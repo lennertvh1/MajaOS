@@ -211,9 +211,9 @@
   function renderAiWidget() {
     const st = $('#aiState');
     if (S.aiError) {
-      $('#aiLine').textContent = t(S.config.ollama ? 'Ollama niet bereikbaar' : 'Ollama niet ingesteld');
-      $('#aiSub').textContent = S.config.ollama ? S.aiError : t('Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env.');
-      st.textContent = ''; st.className = 'pill'; return;
+      $('#aiLine').textContent = t(!S.config.ollama ? 'Ollama niet ingesteld' : S.aiDown ? 'Ollama is niet geïnstalleerd' : 'Ollama niet bereikbaar');
+      $('#aiSub').textContent = !S.config.ollama ? t('Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env.') : S.aiDown ? t('Installeer Ollama uit de appstore om lokaal AI-modellen te draaien.') : S.aiError;
+      st.textContent = S.aiDown ? t('Niet actief') : ''; st.className = 'pill'; return;
     }
     const ai = S.ai; if (!ai) return;
     const loaded = ai.models.filter((m) => m.loaded);
@@ -1495,11 +1495,15 @@
     let o;
     try { o = await api.get('/api/pools/options'); }
     catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('De schijven konden niet gelezen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    poolForm($('#winBody'), o, bays, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
+  }
+  // Formulier om een pool aan te maken: in het venster Opslag en meteen in de welkomstwizard (inline: zonder eigen knoppen,
+  // de wizard roept submit() op en hoort via onPick of er schijven gekozen zijn).
+  function poolForm(body, o, bays, { inline = false, onCreated = () => {}, onBack = null, onPick = () => {} } = {}) {
     const bayOfDisk = (d) => { const k = d.serial ? 's:' + d.serial : 'n:' + d.name; return Object.keys((bays && bays.slots) || {}).find((x) => bays.slots[x].key === k) || null; };
     const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
     let name = ['tank', 'snel', 'data', 'opslag'].find((n) => !o.pools.includes(n)) || 'data' + (o.pools.length + 1);
     const picked = new Set(); let layout = 'stripe', chosenByUser = false;
-    const body = $('#winBody');
     body.innerHTML = `
       <form class="form" id="poolForm" novalidate>
         <div class="fld-row">
@@ -1511,8 +1515,10 @@
         <fieldset class="fld"><span>${t('Schijven')}</span><div class="dev-list" id="poolDisks"></div></fieldset>
         <fieldset class="fld"><span>${t('Indeling')}</span><div class="layout-grid" id="poolLayouts" role="radiogroup" aria-label="${t('Indeling')}"></div></fieldset>
         <div class="pool-sum" id="poolSum" aria-live="polite"></div>
+        <label class="check"><input type="checkbox" name="folders" checked> <span>${t('Standaardmappen aanmaken: {list}', { list: 'appdata, media, backups, vms, isos' })}
+          <span class="muted small">${t('Apps, VM\'s en ISO\'s die nog geen plek hebben, komen op deze pool. Verhuizen kan later bij Instellingen → Opslag.')}</span></span></label>
         <p class="form-error" role="alert"></p>
-        <div class="btn-row"><button class="btn primary" type="submit">${t('Pool aanmaken')}</button><button class="btn" type="button" data-pool-back>${t('Terug naar opslag')}</button></div>
+        ${inline ? '' : `<div class="btn-row"><button class="btn primary" type="submit">${t('Pool aanmaken')}</button>${onBack ? `<button class="btn" type="button" data-pool-back>${t('Terug naar opslag')}</button>` : ''}</div>`}
       </form>`;
     const form = $('#poolForm', body);
     const sel = () => o.disks.filter((d) => picked.has(d.name));
@@ -1569,30 +1575,35 @@
       if (tg.dataset.pdisk) {
         if (tg.checked) picked.add(tg.dataset.pdisk); else picked.delete(tg.dataset.pdisk);
         if (!chosenByUser) layout = suggestLayout(picked.size);
-        drawAll(); return;
+        drawAll(); onPick(picked.size > 0); return;
       }
       if (tg.name === 'layout') { layout = tg.value; chosenByUser = true; drawLayouts(); drawSum(); }
     });
-    body.addEventListener('click', (e) => { if (e.target.closest('[data-pool-back]')) storageWindow(); });
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    if (onBack) body.addEventListener('click', (e) => { if (e.target.closest('[data-pool-back]')) onBack(); });
+    // true = aangemaakt, false = niet (fout staat in het formulier, of geannuleerd).
+    async function submit() {
       const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
       name = form.elements.name.value.trim();
       const d = sel();
-      if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name)) { err.textContent = t('Kies een naam die met een letter begint, met letters, cijfers, - of _ (bv. tank of snel). Namen als mirror of raidz zijn niet toegelaten.'); return; }
-      if (!poolCapacity(layout, d.map((x) => x.size))) { err.textContent = d.length ? t('Deze indeling past niet bij het aantal gekozen schijven.') : t('Vink de schijven aan die in de pool komen.'); return; }
+      if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name)) { err.textContent = t('Kies een naam die met een letter begint, met letters, cijfers, - of _ (bv. tank of snel). Namen als mirror of raidz zijn niet toegelaten.'); return false; }
+      if (!poolCapacity(layout, d.map((x) => x.size))) { err.textContent = d.length ? t('Deze indeling past niet bij het aantal gekozen schijven.') : t('Vink de schijven aan die in de pool komen.'); return false; }
       const r = await ask(t('Pool {name} aanmaken op {list}? Alles wat nu op deze schijven staat, wordt gewist.', { name, list: d.map((x) => x.name).join(', ') }),
         t('Pool aanmaken'), t('Ik begrijp dat alle gegevens op deze schijven verloren gaan'));
-      if (!r) return;
-      if (!r.checked) { err.textContent = t('Vink aan dat de gegevens op de schijven verloren mogen gaan.'); return; }
-      btn.disabled = true; btn.textContent = t('Aanmaken…');
+      if (!r) return false;
+      if (!r.checked) { err.textContent = t('Vink aan dat de gegevens op de schijven verloren mogen gaan.'); return false; }
+      if (btn) { btn.disabled = true; btn.textContent = t('Aanmaken…'); }
       try {
-        await api.post('/api/pools', { name, layout, disks: d.map((x) => x.name), compression: form.elements.compression.value, confirm: name });
-        toast(t('Pool {name} is aangemaakt en staat op /{name}.', { name }));
+        const res = await api.post('/api/pools', { name, layout, disks: d.map((x) => x.name), compression: form.elements.compression.value, confirm: name, folders: form.elements.folders.checked });
+        const folders = res.folders || [];
+        toast(folders.length ? t('Pool {name} is aangemaakt met de mappen {list}.', { name, list: folders.join(', ') }) : t('Pool {name} is aangemaakt en staat op /{name}.', { name }));
+        if (res.warning) toast(tr(res.warning), true);
         loadOverview().catch(() => {});
-        storageWindow();
-      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Pool aanmaken'); }
-    });
+        onCreated(res);
+        return true;
+      } catch (ex) { err.textContent = ex.message; if (btn) { btn.disabled = false; btn.textContent = t('Pool aanmaken'); } return false; }
+    }
+    form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+    return { submit, picked: () => picked.size > 0 };
   }
 
   async function storageWindow() {
@@ -1638,7 +1649,7 @@
       </div>
       <section class="bays-sec" id="baySec"></section>
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS gaf een fout: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
-      ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('Er is nog geen ZFS-pool. In de README staat hoe je er een maakt.')}</p>` : ''}
+      ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('Er is nog geen ZFS-pool. Klik op Pool aanmaken om je schijven te bundelen.')}</p>` : ''}
       <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Pool aanmaken')}</button></div>
       ${s.pools.map(poolBlock).join('')}
       ${loose.length ? `<h3>${t('Niet in een pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
@@ -2118,7 +2129,7 @@
         <div class="seg kind-seg" role="radiogroup" aria-label="${t('Soort VM')}">${Object.entries(VM_KINDS).map(([key, v]) =>
           `<button type="button" role="radio" aria-checked="${key === kind}" data-kind="${key}">${esc(t(v.label))}</button>`).join('')}</div>
         <p class="lead" style="margin-top:12px">${esc(t(k.help))}</p>
-        ${opts.vmDirMissing ? `<p class="lead temp-bad">${t('De map voor VM-schijven ({dir}) bestaat niet. Maak eerst de dataset aan (zie README) of pas VM_DIR aan.', { dir: esc(opts.vmDir) })}</p>` : ''}
+        ${opts.vmDirMissing ? `<p class="lead temp-bad">${t('De map voor VM-schijven ({dir}) bestaat niet. Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(opts.vmDir) })}</p>` : ''}
         <form class="form" id="vmForm" novalidate>
           <input type="hidden" name="kind" value="${kind}">
           <label class="fld"><span>${fileLabel}</span>
@@ -2296,7 +2307,7 @@
       ${d.requires ? `<p class="lead"><b>${t('Vereist:')}</b> ${esc(tr(d.requires))}</p>` : ''}
       ${d.installed ? `<p class="lead temp-ok">${t('Deze app staat al op je server. Je kan hem nog eens installeren onder een andere naam.')}</p>` : ''}
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
-      ${d.appdataMissing ? `<p class="lead temp-bad">${t('De map voor appgegevens ({dir}) bestaat niet. Maak eerst de dataset aan of pas APPDATA_DIR aan.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) })}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         <label class="fld"><span>${t('Naam')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
@@ -2418,7 +2429,7 @@
     $('#customForm', body).innerHTML = `
       ${d.storeMatch ? `<p class="lead">${t('Deze app staat ook in de appstore, met een uitgewerkt formulier.')} <button class="linkish" type="button" data-store-match="${esc(d.storeMatch.id)}">${t('Bekijk {name} in de appstore', { name: esc(prettyName(d.storeMatch.name)) })}</button></p>` : ''}
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
-      ${d.appdataMissing ? `<p class="lead temp-bad">${t('De map voor appgegevens ({dir}) bestaat niet. Maak eerst de dataset aan of pas APPDATA_DIR aan.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) })}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('Naam')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.name)}">
@@ -2504,17 +2515,17 @@
   }
 
   /* --- instellingen (eigen pagina op #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings() {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'Algemeen', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', security: 'Beveiliging', update: 'Software-update', about: 'Over' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'Algemeen', storage: 'Opslag', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', security: 'Beveiliging', update: 'Software-update', about: 'Over' }[tab]);
     $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
   }
 
   function generalPane(el) {
@@ -2538,7 +2549,7 @@
       </div>
       <div id="dtBox"><h2 class="pane-title">${t('Datum en tijd')}</h2><p class="muted small">${t('Laden…')}</p></div>
       <h2 class="pane-title">${t('Welkomstwizard')}</h2>
-      <p class="muted small">${t('Overloop de basisinstellingen opnieuw: wachtwoord, naam, tijdzone, opslag en tweestapsverificatie.')}</p>
+      <p class="muted small">${t('Overloop de basisinstellingen opnieuw: account, naam, tijdzone, opslag en tweestapsverificatie.')}</p>
       <div class="btn-row"><button class="btn" type="button" data-onb-open>${t('Welkomstwizard openen')}</button></div>`;
     el.onclick = (e) => { if (e.target.closest('[data-onb-open]')) { closeSettings(); openOnboarding(0); } };
     el.onchange = async (e) => {
@@ -2558,6 +2569,86 @@
       } catch (ex) { toast(t('Taal opslaan lukte niet: {error}', { error: ex.message }), true); }
     };
     dateTimeSection($('#dtBox', el));
+  }
+
+  /* --- Opslag: waar appgegevens, VM-schijven, ISO's en gedeelde mappen staan, en appgegevens verhuizen naar een andere pool */
+  const MIGRATE_STEPS = { prepare: 'Voorbereiden', stop: 'Apps stoppen', copy: 'Kopiëren', compose: 'Compose-bestanden aanpassen', start: 'Apps starten', done: 'Klaar' };
+  async function storagePane(el) {
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/storage-paths'); }
+    catch (e) { el.innerHTML = `<p class="lead">${t('De opslaglocaties konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'storage') return;
+    const poolOf = (dir) => (dir ? d.pools.find((p) => dir === p.mountpoint || dir.startsWith(p.mountpoint + '/')) : null);
+    const where = (k) => (d.paths[k] ? `<code>${esc(d.paths[k])}</code>${d.exists[k] ? '' : ` <span class="pill warn">${t('bestaat niet')}</span>`}` : `<span class="muted">${t('Nog niet ingesteld')}</span>`);
+    const select = (k) => {
+      const cur = poolOf(d.paths[k]);
+      return `<select class="field sm" data-sp-pool="${k}" aria-label="${t('Pool')}">${d.pools.map((p) => `<option value="${esc(p.name)}"${cur && cur.name === p.name ? ' selected' : ''}>${esc(p.name)} · ${esc(t('{size} vrij', { size: bytes(p.free) }))}</option>`).join('')}</select>`;
+    };
+    const busy = d.migration && d.migration.state === 'running';
+    const row = (k, title, help, btn) => `<li>
+        <div><div class="row-title">${title}</div><div class="row-sub">${where(k)}</div><div class="row-sub">${help}</div></div>
+        <div class="row-side btn-row">${d.pools.length ? select(k) + `<button class="btn sm${k === 'appdata' ? ' primary' : ''}" type="button" data-sp-save="${k}"${busy ? ' disabled' : ''}>${btn}</button>` : ''}</div></li>`;
+    const appsText = d.apps.length ? t('Gebruikt door: {list}', { list: esc(d.apps.map((a) => a.project).join(', ')) }) : t('Nog geen apps.');
+    el.innerHTML = `
+      <p class="muted small">${t('Waar HomeBaseOS je gegevens bewaart. Een nieuwe pool krijgt de mappen appdata, media, backups, vms en isos.')}</p>
+      ${d.pools.length ? '' : `<p class="lead">${t('Er is nog geen pool. Maak er een bij Opslag.')} <button class="btn sm" type="button" data-open="storage">${t('Opslag openen')}</button></p>`}
+      <ul class="rows">
+        ${row('appdata', t('Appgegevens'), appsText + (d.manual.length ? ' · ' + t('Verhuizen niet mee (geen compose-bestand op de server): {list}', { list: esc(d.manual.join(', ')) }) : ''), t('Verhuizen'))}
+        ${row('vms', t('VM-schijven'), t('Nieuwe VM\'s komen hier. Bestaande VM-schijven blijven waar ze zijn.'), t('Opslaan'))}
+        ${row('isos', t('ISO\'s en schijfbestanden'), t('Zet hier installatie-ISO\'s, bv. via een gedeelde map.'), t('Opslaan'))}
+        ${row('shares', t('Gedeelde mappen van Unraid-apps'), t('/mnt/user/… uit de appstore wordt deze map.'), t('Opslaan'))}
+      </ul>
+      <div id="spMig"></div>`;
+    const mig = $('#spMig', el);
+    const drawMig = (m) => {
+      if (!m) { mig.innerHTML = ''; return; }
+      const pct = m.step === 'copy' ? m.percent : m.state === 'done' ? 100 : null;
+      mig.innerHTML = `<h2 class="pane-title">${t('Appgegevens verhuizen')}</h2>
+        <p class="${m.state === 'failed' ? 'temp-bad' : m.state === 'done' ? 'temp-ok' : ''}">${esc(m.state === 'failed' ? t('Mislukt: {error}', { error: tr(m.error) }) : m.state === 'done' ? t('Klaar: de appgegevens staan nu in {dir}.', { dir: m.to }) : t(MIGRATE_STEPS[m.step] || m.step) + '…')}</p>
+        ${pct != null ? `<div class="bar"><span style="width:${pct}%"></span></div>` : ''}
+        <pre class="logs">${esc((m.lines || []).map(tr).join('\n'))}</pre>`;
+    };
+    drawMig(d.migration);
+    // Voortgang volgen zolang een verhuis loopt.
+    const follow = async () => {
+      while (settingsTab() === 'storage' && setWin.open) {
+        let r; try { r = await api.get('/api/storage-paths/migration'); } catch (e) { await new Promise((ok) => setTimeout(ok, 3000)); continue; }
+        if (!mig.isConnected) return;
+        drawMig(r.migration);
+        if (!r.migration || r.migration.state !== 'running') { if (r.migration && r.migration.state === 'done') { toast(t('De appgegevens zijn verhuisd.')); loadApps().catch(() => {}); } storagePaneKeep(el); return; }
+        await new Promise((ok) => setTimeout(ok, 1500));
+      }
+    };
+    // Na afloop de lijst verversen, maar het verslag laten staan.
+    const storagePaneKeep = async (box) => {
+      const keep = mig.innerHTML; await storagePane(box); const m2 = $('#spMig', box); if (m2 && !m2.innerHTML) m2.innerHTML = keep;
+    };
+    if (busy) follow();
+    el.onclick = async (e) => {
+      const b = e.target.closest('[data-sp-save]'); if (!b) return;
+      const kind = b.dataset.spSave, pool = $(`[data-sp-pool="${kind}"]`, el).value, p = d.pools.find((x) => x.name === pool);
+      const cur = poolOf(d.paths[kind]);
+      if (cur && cur.name === pool && d.exists[kind]) { toast(t('Dit staat al op {pool}.', { pool })); return; }
+      if (kind === 'appdata') {
+        const to = p.mountpoint + '/appdata';
+        const ok = d.paths.appdata && d.exists.appdata ? await ask(t('Appgegevens verhuizen van {from} naar {to}? {apps}Alles wordt gekopieerd; de oude map blijft staan tot je ze zelf verwijdert.', {
+          from: d.paths.appdata, to, apps: d.apps.length ? t('Deze apps stoppen tot het kopiëren klaar is: {list}. ', { list: d.apps.map((a) => a.project).join(', ') }) : '' }), t('Verhuizen')) : true;
+        if (!ok) return;
+        await withBusy(b, async () => {
+          try {
+            const r = await api.post('/api/storage-paths', { kind, pool });
+            if (r.started) { drawMig(r.migration); $$('[data-sp-save]', el).forEach((x) => { x.disabled = true; }); follow(); }
+            else { toast(t('Appgegevens komen nu in {dir}.', { dir: to })); storagePane(el); }
+          } catch (ex) { toast(ex.message, true); }
+        });
+        return;
+      }
+      await withBusy(b, async () => {
+        try { await api.post('/api/storage-paths', { kind, pool }); toast(t('Opgeslagen.')); storagePane(el); }
+        catch (ex) { toast(ex.message, true); }
+      });
+    };
   }
 
   // Tijdzones voor een <select>, gegroepeerd per werelddeel (Europe/Brussels → Europe).
@@ -3459,8 +3550,13 @@ sudo ./install.sh</pre></div>`}` : '') +
     openWindow(t('AI'), `<p class="lead">${t('Laden…')}</p>`);
     try { await loadAi(true); } catch (e) { /* fout staat in S.aiError */ }
     if (S.aiError) {
-      $('#winBody').innerHTML = `<p class="lead">${esc(S.config.ollama ? t('Ollama is niet bereikbaar: {error}', { error: S.aiError })
-        : t('Ollama is nog niet gekoppeld. Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env, bijvoorbeeld http://127.0.0.1:11434.'))}</p>`;
+      $('#winBody').innerHTML = S.aiDown
+        ? `<p class="lead">${t('Ollama draait nog niet op deze server. Installeer de app Ollama uit de appstore: HomeBaseOS vindt ze dan vanzelf. Met een NVIDIA-kaart gebruikt ze de GPU.')}</p>
+          <div class="btn-row"><button class="btn primary" type="button" data-ai-store>${t('Ollama zoeken in de appstore')}</button></div>`
+        : `<p class="lead">${esc(S.config.ollama ? t('Ollama is niet bereikbaar: {error}', { error: S.aiError })
+          : t('Ollama is nog niet gekoppeld. Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env, bijvoorbeeld http://127.0.0.1:11434.'))}</p>`;
+      const b = $('[data-ai-store]');
+      if (b) b.onclick = () => { win.close(); S.storeQuery = 'ollama'; $('#storeSearch').value = 'ollama'; location.hash = 'store'; };
       return;
     }
     const draw = () => {
@@ -3565,8 +3661,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); }
   }
   async function loadAi(quiet) {
-    try { S.ai = await api.get('/api/ai'); S.aiError = null; }
-    catch (e) { S.aiError = e.message; if (!quiet) { /* stil in widget */ } }
+    try { S.ai = await api.get('/api/ai'); S.aiError = null; S.aiDown = false; }
+    catch (e) { S.aiError = e.message; S.aiDown = !!(e.data && e.data.notRunning); if (!quiet) { /* stil in widget */ } }
     renderAiWidget();
   }
 
@@ -3636,7 +3732,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; $('.topnav').hidden = true;
     const demoInfo = S.config && S.config.demo;
     $('#loginDemo').hidden = !demoInfo;
-    if (demoInfo) $('#loginDemo').innerHTML = t('Demo: het wachtwoord is {pw}.', { pw: '<b>demo</b>' });
+    if (demoInfo) $('#loginDemo').innerHTML = t('Demo: meld je aan als {user} met het wachtwoord {pw}.', { user: '<b>' + esc(window.HomeBaseOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
     if (wasHidden) loginStep('password');
   }
 
@@ -3699,19 +3795,88 @@ sudo ./install.sh</pre></div>`}` : '') +
     return api.post('/api/password', { current: f('current'), password: f('password') });
   }
 
-  /* ------------------------------------------------------------ welkomstwizard (na de eerste aanmelding) */
+  /* ------------------------------------------------------------ welkomstwizard (eerste keer: account aanmaken; daarna na de eerste aanmelding) */
   const onbWin = $('#onbWin');
-  const ONB = { steps: [], i: 0, dir: 1, data: null };
+  const ONB = { steps: [], i: 0, dir: 1, data: null, setup: false, pool: null };
   const HOUSE = '<svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>';
   const hero = (svg, line) => `<div class="onb-hero${line ? ' line' : ''}" aria-hidden="true">${svg}</div>`;
+  const LOCK = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>';
   function onbSteps() {
     const d = () => ONB.data;
     const pwOn = S.config.passwordEnabled || S.config.demo;
+    // Eerste keer (nog geen account): een account aanmaken. Anders (installaties van vroeger): het wachtwoord uit de installatie vervangen.
+    const account = { id: 'account',
+      render(el) {
+        if (!ONB.setup) {
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Je account')}</h1>
+            <p class="lead">${t('Je account {user} is aangemaakt. Je meldt je ermee aan op elk toestel.', { user: `<b>${esc(d().user || '')}</b>` })}</p>`;
+          return;
+        }
+        el.innerHTML = hero('<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>', true) +
+          `<h1 id="onbTitle">${t('Maak je account aan')}</h1>
+          <p class="lead">${t('Hiermee meld je je aan op HomeBaseOS. Kies een wachtwoord dat je kan onthouden, of bewaar het in je wachtwoordbeheerder.')}</p>
+          <form class="form" data-onb-form>
+            <label class="fld"><span>${t('Gebruikersnaam')}</span>
+              <input class="field" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" value="admin">
+              <span class="muted small">${t('Kleine letters, cijfers, punt, - of _.')}</span></label>
+            <label class="fld"><span>${t('Wachtwoord')}</span>
+              <input class="field" type="password" name="password" autocomplete="new-password" minlength="10">
+              <div class="pw-meter" data-score="0" aria-hidden="true"><span></span></div>
+              <span class="muted small" data-pw-hint></span></label>
+            <label class="fld"><span>${t('Herhaal het wachtwoord')}</span>
+              <input class="field" type="password" name="repeat" autocomplete="new-password"></label>
+            ${S.config.demo ? `<p class="muted small">${t('Demo: het account blijft alleen in deze browser. Aanmelden kan daarna ook met het wachtwoord {pw}.', { pw: '<b>demo</b>' })}</p>` : ''}
+            <p class="form-error onb-err" role="alert"></p></form>`;
+        wirePasswordMeter(el);
+        $('input[name="user"]', el).select();
+      },
+      async next(el) {
+        if (!ONB.setup) return true;
+        const val = (n) => $(`input[name="${n}"]`, el).value;
+        if (val('password').length < 10) throw new Error(t('Kies een wachtwoord van minstens 10 tekens.'));
+        if (val('password') !== val('repeat')) throw new Error(t('De twee wachtwoorden zijn niet gelijk.'));
+        const r = await api.post('/api/setup', { user: val('user'), password: val('password'), repeat: val('repeat'), language: LANG });
+        ONB.setup = false;
+        S.config = { ...S.config, setup: false, passwordEnabled: true, needsLogin: false, loginUser: true };
+        ONB.data = await api.get('/api/onboarding');
+        ONB.steps = onbSteps(); // nu met de gegevens van de server
+        toast(t('Account {user} aangemaakt.', { user: r.user }));
+        return true;
+      } };
+    const password = { id: 'password', skip: true,
+      render(el) {
+        const ch = d().passwordChanged;
+        el.innerHTML = hero(LOCK, true) +
+          `<h1 id="onbTitle">${t('Kies je eigen wachtwoord')}</h1>
+          <p class="lead">${ch ? t('Je hebt al een eigen wachtwoord (sinds {date}). Vul alleen iets in als je het wil wijzigen.', { date: esc(longDate(ch)) })
+            : t('Bij de installatie kreeg je een willekeurig wachtwoord. Kies er nu een dat je zelf kan onthouden, of bewaar het in je wachtwoordbeheerder.')}</p>` +
+          (pwOn ? `<form class="form" data-onb-form>${passwordFields(t('Huidig wachtwoord (uit de installatie)'))}
+            ${S.config.demo ? `<p class="muted small">${t('Demo: het huidige wachtwoord is {pw}. Aanmelden blijft met demo werken.', { pw: '<b>demo</b>' })}</p>` : ''}
+            <p class="form-error onb-err" role="alert"></p></form>`
+            : `<p class="muted">${t('HomeBaseOS draait zonder wachtwoord.')}</p>`);
+        if (pwOn) wirePasswordMeter(el);
+      },
+      async next(el) {
+        if (!pwOn) return true;
+        const val = (n) => $(`input[name="${n}"]`, el).value;
+        if (!val('current') && !val('password') && !val('repeat')) {
+          if (d().passwordChanged) return true;
+          throw new Error(t('Vul een nieuw wachtwoord in, of klik op Overslaan.'));
+        }
+        const r = await submitPassword(el);
+        d().passwordChanged = r.changed;
+        toast(t('Je nieuwe wachtwoord is ingesteld. Andere browsers zijn afgemeld.'));
+        return true;
+      } };
+    // Wie een account heeft (nu of eerder aangemaakt), ziet die stap; installaties van vroeger kiezen een eigen wachtwoord.
+    const second = ONB.setup || (d() && d().user) ? account : password;
     return [
       { id: 'welcome',
         render(el) {
           el.innerHTML = hero(HOUSE) + `<h1 id="onbTitle">${t('Welkom bij HomeBaseOS')}</h1>
-            <p class="lead">${t('In een paar stappen is je server klaar: een eigen wachtwoord, een naam, opslag en extra beveiliging. Alles kan je later nog aanpassen bij Instellingen.')}</p>
+            <p class="lead">${ONB.setup ? t('In een paar stappen is je server klaar: een account, een naam, opslag en extra beveiliging. Alles kan je later nog aanpassen bij Instellingen.')
+              : t('In een paar stappen is je server klaar: een eigen wachtwoord, een naam, opslag en extra beveiliging. Alles kan je later nog aanpassen bij Instellingen.')}</p>
             <h2 class="pane-title">${t('Taal')}</h2>
             <div class="choice-row" role="radiogroup" aria-label="${t('Taal')}">${Object.entries(LANGS).map(([k, name]) => `
               <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
@@ -3723,39 +3888,16 @@ sudo ./install.sh</pre></div>`}` : '') +
         async next(el) {
           const lang = $('input[name="lang"]:checked', el).value;
           if (lang === LANG) return true;
-          await api.post('/api/settings', { language: lang });
+          // Zonder account nog niet op de server: de taal gaat mee bij het aanmaken van het account.
+          if (!ONB.setup) await api.post('/api/settings', { language: lang });
           setLang(lang);
           try { sessionStorage.setItem('tb-onb-step', '1'); } catch (e) { /* privévenster */ }
           location.reload(); // alles opnieuw opbouwen in de nieuwe taal; de wizard gaat verder bij stap 2
           return false;
         },
         focus: false },
-      { id: 'password', skip: true,
-        render(el) {
-          const ch = d().passwordChanged;
-          el.innerHTML = hero('<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>', true) +
-            `<h1 id="onbTitle">${t('Kies je eigen wachtwoord')}</h1>
-            <p class="lead">${ch ? t('Je hebt al een eigen wachtwoord (sinds {date}). Vul alleen iets in als je het wil wijzigen.', { date: esc(longDate(ch)) })
-              : t('Bij de installatie kreeg je een willekeurig wachtwoord. Kies er nu een dat je zelf kan onthouden, of bewaar het in je wachtwoordbeheerder.')}</p>` +
-            (pwOn ? `<form class="form" data-onb-form>${passwordFields(t('Huidig wachtwoord (uit de installatie)'))}
-              ${S.config.demo ? `<p class="muted small">${t('Demo: het huidige wachtwoord is {pw}. Aanmelden blijft met demo werken.', { pw: '<b>demo</b>' })}</p>` : ''}
-              <p class="form-error onb-err" role="alert"></p></form>`
-              : `<p class="muted">${t('HomeBaseOS draait zonder wachtwoord.')}</p>`);
-          if (pwOn) wirePasswordMeter(el);
-        },
-        async next(el) {
-          if (!pwOn) return true;
-          const val = (n) => $(`input[name="${n}"]`, el).value;
-          if (!val('current') && !val('password') && !val('repeat')) {
-            if (d().passwordChanged) return true;
-            throw new Error(t('Vul een nieuw wachtwoord in, of klik op Overslaan.'));
-          }
-          const r = await submitPassword(el);
-          d().passwordChanged = r.changed;
-          toast(t('Je nieuwe wachtwoord is ingesteld. Andere browsers zijn afgemeld.'));
-          return true;
-        } },
-      { id: 'server',
+      second,
+      { id: 'server', skip: true,
         async render(el) {
           el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
           let dt;
@@ -3785,32 +3927,49 @@ sudo ./install.sh</pre></div>`}` : '') +
           if (tz.value !== d().timezone) { await api.post('/api/datetime', { timezone: tz.value }); d().timezone = tz.value; }
           return true;
         } },
-      { id: 'storage',
+      { id: 'storage', skip: true,
         render(el) {
           const pools = d().pools, free = d().freeDisks;
-          const kind = (x) => (x.transport === 'nvme' ? 'NVMe' : x.rotational ? 'HDD' : 'SSD');
+          ONB.pool = null;
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>', true) +
             `<h1 id="onbTitle">${t('Opslag')}</h1>
             <p class="lead">${pools.length ? t('HomeBaseOS vond deze opslagpools. Daar komen je apps, VM\'s en gedeelde mappen.')
-              : t('Er is nog geen opslagpool. Een pool bundelt je schijven tot één grote, beschermde opslag (ZFS). Daar komen je apps, VM\'s en gedeelde mappen.')}</p>
+              : t('Een pool bundelt je schijven tot één grote, beschermde opslag (ZFS). Daar komen je apps, VM\'s en gedeelde mappen. Vink de schijven aan en klik op Pool aanmaken, of sla deze stap over.')}</p>
             ${pools.length ? `<ul class="onb-list">${pools.map((x) => `<li><span class="ok-mark">✓</span><span class="grow"><b>${esc(x.name)}</b></span>
-              <span class="muted small">${x.total ? esc(bytes(x.total)) : ''}</span><span class="pill ${x.health === 'ONLINE' ? 'ok' : 'warn'}">${esc(tr(x.health || ''))}</span></li>`).join('')}</ul>` : ''}
-            ${free.length ? `<h2 class="pane-title">${t('Vrije schijven')}</h2>
-              <ul class="onb-list">${free.map((x) => `<li><span class="pill">${kind(x)}</span><span class="grow">${esc(x.model || x.name)} <span class="muted small">(${esc(x.name)})</span></span>
-                <span class="muted small">${esc(bytes(x.size))}</span></li>`).join('')}</ul>
-              <div class="btn-row"><button class="btn${pools.length ? '' : ' primary'}" type="button" data-onb-pool>${pools.length ? t('Nog een pool aanmaken') : t('Pool aanmaken')}</button></div>`
+              <span class="muted small">${x.total ? esc(bytes(x.total)) : ''}</span><span class="pill ${x.health === 'ONLINE' ? 'ok' : 'warn'}">${esc(tr(x.health || ''))}</span></li>`).join('')}</ul>
+              ${d().appdata ? `<p class="muted small">${t('Appgegevens: {dir}', { dir: `<code>${esc(d().appdata)}</code>` })}</p>` : ''}` : ''}
+            ${free.length ? (pools.length ? `<div class="btn-row" data-onb-more><button class="btn" type="button" data-onb-pool>${t('Nog een pool aanmaken')}</button></div>` : '') +
+                `<div class="onb-pool" data-onb-poolbox${pools.length ? ' hidden' : ''}><p class="muted">${t('Schijven zoeken…')}</p></div>`
               : `<p class="muted small">${pools.length ? t('Er zijn geen vrije schijven meer.') : t('HomeBaseOS vond geen vrije schijven. Steek er een in en open Opslag later opnieuw.')}</p>`}`;
+          const box = $('[data-onb-poolbox]', el);
+          if (!box) return;
+          const mount = async () => {
+            let o;
+            try { o = await api.get('/api/pools/options'); } catch (e) { box.innerHTML = `<p class="muted">${t('De schijven konden niet gelezen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+            if (!el.isConnected) return;
+            box.innerHTML = (pools.length ? `<h2 class="pane-title">${t('Nog een pool aanmaken')}</h2>` : '') + '<div></div>';
+            ONB.pool = poolForm(box.lastElementChild, o, null, {
+              inline: true,
+              onPick: (any) => { $('#onbNext').textContent = any ? t('Pool aanmaken') : t('Volgende'); },
+              onCreated: async () => {
+                try { ONB.data = await api.get('/api/onboarding'); } catch (e) { /* toon wat we weten */ }
+                if (ONB.steps[ONB.i] && ONB.steps[ONB.i].id === 'storage') onbRender();
+              },
+            });
+          };
+          if (!pools.length) mount();
           el.onclick = (e) => {
             if (!e.target.closest('[data-onb-pool]')) return;
-            win.addEventListener('close', async () => {
-              try { ONB.data = await api.get('/api/onboarding'); } catch (ex) { return; }
-              if (ONB.steps[ONB.i] && ONB.steps[ONB.i].id === 'storage') onbRender();
-            }, { once: true });
-            poolCreateWindow(null);
+            $('[data-onb-more]', el).hidden = true; box.hidden = false; mount();
           };
         },
+        // Schijven aangevinkt? Dan maakt Volgende de pool (en blijft de stap staan om het resultaat te tonen).
+        async next() {
+          if (ONB.pool && ONB.pool.picked()) { await ONB.pool.submit(); return false; }
+          return true;
+        },
         focus: false },
-      { id: 'security',
+      { id: 'security', skip: true,
         render(el) {
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>', true) +
             `<h1 id="onbTitle">${t('Tweestapsverificatie')}</h1>
@@ -3829,10 +3988,11 @@ sudo ./install.sh</pre></div>`}` : '') +
             `<h1 id="onbTitle">${t('Klaar!')}</h1>
             <p class="lead">${t('HomeBaseOS is klaar voor gebruik. Dit is ingesteld:')}</p>
             <ul class="onb-list">
-              ${row(!!d().passwordChanged, t('Wachtwoord'), d().passwordChanged ? t('Eigen wachtwoord') : t('Nog dat uit de installatie'))}
+              ${d().user ? row(true, t('Account'), d().user) : row(!!d().passwordChanged, t('Wachtwoord'), d().passwordChanged ? t('Eigen wachtwoord') : t('Nog dat uit de installatie'))}
               ${row(true, t('Naam van de server'), d().hostname)}
               ${row(true, t('Tijdzone'), d().timezone.replace(/_/g, ' '))}
               ${row(d().pools.length > 0, t('Opslag'), d().pools.length ? d().pools.map((x) => x.name).join(', ') : t('Nog geen pool'))}
+              ${row(!!d().appdata, t('Appgegevens'), d().appdata || t('Nog geen plek'))}
               ${row(d().mfa, t('Tweestapsverificatie'), d().mfa ? t('Aan') : t('Uit'))}
             </ul>
             <h2 class="pane-title">${t('Wat nu?')}</h2>
@@ -3852,12 +4012,17 @@ sudo ./install.sh</pre></div>`}` : '') +
     ];
   }
   async function openOnboarding(startAt = 0) {
-    try { ONB.data = await api.get('/api/onboarding'); } catch (e) { toast(e.message, true); return; }
+    ONB.setup = !!S.config.setup;
+    // Zonder account geeft de server nog niets prijs: de gegevens komen na de stap "account".
+    if (ONB.setup) ONB.data = null;
+    else { try { ONB.data = await api.get('/api/onboarding'); } catch (e) { toast(e.message, true); return; } }
     ONB.steps = onbSteps();
     let resume = null;
     try { resume = sessionStorage.getItem('tb-onb-step'); sessionStorage.removeItem('tb-onb-step'); } catch (e) { /* privévenster */ }
     ONB.i = Math.min(ONB.steps.length - 1, resume != null ? Number(resume) || 0 : startAt);
+    if (ONB.setup) ONB.i = Math.min(ONB.i, 1); // eerst het account
     ONB.dir = 1;
+    document.body.classList.add('onb-open'); // alleen de wizard, zonder het dashboard erachter
     if (!onbWin.open) onbWin.showModal();
     onbRender();
   }
@@ -3871,7 +4036,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#onbBack').style.visibility = ONB.i === 0 ? 'hidden' : '';
     $('#onbSkip').hidden = !st.skip;
     $('#onbNext').textContent = st.nextLabel || t('Volgende');
-    $('#onbLater').hidden = ONB.i === ONB.steps.length - 1;
+    // Zonder account kan je de wizard niet uitstellen: zonder account kom je nergens binnen.
+    $('#onbLater').hidden = ONB.i === ONB.steps.length - 1 || ONB.setup;
     Promise.resolve(st.render(el)).then(() => {
       const f = st.focus === false ? null : $('input:not([type=radio]):not([type=checkbox]), select', el);
       (f || $('#onbNext')).focus();
@@ -3894,7 +4060,9 @@ sudo ./install.sh</pre></div>`}` : '') +
     S.config.onboarding = false;
     if (onbWin.open) onbWin.close();
     if (skipped) toast(t('Je vindt de welkomstwizard terug bij Instellingen → Algemeen.'));
+    if (!timers.length) startDesk(); // de eerste keer (account net aangemaakt) staat het dashboard nog niet klaar
   }
+  onbWin.addEventListener('close', () => document.body.classList.remove('onb-open'));
   $('#onbNext').addEventListener('click', () => onbGo(1));
   $('#onbBack').addEventListener('click', () => onbGo(-1, false));
   $('#onbSkip').addEventListener('click', () => onbGo(1, false));
@@ -3905,7 +4073,12 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } }
   function demoClock() { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } }
-  function useDemo() { api = translatedApi(window.HomeBaseOSDemo); S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, clock: demoClock(), onboarding: !demoOnboarded() }; startDesk(); }
+  // De demo begint zoals een nieuwe server: eerst een account aanmaken (tot de wizard één keer afgerond is).
+  function useDemo() {
+    api = translatedApi(window.HomeBaseOSDemo);
+    S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
+    startDesk();
+  }
 
   /* ------------------------------------------------------------ gebeurtenissen */
   document.addEventListener('click', (e) => {
@@ -3976,7 +4149,12 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#loginSub').textContent = two ? t('Typ de code van 6 cijfers uit je authenticator-app.') : t('Meld je aan om je server te beheren.');
     $('#loginError').textContent = ''; $('#mfaError').textContent = '';
     if (two) setRecoveryMode(false);
-    else { mfaPending = null; $('#pw').value = ''; $('#pw').focus(); }
+    else {
+      mfaPending = null; $('#pw').value = '';
+      const withUser = !!(S.config && S.config.loginUser);
+      $('#userLabel').hidden = !withUser; $('#user').hidden = !withUser; $('#user').required = withUser;
+      (withUser && !$('#user').value ? $('#user') : $('#pw')).focus();
+    }
   }
   function setRecoveryMode(on) {
     mfaRecovery = on;
@@ -3999,7 +4177,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     e.preventDefault(); $('#loginError').textContent = '';
     const btn = $('#loginForm .login-go'); btn.disabled = true;
     try {
-      const r = await loginApi().post('/api/login', { password: $('#pw').value, remember: $('#remember').checked });
+      const r = await loginApi().post('/api/login', { user: $('#user').value.trim(), password: $('#pw').value, remember: $('#remember').checked });
       if (r.mfa) { mfaPending = r.pending; loginStep('mfa'); } else loggedIn(r);
     } catch (err) { $('#loginError').textContent = err.message; shake(); $('#pw').select(); }
     finally { btn.disabled = false; }
@@ -4043,6 +4221,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     try { cfg = await realApi.get('/api/config'); } catch (e) { return useDemo(); } // geen server: statische demo
     S.config = cfg;
     if (cfg.demo) return useDemo(); // in de demo bewaart de browser zelf de taal
+    // Nog geen account: alleen de welkomstwizard (de taal kies je daar; die van de server geldt pas daarna).
+    if (cfg.setup) { $('.topnav').hidden = true; return openOnboarding(0); }
     if (cfg.language && cfg.language !== LANG) setLang(cfg.language); // de taal van de server geldt voor iedereen
     if (cfg.needsLogin) return showLogin();
     startDesk();

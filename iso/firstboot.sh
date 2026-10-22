@@ -1,12 +1,12 @@
 #!/bin/bash
 # Eerste opstart na een installatie vanaf de HomeBaseOS-ISO: install.sh draaien (ZFS, libvirt, Docker, HomeBaseOS).
-# Lukt het, dan verdwijnen de installatiebestanden en komt het adres + wachtwoord op het scherm van de server.
+# Lukt het, dan verdwijnen de installatiebestanden en komt het adres op het scherm van de server.
+# Een wachtwoord is er nog niet: bij de eerste keer in de browser maak je een account aan.
 # Lukt het niet, dan blijft alles staan en probeert het bij de volgende opstart opnieuw.
 set -uo pipefail
 SETUP=/opt/homebaseos-setup
 LOG=/var/log/homebaseos-firstboot.log
 ISSUE=/etc/issue.d/homebaseos.issue
-PWISSUE=/etc/issue.d/homebaseos-wachtwoord.issue   # verdwijnt zodra je een eigen wachtwoord kiest
 exec > >(tee -a "$LOG") 2>&1
 
 # Tekst boven de aanmeldregel op het scherm van de server (\4 = het IPv4-adres, ingevuld door agetty).
@@ -26,11 +26,9 @@ ARGS=()
 if bash "$SETUP/install.sh" "${ARGS[@]}"; then
   ENV=/etc/homebaseos/homebaseos.env
   PORT="$(sed -n 's/^PORT=//p' "$ENV" | tail -1)"; PORT="${PORT:-8080}"
-  PW="$(sed -n 's/^APP_PASSWORD=//p' "$ENV" | tail -1)"
-  issue "" "  HomeBaseOS is klaar. Open in je browser:  http://\\4:${PORT}" ""
-  printf '%s\n' "  Wachtwoord voor de eerste aanmelding: ${PW}" "  (de welkomstwizard helpt je daarna een eigen wachtwoord te kiezen)" "" > "$PWISSUE"
-  chmod 644 "$ISSUE" "$PWISSUE"
-  agetty --reload 2>/dev/null || true
+  issue "" "  HomeBaseOS is klaar. Open in je browser:  http://\\4:${PORT}" \
+    "  en maak daar je account aan (de welkomstwizard helpt je verder)." ""
+  chmod 644 "$ISSUE"
   systemctl disable homebaseos-firstboot.service
   rm -rf "$SETUP"
   echo "== Klaar: $(date)"

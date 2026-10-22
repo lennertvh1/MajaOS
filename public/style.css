@@ -275,7 +275,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 .set-side a[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .set-ico { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18); }
 .set-ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.set-ico.gray { background: #8e8e93; } .set-ico.blue { background: #0a84ff; } .set-ico.slate { background: #5e6b7a; } .set-ico.cyan { background: #1d9bd1; } .set-ico.indigo { background: #5e5ce6; } .set-ico.green { background: #30a46c; } .set-ico.orange { background: #f29b30; }
+.set-ico.teal { background: #149e8e; } .set-ico.gray { background: #8e8e93; } .set-ico.blue { background: #0a84ff; } .set-ico.slate { background: #5e6b7a; } .set-ico.cyan { background: #1d9bd1; } .set-ico.indigo { background: #5e5ce6; } .set-ico.green { background: #30a46c; } .set-ico.orange { background: #f29b30; }
 .set-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .set-main .win-body { flex: 1; }
 .set-pane:focus { outline: none; }
@@ -507,7 +507,12 @@ select.field { padding-right: 8px; }
 @media (prefers-reduced-motion: reduce) { .login-card, .login-shake { animation: none; } }
 
 /* ---- welkomstwizard */
-.window.onboard { width: min(680px, calc(100vw - 24px)); height: min(640px, 90vh); max-height: none; }
+.window.onboard { width: min(720px, calc(100vw - 24px)); height: min(700px, 92vh); max-height: none; }
+/* De wizard staat alleen op de achtergrond, zonder het dashboard erachter. */
+body.onb-open .shell { visibility: hidden; }
+.window.onboard::backdrop { background: transparent; backdrop-filter: none; }
+.onb-pool { margin-top: 6px; }
+.onb-pool .form { max-width: none; }
 .window.onboard[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .onb-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 4px; }
 .onb-top .link-btn { font-size: 14px; color: var(--muted); }
@@ -540,7 +545,7 @@ select.field { padding-right: 8px; }
 .onb-next-links button { text-align: left; padding: 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); color: var(--text); font: inherit; cursor: pointer; display: grid; gap: 2px; }
 .onb-next-links button:hover { background: var(--glass-hover); }
 .onb-next-links b { font-size: 14px; } .onb-next-links span { font-size: 13px; color: var(--muted); }
-@media (max-width: 560px) { .onb-body { padding: 8px 18px; } .onb-foot { padding: 12px 16px 16px; } #onbSkip { display: none; } }
+@media (max-width: 560px) { .onb-body { padding: 8px 18px; } .onb-foot { padding: 12px 16px 16px; gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { .onb-step, .onb-dots li { animation: none; transition: none; } }
 
 /* ---- software-update */
@@ -908,3 +913,4 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .vm-ip { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .vm-ip b { color: var(--text); font-weight: 600; }
 .widgets.editing .widget-head > :not(h2) { visibility: hidden; } /* plaats voor de knopjes */
+.field.sm { height: 32px; min-width: 150px; font-size: 13px; border-radius: 9px; flex: 0 1 auto; }

@@ -4,7 +4,7 @@
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 
-NEEDED="curl smartmontools pciutils usbutils bridge-utils samba systemd-timesyncd"
+NEEDED="curl smartmontools pciutils usbutils bridge-utils samba systemd-timesyncd rsync"
 MISSING=""
 for p in $NEEDED; do dpkg -s "$p" >/dev/null 2>&1 || MISSING="$MISSING $p"; done
 if [ -n "$MISSING" ]; then

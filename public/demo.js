@@ -33,6 +33,9 @@
   // Pictogrammen zoals de server ze vindt: uit de catalogus of uit dashboard-icons (Whisper en Piper staan daar niet in).
   const ICON = (n) => (n ? 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/' + n + '.png' : null);
   const ICON_NAME = { pihole: 'pi-hole', whisper: null, piper: null };
+  // Opslaglocaties (Instellingen → Opslag): appgegevens kunnen verhuizen, de rest volgt dat pad.
+  const sp = { appdata: '/snel/appdata', vms: '/tank/vms', isos: '/tank/isos', shares: '/tank' };
+  const AD = () => sp.appdata;
   const apps = appDefs.map(([name, image, port, state, compose], i) => ({
     id: 'demo:' + name, name, image, state: state.toUpperCase(),
     status: state === 'running' ? 'Up ' + (2 + (i % 9)) + ' days' : 'Exited (0) 3 hours ago',
@@ -44,7 +47,7 @@
     update: ['immich', 'open-webui', 'zigbee2mqtt', 'qbittorrent'].includes(name), updateChecked: Date.now() - 2 * 3600000, updateError: null,
     // Vaultwarden en Syncthing doen alsof ze uit de appstore komen, zodat je Verwijderen kan proberen.
     storeId: name === 'vaultwarden' ? 'a1b2c3d4e5f6' : name === 'syncthing' ? 'b2c3d4e5f6a1' : null,
-    dataDirs: name === 'vaultwarden' || name === 'syncthing' ? ['/snel/appdata/' + name] : [],
+    dataDirs: name === 'vaultwarden' || name === 'syncthing' ? [AD() + '/' + name] : [],
   }));
   // Pi-hole heeft een eigen adres in het thuisnetwerk (macvlan, zie Docker-netwerken hieronder).
   Object.assign(apps.find((a) => a.name === 'pihole'), { webui: 'http://192.168.1.53/admin/', ports: [] });
@@ -57,7 +60,7 @@
   const onbSet = (v) => { try { if (v) localStorage.setItem('tb-onboarded', '1'); else localStorage.removeItem('tb-onboarded'); } catch (e) { /* privévenster */ } };
   function onbGet() {
     const o = poolOptions();
-    return { done: onbDone(), finished: null, skipped: false, hostname: net.hostname, timezone: dt.timezone, passwordChanged: onb.passwordChanged, mfa: mfa.enabled,
+    return { done: onbDone(), finished: null, skipped: false, hostname: net.hostname, timezone: dt.timezone, passwordChanged: onb.passwordChanged, user: acct.user, mfa: mfa.enabled, appdata: sp.appdata,
       pools: pools.map((x) => ({ name: x.name, total: x.total, health: x.health })),
       freeDisks: o.disks.filter((d) => d.available).map((d) => ({ name: d.name, size: d.size, model: d.model, rotational: d.rotational, transport: d.transport })) };
   }
@@ -143,6 +146,21 @@
   /* ---- aanmelden met tweestapsverificatie: echte TOTP-codes (RFC 6238), zodat je het met je eigen authenticator-app kan proberen.
      Wachtwoord in de demo: demo. Alles blijft in het geheugen van deze tab. */
   const DEMO_PW = 'demo';
+  /* ---- account: de demo begint zoals een nieuwe server (account aanmaken in de welkomstwizard) */
+  const acct = { user: (() => { try { return localStorage.getItem('tb-demo-user') || 'demo'; } catch (e) { return 'demo'; } })(), password: null };
+  function demoSetup(b) {
+    if (onbDone()) throw err('Er is al een account. Meld je aan.', 409);
+    const u = String(b.user || '').trim().toLowerCase(), v = String(b.password || '');
+    if (!/^[a-z][a-z0-9._-]{1,31}$/.test(u)) throw err('Kies een gebruikersnaam van 2 tot 32 tekens: kleine letters, cijfers, punt, - of _, en begin met een letter.');
+    if (v !== String(b.repeat || '')) throw err('De twee wachtwoorden zijn niet gelijk.');
+    if (v.length < 10) throw err('Kies een wachtwoord van minstens 10 tekens.');
+    if (/^(.)\1+$/.test(v) || /^(0123456789|1234567890|wachtwoord|password)/i.test(v)) throw err('Dit wachtwoord is te makkelijk te raden. Kies een ander.');
+    acct.user = u; acct.password = v; // het wachtwoord alleen in het geheugen; "demo" blijft ook werken
+    try { localStorage.setItem('tb-demo-user', u); } catch (e) { /* privévenster */ }
+    if (b.language) { try { localStorage.setItem('tb-lang', b.language); } catch (e) { /* privévenster */ } }
+    onb.passwordChanged = new Date().toISOString();
+    return { ok: true, user: u };
+  }
   const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   const b32enc = (bytes) => { let bits = 0, v = 0, o = ''; for (const b of bytes) { v = (v << 8) | b; bits += 8; while (bits >= 5) { o += B32[(v >>> (bits - 5)) & 31]; bits -= 5; } } return bits ? o + B32[(v << (5 - bits)) & 31] : o; };
   const b32dec = (str) => { let bits = 0, v = 0; const o = []; for (const ch of str) { v = (v << 5) | B32.indexOf(ch); bits += 5; if (bits >= 8) { o.push((v >>> (bits - 8)) & 255); bits -= 8; } } return new Uint8Array(o); };
@@ -170,7 +188,8 @@
   }
   async function authPost(path, body) {
     if (path === '/api/login') {
-      if (String(body.password || '') !== DEMO_PW) { await wait(800); throw err('Verkeerd wachtwoord', 401); }
+      const pwOk = String(body.password || '') === DEMO_PW || (acct.password && body.password === acct.password);
+      if (!pwOk || String(body.user || '').trim().toLowerCase() !== acct.user) { await wait(800); throw err('Verkeerde gebruikersnaam of wachtwoord', 401); }
       if (mfa.enabled) { mfa.pending = { id: Math.random().toString(36).slice(2), until: Date.now() + 300000, tries: 0 }; return { mfa: true, pending: mfa.pending.id }; }
       return { ok: true };
     }
@@ -411,7 +430,7 @@
         ...(appNet[a.name] && !/_default$/.test(appNet[a.name].net) ? { network: appNet[a.name].net, ip: appNet[a.name].ip, networks: [appNet[a.name].net],
           projectNetworks: [{ key: appNet[a.name].net, name: appNet[a.name].net, external: true }] } : { network: '', ip: '', projectNetworks: [] }),
         ports: a.ports.map((p) => ({ host: String(p.public), container: String(p.private), protocol: p.type.toLowerCase(), ip: '' })),
-        volumes: [{ host: '/snel/appdata/' + a.name, container: '/config', mode: 'rw', kind: 'bind', locked: false }]
+        volumes: [{ host: AD() + '/' + a.name, container: '/config', mode: 'rw', kind: 'bind', locked: false }]
           .concat(a.name === 'jellyfin' ? [{ host: '/tank/media', container: '/media', mode: 'ro', kind: 'bind', locked: false },
             { host: '', container: '/transcode', mode: 'rw', kind: 'tmpfs', locked: true }] : []),
         env: [{ name: 'TZ', value: 'Europe/Brussels' }, { name: 'PUID', value: '1000' }, { name: 'PGID', value: '1000' }],
@@ -479,7 +498,7 @@
   const F = (type, name, target, value, o = {}) => ({ key: 'c' + fk++, type, name, target, value: String(value), mode: o.mode || '',
     description: o.desc || '', required: !!o.req, mask: !!o.mask, advanced: !!o.adv, options: o.options || null, auto: !!o.auto });
   const lsio = (port, dir) => [F('Port', 'WebUI', String(port), port, { mode: 'tcp', req: true }),
-    F('Path', 'Appdata', '/config', '/snel/appdata/' + dir, { mode: 'rw', req: true, adv: true, auto: true, desc: 'Instellingen en database van de app.' }),
+    F('Path', 'Appdata', '/config', AD() + '/' + dir, { mode: 'rw', req: true, adv: true, auto: true, desc: 'Instellingen en database van de app.' }),
     F('Variable', 'PUID', 'PUID', 1000, { req: true, adv: true }), F('Variable', 'PGID', 'PGID', 1000, { req: true, adv: true })];
   const storeDefs = [
     ['Jellyfin', 'lscr.io/linuxserver/jellyfin', 'linuxserver', ['MediaServer'], true, 'Vrije mediaserver: films, series en muziek streamen naar al je toestellen, zonder abonnement.',
@@ -491,41 +510,41 @@
         F('Variable', 'Database host', 'DB_HOSTNAME', '', { req: true, desc: 'Adres van je PostgreSQL-database.' })],
       { webui: 'http://[IP]:[PORT:8080]', requires: 'Een PostgreSQL-database met pgvecto.rs en Redis.' }],
     ['Plex-Media-Server', 'plexinc/pms-docker', 'plexinc', ['MediaServer'], true, 'Plex organiseert je media en streamt ze naar elk scherm.',
-      () => [F('Path', 'Config', '/config', '/snel/appdata/plex', { mode: 'rw', req: true, auto: true }), F('Path', 'Media', '/data', '/tank/media', { mode: 'rw' }),
+      () => [F('Path', 'Config', '/config', AD() + '/plex', { mode: 'rw', req: true, auto: true }), F('Path', 'Media', '/data', '/tank/media', { mode: 'rw' }),
         F('Variable', 'Claim-token', 'PLEX_CLAIM', '', { mask: true, desc: 'Haal je token op via plex.tv/claim.' })], { network: 'host', official: true }],
     ['vaultwarden', 'vaultwarden/server', 'selfhosters', ['Security'], true, 'Lichte Bitwarden-server voor je wachtwoorden.',
-      () => [F('Port', 'WebUI', '80', 8222, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', '/snel/appdata/vaultwarden', { mode: 'rw', req: true, auto: true }),
+      () => [F('Port', 'WebUI', '80', 8222, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', AD() + '/vaultwarden', { mode: 'rw', req: true, auto: true }),
         F('Variable', 'Registraties toestaan', 'SIGNUPS_ALLOWED', 'true', { options: ['true', 'false'] }), F('Variable', 'Admin-token', 'ADMIN_TOKEN', '', { mask: true, adv: true })],
       { webui: 'http://[IP]:[PORT:80]', id: 'a1b2c3d4e5f6' }],
     ['audiobookshelf', 'ghcr.io/advplyr/audiobookshelf', 'selfhosters', ['MediaServer'], true, 'Server voor luisterboeken en podcasts, met apps voor je gsm.',
-      () => [F('Port', 'WebUI', '80', 13378, { mode: 'tcp', req: true }), F('Path', 'Config', '/config', '/snel/appdata/audiobookshelf', { req: true, auto: true }),
+      () => [F('Port', 'WebUI', '80', 13378, { mode: 'tcp', req: true }), F('Path', 'Config', '/config', AD() + '/audiobookshelf', { req: true, auto: true }),
         F('Path', 'Luisterboeken', '/audiobooks', '/tank/media/luisterboeken', { req: true })], { webui: 'http://[IP]:[PORT:80]' }],
     ['mealie', 'ghcr.io/mealie-recipes/mealie', 'selfhosters', ['Productivity'], true, "Recepten bewaren, weekmenu's plannen en boodschappenlijstjes maken.",
-      () => [F('Port', 'WebUI', '9000', 9925, { mode: 'tcp', req: true }), F('Path', 'Data', '/app/data', '/snel/appdata/mealie', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:9000]' }],
+      () => [F('Port', 'WebUI', '9000', 9925, { mode: 'tcp', req: true }), F('Path', 'Data', '/app/data', AD() + '/mealie', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:9000]' }],
     ['paperless-ngx', 'ghcr.io/paperless-ngx/paperless-ngx', 'selfhosters', ['Productivity'], true, 'Scan je papieren, laat ze herkennen (OCR) en vind alles terug.',
-      () => [F('Port', 'WebUI', '8000', 8001, { mode: 'tcp', req: true }), F('Path', 'Data', '/usr/src/paperless/data', '/snel/appdata/paperless-ngx', { req: true, auto: true }),
+      () => [F('Port', 'WebUI', '8000', 8001, { mode: 'tcp', req: true }), F('Path', 'Data', '/usr/src/paperless/data', AD() + '/paperless-ngx', { req: true, auto: true }),
         F('Variable', 'Redis', 'PAPERLESS_REDIS', 'redis://redis:6379', { req: true })], { webui: 'http://[IP]:[PORT:8000]', requires: 'Een Redis-server.' }],
     ['Home-Assistant-Container', 'ghcr.io/home-assistant/home-assistant', 'selfhosters', ['HomeAutomation'], true, 'Home Assistant als container (zonder add-ons). Wil je add-ons, gebruik dan een VM met Home Assistant OS.',
-      () => [F('Path', 'Config', '/config', '/snel/appdata/home-assistant', { req: true, auto: true })], { network: 'host', privileged: true }],
+      () => [F('Path', 'Config', '/config', AD() + '/home-assistant', { req: true, auto: true })], { network: 'host', privileged: true }],
     ['AdGuard-Home', 'adguard/adguardhome', 'selfhosters', ['Network'], true, 'Blokkeert reclame en trackers voor je hele netwerk via DNS.',
       () => [F('Port', 'DNS', '53', 53, { mode: 'udp', req: true }), F('Port', 'WebUI', '3000', 3002, { mode: 'tcp', req: true }),
-        F('Path', 'Config', '/opt/adguardhome/conf', '/snel/appdata/adguard-home', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:3000]', network: 'br0' }],
+        F('Path', 'Config', '/opt/adguardhome/conf', AD() + '/adguard-home', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:3000]', network: 'br0' }],
     ['navidrome', 'deluan/navidrome', 'selfhosters', ['MediaServer'], true, 'Je eigen Spotify voor je muziekcollectie.',
-      () => [F('Port', 'WebUI', '4533', 4533, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', '/snel/appdata/navidrome', { req: true, auto: true }),
+      () => [F('Port', 'WebUI', '4533', 4533, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', AD() + '/navidrome', { req: true, auto: true }),
         F('Path', 'Muziek', '/music', '/tank/media/muziek', { mode: 'ro', req: true })], { webui: 'http://[IP]:[PORT:4533]' }],
     ['portainer-ce', 'portainer/portainer-ce', 'selfhosters', ['Tools'], false, 'Beheer je Docker-containers in detail.',
       () => [F('Port', 'WebUI', '9443', 9443, { mode: 'tcp', req: true }), F('Path', 'Docker', '/var/run/docker.sock', '/var/run/docker.sock', { req: true }),
-        F('Path', 'Data', '/data', '/snel/appdata/portainer', { req: true, auto: true })], { webui: 'https://[IP]:[PORT:9443]' }],
+        F('Path', 'Data', '/data', AD() + '/portainer', { req: true, auto: true })], { webui: 'https://[IP]:[PORT:9443]' }],
     ['stirling-pdf', 'frooodle/s-pdf', 'selfhosters', ['Productivity'], false, "Alles met pdf's: samenvoegen, splitsen, ondertekenen, OCR en meer.",
       () => [F('Port', 'WebUI', '8080', 8090, { mode: 'tcp', req: true })], { webui: 'http://[IP]:[PORT:8080]' }],
     ['ollama', 'ollama/ollama', 'selfhosters', ['AI'], true, 'Draai taalmodellen zoals Llama en Qwen op je eigen GPU.',
-      () => [F('Port', 'API', '11434', 11434, { mode: 'tcp', req: true }), F('Path', 'Modellen', '/root/.ollama', '/snel/appdata/ollama', { req: true, auto: true })], { gpu: true }],
+      () => [F('Port', 'API', '11434', 11434, { mode: 'tcp', req: true }), F('Path', 'Modellen', '/root/.ollama', AD() + '/ollama', { req: true, auto: true })], { gpu: true }],
     ['Grafana', 'grafana/grafana', 'selfhosters', ['Tools'], true, 'Grafieken en dashboards voor alles wat je meet.',
-      () => [F('Port', 'WebUI', '3000', 3003, { mode: 'tcp', req: true }), F('Path', 'Data', '/var/lib/grafana', '/snel/appdata/grafana', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:3000]' }],
+      () => [F('Port', 'WebUI', '3000', 3003, { mode: 'tcp', req: true }), F('Path', 'Data', '/var/lib/grafana', AD() + '/grafana', { req: true, auto: true })], { webui: 'http://[IP]:[PORT:3000]' }],
     ['Redis', 'redis', 'selfhosters', ['Tools'], false, 'Snelle database in het geheugen, vaak nodig voor andere apps.',
-      () => [F('Port', 'Redis', '6379', 6379, { mode: 'tcp' }), F('Path', 'Data', '/data', '/snel/appdata/redis', { auto: true })], {}],
+      () => [F('Port', 'Redis', '6379', 6379, { mode: 'tcp' }), F('Path', 'Data', '/data', AD() + '/redis', { auto: true })], {}],
     ['minecraft-server', 'itzg/minecraft-server', 'selfhosters', ['GameServers'], false, 'Je eigen Minecraft-server voor vrienden en familie.',
-      () => [F('Port', 'Spel', '25565', 25565, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', '/snel/appdata/minecraft-server', { req: true, auto: true }),
+      () => [F('Port', 'Spel', '25565', 25565, { mode: 'tcp', req: true }), F('Path', 'Data', '/data', AD() + '/minecraft-server', { req: true, auto: true }),
         F('Variable', 'EULA aanvaarden', 'EULA', 'TRUE', { req: true, options: ['TRUE', 'FALSE'] }), F('Variable', 'Geheugen', 'MEMORY', '2G', { adv: true })], {}],
   ];
   const STORE_ICON = { 'Plex-Media-Server': 'plex', 'Home-Assistant-Container': 'home-assistant', 'AdGuard-Home': 'adguard-home',
@@ -556,12 +575,12 @@
   function storeDetails(a) {
     let name = storeSlug(a.name);
     for (let n = 2; apps.some((x) => x.name === name); n++) name = storeSlug(a.name) + '-' + n;
-    const fields = a.fields().map((f) => (f.auto ? { ...f, value: '/snel/appdata/' + name } : f));
+    const fields = a.fields().map((f) => (f.auto ? { ...f, value: AD() + '/' + name } : f));
     const { fields: _, gpu: __, ...rest } = a;
     const networks = dnets.filter((n) => !n.builtin).map((n) => ({ name: n.name, driver: n.driver, subnet: n.subnet, gateway: n.gateway, ipRange: n.ipRange }));
     const tpl = a.network || 'bridge';
     const networkDefault = ['bridge', 'host', 'none'].includes(tpl) || networks.some((n) => n.name === tpl) ? tpl : 'bridge';
-    return { ...rest, fields, warnings: storeWarnings(a, networkDefault), networks, networkDefault, templateNetwork: tpl, suggestedName: name, appdataDir: '/snel/appdata', sharesDir: '/tank', stacksDir: '/opt/stacks',
+    return { ...rest, fields, warnings: storeWarnings(a, networkDefault), networks, networkDefault, templateNetwork: tpl, suggestedName: name, appdataDir: AD(), sharesDir: '/tank', stacksDir: '/opt/stacks',
       installed: storeInstalled(a), appdataMissing: false };
   }
   function storeInstall(a, body) {
@@ -620,7 +639,7 @@
       apps.push({ id: 'demo:' + j.name, name: j.name, image: /:[^/]+$/.test(j.a.image) ? j.a.image : j.a.image + ':latest', state: 'RUNNING', status: 'Up minder dan een minuut', autoStart: true,
         icon: j.a.icon, webui: ownIp ? 'http://' + j.own.ip + (tplPort ? ':' + tplPort : '') + '/' : j.webPort ? 'http://[IP]:' + j.webPort + '/' : null, ports, compose: j.name, canUpdate: true, update: null,
         storeId: j.a.id, custom: !!j.custom,
-        dataDirs: [...new Set(j.fields.filter((f) => f.type === 'Path' && f.value.startsWith('/snel/appdata/')).map((f) => f.value.split('/').slice(0, 4).join('/')))] });
+        dataDirs: [...new Set(j.fields.filter((f) => f.type === 'Path' && f.value.startsWith(AD() + '/')).map((f) => f.value.split('/').slice(0, 4).join('/')))] });
       apps.sort((x, y) => x.name.localeCompare(y.name));
     }
     return { done, ok: done, error: null, name: j.name, webui: j.a.webui, lines };
@@ -660,13 +679,13 @@
     const st = store.find((a) => a.image.replace(/^lscr\.io\//, '') === n.repo.replace(/^lscr\.io\//, ''));
     return {
       image: n.image, name, ports,
-      volumes: info.volumes.map((v) => ({ host: '/snel/appdata/' + name + (v === '/config' ? '' : '/' + v.split('/').filter(Boolean).join('-')), container: v, mode: 'rw', auto: true })),
+      volumes: info.volumes.map((v) => ({ host: AD() + '/' + name + (v === '/config' ? '' : '/' + v.split('/').filter(Boolean).join('-')), container: v, mode: 'rw', auto: true })),
       env: (info.lsio ? [{ name: 'PUID', value: '1000' }, { name: 'PGID', value: '1000' }] : []).concat({ name: 'TZ', value: 'Europe/Brussels' }),
       webui: ports[0] ? 'http://[IP]:[PORT:' + ports[0].container + ']/' : '', icon: ICON(base) || '',
       storeMatch: st ? { id: st.id, name: st.name } : null,
       warnings: ports.length ? [] : ['Het image meldt geen poorten. Heeft de app een webinterface, voeg dan zelf een poort toe.'],
       networks: dnets.filter((x) => !x.builtin).map((x) => ({ name: x.name, driver: x.driver, subnet: x.subnet })), networkDefault: 'bridge',
-      appdataDir: '/snel/appdata', stacksDir: '/opt/stacks', appdataMissing: false,
+      appdataDir: AD(), stacksDir: '/opt/stacks', appdataMissing: false,
     };
   }
   function demoInstallCustom(b) {
@@ -771,7 +790,7 @@
     isos: [{ name: 'debian-13.1.0-amd64-netinst.iso', size: 754 * 1e6 }, { name: 'ubuntu-24.04.3-live-server-amd64.iso', size: 3.1 * 1e9 },
       { name: 'Win11_25H2_Dutch_x64.iso', size: 7.3 * 1e9 }],
     images: [{ name: 'haos_ova-16.2.qcow2', size: 1.1 * 1e9 }],
-    isoDir: '/tank/isos', isoDirMissing: false, vmDir: '/tank/vms', vmDirMissing: false,
+    isoDir: sp.isos, isoDirMissing: false, vmDir: sp.vms, vmDirMissing: false,
     network: 'bridge:br0', maxVcpus: 16, maxMemory: 32 * GB,
     networks: vmNets.map((n) => ({ name: n.name, mode: n.mode, subnet: n.subnet, active: n.active })), bridges: [{ name: 'br0', address: '192.168.1.10/24' }],
     usb: copy(USB), pci: copy(PCI), iommu: true,
@@ -930,7 +949,52 @@
       scrub: { kind: null, running: false, progress: null, errors: null, last: null } });
     chosen.forEach((c) => { const d = disks.find((x) => x.name === c.name); Object.assign(d, { pool: name, role: 'data', vdev: label, state: 'ONLINE' }); });
     datasets.push({ name, used: 0, free: usable, mountpoint: '/' + name, compress: 1 });
-    return { name };
+    const folders = b.folders === false ? [] : ['appdata', 'media', 'backups', 'vms', 'isos'];
+    folders.forEach((f) => datasets.push({ name: name + '/' + f, used: 0, free: usable, mountpoint: '/' + name + '/' + f, compress: 1 }));
+    return { name, folders, uses: [] }; // in de demo hebben appgegevens, VM's en ISO's al een plek
+  }
+  /* ---- opslaglocaties (Instellingen → Opslag) en appgegevens verhuizen (nagebootst, ~10 s) */
+  let spJob = null;
+  const FOLDER = { appdata: 'appdata', vms: 'vms', isos: 'isos', shares: '' };
+  const spPools = () => pools.map((p) => ({ name: p.name, mountpoint: '/' + p.name, free: p.free }));
+  const spApps = () => apps.filter((a) => a.compose && a.dataDirs.some((x) => x.startsWith(sp.appdata + '/')));
+  function spMigration() {
+    if (!spJob) return null;
+    const el = Date.now() - spJob.start, n = spJob.apps.length;
+    const lines = [...spJob.apps.map((a) => a + ' stoppen…'), 'Kopiëren van ' + spJob.from + ' naar ' + spJob.to + '…'];
+    let step = 'stop', percent = 0, state = 'running';
+    if (el > 1500) { step = 'copy'; percent = Math.min(100, Math.round(((el - 1500) / 7000) * 100)); }
+    if (el > 8500) { step = 'compose'; lines.push(...spJob.apps.map((a) => 'Aangepast: /opt/stacks/' + a + '/compose.yaml (reservekopie: compose.yaml.bak)')); }
+    if (el > 9500) { step = 'start'; lines.push(...spJob.apps.map((a) => a + ' starten…')); }
+    if (el > 10500) {
+      step = 'done'; state = 'done'; lines.push('Klaar. De oude map ' + spJob.from + ' blijft staan: verwijder ze zelf als alles werkt.');
+      if (!spJob.applied) {
+        spJob.applied = true; sp.appdata = spJob.to;
+        apps.forEach((a) => { a.dataDirs = a.dataDirs.map((x) => (x.startsWith(spJob.from + '/') ? spJob.to + x.slice(spJob.from.length) : x)); });
+        if (!datasets.some((d) => d.mountpoint === spJob.to)) datasets.push({ name: spJob.to.slice(1), used: 162 * GB, free: 1e12, mountpoint: spJob.to, compress: 1.6 });
+      }
+    }
+    return { from: spJob.from, to: spJob.to, state, step, percent, error: null, lines, manual: [], started: new Date(spJob.start).toISOString(), finished: state === 'done' ? new Date().toISOString() : null };
+  }
+  function spGet() {
+    spMigration();
+    return { paths: { ...sp }, exists: { appdata: true, vms: true, isos: true, shares: true }, pools: spPools(), folders: FOLDER,
+      apps: spApps().map((a) => ({ project: a.compose, containers: [a.name], running: /RUNNING/.test(a.state) })), manual: [], migration: spMigration() };
+  }
+  function spSet(b) {
+    const p = spPools().find((x) => x.name === b.pool);
+    if (!p) throw err('Kies een pool.');
+    if (b.kind === 'appdata') {
+      const m = spMigration();
+      if (m && m.state === 'running') throw err('Er loopt al een verhuis. Wacht tot die klaar is.', 409);
+      const to = p.mountpoint + '/appdata';
+      if (to === sp.appdata) throw err('De appgegevens staan al op ' + p.name + '.');
+      spJob = { start: Date.now(), from: sp.appdata, to, apps: spApps().map((a) => a.compose) };
+      return { started: true, migration: spMigration() };
+    }
+    if (!['vms', 'isos', 'shares'].includes(b.kind)) throw err('Onbekende soort map.');
+    sp[b.kind] = p.mountpoint + (FOLDER[b.kind] ? '/' + FOLDER[b.kind] : '');
+    return spGet();
   }
   const pools = [
     { name: 'tank', health: 'ONLINE', used: 3.3 * TB, free: 2.05 * TB, layout: 'raidz1', diskCount: 4,
@@ -1003,7 +1067,9 @@
 
   async function get(path) {
     await wait(rnd(120, 300));
-    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone() };
+    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    if (path === '/api/storage-paths') return spGet();
+    if (path === '/api/storage-paths/migration') return { migration: spMigration() };
     if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
@@ -1071,6 +1137,8 @@
     if (path === '/api/onboarding/finish') { onbSet(true); return { done: true, finished: new Date().toISOString(), skipped: !!body.skipped }; }
     if (path === '/api/onboarding/reset') { onbSet(false); return { done: false }; }
     if (path === '/api/password') { await wait(rnd(300, 600)); return demoPassword(body); }
+    if (path === '/api/setup') { await wait(rnd(300, 600)); return demoSetup(body); }
+    if (path === '/api/storage-paths') { await wait(rnd(300, 600)); return spSet(body); }
     if (path === '/api/update/install') {
       const g = updGet();
       if (g.running) throw err('Er loopt al een update.', 409);
@@ -1289,5 +1357,5 @@
     throw err('Onbekend endpoint', 404);
   }
 
-  window.HomeBaseOSDemo = { get, post, del, stream };
+  window.HomeBaseOSDemo = { get, post, del, stream, user: () => acct.user };
 })();

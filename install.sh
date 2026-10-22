@@ -33,7 +33,7 @@ fi
 apt-get update
 
 step "Basispakketten"
-apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils
+apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils rsync
 # Klok gelijk houden: de codes van tweestapsverificatie hangen af van de tijd.
 apt-get install -y systemd-timesyncd || true
 timedatectl set-ntp true || true
@@ -106,12 +106,12 @@ step "HomeBaseOS installeren in $APP"
 mkdir -p "$APP" "$ETC" /opt/stacks
 rm -rf "$APP/lib" "$APP/public" "$APP/deploy"
 cp -r "$SRC/server.js" "$SRC/package.json" "$SRC/lib" "$SRC/public" "$SRC/deploy" "$APP/"
-NEW_PASSWORD=""
+# Geen wachtwoord: bij de eerste keer in de browser maak je zelf een account aan (de welkomstwizard).
+NEW_INSTALL=0
 if [ ! -f "$ETC/homebaseos.env" ]; then
-  NEW_PASSWORD="$(node -e "console.log(require('crypto').randomBytes(12).toString('base64url'))")"
+  NEW_INSTALL=1
   SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
-  sed -e "s#^APP_PASSWORD=.*#APP_PASSWORD=$NEW_PASSWORD#" -e "s#^SESSION_SECRET=.*#SESSION_SECRET=$SECRET#" \
-    "$SRC/deploy/homebaseos.env" > "$ETC/homebaseos.env"
+  sed -e "s#^SESSION_SECRET=.*#SESSION_SECRET=$SECRET#" "$SRC/deploy/homebaseos.env" > "$ETC/homebaseos.env"
   chmod 600 "$ETC/homebaseos.env"
 fi
 install -m 644 "$SRC/deploy/homebaseos.service" /etc/systemd/system/homebaseos.service
@@ -122,15 +122,11 @@ systemctl restart homebaseos
 IP="$(hostname -I | awk '{print $1}')"
 step "Klaar"
 echo "Open http://$IP:8080"
-if [ -n "$NEW_PASSWORD" ]; then
-  echo "Je wachtwoord: $NEW_PASSWORD  (staat ook in $ETC/homebaseos.env)"
-  echo "Meld je aan: een welkomstwizard helpt je met een eigen wachtwoord, de naam, de tijdzone en je opslag."
+if [ "$NEW_INSTALL" = 1 ]; then
+  echo "Open dat adres in je browser: de welkomstwizard maakt je account aan en helpt je met de naam, de tijdzone en je opslag."
+  echo "Een pool aanmaken kan daar ook; HomeBaseOS maakt er meteen de mappen appdata, media, backups, vms en isos op."
 fi
 echo
-echo "Volgende stappen (zie README):"
-echo "  1. Maak een ZFS-pool, bv.: zpool create -o ashift=12 tank raidz1 /dev/disk/by-id/..."
-echo "  2. Maak de datasets voor VM's en ISO's: zfs create tank/vms && zfs create tank/isos"
-echo "     en voor de appstore: zfs create snel/appdata (of pas APPDATA_DIR aan in $ETC/homebaseos.env)"
-echo "  3. Wil je VM's rechtstreeks in je thuisnetwerk? Maak een bridge br0 en zet VM_NETWORK=bridge=br0 in $ETC/homebaseos.env"
-[ "$NVIDIA" = 1 ] && echo "  4. Herstart de server, zodat de NVIDIA-driver laadt."
+echo "Wil je VM's rechtstreeks in je thuisnetwerk? Maak een bridge br0 (Instellingen → Netwerk) en zet VM_NETWORK=bridge=br0 in $ETC/homebaseos.env"
+[ "$NVIDIA" = 1 ] && echo "Herstart de server, zodat de NVIDIA-driver laadt."
 exit 0

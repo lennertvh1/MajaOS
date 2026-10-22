@@ -2,6 +2,11 @@
 /* Tests voor eigen apps (image of link), de indeling van het startscherm en het kiezen van een manifest. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-test-'));
+process.env.APPDATA_DIR = process.env.APPDATA_DIR || '/snel/appdata';
 const store = require('../lib/appstore');
 const { validateLayout } = require('../lib/layout');
 const { pickManifest } = require('../lib/registry');
