@@ -1,0 +1,50 @@
+# Bouwt de installatie-ISO van HomeBaseOS en zet ze bij de release op GitHub.
+# - Vanzelf bij elke nieuwe release (tag zoals v0.3.0).
+# - Met de hand: Actions > "ISO bouwen" > Run workflow, en vul de tag in van een bestaande release.
+name: ISO bouwen
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag van een bestaande release, bv. v0.3.0 (de ISO komt bij die release)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Gereedschap installeren
+        run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio
+
+      - name: Versie controleren
+        run: |
+          v="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json | head -1)"
+          [ "v$v" = "$TAG" ] || { echo "::error::package.json heeft versie $v, maar de tag is $TAG. Zet ze gelijk."; exit 1; }
+
+      - name: Debian-ISO bewaren tussen runs
+        uses: actions/cache@v4
+        with:
+          path: .iso-cache
+          key: debian-netinst-${{ github.run_id }}
+          restore-keys: debian-netinst-
+
+      - name: ISO bouwen
+        run: ./iso/build-iso.sh --out dist
+
+      - name: Bij de release zetten
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.iso dist/*.sha256 --clobber

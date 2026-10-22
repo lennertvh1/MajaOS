@@ -1,0 +1,4 @@
+
+  HomeBaseOS wordt nu geïnstalleerd (ZFS, Docker, libvirt). Dat duurt 5 à 15 minuten.
+  Meevolgen: meld je aan als "homebase" en typ  sudo journalctl -fu homebaseos-firstboot
+

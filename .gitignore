@@ -12,3 +12,7 @@ npm-debug.log*
 
 # Tijdelijke bestanden van tests en screenshots
 public/_*.html
+
+# ISO bouwen (iso/build-iso.sh)
+dist/
+.iso-cache/

@@ -371,6 +371,9 @@ async function handleApi(req, res, url) {
     if (!CFG.password) return sendJson(res, 409, { error: 'HomeBaseOS draait zonder wachtwoord.' });
     if (!checkPassword(body.current)) { await slow(); return sendJson(res, 401, { error: 'Je huidige wachtwoord klopt niet.' }); }
     auth.setPassword(body.password);
+    // Na een installatie vanaf de ISO staat het eerste wachtwoord op het scherm van de server: weg ermee.
+    const pwIssue = '/etc/issue.d/homebaseos-wachtwoord.issue';
+    if (fs.existsSync(pwIssue)) { fs.rmSync(pwIssue, { force: true }); sys.run('agetty', ['--reload']).catch(() => {}); }
     setSession(res, true);
     return sendJson(res, 200, { ok: true, changed: auth.passwordChanged() });
   }

@@ -1,0 +1,17 @@
+[Unit]
+Description=HomeBaseOS installeren (eerste opstart na de ISO)
+After=network-online.target
+Wants=network-online.target
+# Alleen zolang de installatiebestanden er nog zijn: na een geslaagde installatie verdwijnen ze.
+ConditionPathExists=/opt/homebaseos-setup/install.sh
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/homebaseos-setup/iso/firstboot.sh
+TimeoutStartSec=0
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -16,7 +16,24 @@ HomeBaseOS draait op een gewone **Debian 13** en beheert drie dingen voor je: **
 - **Instellingen** (tandwiel rechtsboven): taal (Nederlands of Engels) en thema, de netwerkinstellingen van de server (IP-adres, DHCP of vast, DNS, hostnaam, bridge voor VM's) met automatisch terugzetten als je niet bevestigt, Docker-netwerken (bridge, macvlan, ipvlan) voor je apps, en alle info over de server, de hardware en de versies
 - Licht en donker thema, werkt ook op je gsm
 
-## Installeren
+## Installeren met de ISO (aanbevolen)
+
+Bij elke release staat een installatie-ISO: `homebaseos-<versie>-amd64.iso`. Dat is de officiële Debian 13-netinstaller met HomeBaseOS erbij.
+
+1. Zet **Secure Boot uit** in het BIOS (de ZFS- en NVIDIA-modules zijn niet ondertekend). Zet de server op UEFI.
+2. Zet de ISO op een USB-stick met [balenaEtcher](https://etcher.balena.io), of: `sudo dd if=homebaseos-….iso of=/dev/sdX bs=4M status=progress conv=fsync`.
+3. Start de server van de stick en kies **HomeBaseOS installeren** (of *met NVIDIA-driver* voor een NVIDIA-kaart). De server heeft internet nodig.
+4. De installer vraagt maar drie dingen:
+   - **de schijf voor het systeem**: kies de SSD voor Debian, *niet* een van je dataschijven;
+   - de bevestiging dat die schijf gewist mag worden;
+   - een wachtwoord voor de beheerder `homebase` (voor SSH en `sudo`).
+5. Na de herstart installeert HomeBaseOS zichzelf (5 à 15 minuten). Daarna staan het adres en het eerste wachtwoord op het scherm van de server. Open dat adres in je browser: de welkomstwizard doet de rest.
+
+Taal en toetsenbord staan op Nederlands (België) en Belgisch AZERTY; de tijdzone op Europe/Brussels (aan te passen in de wizard). Mislukt de installatie bij de eerste opstart, dan staat dat op het scherm; het logboek is `/var/log/homebaseos-firstboot.log` en `sudo systemctl restart homebaseos-firstboot` probeert opnieuw.
+
+**De ISO zelf bouwen.** Dat doet GitHub Actions bij elke release (`.github/workflows/iso.yml`), of met de hand via *Actions > ISO bouwen > Run workflow*. Op een Linux-pc: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (de ISO komt in `dist/`).
+
+## Installeren met de hand
 
 ### 1. Debian 13 installeren
 
