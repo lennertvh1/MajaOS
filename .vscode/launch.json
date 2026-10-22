@@ -1,0 +1,48 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Demo (voorbeelddata)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.js",
+      "args": [
+        "--demo"
+      ],
+      "runtimeArgs": [
+        "--watch"
+      ],
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "poort (\\d+)",
+        "uriFormat": "http://localhost:%s"
+      }
+    },
+    {
+      "name": "Op de server (.env)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.js",
+      "runtimeArgs": [
+        "--watch"
+      ],
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "poort (\\d+)",
+        "uriFormat": "http://localhost:%s"
+      }
+    },
+    {
+      "name": "Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": [
+        "--test"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

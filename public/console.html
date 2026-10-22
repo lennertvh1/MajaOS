@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="console-page">
+  <header class="console-bar">
+    <a class="btn sm back" href="/#vms" aria-label="Terug naar Thuisbasis" data-t-label title="Terug naar Thuisbasis">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></a>
+    <div class="console-title"><b id="cName">…</b> <span class="pill" id="cState"></span></div>
+    <div class="btn-row console-tools">
+      <button class="btn sm" type="button" id="cKeys" disabled>Ctrl+Alt+Del</button>
+      <button class="btn sm" type="button" id="cType" aria-expanded="false" disabled data-t>Tekst typen</button>
+      <button class="btn sm" type="button" id="cScale" aria-pressed="true" data-t>Passend maken</button>
+      <button class="btn sm" type="button" id="cFull" data-t>Volledig scherm</button>
+      <button class="btn sm" type="button" id="cPop" hidden data-t>Los venster</button>
+      <button class="btn sm" type="button" id="cClose" hidden aria-label="Sluiten" data-t-label title="Sluiten">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+  </header>
+  <div class="console-clip" id="cClip" hidden role="status">
+    <span id="cClipText"></span>
+    <button class="btn sm primary" type="button" id="cClipCopy" data-t>Kopiëren naar deze pc</button>
+    <button class="btn sm" type="button" id="cClipHide" data-t>Verbergen</button>
+  </div>
+  <textarea id="cPasteSink" class="paste-sink" tabindex="-1" aria-hidden="true"></textarea>
+  <form class="console-typebar" id="cTypeBar" hidden>
+    <input class="field" id="cText" autocomplete="off" spellcheck="false" placeholder="Tekst die de VM krijgt, bv. een lang wachtwoord" data-t-ph>
+    <label class="check"><input type="checkbox" id="cEnter"> <span data-t>Daarna Enter</span></label>
+    <button class="btn sm primary" type="submit" data-t>Typen</button>
+  </form>
+  <main class="console-screen" id="screen" aria-label="Scherm van de VM"></main>
+  <div class="console-status" id="cStatus" role="status">
+    <p id="cStatusText" data-t>Laden…</p>
+    <div class="btn-row" id="cStatusBtns"></div>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="lang/en.js"></script>
+  <script src="demo.js"></script>
+  <script src="console.js"></script>
+</body>
+</html>

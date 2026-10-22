@@ -1,0 +1,14 @@
+# Geheimen en lokale instellingen
+.env
+*.local
+
+# Afhankelijkheden en build (er zijn er geen, maar voor de zekerheid)
+node_modules/
+
+# Systeem- en logbestanden
+.DS_Store
+*.log
+npm-debug.log*
+
+# Tijdelijke bestanden van tests en screenshots
+public/_*.html

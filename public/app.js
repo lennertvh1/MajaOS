@@ -1,0 +1,2616 @@
+/* Thuisbasis — frontend */
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------ hulpjes */
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /* ------------------------------------------------------------ taal */
+  // De Nederlandse tekst is zelf de sleutel (zoals gettext). Andere talen staan in public/lang/<taal>.js.
+  const LANGS = { nl: 'Nederlands', en: 'English' };
+  const DICTS = { en: window.TB_LANG_EN || {} };
+  const LOCALES = { nl: 'nl-BE', en: 'en-GB' };
+  let LANG = 'nl', LOCALE = 'nl-BE';
+  let nf = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+  let nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+  const fill = (s, vars) => (vars ? String(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : String(s));
+  function t(s, vars) { const d = DICTS[LANG]; return fill(d && d[s] != null ? d[s] : s, vars); }
+  // Meldingen van de server zijn altijd Nederlands: herken ze aan een sjabloon uit het woordenboek en vul de waarden in.
+  let patterns = null;
+  function tr(msg) {
+    const m = String(msg == null ? '' : msg); const d = DICTS[LANG];
+    if (!d || !m) return m;
+    if (d[m] != null) return d[m];
+    if (!patterns) {
+      patterns = Object.keys(d).filter((k) => /\{\w+\}/.test(k)).map((k) => {
+        const names = [];
+        const src = k.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(\w+)\}/g, (_, n) => { names.push(n); return '([\\s\\S]+?)'; });
+        return { re: new RegExp('^' + src + '$'), names, out: d[k] };
+      }).sort((a, b) => b.re.source.length - a.re.source.length); // het meest specifieke sjabloon eerst
+    }
+    for (const p of patterns) {
+      const hit = m.match(p.re);
+      if (hit) return fill(p.out, Object.fromEntries(p.names.map((n, i) => [n, tr(hit[i + 1])])));
+    }
+    return m;
+  }
+  // Vaste tekst uit index.html: één keer verzamelen, bij elke taalwissel opnieuw invullen.
+  const STATIC = [];
+  (function collectStatic() {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.nodeValue.trim() && !n.parentElement.closest('script,style,svg') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const [, lead, key, trail] = n.nodeValue.match(/^(\s*)([\s\S]*?)(\s*)$/);
+      STATIC.push({ n, lead, key, trail });
+    }
+    document.querySelectorAll('[placeholder],[aria-label],[title]').forEach((el) => {
+      ['placeholder', 'aria-label', 'title'].forEach((attr) => { if (el.hasAttribute(attr)) STATIC.push({ el, attr, key: el.getAttribute(attr) }); });
+    });
+  })();
+  function setLang(l) {
+    LANG = LANGS[l] ? l : 'nl'; LOCALE = LOCALES[LANG]; patterns = null;
+    nf = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+    nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+    document.documentElement.lang = LANG;
+    STATIC.forEach((s) => { if (s.n) s.n.nodeValue = s.lead + t(s.key) + s.trail; else s.el.setAttribute(s.attr, t(s.key)); });
+    try { localStorage.setItem('tb-lang', LANG); } catch (e) { /* privévenster */ }
+  }
+  try { setLang(localStorage.getItem('tb-lang') || 'nl'); } catch (e) { setLang('nl'); }
+
+  // Thema per toestel: automatisch (volgt het systeem), licht of donker.
+  function setTheme(v) {
+    if (v === 'light' || v === 'dark') document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem('tb-theme', v || 'auto'); } catch (e) { /* privévenster */ }
+  }
+  const themeNow = () => { try { return localStorage.getItem('tb-theme') || 'auto'; } catch (e) { return 'auto'; } };
+  setTheme(themeNow());
+
+  function bytes(n) {
+    if (n == null || Number.isNaN(n)) return '–';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']; let i = 0; let v = Number(n);
+    while (v >= 1000 && i < u.length - 1) { v /= 1024; i++; }
+    return (v >= 100 ? nf0.format(v) : nf.format(v)) + ' ' + u[i];
+  }
+  function duration(sec) {
+    if (sec == null) return '';
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+    if (d) return t(d === 1 ? '{d} dag {h} u' : '{d} dagen {h} u', { d, h });
+    if (h) return t('{h} u {m} min', { h, m });
+    return t('{m} min', { m });
+  }
+  function level(pct, warn = 75, bad = 90) { return pct >= bad ? 'bad' : pct >= warn ? 'warn' : ''; }
+  function tempClass(t) { return t == null ? '' : t >= 50 ? 'temp-bad' : t >= 45 ? 'temp-warn' : 'temp-ok'; }
+  const KNOWN = { 'open-webui': 'Open WebUI', pihole: 'Pi-hole', qbittorrent: 'qBittorrent', 'nginx-proxy-manager': 'Nginx Proxy Manager',
+    'paperless-ngx': 'Paperless-ngx', 'uptime-kuma': 'Uptime Kuma', zigbee2mqtt: 'Zigbee2MQTT', homeassistant: 'Home Assistant',
+    'home-assistant': 'Home Assistant', adguardhome: 'AdGuard Home', nextcloud: 'Nextcloud', immich: 'Immich' };
+  function prettyName(n) {
+    if (KNOWN[n.toLowerCase()]) return KNOWN[n.toLowerCase()];
+    return n.replace(/[-_]+/g, ' ').replace(/\b(ngx|npm|mqtt|ai|vm|os|ui)\b/gi, (m) => m.toUpperCase())
+      .replace(/^\w/, (c) => c.toUpperCase());
+  }
+  const PALETTE = ['#2f6f9f', '#3e8e7e', '#7a5ea8', '#b05a3c', '#3d7a3a', '#a2457a', '#4f5fb3', '#8a6d1f', '#26738a', '#9b4d4d'];
+  function colorFor(name) { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; }
+  function webuiUrl(tpl) { return tpl ? tpl.replace(/\[IP\]/g, location.hostname || 'localhost') : null; }
+
+  /* ------------------------------------------------------------ API */
+  const realApi = {
+    async req(method, path, body) {
+      const res = await fetch(path, {
+        method, credentials: 'same-origin',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { const e = new Error(tr(data.error) || t('Fout {status}', { status: res.status })); e.status = res.status; throw e; }
+      return data;
+    },
+    get(p) { return this.req('GET', p); },
+    post(p, b) { return this.req('POST', p, b || {}); },
+    del(p) { return this.req('DELETE', p); },
+    async stream(path, body, onLine) {
+      const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok || !res.body) { const d = await res.json().catch(() => ({})); throw new Error(tr(d.error) || t('Fout {status}', { status: res.status })); }
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (line) { const obj = JSON.parse(line); if (obj.error) throw new Error(tr(obj.error)); onLine(obj); }
+        }
+      }
+      if (buf.trim()) onLine(JSON.parse(buf));
+    },
+  };
+  let api = realApi;
+  // De demo gooit dezelfde (Nederlandse) meldingen als de server: die ook vertalen.
+  function translatedApi(src) {
+    const wrap = (fn) => async (...args) => { try { return await fn(...args); } catch (e) { e.message = tr(e.message); throw e; } };
+    return { get: wrap(src.get), post: wrap(src.post), del: wrap(src.del), stream: wrap(src.stream) };
+  }
+
+  /* ------------------------------------------------------------ toestand */
+  const S = { overview: null, apps: [], vms: [], ai: null, aiError: null, filter: 'all', search: '', config: {},
+    vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
+    store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {} };
+
+  /* ------------------------------------------------------------ meldingen */
+  function toast(msg, bad) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (bad ? ' bad' : '');
+    el.textContent = msg;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), bad ? 6000 : 3200);
+  }
+
+  /* ------------------------------------------------------------ klok */
+  function tickClock() {
+    const now = new Date();
+    $('#clock').textContent = now.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+    const d = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
+    $('#date').textContent = d.charAt(0).toUpperCase() + d.slice(1);
+    const h = now.getHours();
+    $('#greeting').textContent = t(h < 6 ? 'Goedenacht' : h < 12 ? 'Goedemorgen' : h < 18 ? 'Goedemiddag' : 'Goedenavond');
+  }
+
+  /* ------------------------------------------------------------ widgets */
+  function setRing(id, pct) {
+    const el = $(id); const c = 113.1;
+    el.style.strokeDashoffset = pct == null ? c : String(c * (1 - Math.min(100, pct) / 100));
+    el.classList.remove('warn', 'bad');
+    const lv = level(pct || 0); if (lv) el.classList.add(lv);
+  }
+
+  function renderOverview() {
+    const o = S.overview; if (!o) return;
+    $('#host').textContent = o.hostname || '';
+    document.title = (o.hostname ? o.hostname + ' – ' : '') + 'Thuisbasis';
+    const cpu = o.cpu && o.cpu.percent; const mem = o.memory && o.memory.percent;
+    setRing('#cpuRing', cpu); $('#cpuPct').textContent = cpu == null ? '–' : Math.round(cpu) + '%';
+    setRing('#memRing', mem); $('#memPct').textContent = mem == null ? '–' : Math.round(mem) + '%';
+    const g = o.gpu && o.gpu[0];
+    $('#gpuRingWrap').hidden = !g;
+    if (g) { const vp = (g.memUsed / g.memTotal) * 100; setRing('#gpuRing', vp); $('#gpuPct').textContent = Math.round(vp) + '%'; }
+    $('#uptime').textContent = o.uptime != null ? t('Aan sinds {time}', { time: duration(o.uptime) }) : '';
+    const facts = [];
+    if (o.cpu && o.cpu.brand) facts.push([t('Processor'), o.cpu.brand.replace(/\s+\d+-Core Processor/i, '').replace(/\(R\)|\(TM\)/g, '')]);
+    if (o.memory) facts.push([t('Geheugen'), t('{used} van {total}', { used: bytes(o.memory.used), total: bytes(o.memory.total) })]);
+    if (g) facts.push(['GPU', g.name.replace(/^NVIDIA (GeForce )?/, '') + (g.temp != null ? ' · ' + g.temp + ' °C' : '')]);
+    if (o.version) facts.push([t('Systeem'), o.version.replace(' GNU/Linux', '')]);
+    $('#sysFacts').innerHTML = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd title="${esc(v)}">${esc(v)}</dd>`).join('');
+
+    const s = o.storage;
+    const st = $('#arrayState');
+    if (!s || !s.pools) {
+      $('#storeFree').textContent = '–'; $('#storeBar').style.width = '0';
+      $('#storeLine').textContent = t(s ? 'Nog geen ZFS-pool. Maak er een aan (zie README).' : 'ZFS is niet bereikbaar.');
+      st.textContent = ''; st.className = 'pill'; return;
+    }
+    const pct = s.total ? (s.used / s.total) * 100 : 0;
+    $('#storeFree').textContent = bytes(s.free);
+    $('#storeFreeLabel').textContent = t('vrij');
+    const bar = $('#storeBar'); bar.style.width = pct.toFixed(1) + '%'; bar.className = level(pct, 80, 92);
+    $('#storeLine').textContent = t(s.pools > 1 ? '{used} van {total} gebruikt in {n} pools' : '{used} van {total} gebruikt', { used: bytes(s.used), total: bytes(s.total), n: s.pools });
+    const [label, cls] = poolHealth(s.health);
+    st.textContent = label; st.className = 'pill ' + cls;
+  }
+  function poolHealth(h) {
+    if (h === 'ONLINE') return [t('Gezond'), 'ok'];
+    if (h === 'DEGRADED') return [t('Aangetast'), 'warn'];
+    return [h ? t('Probleem: {state}', { state: h.toLowerCase() }) : t('Onbekend'), 'bad'];
+  }
+
+  function renderAiWidget() {
+    const st = $('#aiState');
+    if (S.aiError) {
+      $('#aiLine').textContent = t(S.config.ollama ? 'Ollama niet bereikbaar' : 'Ollama niet ingesteld');
+      $('#aiSub').textContent = S.config.ollama ? S.aiError : t('Zet OLLAMA_URL in /etc/thuisbasis/thuisbasis.env.');
+      st.textContent = ''; st.className = 'pill'; return;
+    }
+    const ai = S.ai; if (!ai) return;
+    const loaded = ai.models.filter((m) => m.loaded);
+    $('#aiLine').textContent = loaded.length ? loaded.map((m) => m.name).join(', ') : t('Geen model geladen');
+    const g = ai.gpu && ai.gpu[0];
+    $('#aiSub').textContent = t(ai.models.length === 1 ? '{n} model geïnstalleerd' : '{n} modellen geïnstalleerd', { n: ai.models.length }) +
+      (g ? ' · ' + t('{used} van {total} VRAM', { used: bytes(g.memUsed), total: bytes(g.memTotal) }) : '');
+    st.textContent = t(loaded.length ? 'Klaar' : 'Inactief'); st.className = 'pill ' + (loaded.length ? 'ok' : '');
+  }
+
+  function vmStateText(s) {
+    const k = ({ RUNNING: 'Draait', SHUTOFF: 'Uit', SHUTDOWN: 'Sluit af', PAUSED: 'Gepauzeerd', CRASHED: 'Gecrasht', IDLE: 'Inactief',
+      PMSUSPENDED: 'Slaapstand', NOSTATE: 'Onbekend' })[String(s).toUpperCase()];
+    return k ? t(k) : s;
+  }
+  function renderVmWidget() {
+    const ul = $('#vmMini');
+    const running = S.vms.filter((v) => vmKind(v.state) === 'on').length;
+    $('#vmWidgetCount').textContent = S.vms.length ? t('{n} van {total} actief', { n: running, total: S.vms.length }) : '';
+    if (!S.vms.length) {
+      ul.innerHTML = `<li class="muted small">${S.vmError ? t('VM\'s niet beschikbaar: {error}', { error: esc(S.vmError) }) : t('Nog geen virtuele machines')}</li>`;
+      return;
+    }
+    ul.innerHTML = S.vms.map((v) => {
+      const kind = vmKind(v.state);
+      const live = kind === 'on' || kind === 'paused';
+      const sub = live ? 'CPU ' + vmCpuText(v) + ' · RAM ' + vmRamText(v) : vmPendingText(v);
+      const bar = (pct) => `<span class="${level(pct || 0)}" style="width:${Math.min(100, pct || 0).toFixed(1)}%"></span>`;
+      return `<li>
+        <div class="vm-mini-row"><span class="vm-mini-name">${esc(v.name)}</span><span class="pill ${VM_PILL[kind]}">${esc(vmStateText(v.state))}</span></div>
+        ${live ? `<div class="vm-mini-bars" aria-hidden="true"><div class="bar">${bar(vmCpuPct(v))}</div><div class="bar">${bar(vmRamPct(v))}</div></div>` : ''}
+        ${sub ? `<div class="muted small">${esc(sub)}</div>` : ''}
+      </li>`;
+    }).join('');
+  }
+
+  /* ------------------------------------------------------------ apps */
+  function isRunning(a) { return /RUNNING/i.test(a.state); }
+  function iconHtml(a) {
+    const dot = `<span class="dot ${isRunning(a) ? 'on' : ''}" aria-hidden="true"></span>` +
+      (a.update ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : '');
+    if (a.icon) return `<span class="app-icon" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" loading="lazy">${dot}</span>`;
+    return `<span class="app-icon" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}${dot}</span>`;
+  }
+
+  function renderApps() {
+    const q = S.search.trim().toLowerCase();
+    const list = S.apps.filter((a) => {
+      if (q && !(a.name.toLowerCase().includes(q) || (a.image || '').toLowerCase().includes(q))) return false;
+      if (S.filter === 'running') return isRunning(a);
+      if (S.filter === 'stopped') return !isRunning(a);
+      if (S.filter === 'update') return !!a.update;
+      return true;
+    });
+    // Het filter Updates heeft pas zin als de server updates kan melden.
+    const updBtn = $('#filters [data-filter="update"]');
+    updBtn.hidden = !S.apps.some((a) => a.update);
+    if (updBtn.hidden && S.filter === 'update') { S.filter = 'all'; $$('#filters button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.filter === 'all'))); return renderApps(); }
+    const running = S.apps.filter(isRunning).length;
+    $('#appCount').textContent = S.apps.length ? t('{n} van {total} actief', { n: running, total: S.apps.length }) : '';
+    renderUpdateInfo();
+    const grid = $('#appGrid');
+    if (!list.length) {
+      grid.innerHTML = `<p class="empty">${t(S.apps.length ? 'Geen apps die hierbij passen.' : 'Nog geen containers gevonden.')}</p>`;
+      return;
+    }
+    grid.innerHTML = list.map((a) => {
+      const label = prettyName(a.name);
+      const busy = S.appBusy[a.id];
+      const state = busy ? t(APP_ACTS[busy].noun).toLowerCase() + '…' : t(a.update ? 'update beschikbaar' : isRunning(a) ? 'actief' : 'gestopt');
+      const hint = t(appUrl(a) ? 'klik om te openen' : 'klik voor het menu');
+      return `<div class="app ${isRunning(a) ? '' : 'stopped'}${busy ? ' busy' : ''}">
+        <button class="app-open" type="button" data-app="${esc(a.id)}" data-action="open" title="${esc(label)} – ${state}, ${hint}">
+          ${iconHtml(a)}<span class="app-name">${esc(label)}</span>
+        </button>
+        <button class="app-more" type="button" data-app="${esc(a.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu van {name}', { name: label }))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+  }
+
+  // Onder de titel: hoeveel updates er zijn, met Bekijken, Alles bijwerken en Nu controleren.
+  function renderUpdateInfo() {
+    const el = $('#updInfo');
+    const upd = S.apps.filter((a) => a.update);
+    const canAll = upd.filter((a) => a.canUpdate && !S.appBusy[a.id]);
+    const checked = Math.max(0, ...S.apps.map((a) => a.updateChecked || 0));
+    const when = checked ? t('Laatst gecontroleerd: {when}', { when: new Date(checked).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }) : t('Nog niet gecontroleerd');
+    el.innerHTML = (upd.length
+      ? `<button class="pill warn upd-pill" type="button" data-upd="show"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg>${t(upd.length === 1 ? '{n} update' : '{n} updates', { n: upd.length })}</button>
+         ${canAll.length ? `<button class="linkish" type="button" data-upd="all">${t('Alles bijwerken')}</button>` : ''}`
+      : (checked ? `<span class="muted small">${t('Alles is up-to-date')}</span>` : ''))
+      + `<button class="linkish" type="button" data-upd="check" title="${esc(when)}"${S.updChecking ? ' disabled' : ''}>${t(S.updChecking ? 'Controleren…' : 'Nu controleren')}</button>`;
+  }
+  async function checkUpdatesNow() {
+    S.updChecking = true; renderUpdateInfo();
+    try {
+      const r = await api.post('/api/apps/check-updates');
+      toast(r.updates ? t(r.updates === 1 ? '{n} app heeft een update.' : '{n} apps hebben een update.', { n: r.updates }) : t('Alle apps zijn up-to-date.'));
+      if (r.errors && r.errors.length) toast(t('Niet gecontroleerd: {list}', { list: r.errors.map(tr).join('; ') }), true);
+    } catch (e) { toast(t('Controleren op updates lukte niet: {error}', { error: e.message }), true); }
+    S.updChecking = false;
+    await loadApps().catch(() => renderApps());
+  }
+  async function updateAll() {
+    const list = S.apps.filter((a) => a.update && a.canUpdate && !S.appBusy[a.id]);
+    if (!list.length) return;
+    if (!(await ask(t(list.length === 1 ? '{n} app bijwerken? {names}. Ze zijn elk even onbereikbaar terwijl ze opnieuw starten.'
+      : '{n} apps bijwerken? {names}. Ze zijn elk even onbereikbaar terwijl ze opnieuw starten.', { n: list.length, names: list.map((a) => prettyName(a.name)).join(', ') }), t('Alles bijwerken')))) return;
+    let ok = 0;
+    for (const a of list) {
+      S.appBusy[a.id] = 'update'; renderApps();
+      try { await api.post(appPath(a, '/update')); ok++; } catch (e) { toast(t('Bijwerken van {name} lukte niet: {error}', { name: prettyName(a.name), error: e.message }), true); }
+      delete S.appBusy[a.id];
+    }
+    toast(t('{n} van {total} bijgewerkt.', { n: ok, total: list.length }));
+    await loadApps().catch(() => renderApps());
+  }
+  $('#updInfo').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-upd]'); if (!b) return;
+    if (b.dataset.upd === 'check') return checkUpdatesNow();
+    if (b.dataset.upd === 'all') return updateAll();
+    S.filter = 'update'; $$('#filters button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.filter === 'update'))); renderApps();
+  });
+
+  /* ------------------------------------------------------------ venster */
+  const win = $('#win');
+  let onWinClose = null;
+  function openWindow(title, html, after) {
+    win.classList.remove('win-wide'); // alleen het opslagvenster is breed (voor de kast met bays)
+    if (onWinClose) { try { onWinClose(); } catch (e) { /* negeer */ } onWinClose = null; }
+    $('#winTitle').textContent = title;
+    // Nieuw element, zodat listeners van een vorig venster niet blijven hangen.
+    const old = $('#winBody'), body = old.cloneNode(false);
+    old.replaceWith(body);
+    body.innerHTML = html;
+    if (!win.open) win.showModal();
+    if (after) after(body);
+  }
+  $('#winClose').addEventListener('click', () => win.close());
+  win.addEventListener('click', (e) => { if (e.target === win || e.target.closest('[data-close]')) win.close(); });
+  // Het close-event komt asynchroon: is er intussen al een nieuw venster open, dan dat niet leegmaken.
+  win.addEventListener('close', () => { if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
+
+  // Eigen bevestiging (werkt ook waar confirm() geblokkeerd is).
+  // Met checkLabel komt er een vinkje bij en geeft ask() { checked } terug in plaats van true.
+  function ask(text, yesLabel, checkLabel) {
+    const d = $('#ask');
+    $('#askText').textContent = text; $('#askYes').textContent = yesLabel || t('Doorgaan');
+    $('#askCheckWrap').hidden = !checkLabel; $('#askCheck').checked = false; $('#askCheckText').textContent = checkLabel || '';
+    d.showModal(); $('#askNo').focus();
+    return new Promise((resolve) => {
+      const done = (v) => { d.close(); $('#askYes').onclick = $('#askNo').onclick = null; d.onclose = null; resolve(v); };
+      $('#askYes').onclick = () => done(checkLabel ? { checked: $('#askCheck').checked } : true);
+      $('#askNo').onclick = () => done(false);
+      d.onclose = () => resolve(false);
+    });
+  }
+
+  async function withBusy(btn, fn) {
+    btn.disabled = true;
+    try { await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
+  }
+
+  /* --- apps: menu (rechtsklik of ⋯), acties, logboek, console en instellingen */
+  const APP_ACTS = {
+    start: { noun: 'Starten', done: 'Gestart' }, stop: { noun: 'Stoppen', done: 'Gestopt' },
+    restart: { noun: 'Herstarten', done: 'Herstart' }, update: { noun: 'Bijwerken', done: 'Bijgewerkt' },
+  };
+  const appUrl = (a) => (isRunning(a) ? webuiUrl(a.webui) : null);
+  const appPath = (a, suffix = '') => '/api/apps/' + encodeURIComponent(a.id) + suffix;
+
+  function openAppUrl(a) {
+    const url = appUrl(a); if (!url) return;
+    if (api !== realApi) { toast(t('In de demo opent dit {name} op {url}', { name: prettyName(a.name), url: url.replace(location.hostname || 'localhost', t('je server')) })); return; }
+    window.open(url, '_blank', 'noopener');
+  }
+
+  const MENU_ICONS = {
+    open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    start: '<path d="M7 5l12 7-12 7z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+    restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', update: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
+    remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
+  };
+  const menu = $('#appMenu');
+  let menuOpener = null;
+  function closeMenu(refocus) {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    if (refocus && menuOpener) menuOpener.focus();
+    menuOpener = null;
+  }
+  function openAppMenu(a, x, y, opener) {
+    const run = isRunning(a), busy = S.appBusy[a.id];
+    const items = [
+      appUrl(a) && ['open', t('Openen')], '-',
+      !run && ['start', t('Starten')], run && ['restart', t('Herstarten')], run && ['stop', t('Stoppen'), 'danger'],
+      a.canUpdate && (a.update ? ['update', t('Bijwerken naar de nieuwe versie'), 'accent'] : ['update', t('Bijwerken')]),
+      !a.canUpdate && a.update && ['update', t('Bijwerken kan alleen voor compose-apps'), 'off'], '-',
+      ['logs', t('Logboek')], run && ['console', t('Console')], ['settings', t('Instellingen')],
+      a.storeId && '-', a.storeId && ['remove', t('Verwijderen'), 'danger'],
+    ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
+    menu.innerHTML = `<div class="menu-head"><b>${esc(prettyName(a.name))}</b><span>${esc(busy ? t(APP_ACTS[busy].noun) + '…' : a.status || a.state)}</span>
+        ${a.update && !busy ? `<span class="menu-upd">${t('Er is een nieuwe versie')}</span>` : ''}</div>` +
+      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
+        ${(busy && APP_ACTS[it[0]]) || it[2] === 'off' ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}</button>`)).join('');
+    menu.dataset.forApp = a.id; // niet data-app: daarop reageert de klik-afhandeling van de tegels
+    menu.hidden = false;
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+    menu.style.top = Math.max(8, y + r.height > innerHeight - 8 ? y - r.height : y) + 'px';
+    menuOpener = opener || null;
+    const first = $('.menu-item:not([disabled])', menu); if (first) first.focus();
+  }
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-menu]'); if (!b) return;
+    const a = S.apps.find((x) => x.id === menu.dataset.forApp);
+    closeMenu(false);
+    if (a) appCommand(a, b.dataset.menu);
+  });
+  menu.addEventListener('keydown', (e) => {
+    const items = $$('.menu-item:not([disabled])', menu);
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+    else if (e.key === 'Tab') closeMenu(false);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(false); }, true);
+  window.addEventListener('resize', () => closeMenu(false));
+  window.addEventListener('scroll', () => closeMenu(false), true);
+
+  async function appCommand(a, act) {
+    const label = prettyName(a.name);
+    if (act === 'open') return openAppUrl(a);
+    if (act === 'logs') return logWindow(a);
+    if (act === 'console') return consoleWindow(a);
+    if (act === 'settings') return appSettingsWindow(a);
+    if (act === 'remove') return removeApp(a);
+    if (act === 'stop' && !(await ask(t('{name} stoppen? Wat erop draait, is dan niet meer bereikbaar.', { name: label }), t('Stoppen')))) return;
+    S.appBusy[a.id] = act; renderApps();
+    try { await api.post(appPath(a, '/' + act)); toast(t(APP_ACTS[act].done) + ': ' + label); }
+    catch (e) { toast(t('{action} van {name} lukte niet: {error}', { action: t(APP_ACTS[act].noun), name: label, error: e.message }), true); }
+    delete S.appBusy[a.id];
+    await loadApps().catch(() => renderApps());
+  }
+
+  async function removeApp(a) {
+    const label = prettyName(a.name);
+    const r = await ask(t('{name} verwijderen? De app wordt gestopt en verwijderd, samen met zijn compose-bestand.', { name: label }), t('Verwijderen'),
+      a.dataDirs.length ? t('Ook de gegevens van de app wissen ({dirs})', { dirs: a.dataDirs.join(', ') }) : null);
+    if (!r) return;
+    S.appBusy[a.id] = 'stop'; renderApps();
+    try {
+      const res = await api.del(appPath(a) + (r.checked ? '?data=1' : ''));
+      toast(t('Verwijderd: {name}', { name: label }) + (res.kept && res.kept.length ? '. ' + t('Deze mappen bleven staan: {list}', { list: res.kept.join(', ') }) : ''));
+      if (S.store) { const s = S.store.apps.find((x) => x.id === a.storeId); if (s) s.installed = false; }
+    } catch (e) { toast(t('Verwijderen van {name} lukte niet: {error}', { name: label, error: e.message }), true); }
+    delete S.appBusy[a.id];
+    await loadApps().catch(() => renderApps());
+  }
+
+  // Logboek: live volgen zolang het venster open is; alleen meescrollen als je onderaan stond.
+  function logWindow(a) {
+    openWindow(prettyName(a.name) + ' · ' + t('logboek'), `
+      <div class="log-tools">
+        <label class="check"><input type="checkbox" id="logFollow" checked> ${t('Live volgen')}</label>
+        <select class="field" id="logTail" aria-label="${t('Aantal regels')}">${[100, 500, 2000].map((n) =>
+          `<option value="${n}"${n === 500 ? ' selected' : ''}>${t('Laatste {n} regels', { n })}</option>`).join('')}</select>
+        <button class="btn sm" type="button" id="logRefresh">${t('Vernieuwen')}</button>
+      </div>
+      <pre class="logs logs-big" id="logs" tabindex="0">${t('Laden…')}</pre>`, (body) => {
+      const pre = $('#logs', body);
+      let timer = null;
+      const load = async () => {
+        const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30;
+        try {
+          const lines = await api.get(appPath(a, '/logs?tail=' + $('#logTail', body).value));
+          pre.innerHTML = lines.length ? lines.map((l) => {
+            const ts = l.timestamp ? new Date(l.timestamp).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+            return (ts ? `<span class="ts">${esc(ts)}</span>  ` : '') + esc(l.message);
+          }).join('\n') : t('Nog geen logregels.');
+          if (atEnd) pre.scrollTop = pre.scrollHeight;
+        } catch (e) { pre.textContent = t('Het logboek kon niet geladen worden: {error}', { error: e.message }); }
+      };
+      const schedule = () => { clearTimeout(timer); if (body.isConnected && $('#logFollow', body).checked) timer = setTimeout(() => load().then(schedule), 3000); };
+      load().then(() => { pre.scrollTop = pre.scrollHeight; schedule(); });
+      $('#logFollow', body).addEventListener('change', schedule);
+      $('#logTail', body).addEventListener('change', load);
+      $('#logRefresh', body).addEventListener('click', load);
+      onWinClose = () => clearTimeout(timer);
+    });
+  }
+
+  // Console: elk commando draait apart met sh in de container. cd onthouden we zelf.
+  function consoleWindow(a) {
+    let cwd = '/';
+    const hist = []; let hi = 0;
+    openWindow(prettyName(a.name) + ' · ' + t('console'), `
+      <pre class="logs console-out" id="conOut" aria-live="polite"></pre>
+      <form class="console-line" id="conForm">
+        <label class="console-prompt" for="conIn" id="conPrompt">/ $</label>
+        <input class="console-input" id="conIn" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </form>
+      <p class="muted small">${t('Elk commando draait apart in de app. Programma\'s die op je toetsenbord wachten (zoals top, vi of nano) werken hier niet. Pijltjes omhoog en omlaag halen vorige commando\'s terug. {clear} maakt het scherm leeg.', { clear: '<code>clear</code>' })}</p>`, (body) => {
+      const out = $('#conOut', body), input = $('#conIn', body), prompt = $('#conPrompt', body);
+      const print = (html) => { out.insertAdjacentHTML('beforeend', html); out.scrollTop = out.scrollHeight; };
+      print(`<span class="muted">${t('Verbonden met {name} ({image}).', { name: esc(prettyName(a.name)), image: esc(a.image) })}</span>\n`);
+      input.focus();
+      $('#conForm', body).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cmd = input.value; if (!cmd.trim()) return;
+        hist.push(cmd); hi = hist.length; input.value = '';
+        if (cmd.trim() === 'clear') { out.innerHTML = ''; return; }
+        print(`<span class="console-cmd">${esc(cwd)} $ ${esc(cmd)}</span>\n`);
+        input.disabled = true;
+        try {
+          const r = await api.post(appPath(a, '/exec'), { cmd, cwd });
+          if (r.output) print(esc(r.output) + '\n');
+          if (r.exitCode) print(`<span class="console-err">[${t('foutcode {code}', { code: r.exitCode })}]</span>\n`);
+          cwd = r.cwd; prompt.textContent = cwd + ' $';
+        } catch (ex) { print(`<span class="console-err">${esc(ex.message)}</span>\n`); }
+        input.disabled = false; input.focus();
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp' && hi > 0) { e.preventDefault(); input.value = hist[--hi]; }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(hist.length, hi + 1); input.value = hist[hi] || ''; }
+        else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); out.innerHTML = ''; }
+      });
+    });
+  }
+
+  async function appSettingsWindow(a) {
+    const label = prettyName(a.name);
+    openWindow(label + ' · ' + t('instellingen'), `<p class="lead">${t('Laden…')}</p>`);
+    let s;
+    try { s = await api.get(appPath(a, '/settings')); }
+    catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('De instellingen konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    const ports = s.ports.length ? s.ports.map((p) => p.public + (p.public !== p.private ? ' → ' + p.private : '') + '/' + p.type.toLowerCase()).join(', ') : t('Geen');
+    const c = s.compose;
+    const body = $('#winBody');
+    body.innerHTML = `
+      <dl class="kv">
+        <dt>${t('Status')}</dt><dd>${esc(a.status || a.state)}</dd>
+        <dt>${t('Image')}</dt><dd>${esc(s.image)}</dd>
+        <dt>${t('Versie')}</dt><dd>${a.update ? `<span class="temp-warn">${t('Er is een nieuwe versie')}</span>` + (a.canUpdate ? ' · ' + t('kies Bijwerken in het menu') : '')
+          : a.update === false ? t('Up-to-date') : esc(a.updateError ? t('Onbekend: {reason}', { reason: tr(a.updateError) }) : t('Nog niet gecontroleerd'))}
+          ${a.updateChecked ? `<span class="muted small"> · ${t('gecontroleerd {when}', { when: esc(new Date(a.updateChecked).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) })}</span>` : ''}</dd>
+        <dt>${t('Poorten')}</dt><dd>${esc(ports)}</dd>
+        ${c ? `<dt>${t('Compose-project')}</dt><dd>${esc(c.project)}</dd>` : ''}
+      </dl>
+      <form class="form" id="appSetForm" novalidate style="margin-top:16px">
+        <label class="fld"><span>${t('Adres van de webinterface (WebUI)')}</span>
+          <input class="field" name="webui" value="${esc(s.webui)}" placeholder="${esc(s.webuiDefault || s.webuiAuto || 'http://[IP]:[PORT:8080]/')}" autocomplete="off" spellcheck="false">
+          <small>${t('Dit opent als je op de app klikt. {ip} wordt het adres van je server, {port} de poort op de server die aan poort 80 in de app hangt.', { ip: '<code>[IP]</code>', port: '<code>[PORT:80]</code>' })}
+            ${t('Leeg laten = automatisch ({value}).', { value: esc(s.webuiDefault || s.webuiAuto || t('geen')) })}</small></label>
+        <label class="fld"><span>${t('Pictogram')}</span>
+          <input class="field" name="icon" value="${esc(s.icon)}" placeholder="${esc(s.iconDefault || 'https://…/logo.png')}" autocomplete="off" spellcheck="false">
+          <small>${t('Adres van een afbeelding. Leeg laten = automatisch.')}</small></label>
+        <label class="check"><input type="checkbox" name="autoStart"${s.autoStart ? ' checked' : ''}> ${t('Automatisch starten als de server opstart')}</label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Opslaan')}</button><button class="btn" type="button" data-close>${t('Sluiten')}</button></div>
+      </form>
+      <h3>${t('Container')}</h3>
+      ${!c ? `<p class="muted small">${t('Deze app is niet met Docker Compose gestart. Poorten, mappen en variabelen pas je dan aan door de container opnieuw te maken, bv. vanuit de appstore.')}</p>`
+        : !c.editable ? `<p class="muted small">${c.files.length > 1 ? t('Dit project gebruikt meerdere bestanden ({files}). Pas het daar zelf aan.', { files: esc(c.files.join(', ')) })
+          : t('Dit project gebruikt een bestand dat Thuisbasis niet kan lezen. Pas het daar zelf aan.')}</p>`
+        : `<p class="muted small">${esc(c.file)}${c.project !== a.name ? ' · ' + t('project {name}', { name: esc(c.project) }) : ''}</p>
+          <div id="cfForm"${c.form ? '' : ' hidden'}></div>
+          <div id="cfText"${c.form ? ' hidden' : ''}>
+            ${c.form ? '' : `<p class="lead">${t('Het formulier is niet beschikbaar voor dit bestand. Je kan het wel als tekst aanpassen.')}${c.formError ? ' (' + esc(tr(c.formError)) + ')' : ''}</p>`}
+            <textarea class="field code" id="composeText" rows="18" spellcheck="false" aria-label="${t('Compose-bestand')}">${esc(c.text)}</textarea>
+          </div>
+          <p class="form-error" id="composeErr" role="alert"></p>
+          <div class="btn-row">
+            <button class="btn primary" type="button" id="composeSave">${t('Opslaan en opnieuw starten')}</button>
+            ${c.form ? `<button class="btn" type="button" id="cfToggle">${t('Als tekst bewerken')}</button>` : ''}
+          </div>`}`;
+    const form = $('#appSetForm', body);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form);
+      err.textContent = ''; btn.disabled = true;
+      try {
+        await api.post(appPath(a, '/settings'), { webui: form.elements.webui.value, icon: form.elements.icon.value, autoStart: form.elements.autoStart.checked });
+        toast(t('Opgeslagen: {name}', { name: label }));
+        await loadApps().catch(() => {});
+      } catch (ex) { err.textContent = t('Opslaan lukte niet: {error}', { error: ex.message }); }
+      btn.disabled = false;
+    });
+    if (!c || !c.editable) return;
+
+    // Formulier (zoals het containerformulier van Unraid) of tekst.
+    const model = c.form ? JSON.parse(JSON.stringify(c.form)) : null;
+    let mode = c.form ? 'form' : 'text';
+    if (model) composeFormMount($('#cfForm', body), model, c.dockerNetworks || []);
+    const toggle = $('#cfToggle', body);
+    if (toggle) toggle.addEventListener('click', () => {
+      mode = mode === 'form' ? 'text' : 'form';
+      $('#cfForm', body).hidden = mode !== 'form'; $('#cfText', body).hidden = mode !== 'text';
+      toggle.textContent = t(mode === 'form' ? 'Als tekst bewerken' : 'Terug naar het formulier');
+      if (mode === 'form') toast(t('Het formulier toont de opgeslagen versie. Wijzigingen in de tekst sla je op in de tekstmodus.'));
+    });
+    const save = $('#composeSave', body);
+    save.addEventListener('click', async () => {
+      const err = $('#composeErr', body); err.textContent = '';
+      if (mode === 'form') { const problem = composeFormCheck(model); if (problem) { err.textContent = problem; return; } }
+      const who = c.project !== a.name ? t('het project {name}', { name: c.project }) : label;
+      const note = mode === 'form' ? ' ' + t('Opmerkingen (#) in het bestand verdwijnen; de vorige versie blijft als .bak bewaard.') : '';
+      if (!(await ask(t('Compose-bestand opslaan en {who} opnieuw starten?', { who }) + note, t('Opslaan en starten')))) return;
+      save.disabled = true; save.textContent = t('Bezig…');
+      try {
+        const r = mode === 'form'
+          ? await api.post(appPath(a, '/compose-form'), { form: model })
+          : await api.post(appPath(a, '/compose'), { text: $('#composeText', body).value });
+        toast(t('Opgeslagen en opnieuw gestart. De vorige versie staat in {file}.', { file: r.backup }));
+        await loadApps().catch(() => {});
+        const fresh = S.apps.find((x) => x.name === a.name) || a;
+        return appSettingsWindow(fresh); // opnieuw laden: zo zie je wat er echt in het bestand staat
+      } catch (ex) { err.textContent = ex.message; }
+      save.disabled = false; save.textContent = t('Opslaan en opnieuw starten');
+    });
+  }
+
+  /* --- compose-formulier: rijen voor poorten, mappen, variabelen, apparaten en labels */
+  const CF_KINDS = [
+    ['ports', 'Poorten', 'Poort', { host: '', container: '', protocol: 'tcp' }],
+    ['volumes', 'Mappen', 'Map', { host: '', container: '', mode: 'rw' }],
+    ['env', 'Variabelen', 'Variabele', { name: '', value: '' }],
+    ['devices', 'Apparaten', 'Apparaat', { host: '', container: '' }],
+    ['labels', 'Labels', 'Label', { name: '', value: '' }],
+  ];
+  const SECRET = /pass|secret|token|key|pwd/i;
+  function cfRow(kind, r, i) {
+    const del = `<button class="cf-del" type="button" data-cf-del="${kind}:${i}" aria-label="${t('Weghalen')}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
+    const inp = (k, ph, extra = '') => `<input class="field" data-cf="${kind}:${i}:${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${ph}" autocomplete="off" spellcheck="false"${extra}>`;
+    if (r.locked) {
+      const what = kind === 'ports' ? (r.host || '?') + ' → ' + r.container + '/' + r.protocol : (r.host || r.kind || '') + ' → ' + r.container;
+      return `<div class="cf-row cf-locked"><span class="cf-lock" title="${t('Geavanceerde instelling: pas die aan in de tekstmodus')}">🔒</span>
+        <span class="cf-text">${esc(what)} <span class="muted">· ${t('geavanceerd, alleen in de tekstmodus')}</span></span>${del}</div>`;
+    }
+    if (kind === 'ports') return `<div class="cf-row cf-pair">${inp('host', t('op de server'), ` inputmode="numeric" aria-label="${t('Poort op de server')}"`)}<span class="cf-sep">→</span>
+      ${inp('container', t('in de app'), ` inputmode="numeric" aria-label="${t('Poort in de app')}"`)}
+      <select class="field cf-small" data-cf="${kind}:${i}:protocol" aria-label="Protocol"><option${r.protocol !== 'udp' ? ' selected' : ''}>tcp</option><option${r.protocol === 'udp' ? ' selected' : ''}>udp</option></select>${del}</div>`;
+    if (kind === 'volumes') return `<div class="cf-row cf-pair">${inp('host', t('map op de server, bv. /tank/media'), ` aria-label="${t('Map op de server')}"`)}<span class="cf-sep">→</span>
+      ${inp('container', t('map in de app, bv. /media'), ` aria-label="${t('Map in de app')}"`)}
+      <select class="field cf-small" data-cf="${kind}:${i}:mode" aria-label="${t('Toegang')}"><option value="rw"${r.mode !== 'ro' ? ' selected' : ''}>${t('lezen en schrijven')}</option><option value="ro"${r.mode === 'ro' ? ' selected' : ''}>${t('alleen lezen')}</option></select>${del}</div>`;
+    if (kind === 'devices') return `<div class="cf-row cf-pair">${inp('host', t('op de server, bv. /dev/dri'), ` aria-label="${t('Apparaat op de server')}"`)}<span class="cf-sep">→</span>
+      ${inp('container', t('in de app (leeg = hetzelfde)'), ` aria-label="${t('Apparaat in de app')}"`)}<span></span>${del}</div>`;
+    const secret = kind === 'env' && SECRET.test(r.name);
+    return `<div class="cf-row cf-kv">${inp('name', kind === 'env' ? t('NAAM') : t('naam'), ` aria-label="${t('Naam')}"`)}<span class="cf-sep">=</span>
+      ${inp('value', t(r.unset ? '(doorgegeven van de server)' : 'waarde'), ` aria-label="${t('Waarde')}"${secret ? ' type="password"' : ''}`)}${del}</div>`;
+  }
+  // Keuzes voor het netwerk: standaard, host, geen, de netwerken uit het compose-bestand en de andere Docker-netwerken.
+  function netChoices(f, dockerNets) {
+    const out = [{ value: '', label: t('Standaard (bridge)') }, { value: 'host', label: t('Host (netwerk van de server)') }, { value: 'none', label: t('Geen') }];
+    if (f.network === '*') out.unshift({ value: '*', label: t('Eigen netwerken ({list})', { list: f.networks.join(', ') }) });
+    const pn = f.projectNetworks || [];
+    pn.filter((x) => !x.external).forEach((x) => out.push({ value: x.key, label: t('{name} (uit dit compose-bestand)', { name: x.key }) }));
+    dockerNets.filter((n) => !pn.some((x) => !x.external && x.name === n.name)).forEach((n) =>
+      out.push({ value: n.name, label: [n.name, n.driver, n.subnet].filter(Boolean).join(' · ') }));
+    if (f.network && !out.some((o) => o.value === f.network)) out.push({ value: f.network, label: f.network });
+    return out;
+  }
+  function composeFormMount(el, f, dockerNets = []) {
+    const draw = (focus) => {
+      el.innerHTML = `
+        <div class="form">
+          <label class="fld"><span>${t('Image')}</span><input class="field" data-cf-top="image" value="${esc(f.image)}" placeholder="${t('bv. lscr.io/linuxserver/jellyfin:latest')}" spellcheck="false">
+            <small>${t('Wil je een vaste versie? Zet ze achter de dubbele punt, bv. :10.10.7 in plaats van :latest.')}</small></label>
+          <div class="fld-row">
+            <label class="fld"><span>${t('Herstarten')}</span><select class="field" data-cf-top="restart">
+              ${[['unless-stopped', 'Altijd, behalve als ik hem stop'], ['always', 'Altijd'], ['on-failure', 'Alleen na een fout'], ['no', 'Nooit'], ['', 'Niet ingesteld']]
+                .map(([v, label]) => `<option value="${v}"${f.restart === v ? ' selected' : ''}>${t(label)}</option>`).join('')}</select></label>
+            <label class="fld"><span>${t('Netwerk')}</span><select class="field" data-cf-top="network"${f.networkOther ? ' disabled' : ''}>
+              ${netChoices(f, dockerNets).map((o) => `<option value="${esc(o.value)}"${f.network === o.value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>
+              ${f.networkOther ? `<small>${t('Gebruikt {name}. Pas dat aan in de tekstmodus.', { name: esc(f.networkOther) })}</small>` : ''}</label>
+          </div>
+          ${f.networkOther ? '' : `<p class="muted small" style="margin-top:-6px">${t('Nieuwe netwerken maak je bij Instellingen → Docker-netwerken.')}</p>`}
+          ${f.network === 'host' ? `<p class="lead small">${t('Met het host-netwerk luistert de app rechtstreeks op zijn eigen poorten en negeert Docker de poorten hieronder. Wil je zelf poorten kiezen, zet Netwerk dan op Standaard (bridge) en voeg ze toe met + Poort.')}</p>` : ''}
+          ${['', 'host', 'none', '*'].includes(f.network) || f.networkOther ? '' : (() => {
+            const n = dockerNets.find((x) => x.name === f.network), ownIp = n && /^(macvlan|ipvlan)$/.test(n.driver);
+            return `<label class="fld"><span>${t('Vast IP-adres (optioneel)')}</span><input class="field" data-cf-top="ip" value="${esc(f.ip || '')}" spellcheck="false" autocomplete="off"
+              placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : '')}">
+              <small>${ownIp ? t('Het adres van de app in je thuisnetwerk. Leeg = Docker kiest er een uit het IP-bereik van het netwerk.')
+                : t('Leeg = Docker kiest zelf een adres. Een vast adres kan alleen in een netwerk met een eigen subnet.')}</small></label>`;
+          })()}
+          <label class="check"><input type="checkbox" data-cf-top="privileged"${f.privileged ? ' checked' : ''}> ${t('Privileged (bijna volledige toegang tot de server, alleen als de app het echt nodig heeft)')}</label>
+          ${f.otherServices.length ? `<p class="muted small">${t('Dit bestand bevat ook: {list}. Die blijven ongewijzigd.', { list: esc(f.otherServices.join(', ')) })}</p>` : ''}
+        </div>
+        ${CF_KINDS.map(([kind, title]) => (f[kind].length ? `<h3>${t(title)}</h3><div class="cf-list">${f[kind].map((r, i) => cfRow(kind, r, i)).join('')}</div>` : '')).join('')}
+        <div class="cf-add"><span class="muted small">${t('Toevoegen:')}</span>
+          ${CF_KINDS.map(([kind, , one]) => `<button class="btn sm" type="button" data-cf-add="${kind}">+ ${t(one)}</button>`).join('')}</div>`;
+      if (focus) { const x = $(`[data-cf^="${focus}:"]`, el); if (x) x.focus(); }
+    };
+    draw();
+    el.addEventListener('input', (e) => {
+      const tg = e.target;
+      if (tg.dataset.cfTop) {
+        f[tg.dataset.cfTop] = tg.type === 'checkbox' ? tg.checked : tg.value;
+        if (tg.dataset.cfTop === 'network') { if (['', 'host', 'none'].includes(f.network)) f.ip = ''; draw(); }
+        return;
+      }
+      if (!tg.dataset.cf) return;
+      const [kind, i, k] = tg.dataset.cf.split(':');
+      f[kind][i][k] = tg.value;
+      if (k === 'value') delete f[kind][i].unset;
+    });
+    el.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+    el.addEventListener('click', (e) => {
+      const add = e.target.closest('[data-cf-add]');
+      if (add) {
+        const kind = add.dataset.cfAdd, def = CF_KINDS.find((k) => k[0] === kind)[3];
+        f[kind].push({ ...def }); draw(kind + ':' + (f[kind].length - 1));
+        return;
+      }
+      const del = e.target.closest('[data-cf-del]');
+      if (del) { const [kind, i] = del.dataset.cfDel.split(':'); f[kind].splice(Number(i), 1); draw(); }
+    });
+  }
+  // Snelle controle in de browser; de server controleert alles nog eens.
+  function composeFormCheck(f) {
+    if (!f.image.trim() && !f.build) return t('Vul het image in.');
+    if (f.ip && !/^\d{1,3}(\.\d{1,3}){3}$/.test(String(f.ip).trim())) return t('Het vaste IP-adres is geen geldig adres, bv. 192.168.1.200.');
+    for (const p of f.ports) if (!p.locked && !/^\d{1,5}(-\d{1,5})?$/.test(String(p.container).trim())) return t('Vul bij elke poort de poort in de app in (een getal).');
+    for (const v of f.volumes) if (!v.locked && (!String(v.host).trim() || !String(v.container).trim().startsWith('/'))) return t('Vul bij elke map beide kanten in; de map in de app begint met /.');
+    for (const d of f.devices) if (!/^\/dev\//.test(String(d.host).trim())) return t('Een apparaat begint met /dev/, bv. /dev/dri.');
+    for (const e of f.env) if (String(e.value).trim() && !String(e.name).trim()) return t('Een variabele heeft een naam nodig.');
+    return null;
+  }
+
+  /* --- opslag */
+  function scrubText(sc) {
+    if (!sc || !sc.kind) return t('Nog geen controle (scrub) gedaan');
+    if (sc.running) return t(sc.kind === 'resilver' ? 'Herstel loopt: {pct}%' : 'Controle (scrub) loopt: {pct}%', { pct: nf0.format(sc.progress || 0) });
+    const when = sc.last ? new Date(sc.last).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    return sc.errors ? t('Laatste controle {when}: {n} fouten gevonden', { when, n: sc.errors }) : t('Laatste controle {when}: geen fouten', { when });
+  }
+  /* --- schijfbays: welke schijf in welke bay zit (slepen, of tikken en dan op een bay tikken) */
+  function bayState(d) {
+    if (!d) return 'missing';
+    const sec = d.sectors || {};
+    if ((d.state && d.state !== 'ONLINE') || d.errors || d.smartOk === false || sec.pending > 0 || sec.uncorrectable > 0) return 'bad';
+    if ((d.temp != null && d.temp >= 50) || sec.reallocated > 0) return 'warn';
+    return d.pool ? 'ok' : 'idle';
+  }
+  const diskLabel = (d) => [d.model || d.name, d.serial].filter(Boolean).join(' · ');
+  function mountBays(el, s) {
+    let cfg = JSON.parse(JSON.stringify(s.bays || { count: 0, columns: 12, m2: 0, ssd: 0, slots: {} }));
+    if (cfg.m2 == null) cfg.m2 = 0;
+    if (cfg.ssd == null) cfg.ssd = 0;
+    // Een plaats is een bay ("3"), een M.2-sleuf ("m1") of een 2,5"-sleuf ("s1"), allemaal in cfg.slots.
+    const slotName = (id) => { const k = String(id)[0], n = String(id).replace(/^[ms]/, '');
+      return k === 'm' ? t('M.2-sleuf {n}', { n }) : k === 's' ? t('2,5"-sleuf {n}', { n }) : t('bay {n}', { n }); };
+    let edit = false, picked = null, saveTimer = null;
+    const byKey = new Map(s.disks.map((d) => [d.key, d]));
+    const bayOf = (key) => Object.keys(cfg.slots).find((b) => cfg.slots[b].key === key);
+    const save = () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try { cfg = await api.post('/api/bays', cfg); s.bays = cfg; }
+        catch (e) { toast(t('De indeling opslaan lukte niet: {error}', { error: e.message }), true); }
+      }, 300);
+    };
+    const place = (key, bay) => {
+      const from = bayOf(key), occupant = cfg.slots[bay];
+      if (from === String(bay)) return;
+      if (from) { if (occupant) cfg.slots[from] = occupant; else delete cfg.slots[from]; } // wisselen met de schijf die er al zat
+      const d = byKey.get(key);
+      cfg.slots[bay] = { key, label: d ? diskLabel(d) : (occupant && occupant.key === key ? occupant.label : '') };
+      picked = null; save(); draw();
+    };
+    const unplace = (key) => { const b = bayOf(key); if (b) { delete cfg.slots[b]; save(); } picked = null; draw(); };
+
+    // Gekozen schijf (klik op een bay): details uit smartctl in het paneel naast de kast.
+    let sel = null; // { key, name, info, loading, error }
+    const hoursText = (h) => (h == null ? '–' : h >= 8766 ? t('{years} jaar ({hours} uur)', { years: nf.format(h / 8766), hours: nf0.format(h) })
+      : h >= 48 ? t('{days} dagen ({hours} uur)', { days: nf0.format(h / 24), hours: nf0.format(h) }) : t('{hours} uur', { hours: nf0.format(h) }));
+    const WATCH = [
+      ['reallocated', 'Herplaatste sectoren', 'Plekken die de schijf heeft moeten vervangen. Loopt dit op, vervang dan de schijf.', 'warn'],
+      ['pending', 'Wachtende sectoren', 'Plekken die niet gelezen konden worden. Een slecht teken.', 'bad'],
+      ['uncorrectable', 'Onherstelbare sectoren', 'Gegevens die de schijf niet kon herstellen. ZFS vangt dit op met de andere schijven.', 'bad'],
+      ['reportedUncorrect', 'Gemelde leesfouten', 'Leesfouten die de schijf zelf meldde.', 'warn'],
+      ['crcErrors', 'CRC-fouten (kabel)', 'Meestal een slechte SATA-kabel of aansluiting, niet de schijf.', 'warn'],
+      ['mediaErrors', 'Mediafouten', 'Fouten in het geheugen van de SSD.', 'bad'],
+    ];
+    const panelBox = () => $('#diskPanel', el);
+    function renderPanel() {
+      const box = panelBox(); if (!box) return;
+      box.hidden = !sel;
+      const hint = $('#bayHint', el); if (hint) hint.hidden = !!sel;
+      if (!sel) { box.innerHTML = ''; return; }
+      const d = byKey.get(sel.key), bayNo = bayOf(sel.key);
+      if (!d) {
+        const slot = cfg.slots[bayNo];
+        box.innerHTML = `<h4>${esc(slotName(bayNo))}: ${t('schijf weg')}</h4><p class="small">${esc(slot ? slot.label : '')}</p>
+          <p class="small muted">${t('Deze schijf zat in deze bay, maar de server vindt ze niet meer. Is ze kapot of losgekoppeld? Zet er een nieuwe in en sleep die naar deze bay.')}</p>`;
+        return;
+      }
+      const head = `<div class="dp-head"><div><h4>${esc(d.name)}${bayNo ? ` <span class="muted">· ${esc(slotName(bayNo))}</span>` : ''}</h4>
+          <p class="small muted">${esc([sel.info && sel.info.family, (sel.info && sel.info.model) || d.model].filter(Boolean).join(' · '))}</p></div>
+          <button class="cf-del" type="button" data-dp-close aria-label="${t('Sluiten')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`;
+      if (sel.loading) { box.innerHTML = head + `<p class="muted small">${t('SMART uitlezen…')}</p>`; return; }
+      if (sel.error) { box.innerHTML = head + `<p class="small temp-bad">${esc(sel.error)}</p><button class="btn sm" type="button" data-dp-retry>${t('Opnieuw proberen')}</button>`; return; }
+      const i = sel.info;
+      if (i.sleeping) {
+        box.innerHTML = head + `<p class="small">${t('De schijf slaapt om stroom te besparen. Uitlezen maakt ze wakker; daarna valt ze vanzelf weer in slaap.')}</p>
+          <button class="btn sm" type="button" data-dp-wake>${t('Toch uitlezen')}</button>`;
+        return;
+      }
+      const kind = d.transport === 'nvme' ? 'NVMe' : !d.rotational ? 'SSD' : i.rpm ? t('HDD, {rpm} toeren', { rpm: i.rpm }) : 'HDD';
+      const tc = i.temp == null ? '' : i.temp >= 50 ? 'temp-bad' : i.temp >= 45 ? 'temp-warn' : 'temp-ok';
+      const watch = WATCH.filter(([k]) => i.watch[k] != null && (i.watch[k] > 0 || ['reallocated', 'pending', 'uncorrectable', 'crcErrors', 'mediaErrors'].includes(k)))
+        .map(([k, label, help, lvl]) => `<li title="${esc(t(help))}"><span>${t(label)}</span><b class="${i.watch[k] > 0 ? 'temp-' + lvl : 'temp-ok'}">${nf0.format(i.watch[k])}</b></li>`).join('');
+      const nv = i.nvme;
+      const nvRows = nv ? [
+        [t('Slijtage'), nv.percentUsed != null ? nv.percentUsed + '%' : '–', nv.percentUsed >= 100 ? 'temp-bad' : nv.percentUsed >= 80 ? 'temp-warn' : 'temp-ok'],
+        [t('Reserve'), nv.spare != null ? nv.spare + '%' : '–', nv.spare != null && nv.spareThreshold != null && nv.spare <= nv.spareThreshold ? 'temp-bad' : 'temp-ok'],
+        [t('Geschreven'), nv.written != null ? bytes(nv.written) : '–', ''],
+        [t('Onveilig uitgeschakeld'), nv.unsafeShutdowns != null ? nf0.format(nv.unsafeShutdowns) + '×' : '–', ''],
+      ].map(([k, v, c]) => `<li><span>${k}</span><b class="${c}">${esc(v)}</b></li>`).join('') : '';
+      const RES = { ok: 'geslaagd', failed: 'mislukt', aborted: 'afgebroken', interrupted: 'onderbroken', fatal: 'fout', running: 'loopt', unknown: 'onbekend' };
+      const running = i.testRunning;
+      box.innerHTML = head + `
+        <div class="dp-badges">
+          <span class="pill ${i.smartOk === false ? 'bad' : i.smartOk ? 'ok' : ''}">${i.smartOk === false ? t('SMART: probleem') : i.smartOk ? t('SMART: in orde') : t('SMART: onbekend')}</span>
+          ${i.temp != null ? `<span class="pill ${tc.replace('temp-', '')}">${i.temp} °C</span>` : ''}
+          ${d.pool ? `<span class="pill">${esc(d.pool)}${d.role && d.role !== 'data' ? ' · ' + esc(d.role) : ''}${d.state && d.state !== 'ONLINE' ? ' · ' + esc(d.state.toLowerCase()) : ''}</span>` : ''}
+        </div>
+        <dl class="kv dp-kv">
+          <dt>${t('Aan')}</dt><dd>${esc(hoursText(i.powerOnHours))}</dd>
+          <dt>${t('Keer aangezet')}</dt><dd>${i.powerCycles != null ? nf0.format(i.powerCycles) : '–'}</dd>
+          <dt>${t('Grootte')}</dt><dd>${bytes(i.size || d.size)}</dd>
+          <dt>${t('Soort')}</dt><dd>${esc([kind, i.formFactor].filter(Boolean).join(' · '))}</dd>
+          ${i.link ? `<dt>${t('Aansluiting')}</dt><dd>${esc(i.link)}</dd>` : ''}
+          <dt>${t('Serienummer')}</dt><dd><code>${esc(i.serial || d.serial || '–')}</code></dd>
+          ${i.firmware ? `<dt>${t('Firmware')}</dt><dd>${esc(i.firmware)}</dd>` : ''}
+          ${d.pool ? `<dt>${t('ZFS-fouten')}</dt><dd class="${d.errors ? 'temp-bad' : ''}">${nf0.format(d.errors || 0)}</dd>` : ''}
+          ${i.errorLog ? `<dt>${t('Foutenlogboek')}</dt><dd class="temp-warn">${t('{n} fouten gemeld', { n: i.errorLog })}</dd>` : ''}
+        </dl>
+        ${watch || nvRows ? `<h4 class="dp-sub">${t('Gezondheid')}</h4><ul class="dp-watch">${nvRows}${watch}</ul>` : ''}
+        <h4 class="dp-sub">${t('Zelftest')}</h4>
+        ${running ? `<p class="small">${running.remaining != null ? t('Test loopt: nog {n}% te gaan.', { n: running.remaining }) : t('Er loopt een test.')}</p>` : ''}
+        ${i.tests.length ? `<ul class="dp-tests">${i.tests.slice(0, 3).map((x) => `<li><span>${esc(x.type)}</span>
+            <b class="${x.result === 'ok' ? 'temp-ok' : x.result === 'running' ? '' : 'temp-bad'}">${t(RES[x.result] || x.result)}</b>
+            <span class="muted">${x.hours != null ? t('bij {hours} uur', { hours: nf0.format(x.hours) }) : ''}</span></li>`).join('')}</ul>`
+          : `<p class="small muted">${t('Nog geen zelftest gedaan.')}</p>`}
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn sm" type="button" data-dp-test="short"${running ? ' disabled' : ''}>${t('Korte test')}${i.testMinutes && i.testMinutes.short ? ' (' + t('{n} min', { n: i.testMinutes.short }) + ')' : ''}</button>
+          <button class="btn sm" type="button" data-dp-test="long"${running ? ' disabled' : ''}>${t('Lange test')}${i.testMinutes && i.testMinutes.long ? ' (' + t('{n} min', { n: i.testMinutes.long }) + ')' : ''}</button>
+        </div>
+        <p class="small muted" style="margin-top:6px">${t('Een test leest de schijf na terwijl ze gewoon blijft werken. De lange test duurt uren.')}</p>
+        ${i.attributes.length ? `<details class="adv dp-attrs"><summary>${t('Alle SMART-waarden ({n})', { n: i.attributes.length })}</summary>
+          <table class="attr-table"><thead><tr><th>ID</th><th>${t('Naam')}</th><th>${t('Waarde')}</th><th>${t('Drempel')}</th><th>Raw</th></tr></thead><tbody>
+          ${i.attributes.map((a) => `<tr class="${a.failing ? 'temp-bad' : ''}"><td>${a.id}</td><td>${esc(a.name)}</td><td>${a.value}</td><td>${a.thresh}</td><td>${esc(a.raw)}</td></tr>`).join('')}
+          </tbody></table></details>` : ''}`;
+    }
+    let testTimer = null;
+    async function loadDisk(wake = false, quiet = false) {
+      clearTimeout(testTimer);
+      const d = byKey.get(sel.key); if (!d) { renderPanel(); return; }
+      const key = sel.key;
+      if (!quiet) { sel.loading = true; sel.error = null; renderPanel(); }
+      try { const info = await api.get('/api/disks/' + encodeURIComponent(d.name) + (wake ? '?wake=1' : '')); if (sel && sel.key === key) { sel.info = info; sel.loading = false; } }
+      catch (e) { if (sel && sel.key === key) { sel.error = e.message; sel.loading = false; } }
+      renderPanel();
+      // Loopt er een test, dan elke 10 s bijwerken zolang het venster open is.
+      if (sel && sel.key === key && sel.info && sel.info.testRunning) testTimer = setTimeout(() => { if (el.isConnected && sel && sel.key === key) loadDisk(false, true); }, 10000);
+    }
+    // Nog eens op dezelfde schijf klikken: paneel dicht en niets meer geselecteerd.
+    function selectDisk(key) {
+      clearTimeout(testTimer);
+      sel = sel && sel.key === key ? null : { key, info: null, loading: false, error: null };
+      $$('[data-bay]', el).forEach((b) => { if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(!!(sel && cfg.slots[b.dataset.bay] && cfg.slots[b.dataset.bay].key === sel.key))); });
+      if (sel) loadDisk(); else renderPanel();
+    }
+
+    // Labels op een lade: de pool (elke pool zijn eigen kleur, met de rol als het geen gewone dataschijf is) en de temperatuur.
+    const poolNames = (s.pools || []).map((p) => p.name);
+    const tags = (d) => {
+      const pool = d.pool ? `<span class="tag pool p${(poolNames.indexOf(d.pool) % 5) + 1}">${esc(d.pool)}${d.role && d.role !== 'data' ? ' · ' + esc(d.role) : ''}</span>`
+        : `<span class="tag">${t('Geen pool')}</span>`;
+      const tc = d.temp == null ? 'sleep' : d.temp >= 50 ? 'bad' : d.temp >= 45 ? 'warn' : 'ok';
+      return pool + `<span class="tag temp ${tc}">${d.temp != null ? d.temp + ' °C' : t('In rust')}</span>`;
+    };
+    async function runTest(type, btn) {
+      const d = sel && byKey.get(sel.key); if (!d) return;
+      btn.disabled = true;
+      try {
+        const r = await api.post('/api/disks/' + encodeURIComponent(d.name) + '/test', { type });
+        toast(t(type === 'short' ? 'Korte test gestart op {disk}.' : 'Lange test gestart op {disk}.', { disk: d.name }) + (r.minutes ? ' ' + t('Klaar over ongeveer {n} minuten.', { n: r.minutes }) : ''));
+        loadDisk();
+      } catch (e) { toast(e.message, true); btn.disabled = false; }
+    }
+    const kindOf = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
+    const bayCard = (n) => {
+      const slot = cfg.slots[n], d = slot && byKey.get(slot.key), st = slot ? bayState(d) : 'vacant';
+      const title = !slot ? t('Bay {n}: leeg', { n }) : d ? t('Bay {n}: {disk}', { n, disk: d.name }) : t('Bay {n}: schijf weg', { n });
+      const head = `<span class="tray-top"><span class="bay-no">${n}</span><span class="tray-leds" aria-hidden="true"><i class="led"></i></span></span>`;
+      return `<button type="button" class="bay ${st}${slot && picked === slot.key ? ' picked' : ''}" data-bay="${n}"
+          ${edit && slot ? `draggable="true" data-key="${esc(slot.key)}"` : ''} aria-label="${esc(title)}"${edit ? '' : slot ? ` aria-pressed="${!!(sel && sel.key === slot.key)}"` : ' tabindex="-1"'}>
+        ${!slot ? `<span class="slot-hole">${head}<span class="bay-empty">${edit ? t('Sleep hier een schijf') : t('Leeg')}</span></span>`
+          : `<span class="tray">${head}<span class="tray-vents" aria-hidden="true"></span>
+            ${d ? `<span class="tray-info"><b class="bay-name">${esc(d.name)}</b>
+                <span class="bay-sub" title="${esc(diskLabel(d))}">${esc(d.model || '')}</span>
+                <span class="bay-sub">${esc(bytes(d.size))}</span><span class="bay-sub">${esc(kindOf(d))}</span></span>
+              <span class="tray-tags">${tags(d)}</span>`
+            : `<span class="tray-info"><b class="bay-name">${t('Schijf weg')}</b><span class="bay-sub" title="${esc(slot.label)}">${esc(slot.label)}</span></span>`}
+            <span class="tray-handle" aria-hidden="true"></span></span>`}
+      </button>`;
+    };
+    // M.2-sleuf: een liggend printplaatje met chips en een goudkleurige connector.
+    const m2Card = (n) => {
+      const id = 'm' + n, slot = cfg.slots[id], d = slot && byKey.get(slot.key), st = slot ? bayState(d) : 'vacant';
+      const title = !slot ? t('M.2-sleuf {n}: leeg', { n }) : d ? t('M.2-sleuf {n}: {disk}', { n, disk: d.name }) : t('M.2-sleuf {n}: schijf weg', { n });
+      return `<button type="button" class="m2 ${st}${slot && picked === slot.key ? ' picked' : ''}" data-bay="${id}"
+          ${edit && slot ? `draggable="true" data-key="${esc(slot.key)}"` : ''} aria-label="${esc(title)}"${edit ? '' : slot ? ` aria-pressed="${!!(sel && sel.key === slot.key)}"` : ' tabindex="-1"'}>
+        <span class="m2-label">M.2 ${n}</span>
+        ${!slot ? `<span class="m2-empty">${edit ? t('Sleep hier een NVMe') : t('Leeg')}</span>`
+          : `<span class="m2-stick"><span class="m2-gold" aria-hidden="true"></span><span class="m2-chip" aria-hidden="true"></span>
+            <span class="m2-info"><b class="bay-name">${d ? esc(d.name) : t('Schijf weg')}</b>
+              <span class="bay-sub" title="${esc(d ? diskLabel(d) : slot.label)}">${esc(d ? [d.model, bytes(d.size)].filter(Boolean).join(' · ') : slot.label)}</span></span>
+            ${d ? `<span class="m2-tags">${tags(d)}</span>` : ''}
+            <span class="tray-leds" aria-hidden="true"><i class="led"></i></span><span class="m2-notch" aria-hidden="true"></span></span>`}
+      </button>`;
+    };
+    // 2,5"-sleuf: een liggende, smalle lade (zoals de hot-swap-sleuven voor SSD's).
+    const ssdCard = (n) => {
+      const id = 's' + n, slot = cfg.slots[id], d = slot && byKey.get(slot.key), st = slot ? bayState(d) : 'vacant';
+      const title = !slot ? t('2,5"-sleuf {n}: leeg', { n }) : d ? t('2,5"-sleuf {n}: {disk}', { n, disk: d.name }) : t('2,5"-sleuf {n}: schijf weg', { n });
+      return `<button type="button" class="sff ${st}${slot && picked === slot.key ? ' picked' : ''}" data-bay="${id}"
+          ${edit && slot ? `draggable="true" data-key="${esc(slot.key)}"` : ''} aria-label="${esc(title)}"${edit ? '' : slot ? ` aria-pressed="${!!(sel && sel.key === slot.key)}"` : ' tabindex="-1"'}>
+        ${!slot ? `<span class="sff-hole"><span class="sff-no">${n}</span><span class="sff-empty">${edit ? t('Sleep hier een SSD') : t('Leeg')}</span></span>`
+          : `<span class="sff-tray"><span class="sff-no">${n}</span><span class="sff-vents" aria-hidden="true"></span>
+            <span class="sff-info"><b class="bay-name">${d ? esc(d.name) : t('Schijf weg')}</b>
+              <span class="bay-sub" title="${esc(d ? diskLabel(d) : slot.label)}">${esc(d ? bytes(d.size) : slot.label)}</span></span>
+            ${d ? `<span class="sff-tags">${tags(d)}</span>` : ''}
+            <span class="tray-leds" aria-hidden="true"><i class="led"></i></span><span class="sff-handle" aria-hidden="true"></span></span>`}
+      </button>`;
+    };
+    const draw = () => {
+      const unplaced = s.disks.filter((d) => !bayOf(d.key));
+      if (!cfg.count && !edit) {
+        el.innerHTML = `<h3>${t('Schijfbays')}</h3>
+          <p class="muted small">${t('Geef je kast zijn aantal bays en sleep je schijven naar de juiste plaats. Zo zie je meteen welke schijf je moet vervangen.')}</p>
+          <div class="btn-row" style="margin-top:10px"><button class="btn sm" type="button" data-bay-edit>${t('Bays instellen')}</button></div>`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="bays-head"><h3>${t('Schijfbays')}</h3>
+          <button class="btn sm${edit ? ' primary' : ''}" type="button" data-bay-edit>${edit ? t('Klaar') : t('Indeling aanpassen')}</button></div>
+        ${edit ? `<div class="bays-cfg">
+            <label class="fld"><span>${t('Aantal bays')}</span><input class="field" type="number" min="1" max="60" step="1" data-bay-cfg="count" value="${cfg.count}"></label>
+            <label class="fld"><span>${t('Bays per rij')}</span><input class="field" type="number" min="1" max="12" step="1" data-bay-cfg="columns" value="${cfg.columns}"></label>
+            <label class="fld"><span>${t('2,5"-sleuven')}</span><input class="field" type="number" min="0" max="16" step="1" data-bay-cfg="ssd" value="${cfg.ssd}"></label>
+            <label class="fld"><span>${t('M.2-sleuven')}</span><input class="field" type="number" min="0" max="8" step="1" data-bay-cfg="m2" value="${cfg.m2}"></label>
+          </div>
+          <p class="muted small">${t('Sleep een schijf naar een bay. Op een volle bay wisselen de twee van plaats. Slepen gaat niet? Tik op een schijf en daarna op een bay.')}</p>` : ''}
+        <div class="bays-wrap"><div class="nas">
+          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'Thuisbasis')}</span>
+            <span class="nas-power" title="${t('Aan')}"><i class="led"></i></span></div>
+          <div class="bay-grid" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
+          ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
+          ${cfg.m2 ? `<div class="m2-row">${Array.from({ length: cfg.m2 }, (_, i) => m2Card(i + 1)).join('')}</div>` : ''}
+        </div>${edit ? '' : '<div class="disk-panel" id="diskPanel" aria-live="polite" hidden></div>'}</div>
+        ${edit ? '' : `<p class="muted small" id="bayHint" style="margin-top:8px">${t('Klik op een bay om de details van de schijf te zien: uren, SMART, temperatuur en zelftesten.')}</p>`}
+        ${edit ? `<div class="bay-pool${picked && bayOf(picked) ? ' droppable' : ''}" data-unplace>
+            <span class="muted small">${unplaced.length ? t('Nog niet in een bay (sleep een schijf hierheen om ze uit haar bay te halen):') : t('Alle schijven zitten in een bay. Sleep er een hierheen om ze uit haar bay te halen.')}</span>
+            <div class="bay-chips">${unplaced.map((d) => `<button type="button" class="bay-chip ${bayState(d)}${picked === d.key ? ' picked' : ''}" draggable="true" data-key="${esc(d.key)}">
+              <span class="bay-led" aria-hidden="true"></span><b>${esc(d.name)}</b> <span class="muted">${esc([d.model, bytes(d.size)].filter(Boolean).join(' · '))}</span>${tags(d)}</button>`).join('')}</div>
+          </div>`
+        : unplaced.length ? `<p class="muted small" style="margin-top:8px">${t(unplaced.length === 1 ? '{n} schijf zit nog niet in een bay:' : '{n} schijven zitten nog niet in een bay:', { n: unplaced.length })}
+            ${unplaced.map((d) => `<button type="button" class="link-btn" data-dp-disk="${esc(d.key)}">${esc(d.name)}</button>`).join(', ')}</p>` : ''}`;
+      renderPanel();
+    };
+    draw();
+
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-bay-edit]')) {
+        if (!edit && !cfg.count) {
+          const nvme = s.disks.filter((d) => d.transport === 'nvme').length, sata = s.disks.filter((d) => d.transport !== 'nvme' && !d.rotational).length;
+          cfg.count = Math.max(1, s.disks.length - nvme - sata); cfg.m2 = nvme; cfg.ssd = sata;
+          cfg.columns = Math.min(12, cfg.count); // standaard alle bays naast elkaar op één rij
+          save();
+        }
+        edit = !edit; picked = null; draw(); return;
+      }
+      if (!edit) {
+        if (e.target.closest('[data-dp-close]')) { sel = null; draw(); return; }
+        if (e.target.closest('[data-dp-retry]')) { loadDisk(); return; }
+        if (e.target.closest('[data-dp-wake]')) { loadDisk(true); return; }
+        const tb = e.target.closest('[data-dp-test]');
+        if (tb) { runTest(tb.dataset.dpTest, tb); return; }
+        const pick = e.target.closest('[data-dp-disk]'); if (pick) { selectDisk(pick.dataset.dpDisk); return; }
+        const bv = e.target.closest('[data-bay]'); const slot = bv && cfg.slots[bv.dataset.bay];
+        if (slot) selectDisk(slot.key);
+        return;
+      }
+      const bay = e.target.closest('[data-bay]'), chip = e.target.closest('.bay-chip');
+      if (chip) { picked = picked === chip.dataset.key ? null : chip.dataset.key; draw(); return; }
+      if (bay) {
+        const slot = cfg.slots[bay.dataset.bay];
+        if (picked) place(picked, bay.dataset.bay);
+        else if (slot) { picked = slot.key; draw(); }
+        return;
+      }
+      if (e.target.closest('[data-unplace]') && picked) unplace(picked);
+    });
+    el.addEventListener('change', (e) => {
+      const k = e.target.dataset.bayCfg; if (!k) return;
+      const v = Math.round(Number(e.target.value));
+      if (k === 'count' && !(v >= 1 && v <= 60)) { toast(t('Kies tussen 1 en 60 bays.'), true); draw(); return; }
+      if (k === 'columns' && !(v >= 1 && v <= 12)) { toast(t('Kies tussen 1 en 12 kolommen.'), true); draw(); return; }
+      if (k === 'm2' && !(v >= 0 && v <= 8)) { toast(t('Kies tussen 0 en 8 M.2-sleuven.'), true); draw(); return; }
+      if (k === 'ssd' && !(v >= 0 && v <= 16)) { toast(t('Kies tussen 0 en 16 2,5"-sleuven.'), true); draw(); return; }
+      // Stonden alle bays op één rij, dan blijft dat zo bij meer of minder bays.
+      if (k === 'count' && cfg.columns === Math.min(12, cfg.count)) cfg.columns = Math.min(12, v);
+      const prefix = { count: '', m2: 'm', ssd: 's' }[k];
+      if (prefix != null) Object.keys(cfg.slots).forEach((b) => { const x = b.match(/^([ms]?)(\d+)$/); if (x && x[1] === prefix && Number(x[2]) > v) delete cfg.slots[b]; });
+      cfg[k] = v; save(); draw();
+    });
+    // Slepen (muis); op aanraakschermen werkt tikken.
+    el.addEventListener('dragstart', (e) => {
+      const src = e.target.closest('[data-key]'); if (!src || !edit) return;
+      e.dataTransfer.setData('text/plain', src.dataset.key); e.dataTransfer.effectAllowed = 'move';
+      picked = src.dataset.key; requestAnimationFrame(() => src.classList.add('dragging'));
+    });
+    el.addEventListener('dragend', () => { picked = null; $$('.over, .dragging', el).forEach((x) => x.classList.remove('over', 'dragging')); });
+    el.addEventListener('dragover', (e) => {
+      const target = e.target.closest('[data-bay], [data-unplace]'); if (!target || !edit) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      $$('.over', el).forEach((x) => { if (x !== target) x.classList.remove('over'); }); target.classList.add('over');
+    });
+    el.addEventListener('dragleave', (e) => { const target = e.target.closest('.over'); if (target && !target.contains(e.relatedTarget)) target.classList.remove('over'); });
+    el.addEventListener('drop', (e) => {
+      const target = e.target.closest('[data-bay], [data-unplace]'); if (!target || !edit) return;
+      e.preventDefault();
+      const key = e.dataTransfer.getData('text/plain'); if (!key) return;
+      if (target.dataset.bay) place(key, target.dataset.bay); else unplace(key);
+    });
+  }
+
+  /* --- pool aanmaken: schijven en indeling kiezen, met meteen de opslag die het oplevert */
+  const POOL_LAYOUTS = [
+    ['stripe', 'Stripe', 1, 'Alle ruimte, maar geen bescherming: valt één schijf uit, dan ben je alles kwijt.'],
+    ['mirror', 'Mirror', 2, 'Elke schijf bevat dezelfde gegevens. Heel veilig, maar je hebt de ruimte van één schijf.'],
+    ['raidz1', 'RAID-Z1', 3, 'Zoals RAID 5: één schijf mag uitvallen. Goed voor 3 tot 5 schijven.'],
+    ['raidz2', 'RAID-Z2', 4, 'Zoals RAID 6: twee schijven mogen uitvallen. Aanbevolen vanaf 6 schijven of bij grote schijven.'],
+    ['raidz3', 'RAID-Z3', 5, 'Drie schijven mogen uitvallen. Voor veel grote schijven.'],
+    ['mirrors', 'Mirror-paren (RAID 10)', 4, 'Paren van twee: snel, en per paar mag één schijf uitvallen. Een even aantal schijven.'],
+  ];
+  // Zelfde berekening als capacity() in lib/zpool.js.
+  function poolCapacity(layout, sizes) {
+    const n = sizes.length, L = POOL_LAYOUTS.find((x) => x[0] === layout);
+    if (!L || n < L[2] || (layout === 'mirrors' && n % 2)) return null;
+    const raw = sizes.reduce((a, b) => a + b, 0), min = Math.min(...sizes);
+    let usable, unused = 0;
+    if (layout === 'stripe') usable = raw;
+    else if (layout === 'mirrors') { const x = [...sizes].sort((a, b) => b - a); usable = 0; for (let i = 0; i < n; i += 2) usable += Math.min(x[i], x[i + 1]); unused = raw / 2 - usable; }
+    else { usable = ({ mirror: 1, raidz1: n - 1, raidz2: n - 2, raidz3: n - 3 })[layout] * min; unused = sizes.reduce((a, b) => a + b - min, 0); }
+    const slop = Math.min(Math.max(usable / 32, 128 * 1048576), 128 * 1073741824);
+    const failures = ({ stripe: 0, mirror: n - 1, raidz1: 1, raidz2: 2, raidz3: 3, mirrors: 1 })[layout];
+    return { raw, usable: Math.max(0, usable - slop), redundancy: Math.max(0, raw - usable - unused), unused, failures };
+  }
+  const suggestLayout = (n) => (n <= 1 ? 'stripe' : n === 2 ? 'mirror' : n <= 5 ? 'raidz1' : 'raidz2');
+
+  async function poolCreateWindow(bays) {
+    openWindow(t('Pool aanmaken'), `<p class="lead">${t('Schijven zoeken…')}</p>`);
+    let o;
+    try { o = await api.get('/api/pools/options'); }
+    catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('De schijven konden niet gelezen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    const bayOfDisk = (d) => { const k = d.serial ? 's:' + d.serial : 'n:' + d.name; return Object.keys((bays && bays.slots) || {}).find((x) => bays.slots[x].key === k) || null; };
+    const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
+    let name = ['tank', 'snel', 'data', 'opslag'].find((n) => !o.pools.includes(n)) || 'data' + (o.pools.length + 1);
+    const picked = new Set(); let layout = 'stripe', chosenByUser = false;
+    const body = $('#winBody');
+    body.innerHTML = `
+      <form class="form" id="poolForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam van de pool')}</span><input class="field" name="name" value="${esc(name)}" maxlength="64" autocomplete="off" spellcheck="false">
+            <small>${t('Bijvoorbeeld tank voor de harde schijven en snel voor de SSD\'s. De pool komt op /naam.')}</small></label>
+          <label class="fld"><span>${t('Compressie')}</span><select class="field" name="compression">
+            <option value="lz4">${t('lz4 (aanbevolen: snel en bespaart ruimte)')}</option><option value="zstd">${t('zstd (bespaart meer, iets trager)')}</option><option value="off">${t('Uit')}</option></select></label>
+        </div>
+        <fieldset class="fld"><span>${t('Schijven')}</span><div class="dev-list" id="poolDisks"></div></fieldset>
+        <fieldset class="fld"><span>${t('Indeling')}</span><div class="layout-grid" id="poolLayouts" role="radiogroup" aria-label="${t('Indeling')}"></div></fieldset>
+        <div class="pool-sum" id="poolSum" aria-live="polite"></div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Pool aanmaken')}</button><button class="btn" type="button" data-pool-back>${t('Terug naar opslag')}</button></div>
+      </form>`;
+    const form = $('#poolForm', body);
+    const sel = () => o.disks.filter((d) => picked.has(d.name));
+    const drawDisks = () => {
+      // Alleen vrije schijven: wat in een pool zit of het systeem draagt, kan je toch niet kiezen.
+      const free = o.disks.filter((d) => d.available);
+      $('#poolDisks', form).innerHTML = free.map((d) => {
+        const b = bayOfDisk(d);
+        return `<label class="check dev"><input type="checkbox" data-pdisk="${esc(d.name)}"${picked.has(d.name) ? ' checked' : ''}>
+          <span><b>${esc(d.name)}</b> <span class="muted small">${esc([d.model, bytes(d.size), kind(d), b ? (b.startsWith('m') ? t('M.2-sleuf {n}', { n: b.slice(1) }) : b.startsWith('s') ? t('2,5"-sleuf {n}', { n: b.slice(1) }) : t('bay {n}', { n: b })) : null].filter(Boolean).join(' · '))}</span>
+          ${d.warn && picked.has(d.name) ? `<span class="small temp-warn">${esc(tr(d.warn))}</span>` : ''}</span></label>`;
+      }).join('') || `<p class="muted">${t('Er zijn geen vrije schijven. Elke schijf zit al in een pool of draagt het systeem.')}</p>`;
+    };
+    const drawLayouts = () => {
+      const n = picked.size;
+      $('#poolLayouts', form).innerHTML = POOL_LAYOUTS.map(([k, label, min, help]) => {
+        const short = n < min ? min - n : 0, odd = k === 'mirrors' && n >= min && n % 2;
+        return `<label class="layout${layout === k ? ' on' : ''}${short || odd ? ' short' : ''}"><input type="radio" name="layout" value="${k}"${layout === k ? ' checked' : ''}>
+          <b>${t(label)}</b><span class="small muted">${t(help)}</span>
+          <span class="small">${short ? t(short === 1 ? 'Nog {n} schijf nodig' : 'Nog {n} schijven nodig', { n: short }) : odd ? t('Kies een even aantal') : t(min === 1 ? 'Minstens {n} schijf' : 'Minstens {n} schijven', { n: min })}</span></label>`;
+      }).join('');
+    };
+    const drawSum = () => {
+      const d = sel(), c = poolCapacity(layout, d.map((x) => x.size)), box = $('#poolSum', form);
+      if (!d.length) { box.innerHTML = `<p class="muted">${t('Vink de schijven aan die in de pool komen.')}</p>`; return; }
+      if (!c) {
+        const L = POOL_LAYOUTS.find((x) => x[0] === layout);
+        box.innerHTML = `<p class="muted">${layout === 'mirrors' && d.length >= L[2] ? t('Mirror-paren hebben een even aantal schijven nodig.') : t('{layout} heeft minstens {n} schijven nodig.', { layout: t(L[1]), n: L[2] })}</p>`; return;
+      }
+      const pct = (v) => (c.raw ? (v / c.raw) * 100 : 0).toFixed(1);
+      const warns = [];
+      if (layout === 'stripe' && d.length > 1) warns.push(t('Zonder bescherming: valt één schijf uit, dan ben je de hele pool kwijt.'));
+      if (c.unused > 1e9) warns.push(t('{size} blijft ongebruikt: bij deze indeling telt van elke schijf alleen zoveel als de kleinste.', { size: bytes(c.unused) }));
+      if (d.some((x) => x.rotational) && d.some((x) => !x.rotational)) warns.push(t('Je mengt harde schijven en SSD\'s: de pool is zo traag als de harde schijven. Maak liever twee pools.'));
+      if (layout === 'raidz1' && d.length >= 6) warns.push(t('Met 6 of meer schijven is RAID-Z2 veiliger: tijdens het herstellen van een schijf mag er dan nog een uitvallen.'));
+      box.innerHTML = `
+        <div class="pool-big"><b>${bytes(c.usable)}</b> <span>${t('bruikbaar (ongeveer)')}</span></div>
+        <div class="pool-bar" aria-hidden="true"><span class="u" style="width:${pct(c.usable)}%"></span><span class="r" style="width:${pct(c.redundancy)}%"></span><span class="x" style="width:${pct(c.unused)}%"></span></div>
+        <div class="pool-legend small">
+          <span><i class="u"></i>${t('Bruikbaar {size}', { size: bytes(c.usable) })}</span>
+          <span><i class="r"></i>${t('Bescherming {size}', { size: bytes(c.redundancy) })}</span>
+          ${c.unused > 1e9 ? `<span><i class="x"></i>${t('Ongebruikt {size}', { size: bytes(c.unused) })}</span>` : ''}
+          <span class="muted">${t('Ruw {size} op {n} schijven', { size: bytes(c.raw), n: d.length })}</span>
+        </div>
+        <p class="${c.failures ? 'temp-ok' : 'temp-warn'}">${c.failures ? t(c.failures === 1 ? 'Er mag {n} schijf uitvallen zonder dat je gegevens kwijt bent.' : 'Er mogen {n} schijven uitvallen zonder dat je gegevens kwijt bent.', { n: c.failures })
+          + (layout === 'mirrors' ? ' ' + t('(één per paar)') : '') : t('Geen bescherming.')}</p>
+        ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}
+        <p class="small muted">${t('ZFS houdt ongeveer 3% achter voor zichzelf; compressie maakt er vaak weer meer van.')}</p>`;
+    };
+    const drawAll = () => { drawDisks(); drawLayouts(); drawSum(); };
+    drawAll();
+    form.addEventListener('change', (e) => {
+      const tg = e.target;
+      if (tg.dataset.pdisk) {
+        if (tg.checked) picked.add(tg.dataset.pdisk); else picked.delete(tg.dataset.pdisk);
+        if (!chosenByUser) layout = suggestLayout(picked.size);
+        drawAll(); return;
+      }
+      if (tg.name === 'layout') { layout = tg.value; chosenByUser = true; drawLayouts(); drawSum(); }
+    });
+    body.addEventListener('click', (e) => { if (e.target.closest('[data-pool-back]')) storageWindow(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      name = form.elements.name.value.trim();
+      const d = sel();
+      if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name)) { err.textContent = t('Kies een naam die met een letter begint, met letters, cijfers, - of _ (bv. tank of snel). Namen als mirror of raidz zijn niet toegelaten.'); return; }
+      if (!poolCapacity(layout, d.map((x) => x.size))) { err.textContent = d.length ? t('Deze indeling past niet bij het aantal gekozen schijven.') : t('Vink de schijven aan die in de pool komen.'); return; }
+      const r = await ask(t('Pool {name} aanmaken op {list}? Alles wat nu op deze schijven staat, wordt gewist.', { name, list: d.map((x) => x.name).join(', ') }),
+        t('Pool aanmaken'), t('Ik begrijp dat alle gegevens op deze schijven verloren gaan'));
+      if (!r) return;
+      if (!r.checked) { err.textContent = t('Vink aan dat de gegevens op de schijven verloren mogen gaan.'); return; }
+      btn.disabled = true; btn.textContent = t('Aanmaken…');
+      try {
+        await api.post('/api/pools', { name, layout, disks: d.map((x) => x.name), compression: form.elements.compression.value, confirm: name });
+        toast(t('Pool {name} is aangemaakt en staat op /{name}.', { name }));
+        loadOverview().catch(() => {});
+        storageWindow();
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Pool aanmaken'); }
+    });
+  }
+
+  async function storageWindow() {
+    openWindow(t('Opslag'), `<p class="lead">${t('Schijven laden…')}</p>`);
+    win.classList.add('win-wide');
+    let s;
+    try { s = await api.get('/api/storage'); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    const pct = s.total ? (s.used / s.total) * 100 : 0;
+    const ROLE = { cache: 'Leescache', log: 'Schrijflog', spare: 'Reserve', special: 'Metadata', dedup: 'Dedup' };
+    const diskRow = (d) => {
+      const sub = [d.model, ROLE[d.role] && t(ROLE[d.role]), d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD',
+        d.state && d.state !== 'ONLINE' ? d.state.toLowerCase() : null, d.errors ? t('{n} fouten', { n: d.errors }) : null,
+        d.smartOk === false ? t('SMART meldt een probleem') : null].filter(Boolean).join(' · ');
+      const bad = (d.state && d.state !== 'ONLINE') || d.errors || d.smartOk === false;
+      return `<li>
+        <div><div class="row-title">${esc(d.name)}</div><div class="row-sub${bad ? ' temp-bad' : ''}">${esc(sub)}</div></div>
+        <div class="row-side"><div>${bytes(d.size)}</div><div class="${tempClass(d.temp)}">${d.temp != null ? d.temp + ' °C' : t('In rust')}</div></div>
+      </li>`;
+    };
+    const poolBlock = (p) => {
+      const used = p.total ? (p.used / p.total) * 100 : 0;
+      const [label, cls] = poolHealth(p.health);
+      const disks = s.disks.filter((d) => d.pool === p.name);
+      return `<h3>${esc(p.name)} <span class="pill ${cls}">${esc(label)}</span></h3>
+        <ul class="rows">
+          <li>
+            <div><div class="row-title">${t('{size} vrij', { size: bytes(p.free) })}</div>
+              <div class="row-sub">${esc([p.layout, p.diskCount ? t(p.diskCount === 1 ? '{n} schijf' : '{n} schijven', { n: p.diskCount }) : null].filter(Boolean).join(' · '))}</div></div>
+            <div class="row-side">${t('{used} van {total}', { used: bytes(p.used), total: bytes(p.total) })}</div>
+            <div class="row-bar"><div class="bar"><span class="${level(used, 80, 92)}" style="width:${used.toFixed(1)}%"></span></div>
+              <div class="row-sub">${esc(scrubText(p.scrub))}</div></div>
+          </li>
+          ${disks.map(diskRow).join('')}
+        </ul>`;
+    };
+    const loose = s.disks.filter((d) => !d.pool);
+    $('#winBody').innerHTML = `
+      <div class="stat-strip">
+        <div class="stat"><b>${bytes(s.free)}</b><span>${t('vrij')}</span></div>
+        <div class="stat"><b>${nf0.format(pct)}%</b><span>${t('gebruikt van {total}', { total: bytes(s.total) })}</span></div>
+        <div class="stat"><b>${s.disks.length}</b><span>${t('schijven')}</span></div>
+        <div class="stat"><b>${s.disks.reduce((n, d) => n + (d.errors || 0), 0)}</b><span>${t('schijffouten')}</span></div>
+      </div>
+      <section class="bays-sec" id="baySec"></section>
+      ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS gaf een fout: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
+      ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('Er is nog geen ZFS-pool. In de README staat hoe je er een maakt.')}</p>` : ''}
+      <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Pool aanmaken')}</button></div>
+      ${s.pools.map(poolBlock).join('')}
+      ${loose.length ? `<h3>${t('Niet in een pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
+      <h3>${t('Datasets')}</h3>
+      <ul class="rows">${s.datasets.map((d) => `<li>
+        <div><div class="row-title">${esc(d.name)}</div><div class="row-sub">${esc([d.mountpoint, d.compress > 1.01 ? t('compressie {x}×', { x: nf.format(d.compress) }) : null].filter(Boolean).join(' · '))}</div></div>
+        <div class="row-side">${bytes(d.used)}</div></li>`).join('') || `<li><span class="muted">${t('Geen datasets')}</span></li>`}</ul>`;
+    mountBays($('#baySec'), s);
+    $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
+  }
+
+  /* --- VM's (eigen pagina op #vms) */
+  const VM_ACTS = {
+    start: { label: 'Starten', noun: 'Starten', done: 'Gestart' },
+    stop: { label: 'Afsluiten', noun: 'Afsluiten', done: 'Afsluiten gestart', yes: 'Afsluiten',
+      ask: (n) => t('{name} afsluiten? De VM krijgt het signaal om netjes af te sluiten.', { name: n }) },
+    reboot: { label: 'Herstarten', noun: 'Herstarten', done: 'Herstart', yes: 'Herstarten',
+      ask: (n) => t('{name} herstarten? Wat erop draait, is even onbereikbaar.', { name: n }) },
+    pause: { label: 'Pauzeren', noun: 'Pauzeren', done: 'Gepauzeerd' },
+    resume: { label: 'Hervatten', noun: 'Hervatten', done: 'Hervat' },
+    'force-stop': { label: 'Forceer uit', noun: 'Geforceerd uitzetten', done: 'Uitgezet', yes: 'Forceer uit',
+      ask: (n) => t('{name} geforceerd uitzetten? Dat is alsof je de stekker uittrekt. Wat niet opgeslagen is, gaat verloren.', { name: n }) },
+    reset: { label: 'Hard herstarten', noun: 'Hard herstarten', done: 'Hard herstart', yes: 'Hard herstarten',
+      ask: (n) => t('{name} hard herstarten? Wat niet opgeslagen is, gaat verloren.', { name: n }) },
+    delete: { label: 'Verwijderen', noun: 'Verwijderen', done: 'Verwijderd' },
+  };
+  const VM_HINT = {
+    PAUSED: 'Het geheugen blijft bezet tot je hervat.', PMSUSPENDED: 'De VM staat in slaapstand.',
+    CRASHED: 'Start hem opnieuw of zet hem geforceerd uit.', SHUTDOWN: 'Wacht tot hij uit is, of zet hem geforceerd uit.',
+  };
+  function vmKind(s) {
+    s = String(s).toUpperCase();
+    if (s === 'RUNNING' || s === 'IDLE') return 'on';
+    if (s === 'PAUSED' || s === 'PMSUSPENDED') return 'paused';
+    if (s === 'CRASHED') return 'bad';
+    if (s === 'SHUTDOWN') return 'stopping';
+    return 'off';
+  }
+  const VM_PILL = { on: 'ok', paused: 'warn', bad: 'bad', stopping: 'warn', off: '' };
+  function vmMatches(v, filter) {
+    const k = vmKind(v.state);
+    if (filter === 'on') return k === 'on';
+    if (filter === 'paused') return k === 'paused';
+    if (filter === 'off') return k !== 'on' && k !== 'paused';
+    return true;
+  }
+  function delayText(sec) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m ? (s ? t('{m} min {s} s', { m, s }) : t('{m} min', { m })) : t('{n} s', { n: s });
+  }
+  function vmPendingText(v) {
+    if (!v.startsAt) return '';
+    const left = Math.ceil((v.startsAt - Date.now()) / 1000);
+    return left > 0 ? t('Start automatisch over {time}', { time: delayText(left) }) : t('Start nu automatisch…');
+  }
+  function vmSubText(v) {
+    const busy = S.vmBusy[v.id];
+    const hint = VM_HINT[String(v.state).toUpperCase()];
+    return busy ? t(VM_ACTS[busy].noun) + '…' : vmPendingText(v) || (hint ? t(hint) : '');
+  }
+  function vmSpecs(v) {
+    const parts = [];
+    if (v.vcpus) parts.push(t(v.vcpus === 1 ? '{n} vCPU' : "{n} vCPU's", { n: v.vcpus }));
+    if (v.memory) parts.push(bytes(v.memory) + ' RAM');
+    if (v.autostart) parts.push(v.delay ? t('start automatisch na {time}', { time: delayText(v.delay) }) : t('start automatisch'));
+    return parts.join(' · ');
+  }
+  const vmCpuPct = (v) => (v.cpu == null ? null : v.cpu);
+  const vmRamPct = (v) => (v.memUsed != null && v.memory ? (v.memUsed / v.memory) * 100 : null);
+  const vmCpuText = (v) => (v.cpu == null ? '–' : nf0.format(v.cpu) + '%');
+  const vmRamText = (v) => (v.memUsed == null ? '–' : t('{used} van {total}', { used: bytes(v.memUsed), total: bytes(v.memory) }));
+
+  function meterHtml(label, pct, text) {
+    return `<div class="meter"><div class="meter-head"><span>${label}</span><b>${esc(text)}</b></div>
+      <div class="bar"><span class="${level(pct || 0)}" style="width:${Math.min(100, pct || 0).toFixed(1)}%"></span></div></div>`;
+  }
+  function setMeter(el, pct, text) {
+    el.querySelector('b').textContent = text;
+    const bar = el.querySelector('.bar span');
+    bar.style.width = Math.min(100, pct || 0).toFixed(1) + '%'; bar.className = level(pct || 0);
+  }
+
+  // De console opent in een eigen tabblad (één per VM), zoals in Unraid.
+  // De console opent groot in Thuisbasis; daar kan je ze met "Los venster" in een eigen browservenster zetten.
+  const consoleLink = (id, cls) => `<button class="${cls}" type="button" data-console="${esc(id)}">${t('Console')}</button>`;
+  const conWin = $('#conWin'), conFrame = $('#conFrame');
+  function openConsole(id) {
+    if (win.open) win.close();
+    conFrame.src = 'console.html#' + encodeURIComponent(id);
+    if (!conWin.open) conWin.showModal();
+    conFrame.focus();
+  }
+  // De console (in de iframe) roept dit op bij Sluiten of Los venster. De iframe leegmaken verbreekt de verbinding.
+  window.TB_closeConsole = () => { conFrame.src = 'about:blank'; if (conWin.open) conWin.close(); };
+  conWin.addEventListener('close', () => { conFrame.src = 'about:blank'; });
+  conWin.addEventListener('click', (e) => { if (e.target === conWin) window.TB_closeConsole(); });
+  function vmCardHtml(v) {
+    const kind = vmKind(v.state), busy = S.vmBusy[v.id];
+    const btn = (act, cls = '') => `<button class="btn ${cls}" type="button" data-vm="${esc(v.id)}" data-do="${act}"${busy ? ' disabled' : ''}>${t(VM_ACTS[act].label)}</button>`;
+    const main = (kind === 'on' ? btn('pause') + btn('reboot') + btn('stop', 'danger')
+      : kind === 'paused' ? btn('resume', 'primary')
+      : kind === 'stopping' ? ''
+      : btn('start', 'primary')) +
+      (kind === 'on' || kind === 'paused' ? consoleLink(v.id, 'btn') : '') +
+      `<button class="btn" type="button" data-vm-edit="${esc(v.id)}"${busy ? ' disabled' : ''}>${t('Bewerken')}</button>`;
+    const force = kind === 'on' ? btn('force-stop', 'sm danger') + btn('reset', 'sm danger') : kind === 'off' ? '' : btn('force-stop', 'sm danger');
+    const foot = kind === 'off' ? `<span class="row-sub">${t('Niet meer nodig?')}</span>${btn('delete', 'sm danger')}`
+      : `<span class="row-sub">${t('Reageert hij niet meer?')}</span>${force}`;
+    return `<article class="widget vm-card ${kind}" data-card="${esc(v.id)}">
+      <header class="vm-head">
+        <span class="vm-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+        <div class="vm-title"><h2 title="${esc(v.name)}">${esc(v.name)}</h2><p class="row-sub vm-sub">${esc(vmSubText(v))}</p></div>
+        <span class="pill ${VM_PILL[kind]}">${esc(vmStateText(v.state))}</span>
+      </header>
+      ${v.description ? `<p class="vm-desc">${esc(tr(v.description))}</p>` : ''}
+      ${kind === 'on' || kind === 'paused'
+        ? `<div class="vm-meters">${meterHtml('CPU', vmCpuPct(v), vmCpuText(v))}${meterHtml('RAM', vmRamPct(v), vmRamText(v))}</div>` : ''}
+      <p class="vm-specs">${esc(vmSpecs(v))}</p>
+      <div class="btn-row">${main}</div>
+      <div class="vm-force">${foot}</div>
+    </article>`;
+  }
+
+  // Elke 3 s nieuwe cijfers: alleen de meters bijwerken, zodat focus en animaties blijven.
+  let vmSig = '';
+  function patchVmCard(v) {
+    const card = $(`[data-card="${CSS.escape(v.id)}"]`, $('#vmList')); if (!card) return;
+    $('.vm-sub', card).textContent = vmSubText(v);
+    const meters = $$('.meter', card);
+    if (meters.length === 2) { setMeter(meters[0], vmCpuPct(v), vmCpuText(v)); setMeter(meters[1], vmRamPct(v), vmRamText(v)); }
+  }
+
+  function renderVmPage() {
+    if ($('#vmPage').hidden) return;
+    const all = S.vms;
+    const running = all.filter((v) => vmKind(v.state) === 'on').length;
+    $('#vmCount').textContent = all.length ? t('{n} van {total} actief', { n: running, total: all.length }) : '';
+    const names = { all: 'Alle', on: 'Actief', paused: 'Gepauzeerd', off: 'Uit' };
+    $$('#vmFilters button').forEach((b) => {
+      const n = all.filter((v) => vmMatches(v, b.dataset.filter)).length;
+      b.textContent = t(names[b.dataset.filter]) + (all.length ? ' ' + n : '');
+    });
+
+    const list = $('#vmList');
+    const show = (html) => { vmSig = ''; list.innerHTML = html; };
+    if (!S.vmsLoaded) return show(`<p class="empty">${t("VM's laden…")}</p>`);
+    if (S.vmError && !all.length) {
+      return show(`<div class="empty"><p>${t("De VM's konden niet geladen worden: {error}", { error: esc(S.vmError) })}</p>
+        <button class="btn sm" type="button" data-vm-retry style="margin-top:12px">${t('Opnieuw proberen')}</button></div>`);
+    }
+    if (!all.length) return show(`<p class="empty">${t('Er zijn nog geen virtuele machines. Maak er een aan met de knop Nieuwe VM.')}</p>`);
+
+    const q = S.vmSearch.trim().toLowerCase();
+    const shown = all.filter((v) => vmMatches(v, S.vmFilter) && (!q || v.name.toLowerCase().includes(q)));
+    if (!shown.length) return show(`<p class="empty">${t("Geen VM's die hierbij passen.")}</p>`);
+
+    const sig = shown.map((v) => [v.id, v.state, S.vmBusy[v.id] || '', v.autostart, v.delay, !!v.startsAt, v.vcpus, v.memory, v.description].join('|')).join('\n');
+    if (sig === vmSig) { shown.forEach(patchVmCard); return; }
+    vmSig = sig;
+    list.innerHTML = shown.map(vmCardHtml).join('');
+  }
+
+  async function vmRun(v, act, request) {
+    S.vmBusy[v.id] = act; renderVmPage();
+    try { const r = await request(); toast(t(VM_ACTS[act].done) + ': ' + v.name + (r && r.kept && r.kept.length ? '. ' + t('Deze bestanden bleven staan: {list}', { list: r.kept.join(', ') }) : '')); }
+    catch (err) { toast(t('{action} van {name} lukte niet: {error}', { action: t(VM_ACTS[act].noun), name: v.name, error: err.message }), true); }
+    delete S.vmBusy[v.id];
+    await loadVms().catch(() => renderVmPage());
+  }
+
+  $('#vmList').addEventListener('click', async (e) => {
+    if (e.target.closest('[data-vm-retry]')) { loadVms().catch(() => {}); return; }
+    const edit = e.target.closest('[data-vm-edit]');
+    if (edit) { vmEditWindow(edit.dataset.vmEdit); return; }
+    const b = e.target.closest('[data-vm]'); if (!b) return;
+    const v = S.vms.find((x) => x.id === b.dataset.vm); const act = b.dataset.do; const def = VM_ACTS[act];
+    if (!v || !def || S.vmBusy[v.id]) return;
+    if (act === 'delete') {
+      const r = await ask(t('{name} verwijderen? De VM verdwijnt uit de lijst. Dit kan je niet ongedaan maken.', { name: v.name }), t('Verwijderen'), t('Ook de schijfbestanden wissen'));
+      if (!r) return;
+      return vmRun(v, act, () => api.del('/api/vms/' + encodeURIComponent(v.id) + (r.checked ? '?disks=1' : '')));
+    }
+    if (def.ask && !(await ask(def.ask(v.name), t(def.yes)))) return;
+    vmRun(v, act, () => api.post('/api/vms/' + encodeURIComponent(v.id) + '/' + act));
+  });
+  $('#vmSearch').addEventListener('input', (e) => { S.vmSearch = e.target.value; renderVmPage(); });
+  $('#vmFilters').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-filter]'); if (!b) return;
+    S.vmFilter = b.dataset.filter;
+    $$('#vmFilters button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    renderVmPage();
+  });
+  $('#vmNew').addEventListener('click', () => vmCreateWindow());
+
+  /* --- VM-formulieren (aanmaken en bewerken) */
+  function vmNameField(d, off = true) {
+    return `<label class="fld"><span>${t('Naam')}</span>
+        <input class="field" name="name" required maxlength="63" autocomplete="off" value="${esc(d.name || '')}"${off ? '' : ' disabled'}>
+        ${off ? '' : `<small>${t('Zet de VM uit om de naam te wijzigen.')}</small>`}</label>`;
+  }
+  function vmSizeFields(d, opts, pinned = false) {
+    const maxGb = Math.floor(opts.maxMemory / 1073741824);
+    const gb = d.memory ? Math.round((d.memory / 1073741824) * 100) / 100 : '';
+    return `<div class="fld-row">
+        <label class="fld"><span>${t("vCPU's")}</span>
+          <input class="field" name="vcpus" type="number" min="1" max="${opts.maxVcpus}" step="1" required value="${esc(d.vcpus || '')}"${pinned ? ' disabled' : ''}>
+          <small>${pinned ? t('Volgt uit de gekozen kernen hieronder.') : t('Je server heeft {n} threads.', { n: opts.maxVcpus })}</small></label>
+        <label class="fld"><span>${t('Geheugen (GB)')}</span>
+          <input class="field" name="memoryGb" type="number" min="0.25" max="${maxGb}" step="0.25" required value="${gb}">
+          <small>${t('Je server heeft {size}.', { size: bytes(opts.maxMemory) })}</small></label>
+        ${d.diskGb !== undefined ? `<label class="fld"><span>${t('Schijf (GB)')}</span>
+          <input class="field" name="diskGb" type="number" min="4" max="16384" step="1" required value="${esc(d.diskGb)}">
+          <small>${t('Groeit mee, neemt niet meteen alles in.')}</small></label>` : ''}
+      </div>`;
+  }
+  function vmDescAutoFields(d) {
+    return `<label class="fld"><span>${t('Beschrijving')} <em class="muted">${t('(optioneel)')}</em></span>
+        <textarea class="field" name="description" rows="2" maxlength="2000">${esc(d.description || '')}</textarea></label>
+      <fieldset class="fld autostart">
+        <label class="check"><input type="checkbox" name="autostart"${d.autostart ? ' checked' : ''}> ${t('Automatisch starten als de server opstart')}</label>
+        <label class="fld"><span>${t('Startuitstel (seconden)')}</span>
+          <input class="field" name="delay" type="number" min="0" max="3600" step="5" value="${esc(d.delay || 0)}"${d.autostart ? '' : ' disabled'}>
+          <small>${t('Bijvoorbeeld 60: de VM start 1 minuut na de server, zodat die eerst rustig kan opstarten.')}</small></label>
+      </fieldset>`;
+  }
+  // Keuzelijst met netwerken: "network:<naam>" (libvirt) of "bridge:<naam>" (bridge van de server).
+  const NET_MODE = { nat: 'NAT', isolated: 'Afgeschermd', bridge: 'Bridge', route: 'Gerouteerd', open: 'Open' };
+  function vmNetOptions(opts, selected) {
+    const opt = (v, label) => `<option value="${esc(v)}"${v === selected ? ' selected' : ''}>${esc(label)}</option>`;
+    const known = [...opts.networks.map((n) => 'network:' + n.name), ...opts.bridges.map((b) => 'bridge:' + b.name)];
+    return (opts.bridges.length ? `<optgroup label="${t('Thuisnetwerk (bridge van de server)')}">${opts.bridges.map((b) =>
+        opt('bridge:' + b.name, [b.name, b.address].filter(Boolean).join(' · '))).join('')}</optgroup>` : '') +
+      `<optgroup label="${t('VM-netwerken')}">${opts.networks.map((n) =>
+        opt('network:' + n.name, [n.name, t(NET_MODE[n.mode] || n.mode), n.subnet, n.active ? null : t('niet actief')].filter(Boolean).join(' · '))).join('')}</optgroup>` +
+      (selected && !known.includes(selected) ? opt(selected, selected.replace(':', ': ') + ' (' + t('bestaat niet meer') + ')') : '');
+  }
+  const VM_NET_HELP = 'Bridge (bv. br0): de VM krijgt een eigen adres in je thuisnetwerk, nodig voor Home Assistant. NAT: de VM kan naar internet, maar je bereikt hem niet vanuit je netwerk.';
+  function readForm(form) {
+    const out = {};
+    for (const el of form.elements) {
+      if (!el.name || (el.disabled && el.name !== 'delay')) continue; // uitstel bewaren, ook als automatisch starten uit staat
+      out[el.name] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
+    }
+    return out;
+  }
+  function wireAutostart(form) {
+    const box = form.elements.autostart, delay = form.elements.delay;
+    box.addEventListener('change', () => { delay.disabled = !box.checked; });
+  }
+  function vncHtml(vnc) {
+    if (!vnc) return `<p class="muted small">${t('Deze VM heeft geen VNC-scherm.')}</p>`;
+    const host = location.hostname || 'je-server';
+    const addr = vnc.port ? host + ':' + vnc.port : null;
+    return `<dl class="kv">
+        <dt>${t('Adres')}</dt><dd>${addr ? `<a href="vnc://${esc(addr)}" target="_blank" rel="noopener">${esc(addr)}</a>` : t('Start de VM om het adres te zien')}</dd>
+        <dt>${t('Wachtwoord')}</dt><dd>${vnc.password ? `<code>${esc(vnc.password)}</code>` : t('Geen')}</dd>
+      </dl>
+      <p class="muted small">${t('Op je Mac opent de link Schermdeling. Daar installeer je het besturingssysteem of zie je het scherm van de VM.')}</p>`;
+  }
+  const vmOptions = () => api.get('/api/vm-options'); // altijd vers: USB-apparaten en ISO's veranderen
+
+  const GIB = 1073741824;
+  const NIC_MODELS = [['virtio', 'virtio (snelst: Linux, Home Assistant)'], ['e1000e', 'e1000e (Windows zonder extra drivers)'], ['rtl8139', 'rtl8139 (oude systemen)']];
+  const VM_TABS = [['general', 'Algemeen'], ['cpu', 'CPU en geheugen'], ['net', 'Netwerk'], ['storage', 'Opslag'], ['devices', 'Apparaten'], ['screen', 'Scherm']];
+
+  async function vmEditWindow(id, tab = 'general') {
+    openWindow(t('VM bewerken'), `<p class="lead">${t('Laden…')}</p>`);
+    let d, opts;
+    try { [d, opts] = await Promise.all([api.get('/api/vms/' + encodeURIComponent(id)), vmOptions()]); }
+    catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('De VM kon niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    $('#winTitle').textContent = d.name;
+    const off = vmKind(d.state) === 'off';
+    // Wat in het formulier verandert, maar geen gewoon invoerveld is.
+    const st = {
+      nics: d.nics.map((n) => ({ id: n.mac, locked: n.locked, type: n.type, source: n.source, model: n.model || 'virtio', mac: n.mac || '' })),
+      disks: d.disks.map((k) => ({ target: k.target, source: k.source, size: k.size, sizeGb: k.size ? Math.ceil(k.size / GIB) : '', remove: false })),
+      add: [], hostdevs: new Set(d.hostdevs), pins: new Set(d.cpuPins),
+    };
+    const body = $('#winBody');
+    body.innerHTML = `
+      ${off ? '' : `<p class="lead">${t('De VM draait. Wijzigingen aan CPU, geheugen, netwerk en apparaten gelden pas nadat je hem afsluit en opnieuw start. Een ISO wisselen en schijven groter maken gaat meteen.')}</p>`}
+      <div class="seg vm-tabs" role="tablist" aria-label="${t('Onderdelen')}">${VM_TABS.map(([k, label]) =>
+        `<button type="button" role="tab" id="vt-${k}" aria-controls="vp-${k}" aria-selected="${k === tab}" data-vtab="${k}">${t(label)}</button>`).join('')}</div>
+      <form class="form" id="vmForm" novalidate>
+        <section class="form" role="tabpanel" id="vp-general" aria-labelledby="vt-general" data-vpane="general">${vmNameField(d, off)}${vmDescAutoFields(d)}</section>
+        <section class="form" role="tabpanel" id="vp-cpu" aria-labelledby="vt-cpu" data-vpane="cpu"></section>
+        <section class="form" role="tabpanel" id="vp-net" aria-labelledby="vt-net" data-vpane="net"></section>
+        <section class="form" role="tabpanel" id="vp-storage" aria-labelledby="vt-storage" data-vpane="storage"></section>
+        <section class="form" role="tabpanel" id="vp-devices" aria-labelledby="vt-devices" data-vpane="devices"></section>
+        <section role="tabpanel" id="vp-screen" aria-labelledby="vt-screen" data-vpane="screen">
+          <div class="btn-row" style="margin-bottom:14px">${vmKind(d.state) === 'off' ? `<span class="muted">${t('Start de VM om het scherm te zien.')}</span>` : consoleLink(d.id, 'btn primary')}</div>
+          <p class="muted small" style="margin-bottom:10px">${t('De console toont het scherm van de VM, met toetsenbord en muis. Met Los venster zet je ze in een eigen browservenster. Plakken (Cmd/Ctrl+V) typt de tekst van je klembord in de VM.')}</p>
+          <label class="check" style="margin-bottom:4px"><input type="checkbox" name="clipboard"${d.clipboard ? ' checked' : ''}> ${t('Klembord delen met deze VM')}</label>
+          <p class="muted small" style="margin-bottom:14px">${t('Nodig om tekst die je in de VM kopieert op je pc te krijgen. Installeer in de VM spice-vdagent (Linux) of de SPICE guest tools (Windows) en start de VM daarna opnieuw.')}</p>
+          <p class="muted small" style="margin-bottom:10px">${t('Liever een eigen VNC-programma? Gebruik dan dit adres en wachtwoord.')}</p>
+          ${vncHtml(d.vnc)}</section>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Opslaan')}</button><button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
+      </form>`;
+    const form = $('#vmForm', body);
+    const pane = (k) => $(`[data-vpane="${k}"]`, form);
+
+    /* CPU en geheugen, met vaste kernen */
+    const cores = [];
+    opts.cpus.forEach((c) => { let g = cores.find((x) => x.core === c.core && x.siblings.join() === c.siblings.join()); if (!g) cores.push(g = { core: c.core, siblings: c.siblings, ids: [] }); g.ids.push(c.id); });
+    const drawCpu = () => {
+      const memory = form.elements.memoryGb ? Number(form.elements.memoryGb.value) * GIB : d.memory;
+      const vcpus = st.pins.size || (form.elements.vcpus ? Number(form.elements.vcpus.value) : d.vcpus);
+      pane('cpu').innerHTML = vmSizeFields({ ...d, vcpus, memory }, opts, st.pins.size > 0) + `
+        <fieldset class="fld"><span>${t('Vaste kernen (optioneel)')}</span>
+          <div class="pin-grid">${cores.map((c, i) => `<div class="pin-core"><span class="muted small">${t('Kern {n}', { n: i })}</span><div>${c.ids.map((cpu) =>
+            `<label class="pin"><input type="checkbox" data-pin="${cpu}"${st.pins.has(cpu) ? ' checked' : ''}><span>${cpu}</span></label>`).join('')}</div></div>`).join('')}</div>
+          <small>${t('Kies kernen om de VM altijd op die kernen te laten draaien, zoals in Unraid. Neem beide threads van een kern en laat kern 0 vrij voor de server. Niets gekozen = de server verdeelt zelf.')}</small>
+          ${st.pins.size ? `<button class="btn sm" type="button" data-pin-clear style="justify-self:start">${t('Geen vaste kernen')}</button>` : ''}</fieldset>`;
+    };
+
+    /* Netwerk */
+    const drawNet = () => {
+      pane('net').innerHTML = `<div class="cf-list">${st.nics.map((n, i) => n.locked
+        ? `<div class="cf-row cf-locked"><span class="cf-lock">🔒</span><span class="cf-text">${esc(n.type + (n.source ? ' (' + n.source + ')' : '') + ' · ' + (n.mac || ''))}
+            <span class="muted">· ${t('geavanceerd, pas aan met virsh edit')}</span></span>
+            <button class="cf-del" type="button" data-nic-del="${i}" aria-label="${t('Weghalen')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`
+        : `<div class="cf-row nic-row">
+            <select class="field" data-nic="${i}:net" aria-label="${t('Netwerk')}">${vmNetOptions(opts, n.type + ':' + n.source)}</select>
+            <select class="field" data-nic="${i}:model" aria-label="${t('Soort kaart')}">${NIC_MODELS.map(([v, label]) => `<option value="${v}"${n.model === v ? ' selected' : ''}>${esc(t(label))}</option>`).join('')}</select>
+            <input class="field" data-nic="${i}:mac" value="${esc(n.mac)}" placeholder="${t('MAC: automatisch')}" aria-label="${t('MAC-adres')}" spellcheck="false" autocomplete="off">
+            <button class="cf-del" type="button" data-nic-del="${i}" aria-label="${t('Weghalen')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join('')
+        || `<p class="muted">${t('Deze VM heeft geen netwerkkaart en kan dus niet op het netwerk.')}</p>`}</div>
+        <div class="btn-row"><button class="btn sm" type="button" data-nic-add${st.nics.length >= 8 ? ' disabled' : ''}>+ ${t('Netwerkkaart')}</button></div>
+        <p class="muted small">${t(VM_NET_HELP)} ${t('Eigen VM-netwerken maak je bij')} <a href="#settings/vmnet">${t('Instellingen → VM-netwerken')}</a>.</p>
+        <p class="muted small">${t('Het MAC-adres bepaalt welk IP-adres je router de VM geeft. Laat het staan als je router een vast adres voor de VM heeft.')}</p>`;
+    };
+
+    /* Opslag: schijven, cd-rom en opstarten */
+    const drawStorage = () => {
+      const cur = d.cdroms[0] || '';
+      const curIso = cur && cur.startsWith(opts.isoDir + '/') ? cur.slice(opts.isoDir.length + 1) : null;
+      const isoKnown = curIso && opts.isos.some((f) => f.name === curIso);
+      pane('storage').innerHTML = `
+        <div class="cf-list">${st.disks.map((k, i) => `<div class="cf-row disk-row${k.remove ? ' is-removed' : ''}">
+            <div><div class="row-title">${esc(k.target || t('schijf'))}</div><div class="row-sub">${esc(k.source || '')}</div></div>
+            <label class="disk-size"><input class="field" type="number" min="${k.size ? Math.ceil(k.size / GIB) : 1}" max="16384" step="1" data-disk="${i}:sizeGb" value="${esc(k.sizeGb)}"${k.remove ? ' disabled' : ''} aria-label="${t('Grootte in GB')}"> GB</label>
+            <label class="check small"><input type="checkbox" data-disk="${i}:remove"${k.remove ? ' checked' : ''}> ${t('Loskoppelen')}</label></div>`).join('')}
+          ${st.add.map((k, i) => `<div class="cf-row disk-row is-new">
+            <div><div class="row-title">${t('Nieuwe schijf')}</div><div class="row-sub">${t('Komt in {dir}', { dir: esc(opts.vmDir) })}</div></div>
+            <label class="disk-size"><input class="field" type="number" min="1" max="16384" step="1" data-add="${i}:sizeGb" value="${esc(k.sizeGb)}" aria-label="${t('Grootte in GB')}"> GB</label>
+            <div class="disk-new-side"><select class="field cf-small" data-add="${i}:bus" aria-label="${t('Aansluiting')}"><option value="virtio"${k.bus !== 'sata' ? ' selected' : ''}>virtio</option><option value="sata"${k.bus === 'sata' ? ' selected' : ''}>SATA</option></select>
+            <button class="cf-del" type="button" data-add-del="${i}" aria-label="${t('Weghalen')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div>`).join('')}</div>
+        <div class="btn-row"><button class="btn sm" type="button" data-add-disk${st.add.length >= 4 ? ' disabled' : ''}>+ ${t('Schijf')}</button></div>
+        <p class="muted small">${t('Een schijf kan alleen groter worden. Vergroot daarna ook de partitie in de VM zelf. Loskoppelen haalt de schijf uit de VM; het bestand blijft staan.')}</p>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Cd-rom')}</span><select class="field" name="cdrom">
+            <option value="">${t('Leeg')}</option>
+            ${cur && !isoKnown ? `<option value="=" selected>${esc(cur)}</option>` : ''}
+            ${opts.isos.map((f) => `<option value="${esc(f.name)}"${f.name === curIso ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+            <small>${t('ISO\'s uit {dir}', { dir: esc(opts.isoDir) })}</small></label>
+          <label class="fld"><span>${t('Opstarten van')}</span><select class="field" name="boot">
+            <option value="disk"${d.boot !== 'cdrom' ? ' selected' : ''}>${t('Eerst de schijf')}</option>
+            <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('Eerst de cd-rom')}</option></select>
+            <small>${t('Kies de cd-rom om een besturingssysteem te installeren.')}</small></label>
+        </div>`;
+    };
+
+    /* Apparaten: USB en PCI */
+    const drawDevices = () => {
+      const usb = [...opts.usb];
+      [...st.hostdevs].filter((k) => k.startsWith('usb:') && !usb.some((u) => u.key === k)).forEach((k) => usb.push({ key: k, name: k.slice(4), missing: true }));
+      const busy = (p) => p.driver && !/^vfio/.test(p.driver);
+      const pciMissing = [...st.hostdevs].filter((k) => k.startsWith('pci:') && !opts.pci.some((p) => p.key === k));
+      pane('devices').innerHTML = `
+        <h3>${t('USB')}</h3>
+        <div class="dev-list">${usb.map((u) => `<label class="check dev"><input type="checkbox" data-dev="${esc(u.key)}"${st.hostdevs.has(u.key) ? ' checked' : ''}>
+            <span><b>${esc(u.name)}</b> <span class="muted small">${esc(u.vendor ? u.vendor + ':' + u.product : '')}${u.missing ? ' · ' + t('niet aangesloten') : ''}</span></span></label>`).join('')
+          || `<p class="muted">${t('Geen USB-apparaten gevonden. Steek er een in en open dit venster opnieuw.')}</p>`}</div>
+        <p class="muted small">${t('Bijvoorbeeld een Zigbee- of Z-Wave-stick voor Home Assistant. De VM krijgt het apparaat voor zich alleen.')}</p>
+        <h3>${t('PCI')}</h3>
+        ${!opts.iommu ? `<p class="lead">${t('IOMMU staat uit. Zet AMD-Vi (IOMMU) aan in het BIOS en start de server opnieuw om PCI-apparaten zoals een GPU door te geven.')}</p>` : `
+        <div class="dev-list">${opts.pci.map((p) => `<label class="check dev"><input type="checkbox" data-dev="${esc(p.key)}"${st.hostdevs.has(p.key) ? ' checked' : ''}>
+            <span><b>${esc(p.name)}</b> <span class="muted small">${esc([t(p.kind), p.address, p.group != null ? t('groep {n}', { n: p.group }) : null].filter(Boolean).join(' · '))}</span>
+            ${busy(p) ? `<span class="small temp-warn">${t('Nu in gebruik door de server (driver {driver}).', { driver: esc(p.driver) })}${p.kind === 'Beeld' ? ' ' + t('Geef je hem door, dan kan de server hem niet gebruiken zolang de VM draait (bv. Ollama).') : ''}</span>` : ''}
+            ${p.groupDevices.length ? `<span class="small muted">${t('Zit in dezelfde groep als {list}. Geef die samen door.', { list: esc(p.groupDevices.map((g) => g.name).join(', ')) })}</span>` : ''}</span></label>`).join('')}
+          ${pciMissing.map((k) => `<label class="check dev"><input type="checkbox" data-dev="${esc(k)}" checked><span><b>${esc(k.slice(4))}</b> <span class="muted small">${t('niet gevonden')}</span></span></label>`).join('')}</div>`}`;
+    };
+
+    drawCpu(); drawNet(); drawStorage(); drawDevices();
+    const showTab = (k) => {
+      $$('[data-vtab]', body).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vtab === k)));
+      $$('[data-vpane]', body).forEach((p) => { p.hidden = p.dataset.vpane !== k; });
+    };
+    showTab(tab);
+    wireAutostart(form);
+
+    body.addEventListener('click', (e) => {
+      const tb = e.target.closest('[data-vtab]'); if (tb) { showTab(tb.dataset.vtab); return; }
+      if (e.target.closest('a[href^="#settings"]')) { win.close(); return; }
+      if (e.target.closest('[data-pin-clear]')) { st.pins.clear(); drawCpu(); return; }
+      if (e.target.closest('[data-nic-add]')) {
+        const first = opts.bridges[0] ? { type: 'bridge', source: opts.bridges[0].name } : { type: 'network', source: (opts.networks[0] || {}).name || 'default' };
+        st.nics.push({ ...first, model: 'virtio', mac: '' }); drawNet(); return;
+      }
+      const nd = e.target.closest('[data-nic-del]'); if (nd) { st.nics.splice(Number(nd.dataset.nicDel), 1); drawNet(); return; }
+      if (e.target.closest('[data-add-disk]')) { st.add.push({ sizeGb: 32, bus: 'virtio' }); drawStorage(); return; }
+      const ad = e.target.closest('[data-add-del]'); if (ad) { st.add.splice(Number(ad.dataset.addDel), 1); drawStorage(); }
+    });
+    body.addEventListener('change', (e) => {
+      const tg = e.target;
+      if (tg.dataset.pin != null) { if (tg.checked) st.pins.add(Number(tg.dataset.pin)); else st.pins.delete(Number(tg.dataset.pin)); drawCpu(); return; }
+      if (tg.dataset.dev) { if (tg.checked) st.hostdevs.add(tg.dataset.dev); else st.hostdevs.delete(tg.dataset.dev); return; }
+      if (tg.dataset.disk) { const [i, k] = tg.dataset.disk.split(':'); st.disks[i][k] = k === 'remove' ? tg.checked : tg.value; if (k === 'remove') drawStorage(); return; }
+    });
+    body.addEventListener('input', (e) => {
+      const tg = e.target;
+      if (tg.dataset.nic) {
+        const [i, k] = tg.dataset.nic.split(':');
+        if (k === 'net') { const [type, ...rest] = tg.value.split(':'); st.nics[i].type = type; st.nics[i].source = rest.join(':'); } else st.nics[i][k] = tg.value;
+      } else if (tg.dataset.add) { const [i, k] = tg.dataset.add.split(':'); st.add[i][k] = tg.value; }
+      else if (tg.dataset.disk) { const [i, k] = tg.dataset.disk.split(':'); if (k === 'sizeGb') st.disks[i].sizeGb = tg.value; }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('[type=submit]', form), err = $('.form-error', form);
+      err.textContent = '';
+      const badMac = st.nics.find((n) => !n.locked && n.mac && !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(n.mac.trim()));
+      if (badMac) { showTab('net'); err.textContent = t('"{mac}" is geen geldig MAC-adres, bv. 52:54:00:12:34:56.', { mac: badMac.mac }); return; }
+      const small = st.disks.find((k) => !k.remove && k.size && Number(k.sizeGb) * GIB < k.size);
+      if (small) { showTab('storage'); err.textContent = t('Een schijf kan alleen groter worden. {disk} is nu {size} GB.', { disk: small.target, size: Math.ceil(small.size / GIB) }); return; }
+      const out = readForm(form);
+      Object.assign(out, {
+        nics: st.nics.map((n) => (n.locked ? { id: n.id, locked: true } : { id: n.id || null, type: n.type, source: n.source, model: n.model, mac: n.mac.trim() })),
+        hostdevs: [...st.hostdevs], cpuPins: [...st.pins].sort((a, b) => a - b),
+        removeDisks: st.disks.filter((k) => k.remove).map((k) => k.target),
+        resizeDisks: st.disks.filter((k) => !k.remove && k.sizeGb && (!k.size || Number(k.sizeGb) * GIB > k.size)).map((k) => ({ target: k.target, sizeGb: Number(k.sizeGb) })),
+        addDisks: st.add.map((k) => ({ sizeGb: Number(k.sizeGb), bus: k.bus })),
+      });
+      if (out.removeDisks.length && !(await ask(t('{n} schijf/schijven loskoppelen van {name}? De bestanden blijven staan, maar de VM ziet ze niet meer.', { n: out.removeDisks.length, name: d.name }), t('Loskoppelen')))) return;
+      btn.disabled = true;
+      try {
+        const r = await api.post('/api/vms/' + encodeURIComponent(d.id) + '/settings', out);
+        toast(t('Opgeslagen: {name}', { name: r.name }) + (r.restartNeeded ? '. ' + t('Sluit de VM af en start hem opnieuw om de nieuwe instellingen te gebruiken.') : ''));
+        win.close();
+        await loadVms().catch(() => {});
+      } catch (ex) { err.textContent = t('Opslaan lukte niet: {error}', { error: ex.message }); btn.disabled = false; }
+    });
+  }
+
+  const VM_KINDS = {
+    linux: { label: 'Linux', help: 'Installeer Linux vanaf een ISO, bijvoorbeeld Debian of Ubuntu Server.', vcpus: 2, memoryGb: 4, diskGb: 32 },
+    windows: { label: 'Windows 11', help: 'Windows 11 met TPM en UEFI. De schijf gebruikt SATA, zodat de installer hem meteen ziet.', vcpus: 4, memoryGb: 8, diskGb: 64 },
+    import: { label: 'Bestaande schijf', help: 'Gebruik een bestaand schijfbestand, zoals het qcow2-bestand van Home Assistant OS. Thuisbasis maakt er een kopie van.', vcpus: 2, memoryGb: 4 },
+  };
+  async function vmCreateWindow() {
+    openWindow(t('Nieuwe VM'), `<p class="lead">${t('Laden…')}</p>`);
+    let opts;
+    try { opts = await vmOptions(); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    let kind = 'linux';
+    const draw = (keep) => {
+      const k = VM_KINDS[kind];
+      const files = kind === 'import' ? opts.images : opts.isos;
+      const fileLabel = t(kind === 'import' ? 'Schijfbestand' : 'Installatie-ISO');
+      const blocked = opts.vmDirMissing || !files.length;
+      $('#winBody').innerHTML = `
+        <div class="seg kind-seg" role="radiogroup" aria-label="${t('Soort VM')}">${Object.entries(VM_KINDS).map(([key, v]) =>
+          `<button type="button" role="radio" aria-checked="${key === kind}" data-kind="${key}">${esc(t(v.label))}</button>`).join('')}</div>
+        <p class="lead" style="margin-top:12px">${esc(t(k.help))}</p>
+        ${opts.vmDirMissing ? `<p class="lead temp-bad">${t('De map voor VM-schijven ({dir}) bestaat niet. Maak eerst de dataset aan (zie README) of pas VM_DIR aan.', { dir: esc(opts.vmDir) })}</p>` : ''}
+        <form class="form" id="vmForm" novalidate>
+          <input type="hidden" name="kind" value="${kind}">
+          <label class="fld"><span>${fileLabel}</span>
+            ${files.length ? `<select class="field" name="source" required>${files.map((f) =>
+              `<option value="${esc(f.name)}"${keep && keep.source === f.name ? ' selected' : ''}>${esc(f.name)} (${bytes(f.size)})</option>`).join('')}</select>`
+            : `<p class="muted small">${t(kind === 'import' ? 'Er staan nog geen schijfbestanden (.qcow2, .img, .raw) in {dir}.' : 'Er staan nog geen ISO-bestanden in {dir}.', { dir: esc(opts.isoDir) })}
+                ${t('Zet er een in, bijvoorbeeld via de gedeelde map of met scp, en open dit venster opnieuw.')}</p>`}
+            <small>${t('Uit {dir}', { dir: esc(opts.isoDir) })}</small></label>
+          ${(() => { const v = { name: keep ? keep.name : '', vcpus: k.vcpus, memory: k.memoryGb * 1073741824, diskGb: k.diskGb, autostart: false, delay: 0,
+            description: keep ? keep.description : '' }; return vmNameField(v) + vmSizeFields(v, opts) + `
+          <label class="fld"><span>${t('Netwerk')}</span><select class="field" name="network">${vmNetOptions(opts, keep && keep.network || opts.network)}</select>
+            <small>${t(VM_NET_HELP)}</small></label>` + vmDescAutoFields(v); })()}
+          <p class="muted small">${t('De VM start meteen na het aanmaken. Netwerkkaarten, schijven en apparaten pas je daarna aan bij Bewerken.')}</p>
+          <p class="form-error" role="alert"></p>
+          <div class="btn-row"><button class="btn primary" type="submit"${blocked ? ' disabled' : ''}>${t('Aanmaken')}</button><button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
+        </form>`;
+      wireAutostart($('#vmForm'));
+    };
+    draw();
+    const body = $('#winBody');
+    body.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-kind]'); if (!b || b.dataset.kind === kind) return;
+      const f = $('#vmForm');
+      const keep = { name: f.elements.name.value, description: f.elements.description.value, source: f.elements.source && f.elements.source.value, network: f.elements.network.value };
+      kind = b.dataset.kind; draw(keep);
+    });
+    body.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target, btn = $('[type=submit]', form), err = $('.form-error', form);
+      err.textContent = ''; btn.disabled = true; btn.textContent = t('Aanmaken…');
+      try {
+        const r = await api.post('/api/vms', readForm(form));
+        toast(t('Aangemaakt en gestart: {name}', { name: r.name }));
+        await loadVms().catch(() => {});
+        vmEditWindow(r.name, 'screen'); // meteen naar de console om de installatie te doen
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Aanmaken'); }
+    });
+  }
+
+  /* --- appstore (eigen pagina op #store) */
+  const STORE_PAGE = 48;
+  let storeLoading = null;
+  function loadStore(refresh) {
+    if (S.store && !refresh) { renderStore(); return Promise.resolve(); }
+    if (storeLoading) return storeLoading;
+    $('#storeMore').hidden = true;
+    $('#storeGrid').innerHTML = `<p class="empty">${t(refresh ? 'Catalogus vernieuwen…' : 'Catalogus laden…')}</p>`;
+    storeLoading = api.get('/api/store' + (refresh ? '?refresh=1' : ''))
+      .then((c) => {
+        S.store = c;
+        const sel = $('#storeCat'), cur = sel.value;
+        sel.innerHTML = `<option value="featured">${t('Aanbevolen')}</option><option value="all">${t('Alle apps')}</option>` +
+          c.categories.map((k) => `<option value="${esc(k.id)}">${esc(t(k.name))}</option>`).join('');
+        sel.value = cur;
+        renderStore();
+      })
+      .catch((e) => {
+        $('#storeGrid').innerHTML = `<div class="empty"><p>${esc(e.message)}</p>
+          <button class="btn sm" type="button" data-store-retry style="margin-top:12px">${t('Opnieuw proberen')}</button></div>`;
+      })
+      .finally(() => { storeLoading = null; });
+    return storeLoading;
+  }
+
+  function storeIconHtml(a) {
+    const letter = esc(prettyName(a.name).charAt(0).toUpperCase());
+    if (a.icon) return `<span class="app-icon store-icon" data-letter="${letter}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" loading="lazy"></span>`;
+    return `<span class="app-icon store-icon" style="background:${colorFor(a.name)}">${letter}</span>`;
+  }
+
+  function storeResults() {
+    const c = S.store; const q = S.storeQuery.trim().toLowerCase(); const cat = S.storeCat;
+    let list = c.apps.filter((a) => (cat === 'featured' ? (q ? true : a.featured) : cat === 'all' ? true : a.categories.includes(cat)));
+    if (!q) return list.sort((a, b) => (b.featured - a.featured) || (b.popularity - a.popularity) || a.name.localeCompare(b.name));
+    const score = (a) => {
+      const n = a.name.toLowerCase(), p = prettyName(a.name).toLowerCase();
+      if (n === q || p === q) return 0;
+      if (n.startsWith(q) || p.startsWith(q)) return 1;
+      if (n.includes(q) || p.includes(q)) return 2;
+      if ((a.summary + ' ' + a.maintainer + ' ' + a.image).toLowerCase().includes(q)) return 3;
+      return 9;
+    };
+    return list.map((a) => [score(a), a]).filter(([s]) => s < 9)
+      .sort((x, y) => (x[0] - y[0]) || (y[1].featured - x[1].featured) || (y[1].popularity - x[1].popularity)).map(([, a]) => a);
+  }
+
+  function renderStore() {
+    const c = S.store; if (!c || $('#storePage').hidden) return;
+    const when = new Date(c.updated).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
+    $('#storeCount').textContent = t('{n} apps', { n: nf0.format(c.count) });
+    $('#storeSource').innerHTML = `${t('Catalogus van {source}, bijgewerkt op {when}. De templates komen van hun eigen maintainers.', { source: esc(tr(c.source)), when: esc(when) })}
+      ${c.error ? `<span class="temp-warn">${t('Vernieuwen lukte niet ({error}), dit is de vorige versie.', { error: esc(tr(c.error)) })}</span>` : ''}
+      <button class="linkish" type="button" data-store-refresh>${t('Nu vernieuwen')}</button>`;
+    const list = storeResults();
+    const shown = list.slice(0, S.storeShown);
+    $('#storeGrid').innerHTML = shown.length ? shown.map((a) => `
+      <button class="widget store-card" type="button" data-store="${esc(a.id)}">
+        ${storeIconHtml(a)}
+        <span class="store-body">
+          <span class="store-name">${esc(prettyName(a.name))}${a.installed ? ` <span class="pill ok">${t('Geïnstalleerd')}</span>` : ''}${a.beta ? ' <span class="pill warn">Beta</span>' : ''}</span>
+          <span class="store-by">${esc([a.maintainer, a.official ? t('officieel') : null].filter(Boolean).join(' · '))}</span>
+          <span class="store-sum">${esc(tr(a.summary))}</span>
+        </span>
+      </button>`).join('')
+      : `<p class="empty">${S.storeQuery ? t('Geen apps gevonden voor "{q}".', { q: esc(S.storeQuery) }) : t('Geen apps in deze categorie.')}</p>`;
+    const more = $('#storeMore');
+    more.hidden = list.length <= shown.length;
+    more.textContent = t('Meer tonen ({n} over)', { n: nf0.format(list.length - shown.length) });
+  }
+
+  $('#storeSearch').addEventListener('input', (e) => { S.storeQuery = e.target.value; S.storeShown = STORE_PAGE; renderStore(); });
+  $('#storeCat').addEventListener('change', (e) => { S.storeCat = e.target.value; S.storeShown = STORE_PAGE; renderStore(); });
+  $('#storeMore').addEventListener('click', () => { S.storeShown += STORE_PAGE; renderStore(); });
+  $('#storePage').addEventListener('click', (e) => {
+    if (e.target.closest('[data-store-retry]')) return loadStore();
+    if (e.target.closest('[data-store-refresh]')) return loadStore(true);
+    const card = e.target.closest('[data-store]');
+    if (card) storeWindow(card.dataset.store);
+  });
+
+  const FIELD_GROUPS = [['Port', 'Poorten'], ['Path', 'Mappen'], ['Device', 'Apparaten'], ['Variable', 'Instellingen'], ['Label', 'Labels']];
+  function storeFieldHtml(f, d) {
+    const ro = /^ro\b|^r$/.test(f.mode);
+    const where = f.type === 'Port' ? t('Poort in de app: {port}', { port: f.target + '/' + (f.mode || 'tcp') })
+      : f.type === 'Path' ? t(ro ? 'In de app: {path} (alleen lezen)' : 'In de app: {path}', { path: f.target })
+      : f.type === 'Variable' || f.type === 'Label' ? f.target : t('Apparaat op de server');
+    const attrs = `name="${esc(f.key)}"${f.required ? ' required' : ''}${f.auto ? ' data-auto="1"' : ''}${f.type === 'Port' ? ' data-port="1"' : ''}`;
+    const input = f.options
+      ? `<select class="field" ${attrs}>${f.options.map((o) => `<option${o === f.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+      : `<input class="field" ${attrs} type="${f.type === 'Port' ? 'number' : f.mask ? 'password' : 'text'}" value="${esc(f.value)}" autocomplete="off"
+          ${f.type === 'Port' ? 'min="1" max="65535"' : ''}${f.type === 'Path' && !f.value ? ` placeholder="${t('bv. {path}', { path: esc(d.sharesDir) + '/media' })}"` : ''}>`;
+    return `<label class="fld"><span>${esc(tr(f.name))}${f.required ? ' <em class="req">*</em>' : ''}</span>${input}
+      <small>${esc([tr(f.description), where].filter(Boolean).join(' · '))}</small></label>`;
+  }
+  // Krijgt de app poorten op de server? Niet bij host, geen netwerk of een eigen adres (macvlan/ipvlan).
+  function storeNetPorts(d, value) {
+    const n = (d.networks || []).find((x) => x.name === value);
+    return !['host', 'none'].includes(value) && !(n && /^(macvlan|ipvlan)$/.test(n.driver));
+  }
+  function storeNetHtml(d) {
+    const opts = [['bridge', t('Standaard (bridge)')], ['host', t('Host (netwerk van de server)')],
+      ...(d.networks || []).map((n) => [n.name, [n.name, n.driver, n.subnet].filter(Boolean).join(' · ')])];
+    return `<h3>${t('Netwerk')}</h3><div class="form">
+      <label class="fld"><span>${t('Netwerk')}</span><select class="field" name="__network">${opts.map(([v, label]) =>
+        `<option value="${esc(v)}"${v === d.networkDefault ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
+        <small id="storeNetHelp"></small></label>
+      <label class="fld" data-store-ip><span>${t('Vast IP-adres (optioneel)')}</span><input class="field" name="__ip" spellcheck="false" autocomplete="off">
+        <small>${t('Leeg = Docker kiest zelf een adres.')}</small></label></div>`;
+  }
+  function storeSections(fields, d) {
+    return FIELD_GROUPS.map(([type, title]) => {
+      const list = fields.filter((f) => f.type === type);
+      return list.length ? `<h3>${t(title)}</h3><div class="form">${list.map((f) => storeFieldHtml(f, d)).join('')}</div>` : '';
+    }).join('');
+  }
+
+  async function storeWindow(id) {
+    openWindow(t('App'), `<p class="lead">${t('Laden…')}</p>`);
+    let d;
+    try { d = await api.get('/api/store/apps/' + encodeURIComponent(id)); }
+    catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('De app kon niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    $('#winTitle').textContent = prettyName(d.name);
+    // Verplichte velden zonder waarde altijd tonen, ook als het template ze "geavanceerd" noemt.
+    const basic = d.fields.filter((f) => !f.advanced || (f.required && !f.value));
+    const adv = d.fields.filter((f) => !basic.includes(f));
+    const links = [d.project && `<a href="${esc(d.project)}" target="_blank" rel="noopener">${t('Website')}</a>`,
+      d.support && `<a href="${esc(d.support)}" target="_blank" rel="noopener">${t('Hulp')}</a>`].filter(Boolean).join(' · ');
+    const body = $('#winBody');
+    body.innerHTML = `
+      <div class="store-head">${storeIconHtml(d)}
+        <div><p class="store-by">${esc([d.maintainer, d.official ? t('officieel') : null].filter(Boolean).join(' · '))}</p>
+          ${links ? `<p class="small">${links}</p>` : ''}</div>
+      </div>
+      <p class="store-overview">${esc(tr(d.overview))}</p>
+      ${d.requires ? `<p class="lead"><b>${t('Vereist:')}</b> ${esc(tr(d.requires))}</p>` : ''}
+      ${d.installed ? `<p class="lead temp-ok">${t('Deze app staat al op je server. Je kan hem nog eens installeren onder een andere naam.')}</p>` : ''}
+      ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('De map voor appgegevens ({dir}) bestaat niet. Maak eerst de dataset aan of pas APPDATA_DIR aan.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      <form class="form" id="storeForm" novalidate>
+        <label class="fld"><span>${t('Naam')} <em class="req">*</em></span>
+          <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
+          <small>${t('Kleine letters, cijfers, - en _. Wordt de naam van de container en van de map {dir}/naam.', { dir: esc(d.stacksDir) })}</small></label>
+        ${storeNetHtml(d)}
+        ${storeSections(basic, d)}
+        <div class="cf-list" id="storeExtra"></div>
+        <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Poort')}</button></div>
+        ${adv.length ? `<details class="adv"><summary>${t('Geavanceerd ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
+        <p class="muted small">${t('Image: {image}. Thuisbasis maakt er een compose-bestand van, dat je later ook in Dockge kan openen.', { image: esc(d.image) })}</p>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Installeren')}</button>
+          <button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
+      </form>
+      <div id="storeJob" hidden>
+        <p class="lead" id="jobState">${t('Installeren…')}</p>
+        <pre class="logs" id="jobLog"></pre>
+        <div class="btn-row" id="jobBtns" style="margin-top:12px"></div>
+      </div>`;
+    const form = $('#storeForm', body);
+    const syncNet = () => {
+      const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
+      $('[data-store-ip]', form).hidden = !(n && n.subnet);
+      if (!(n && n.subnet)) form.elements.__ip.value = '';
+      form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : '';
+      $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('Je koos zelf een poort, daarom gebruikt de app nu het standaardnetwerk (bridge). Met host luistert de app altijd op zijn eigen poorten.')
+        : v === 'host' ? t('De app gebruikt het netwerk van de server en luistert op zijn eigen poorten. Pas je hieronder een poort aan, dan kiest Thuisbasis het standaardnetwerk (bridge).')
+        : !ports ? t('De app krijgt een eigen adres in je thuisnetwerk en is daar bereikbaar op de poorten van de app zelf. Pas je een poort aan, dan kiest Thuisbasis het standaardnetwerk (bridge).')
+        : n ? t('Apps in hetzelfde netwerk vinden elkaar op naam.') : t('Nieuwe netwerken maak je bij Instellingen → Docker-netwerken.');
+    };
+    let switched = false;
+    form.elements.__network.addEventListener('change', () => { switched = false; syncNet(); });
+    // Een poort aanpassen kan alleen als Docker de poorten regelt: dan zelf naar het standaardnetwerk.
+    const needPorts = () => {
+      if (storeNetPorts(d, form.elements.__network.value)) return;
+      form.elements.__network.value = 'bridge'; switched = true; syncNet();
+    };
+    form.addEventListener('input', (e) => { if (e.target.dataset.port) needPorts(); });
+    syncNet();
+    // Extra poorten die niet in het template staan.
+    const extra = [];
+    const drawExtra = (focus) => {
+      $('#storeExtra', form).innerHTML = extra.length ? `<h3>${t('Extra poorten')}</h3>` + extra.map((p, i) => `<div class="cf-row cf-pair">
+          <input class="field" data-xport="${i}:host" value="${esc(p.host)}" inputmode="numeric" placeholder="${t('op de server')}" aria-label="${t('Poort op de server')}"><span class="cf-sep">→</span>
+          <input class="field" data-xport="${i}:container" value="${esc(p.container)}" inputmode="numeric" placeholder="${t('in de app')}" aria-label="${t('Poort in de app')}">
+          <select class="field cf-small" data-xport="${i}:protocol" aria-label="Protocol"><option${p.protocol !== 'udp' ? ' selected' : ''}>tcp</option><option${p.protocol === 'udp' ? ' selected' : ''}>udp</option></select>
+          <button class="cf-del" type="button" data-xport-del="${i}" aria-label="${t('Weghalen')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join('') : '';
+      if (focus) { const x = $(`[data-xport="${focus}:host"]`, form); if (x) x.focus(); }
+    };
+    form.addEventListener('click', (e) => {
+      if (e.target.closest('[data-xport-add]')) { needPorts(); extra.push({ host: '', container: '', protocol: 'tcp' }); drawExtra(extra.length - 1); return; }
+      const del = e.target.closest('[data-xport-del]'); if (del) { extra.splice(Number(del.dataset.xportDel), 1); drawExtra(); }
+    });
+    form.addEventListener('input', (e) => { if (!e.target.dataset.xport) return; const [i, k] = e.target.dataset.xport.split(':'); extra[i][k] = e.target.value; });
+    form.addEventListener('change', (e) => { if (e.target.dataset.xport) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+    // Automatisch ingevulde appdata-mappen volgen de naam: /snel/appdata/<naam>.
+    let lastName = d.suggestedName;
+    form.elements.__name.addEventListener('input', (e) => {
+      const n = e.target.value.trim();
+      $$('[data-auto]', form).forEach((el) => { if (el.value === d.appdataDir + '/' + lastName) el.value = d.appdataDir + '/' + n; });
+      lastName = n;
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form);
+      err.textContent = '';
+      const missing = [...form.elements].find((el) => el.required && !el.disabled && !el.value.trim());
+      if (missing) {
+        const det = missing.closest('details'); if (det) det.open = true;
+        err.textContent = t('Vul {field} in.', { field: missing.closest('.fld').querySelector('span').textContent.replace('*', '').trim() });
+        missing.focus(); return;
+      }
+      const badX = extra.find((p) => (String(p.host).trim() || String(p.container).trim()) && !(/^\d{1,5}$/.test(String(p.host).trim()) && /^\d{1,5}$/.test(String(p.container).trim())));
+      if (badX) { err.textContent = t('Vul bij elke extra poort twee poorten in tussen 1 en 65535.'); return; }
+      const values = {};
+      for (const el of form.elements) if (el.name && !el.name.startsWith('__') && !el.disabled) values[el.name] = el.value;
+      btn.disabled = true;
+      let r;
+      try {
+        r = await api.post('/api/store/apps/' + encodeURIComponent(d.id) + '/install',
+          { name: form.elements.__name.value.trim(), values, network: form.elements.__network.value, ip: form.elements.__ip.value.trim(),
+            extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()) });
+      }
+      catch (ex) { err.textContent = ex.message; btn.disabled = false; return; }
+      form.hidden = true; $('#storeJob', body).hidden = false;
+      followJob(r.job, prettyName(d.name), body, d.id);
+    });
+  }
+
+  // Volg de installatie. Sluit je het venster, dan loopt ze gewoon door en krijg je op het einde een melding.
+  async function followJob(jobId, label, body, storeId) {
+    let j;
+    try { j = await api.get('/api/store/jobs/' + jobId); } catch (e) { setTimeout(() => followJob(jobId, label, body, storeId), 2000); return; }
+    const visible = body.isConnected;
+    if (visible) { const log = $('#jobLog', body); log.textContent = j.lines.map(tr).join('\n'); log.scrollTop = log.scrollHeight; }
+    if (!j.done) { setTimeout(() => followJob(jobId, label, body, storeId), 1000); return; }
+    if (j.ok) {
+      toast(t('Geïnstalleerd: {name}', { name: label }));
+      await loadApps().catch(() => {});
+      if (S.store) { const s = S.store.apps.find((x) => x.id === storeId); if (s) s.installed = true; renderStore(); }
+      if (!visible) return;
+      const a = S.apps.find((x) => x.name === j.name);
+      const url = a && webuiUrl(a.webui);
+      $('#jobState', body).textContent = t('Klaar: {name} is geïnstalleerd en gestart.', { name: label });
+      $('#jobBtns', body).innerHTML = (url ? `<a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener">${t('Openen')}</a>` : '') +
+        `<button class="btn" type="button" data-close>${t('Sluiten')}</button>`;
+    } else {
+      toast(t('Installeren van {name} mislukt: {error}', { name: label, error: tr(j.error) }), true);
+      if (!visible) return;
+      $('#jobState', body).innerHTML = `<span class="temp-bad">${t('Installeren mislukt: {error}', { error: esc(tr(j.error)) })}</span>`;
+      $('#jobBtns', body).innerHTML = `<button class="btn primary" type="button" data-job-back>${t('Terug naar het formulier')}</button><button class="btn" type="button" data-close>${t('Sluiten')}</button>`;
+      $('[data-job-back]', body).addEventListener('click', () => {
+        $('#storeJob', body).hidden = true; const f = $('#storeForm', body); f.hidden = false; $('[type=submit]', f).disabled = false;
+      });
+    }
+  }
+
+  /* --- instellingen (eigen pagina op #settings, #settings/network, #settings/docker, #settings/about) */
+  const settingsTab = () => ({ '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/about': 'about' })[location.hash] || 'general';
+  let netTimer = null;
+  function showSettings() {
+    const tab = settingsTab();
+    $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
+    $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
+    $('#setWinTitle').textContent = t({ general: 'Algemeen', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', about: 'Over' }[tab]);
+    $('#setPane').scrollTop = 0;
+    clearInterval(netTimer); netTimer = null;
+    $('#setPane').onclick = null; $('#setPane').onchange = null;
+    ({ general: generalPane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, about: aboutPane })[tab]($('#setPane'));
+  }
+
+  function generalPane(el) {
+    const theme = themeNow();
+    el.innerHTML = `
+      <h2 class="pane-title">${t('Taal')}</h2>
+      <p class="muted small">${t('Geldt voor iedereen die Thuisbasis op deze server gebruikt.')}</p>
+      <div class="choice-row" role="radiogroup" aria-label="${t('Taal')}">${Object.entries(LANGS).map(([k, name]) => `
+        <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
+      </div>
+      <h2 class="pane-title">${t('Thema')}</h2>
+      <p class="muted small">${t('Geldt alleen voor dit toestel.')}</p>
+      <div class="choice-row" role="radiogroup" aria-label="${t('Thema')}">${[['auto', t('Automatisch')], ['light', t('Licht (ochtendnevel)')], ['dark', t('Donker (avond)')]].map(([k, name]) => `
+        <label class="choice"><input type="radio" name="theme" value="${k}"${k === theme ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
+      </div>`;
+    el.onchange = async (e) => {
+      if (e.target.name === 'theme') { setTheme(e.target.value); return; }
+      if (e.target.name !== 'lang') return;
+      try {
+        await api.post('/api/settings', { language: e.target.value });
+        setLang(e.target.value);
+        location.reload(); // alles opnieuw opbouwen in de nieuwe taal
+      } catch (ex) { toast(t('Taal opslaan lukte niet: {error}', { error: ex.message }), true); }
+    };
+  }
+
+  async function networkPane(el) {
+    el.onchange = null;
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let n;
+    try { n = await api.get('/api/network'); }
+    catch (e) { el.innerHTML = `<p class="lead">${t('De netwerkinstellingen konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'network') return;
+    const c = n.config;
+    const linkRows = n.links.map((l) => `<li>
+        <div><div class="row-title">${esc(l.name)} <span class="pill ${l.up ? 'ok' : ''}">${l.up ? t('Verbonden') : t('Niet verbonden')}</span></div>
+          <div class="row-sub">${esc([l.kind === 'bridge' ? t('Bridge') : t('Netwerkkaart'), l.speed ? (l.speed >= 1000 ? nf.format(l.speed / 1000) + ' Gbit/s' : l.speed + ' Mbit/s') : null,
+            l.master ? t('in bridge {name}', { name: l.master }) : null, l.mac].filter(Boolean).join(' · '))}</div></div>
+        <div class="row-side">${l.ipv4.map((a) => esc(a.address) + (a.dynamic ? ' <span class="muted">(DHCP)</span>' : '')).join('<br>') || '–'}
+          ${l.gateway ? `<div>${t('gateway {ip}', { ip: esc(l.gateway) })}</div>` : ''}</div></li>`).join('');
+    el.innerHTML = `
+      <div id="netPending"></div>
+      <h2 class="pane-title">${t('Nu')}</h2>
+      <ul class="rows">${linkRows || `<li><span class="muted">${t('Geen netwerkkaarten gevonden.')}</span></li>`}</ul>
+      <p class="muted small" style="margin-top:8px">${t('DNS-servers: {list}', { list: esc(n.dns.join(', ') || '–') })}</p>
+
+      <h2 class="pane-title">${t('Hostnaam')}</h2>
+      <form class="inline-form" id="hostForm">
+        <input class="field" name="hostname" value="${esc(n.hostname)}" maxlength="63" autocomplete="off" spellcheck="false" aria-label="${t('Hostnaam')}">
+        <button class="btn" type="submit">${t('Opslaan')}</button>
+      </form>
+      <p class="muted small" style="margin-top:6px">${t('De naam van de server in je netwerk. De verbinding blijft gewoon werken.')}</p>
+
+      <h2 class="pane-title">${t('IP-adres')}</h2>
+      ${!n.editable ? `<p class="lead">${t('Dit netwerk wordt beheerd door {who}. Thuisbasis kan het alleen aanpassen als Debian ifupdown gebruikt (/etc/network/interfaces), de standaard voor een server zonder desktop.', { who: esc(n.manager || t('een ander programma')) })}</p>` : `
+      <form class="form" id="netForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Netwerkkaart')}</span><select class="field" name="interface">${n.physical.map((p) => `<option${c && c.interface === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
+          <label class="fld"><span>${t('Adres krijgen')}</span><select class="field" name="mode">
+            <option value="dhcp"${c && c.mode === 'dhcp' ? ' selected' : ''}>${t('Automatisch (DHCP van je router)')}</option>
+            <option value="static"${c && c.mode === 'static' ? ' selected' : ''}>${t('Vast adres')}</option></select></label>
+        </div>
+        <div class="fld-row" data-static>
+          <label class="fld"><span>${t('IP-adres en netmasker')}</span><input class="field" name="address" value="${esc(c ? c.address : '')}" placeholder="192.168.1.10/24" spellcheck="false">
+            <small>${t('/24 betekent netmasker 255.255.255.0, wat bij de meeste thuisnetwerken past.')}</small></label>
+          <label class="fld"><span>${t('Gateway')}</span><input class="field" name="gateway" value="${esc(c ? c.gateway : '')}" placeholder="192.168.1.1" spellcheck="false">
+            <small>${t('Meestal het adres van je router.')}</small></label>
+        </div>
+        <label class="fld" data-static><span>${t('DNS-servers')}</span><input class="field" name="dns" value="${esc(c ? c.dns.join(', ') : '')}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false">
+          <small>${t('Gescheiden door komma\'s.')}</small></label>
+        <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Bridge br0 maken voor VM\'s')}</label>
+        <p class="muted small" style="margin-top:-6px">${t('Nodig om VM\'s (zoals Home Assistant) een eigen adres in je thuisnetwerk te geven. Zet daarna VM_NETWORK=bridge=br0.')}</p>
+        <p class="lead">${t('Na het toepassen heb je 2 minuten om te bevestigen. Bevestig je niet, bv. omdat de server onbereikbaar werd, dan zet Thuisbasis vanzelf de oude instellingen terug.')}</p>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Toepassen')}</button></div>
+      </form>`}`;
+
+    const hostForm = $('#hostForm', el);
+    hostForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('button', hostForm); btn.disabled = true;
+      try { const r = await api.post('/api/network/hostname', { hostname: hostForm.elements.hostname.value }); toast(t('Hostnaam is nu {name}.', { name: r.hostname })); loadOverview().catch(() => {}); }
+      catch (ex) { toast(ex.message, true); }
+      btn.disabled = false;
+    });
+    const form = $('#netForm', el);
+    if (form) {
+      const sync = () => $$('[data-static]', form).forEach((x) => { x.hidden = form.elements.mode.value !== 'static'; });
+      form.elements.mode.addEventListener('change', sync); sync();
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+        const body = { interface: form.elements.interface.value, mode: form.elements.mode.value, address: form.elements.address.value.trim(),
+          gateway: form.elements.gateway.value.trim(), dns: form.elements.dns.value, bridge: form.elements.bridge.checked };
+        if (!(await ask(t('Netwerkinstellingen toepassen? De verbinding valt even weg. Bevestig daarna binnen 2 minuten, anders komen de oude instellingen terug.'), t('Toepassen')))) return;
+        btn.disabled = true;
+        try {
+          const r = await api.post('/api/network', body);
+          const newUrl = r.address && r.address !== location.hostname ? location.protocol + '//' + r.address + (location.port ? ':' + location.port : '') + '/#settings/network' : null;
+          renderPending(el, r.pending, newUrl, body.mode === 'dhcp');
+        } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+      });
+    }
+    if (n.pending) renderPending(el, n.pending, null, false);
+  }
+
+  // Wachten op bevestiging, met aftellen. De pagina vraagt intussen de toestand op (ook bij een nieuw adres).
+  function renderPending(el, p, newUrl, dhcp) {
+    const box = $('#netPending', el); if (!box) return;
+    const btn = $('#netForm [type=submit]', el); if (btn) btn.disabled = true;
+    box.innerHTML = `<div class="notice warn">
+      <p><b>${t('Nieuwe netwerkinstellingen actief.')}</b> ${t('Werkt alles? Bevestig ze dan. Anders worden ze teruggezet over')} <b id="netLeft"></b>.</p>
+      ${newUrl ? `<p>${t('Het adres van de server verandert. Open')} <a href="${esc(newUrl)}">${esc(newUrl)}</a> ${t('en bevestig daar (je moet misschien opnieuw aanmelden).')}</p>` : ''}
+      ${dhcp ? `<p>${t('Met DHCP kiest je router het adres. Zoek het op in je router als deze pagina niet meer bereikbaar is.')}</p>` : ''}
+      <div class="btn-row"><button class="btn primary" type="button" id="netConfirm">${t('Bevestigen')}</button><button class="btn" type="button" id="netRevert">${t('Nu terugzetten')}</button></div></div>`;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((p.until - Date.now()) / 1000));
+      const lbl = $('#netLeft', box); if (lbl) lbl.textContent = t('{n} s', { n: left });
+      if (!left) { clearInterval(netTimer); setTimeout(() => location.hash === '#settings/network' && showSettings(), 4000); }
+    };
+    clearInterval(netTimer); tick(); netTimer = setInterval(tick, 1000);
+    $('#netConfirm', box).addEventListener('click', async () => {
+      try { await api.post('/api/network/confirm'); clearInterval(netTimer); toast(t('Netwerkinstellingen bevestigd.')); showSettings(); }
+      catch (ex) { toast(ex.message, true); }
+    });
+    $('#netRevert', box).addEventListener('click', async () => {
+      try { await api.post('/api/network/revert'); clearInterval(netTimer); toast(t('De oude netwerkinstellingen zijn teruggezet.')); showSettings(); }
+      catch (ex) { toast(ex.message, true); }
+    });
+  }
+
+  /* --- Docker-netwerken: eigen bridges en netwerken met een eigen adres in je thuisnetwerk (macvlan/ipvlan) */
+  const ipNum = (ip) => ip.split('.').reduce((x, o) => x * 256 + Number(o), 0);
+  const numIp = (n) => [16777216, 65536, 256, 1].map((d) => Math.floor(n / d) % 256).join('.');
+  // Voorstel voor het IP-bereik: het voorlaatste achtste van het subnet, bv. 192.168.1.192/27 in een /24.
+  function suggestRange(subnet) {
+    const m = String(subnet || '').match(/^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/);
+    if (!m || Number(m[2]) > 27) return '';
+    const size = 2 ** (32 - Number(m[2])), rs = size / 8, base = ipNum(m[1]) - (ipNum(m[1]) % size);
+    return numIp(base + size - 2 * rs) + '/' + (Number(m[2]) + 3);
+  }
+  const NET_HELP = {
+    bridge: 'Apps in hetzelfde netwerk vinden elkaar op naam, bv. http://database:5432. Subnet en gateway mag je leeg laten, dan kiest Docker ze zelf.',
+    macvlan: 'Elke app krijgt een eigen IP- en MAC-adres in je thuisnetwerk, zoals br0 in Unraid. Let op: de server zelf kan apps in dit netwerk niet bereiken.',
+    ipvlan: 'Zoals macvlan, maar alle apps delen het MAC-adres van de server. Kies dit als je router of switch moeilijk doet met veel MAC-adressen. Ook hier kan de server zelf de apps niet bereiken.',
+  };
+  const BUILTIN_NET = { bridge: 'Voor apps zonder eigen netwerk', host: 'Het netwerk van de server zelf', none: 'Geen netwerk' };
+  async function dockerNetPane(el) {
+    el.onchange = null;
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/docker-networks'); }
+    catch (e) { el.innerHTML = `<p class="lead">${t('De Docker-netwerken konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'docker') return;
+    const own = d.networks.filter((n) => !n.builtin), builtin = d.networks.filter((n) => n.builtin);
+    const lan = d.parents.find((p) => p.gateway) || d.parents[0] || null;
+    const row = (n) => {
+      const sub = [n.subnet, n.gateway && t('gateway {ip}', { ip: n.gateway }), n.ipRange && t('adressen uit {range}', { range: n.ipRange }),
+        n.parent && t('via {name}', { name: n.parent }), n.internal && t('zonder internet'), n.compose && t('van compose-project {name}', { name: n.compose }),
+        n.builtin && t(BUILTIN_NET[n.name] || '')].filter(Boolean).join(' · ');
+      const apps = n.containers.map((c) => esc(c.name) + (c.ip && n.driver !== 'bridge' ? ' <span class="muted">(' + esc(c.ip) + ')</span>' : '')).join(', ');
+      return `<li>
+        <div><div class="row-title">${esc(n.name)} <span class="pill">${esc(n.driver || '–')}</span></div>
+          <div class="row-sub">${esc(sub)}</div>
+          <div class="row-sub">${n.containers.length ? t('Apps: {list}', { list: apps }) : t('Nog geen apps')}</div></div>
+        <div class="row-side">${n.builtin ? `<span class="muted">${t('ingebouwd')}</span>`
+          : `<button class="btn sm danger" type="button" data-net-del="${esc(n.name)}"${n.containers.length ? ` disabled title="${t('Haal eerst de apps uit dit netwerk.')}"` : ''}>${t('Verwijderen')}</button>`}</div></li>`;
+    };
+    el.innerHTML = `
+      <p class="muted small">${t('Kies een netwerk bij de instellingen van een app (compose-formulier) of bij het installeren uit de appstore.')}</p>
+      <h2 class="pane-title">${t('Eigen netwerken')}</h2>
+      <ul class="rows">${own.map(row).join('') || `<li><span class="muted">${t('Nog geen eigen netwerken. Maak er hieronder een aan.')}</span></li>`}</ul>
+      <h2 class="pane-title">${t('Netwerk aanmaken')}</h2>
+      <form class="form" id="dnForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="63" placeholder="${t('bv. thuisnet')}" autocomplete="off" spellcheck="false"></label>
+          <label class="fld"><span>${t('Soort')}</span><select class="field" name="driver">
+            <option value="bridge">${t('Bridge (eigen netwerk tussen apps)')}</option>
+            <option value="macvlan"${d.parents.length ? '' : ' disabled'}>${t('macvlan (eigen adres in je thuisnetwerk)')}</option>
+            <option value="ipvlan"${d.parents.length ? '' : ' disabled'}>${t('ipvlan (eigen adres, zelfde MAC-adres)')}</option></select></label>
+        </div>
+        <p class="muted small" id="dnHelp"></p>
+        <label class="fld" data-own><span>${t('Netwerkkaart')}</span><select class="field" name="parent">${d.parents.map((p) =>
+          `<option value="${esc(p.name)}"${lan && lan.name === p.name ? ' selected' : ''}>${esc(p.name + (p.subnet ? ' · ' + p.subnet : ''))}</option>`).join('')}</select>
+          <small>${t('De kaart (of bridge br0) die met je thuisnetwerk verbonden is.')}</small></label>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Subnet')}</span><input class="field" name="subnet" spellcheck="false" autocomplete="off">
+            <small data-bridge>${t('Leeg = Docker kiest zelf.')}</small><small data-own>${t('Het subnet van je thuisnetwerk.')}</small></label>
+          <label class="fld"><span>${t('Gateway')}</span><input class="field" name="gateway" spellcheck="false" autocomplete="off">
+            <small data-bridge>${t('Leeg = Docker kiest zelf.')}</small><small data-own>${t('Meestal het adres van je router.')}</small></label>
+        </div>
+        <label class="fld" data-own><span>${t('IP-bereik voor apps')}</span><input class="field" name="ipRange" spellcheck="false" autocomplete="off">
+          <small>${t('Docker deelt adressen uit dit bereik uit. Kies een stuk dat je router niet via DHCP uitdeelt, anders kunnen er dubbele adressen komen.')}</small></label>
+        <label class="check" data-bridge><input type="checkbox" name="internal"> ${t('Zonder internet (alleen verkeer tussen de apps in dit netwerk)')}</label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Aanmaken')}</button></div>
+      </form>
+      <h2 class="pane-title">${t('Ingebouwd')}</h2>
+      <ul class="rows">${builtin.map(row).join('')}</ul>`;
+
+    const form = $('#dnForm', el), F = form.elements;
+    const parentOf = () => d.parents.find((p) => p.name === F.parent.value) || null;
+    let filled = null; // wat we zelf invulden, zodat we het bij een andere keuze weer kunnen weghalen
+    const sync = () => {
+      const ownIp = F.driver.value !== 'bridge';
+      $$('[data-own]', form).forEach((x) => { x.hidden = !ownIp; });
+      $$('[data-bridge]', form).forEach((x) => { x.hidden = ownIp; });
+      $('#dnHelp', form).textContent = t(NET_HELP[F.driver.value]);
+      const p = parentOf();
+      const want = ownIp && p ? { subnet: p.subnet || '', gateway: p.gateway || '', ipRange: suggestRange(p.subnet) } : { subnet: '', gateway: '', ipRange: '' };
+      for (const k of ['subnet', 'gateway', 'ipRange']) if (!F[k].value || (filled && F[k].value === filled[k])) F[k].value = want[k];
+      filled = want;
+      F.subnet.placeholder = ownIp ? '192.168.1.0/24' : '172.30.0.0/24';
+      F.gateway.placeholder = ownIp ? '192.168.1.1' : '172.30.0.1';
+      F.ipRange.placeholder = '192.168.1.192/27';
+    };
+    F.driver.addEventListener('change', sync); F.parent.addEventListener('change', sync); sync();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      if (!F.name.value.trim()) { err.textContent = t('Geef het netwerk een naam.'); F.name.focus(); return; }
+      const ownIp = F.driver.value !== 'bridge';
+      const body = { name: F.name.value.trim(), driver: F.driver.value, subnet: F.subnet.value.trim(), gateway: F.gateway.value.trim(),
+        ipRange: ownIp ? F.ipRange.value.trim() : '', parent: ownIp ? F.parent.value : '', internal: !ownIp && F.internal.checked };
+      btn.disabled = true;
+      try { await api.post('/api/docker-networks', body); toast(t('Netwerk {name} aangemaakt.', { name: body.name })); dockerNetPane(el); }
+      catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    el.onclick = async (e) => {
+      const del = e.target.closest('[data-net-del]');
+      if (!del) return;
+      const name = del.dataset.netDel;
+      if (!(await ask(t('Netwerk {name} verwijderen? Apps gebruiken het niet meer, dus er valt niets weg.', { name }), t('Verwijderen')))) return;
+      del.disabled = true;
+      try { await api.del('/api/docker-networks/' + encodeURIComponent(name)); toast(t('Netwerk {name} verwijderd.', { name })); dockerNetPane(el); }
+      catch (ex) { toast(ex.message, true); del.disabled = false; }
+    };
+  }
+
+  /* --- VM-netwerken: libvirt-netwerken (NAT of afgeschermd) en de bridges van de server */
+  async function vmNetPane(el) {
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/vm-networks'); }
+    catch (e) { el.innerHTML = `<p class="lead">${t('De VM-netwerken konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'vmnet') return;
+    const vmsText = (list) => (list.length ? t("VM's: {list}", { list: esc(list.join(', ')) }) : t("Nog geen VM's"));
+    // Eerste vrije 192.168.1xx.0/24 als voorstel.
+    let suggest = '';
+    for (let i = 150; i < 250 && !suggest; i++) { const c = '192.168.' + i + '.0/24'; if (!d.networks.some((n) => n.subnet === c)) suggest = c; }
+    el.innerHTML = `
+      <p class="muted small">${t('Kies het netwerk van een VM bij Bewerken → Netwerk, of bij het aanmaken.')}</p>
+      <h2 class="pane-title">${t('Thuisnetwerk (bridges)')}</h2>
+      <ul class="rows">${d.bridges.map((b) => `<li>
+          <div><div class="row-title">${esc(b.name)} <span class="pill ${b.up ? 'ok' : ''}">${t('Bridge')}</span></div>
+            <div class="row-sub">${esc(b.address || t('geen IP-adres'))}</div><div class="row-sub">${vmsText(b.vms)}</div></div>
+          <div class="row-side"></div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen bridge. Maak br0 aan bij')} <a href="#settings/network">${t('Instellingen → Netwerk')}</a> ${t("om VM's een eigen adres in je thuisnetwerk te geven.")}</span></li>`}</ul>
+      <p class="muted small" style="margin-top:8px">${t('Een VM op een bridge is een gewoon toestel in je thuisnetwerk: je router geeft hem een adres. Nodig voor Home Assistant.')}</p>
+      <h2 class="pane-title">${t('VM-netwerken')}</h2>
+      <ul class="rows">${d.networks.map((n) => `<li>
+          <div><div class="row-title">${esc(n.name)} <span class="pill">${esc(t(NET_MODE[n.mode] || n.mode))}</span>${n.active ? '' : ` <span class="pill warn">${t('niet actief')}</span>`}</div>
+            <div class="row-sub">${esc([n.subnet, n.dhcp && t('DHCP {start} – {end}', n.dhcp), n.bridge && t('via {name}', { name: n.bridge })].filter(Boolean).join(' · '))}</div>
+            <div class="row-sub">${vmsText(n.vms)}</div></div>
+          <div class="row-side btn-row">${n.active ? '' : `<button class="btn sm" type="button" data-vmnet-start="${esc(n.name)}">${t('Starten')}</button>`}
+            ${n.builtin ? `<span class="muted">${t('standaard')}</span>` : `<button class="btn sm danger" type="button" data-vmnet-del="${esc(n.name)}"${n.vms.length ? ` disabled title="${t("Kies voor deze VM's eerst een ander netwerk.")}"` : ''}>${t('Verwijderen')}</button>`}</div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen VM-netwerken.')}</span></li>`}</ul>
+      <h2 class="pane-title">${t('VM-netwerk aanmaken')}</h2>
+      <form class="form" id="vnForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="32" placeholder="${t('bv. labo')}" autocomplete="off" spellcheck="false"></label>
+          <label class="fld"><span>${t('Soort')}</span><select class="field" name="mode">
+            <option value="nat">${t('NAT (met internet)')}</option><option value="isolated">${t('Afgeschermd (zonder internet)')}</option></select></label>
+        </div>
+        <p class="muted small" id="vnHelp"></p>
+        <label class="fld"><span>${t('Subnet')}</span><input class="field" name="subnet" value="${esc(suggest)}" spellcheck="false" autocomplete="off">
+          <small>${t('Een privé-subnet dat nog nergens gebruikt wordt. De server krijgt het eerste adres.')}</small></label>
+        <label class="check"><input type="checkbox" name="dhcp" checked> ${t("Adressen uitdelen met DHCP (de VM's krijgen vanzelf een adres)")}</label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Aanmaken')}</button></div>
+      </form>`;
+    const form = $('#vnForm', el), F = form.elements;
+    const help = { nat: "De VM's kunnen naar internet en naar elkaar, maar je bereikt ze niet vanuit je thuisnetwerk. Handig om iets uit te proberen.",
+      isolated: "De VM's kunnen alleen elkaar en de server bereiken, niet het internet. Handig voor een afgeschermd labo." };
+    const sync = () => { $('#vnHelp', form).textContent = t(help[F.mode.value]); };
+    F.mode.addEventListener('change', sync); sync();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      if (!F.name.value.trim()) { err.textContent = t('Geef het netwerk een naam.'); F.name.focus(); return; }
+      btn.disabled = true;
+      try {
+        const r = await api.post('/api/vm-networks', { name: F.name.value.trim(), mode: F.mode.value, subnet: F.subnet.value.trim(), dhcp: F.dhcp.checked });
+        toast(t('Netwerk {name} aangemaakt.', { name: r.name })); vmNetPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    el.onclick = async (e) => {
+      const st = e.target.closest('[data-vmnet-start]');
+      if (st) {
+        st.disabled = true;
+        try { await api.post('/api/vm-networks/' + encodeURIComponent(st.dataset.vmnetStart) + '/start'); vmNetPane(el); }
+        catch (ex) { toast(ex.message, true); st.disabled = false; }
+        return;
+      }
+      const del = e.target.closest('[data-vmnet-del]');
+      if (!del) return;
+      const name = del.dataset.vmnetDel;
+      if (!(await ask(t("VM-netwerk {name} verwijderen? Geen enkele VM gebruikt het nog.", { name }), t('Verwijderen')))) return;
+      del.disabled = true;
+      try { await api.del('/api/vm-networks/' + encodeURIComponent(name)); toast(t('Netwerk {name} verwijderd.', { name })); vmNetPane(el); }
+      catch (ex) { toast(ex.message, true); del.disabled = false; }
+    };
+  }
+
+  async function aboutPane(el) {
+    el.onchange = null;
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let a;
+    try { a = await api.get('/api/about'); }
+    catch (e) { el.innerHTML = `<p class="lead">${t('De gegevens konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'about') return;
+    const b = a.board || {};
+    const groups = [
+      [t('Server'), [[t('Hostnaam'), a.hostname], [t('Systeem'), [b.vendor, b.product].filter(Boolean).join(' ')],
+        [t('Moederbord'), [b.boardVendor, b.board].filter(Boolean).join(' ')], [t('BIOS'), [b.bios, b.biosDate].filter(Boolean).join(' · ')]]],
+      [t('Hardware'), [[t('Processor'), a.cpu && a.cpu.brand], [t('Kernen'), a.cpu && a.cpu.threads ? t('{cores} kernen, {threads} threads', { cores: a.cpu.cores || '?', threads: a.cpu.threads }) : null],
+        [t('Geheugen'), bytes(a.memory)],
+        [t('ECC'), a.ecc ? (a.ecc.active ? t('Actief') + (a.ecc.mode ? ' (' + a.ecc.mode + ')' : '') + (a.ecc.corrected ? ' · ' + t('{n} fouten gecorrigeerd', { n: a.ecc.corrected }) : '') : t('Niet actief')) : t('Onbekend')],
+        [t('Grafische kaart'), (a.gpus || []).join(', ')]]],
+      [t('Besturingssysteem'), [[t('Systeem'), a.os], [t('Kernel'), a.kernel], [t('Architectuur'), a.arch], [t('Tijdzone'), a.timezone],
+        [t('Aan sinds'), a.uptime != null ? duration(a.uptime) : null], [t('IP-adressen'), (a.addresses || []).map((x) => x.address + ' (' + x.interface + ')').join(', ')]]],
+      [t('Versies'), Object.entries({ Thuisbasis: a.versions.thuisbasis, 'Node.js': a.versions.node, Docker: a.versions.docker, 'Docker Compose': a.versions.compose,
+        ZFS: a.versions.zfs, libvirt: a.versions.libvirt, [t('Hypervisor')]: a.versions.hypervisor })],
+    ];
+    const plain = groups.map(([title, rows]) => title + '\n' + rows.map(([k, v]) => '  ' + k + ': ' + (v || '–')).join('\n')).join('\n\n');
+    el.innerHTML = groups.map(([title, rows]) => `<h2 class="pane-title">${esc(title)}</h2>
+      <dl class="kv about-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v ? esc(v) : '<span class="muted">' + t('niet gevonden') + '</span>'}</dd>`).join('')}</dl>`).join('') +
+      `<div class="btn-row" style="margin-top:18px"><button class="btn" type="button" id="aboutCopy">${t('Alles kopiëren')}</button></div>
+      <p class="muted small" style="margin-top:8px">${t('Handig als je ergens hulp vraagt.')}</p>`;
+    $('#aboutCopy', el).addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(plain); toast(t('Gekopieerd.')); } catch (e) { toast(t('Kopiëren lukte niet in deze browser.'), true); }
+    });
+  }
+
+  /* --- AI */
+  const chatHistory = [];
+  async function aiWindow() {
+    openWindow(t('AI'), `<p class="lead">${t('Laden…')}</p>`);
+    try { await loadAi(true); } catch (e) { /* fout staat in S.aiError */ }
+    if (S.aiError) {
+      $('#winBody').innerHTML = `<p class="lead">${esc(S.config.ollama ? t('Ollama is niet bereikbaar: {error}', { error: S.aiError })
+        : t('Ollama is nog niet gekoppeld. Zet OLLAMA_URL in /etc/thuisbasis/thuisbasis.env, bijvoorbeeld http://127.0.0.1:11434.'))}</p>`;
+      return;
+    }
+    const draw = () => {
+      const ai = S.ai; const g = ai.gpu && ai.gpu[0];
+      const opts = ai.models.filter((m) => !/embed/i.test(m.name)).map((m) => `<option value="${esc(m.name)}" ${m.loaded ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+      $('#winBody').innerHTML = `
+        <div class="stat-strip">
+          ${g ? `<div class="stat"><b>${bytes(g.memUsed)}</b><span>${t('van {total} VRAM', { total: bytes(g.memTotal) })}</span></div>
+                 <div class="stat"><b>${g.util ?? '–'}%</b><span>${t('GPU-belasting')}</span></div>` : ''}
+          <div class="stat"><b>${ai.models.length}</b><span>${t(ai.models.length === 1 ? 'model' : 'modellen')}</span></div>
+          ${ai.version ? `<div class="stat"><b>${esc(ai.version)}</b><span>${t('Ollama-versie')}</span></div>` : ''}
+        </div>
+        <h3>${t('Modellen')}</h3>
+        <ul class="rows" id="modelRows">${ai.models.map((m) => `<li>
+          <div><div class="row-title">${esc(m.name)}</div>
+            <div class="row-sub">${esc([m.params, m.quant, bytes(m.size), m.loaded ? t('geladen in {size} VRAM', { size: bytes(m.vram) }) : null].filter(Boolean).join(' · '))}</div></div>
+          <div class="btn-row">
+            ${m.loaded ? `<button class="btn sm" data-model="${esc(m.name)}" data-do="unload">${t('Ontladen')}</button>`
+                       : `<button class="btn sm" data-model="${esc(m.name)}" data-do="load">${t('Laden')}</button>`}
+            <button class="btn sm danger" data-model="${esc(m.name)}" data-do="delete">${t('Verwijderen')}</button>
+          </div></li>`).join('') || `<li><span class="muted">${t('Nog geen modellen. Download er hieronder een.')}</span></li>`}</ul>
+
+        <h3>${t('Model downloaden')}</h3>
+        <form class="inline-form" id="pullForm">
+          <input class="field" id="pullName" placeholder="${t('bijvoorbeeld qwen3:8b')}" autocomplete="off" required>
+          <button class="btn primary" type="submit">${t('Downloaden')}</button>
+        </form>
+        <div class="bar" style="margin-top:10px" hidden id="pullBarWrap"><span id="pullBar"></span></div>
+        <p class="progress-note" id="pullNote"></p>
+
+        <h3>${t('Snel iets vragen')}</h3>
+        ${opts ? `<div class="chat">
+          <select class="field" id="chatModel" aria-label="${t('Model')}">${opts}</select>
+          <div class="chat-log" id="chatLog">${chatHistory.map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div>
+          <form class="inline-form" id="chatForm">
+            <textarea class="field" id="chatInput" placeholder="${t('Stel een vraag aan je eigen model')}" required></textarea>
+            <button class="btn primary" type="submit">${t('Versturen')}</button>
+          </form>
+        </div>` : `<p class="lead">${t('Download eerst een model om te kunnen chatten.')}</p>`}`;
+    };
+    draw();
+
+    const body = $('#winBody');
+    body.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-model]'); if (!b) return;
+      const name = b.dataset.model, act = b.dataset.do;
+      if (act === 'delete' && !(await ask(t('{name} verwijderen?', { name }), t('Verwijderen')))) return;
+      withBusy(b, async () => {
+        if (act === 'delete') await api.del('/api/ai/models/' + encodeURIComponent(name));
+        else await api.post('/api/ai/models/' + encodeURIComponent(name) + '/' + act);
+        toast(t({ delete: 'Verwijderd', load: 'Geladen', unload: 'Ontladen' }[act]) + ': ' + name);
+        await loadAi(); draw();
+      });
+    });
+    body.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (e.target.id === 'pullForm') {
+        const name = $('#pullName').value.trim(); if (!name) return;
+        const btn = e.target.querySelector('button'); btn.disabled = true;
+        $('#pullBarWrap').hidden = false;
+        try {
+          await api.stream('/api/ai/pull', { name }, (l) => {
+            if (l.total && l.completed != null) {
+              const p = (l.completed / l.total) * 100;
+              $('#pullBar').style.width = p.toFixed(1) + '%';
+              $('#pullNote').textContent = t('Downloaden: {done} van {total}', { done: bytes(l.completed), total: bytes(l.total) });
+            } else if (l.status) $('#pullNote').textContent = l.status === 'success' ? t('Klaar') : l.status;
+          });
+          toast(t('Gedownload: {name}', { name }));
+          await loadAi(); draw();
+        } catch (err) { $('#pullNote').textContent = t('Downloaden mislukt: {error}', { error: err.message }); btn.disabled = false; }
+      }
+      if (e.target.id === 'chatForm') {
+        const input = $('#chatInput'); const text = input.value.trim(); if (!text) return;
+        const model = $('#chatModel').value; const log = $('#chatLog');
+        const btn = e.target.querySelector('button'); btn.disabled = true; input.value = '';
+        chatHistory.push({ role: 'user', content: text });
+        log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
+        const out = document.createElement('div'); out.className = 'msg assistant'; out.textContent = '…'; log.appendChild(out);
+        log.scrollTop = log.scrollHeight;
+        let answer = '';
+        try {
+          await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
+            if (l.message && l.message.content) { answer += l.message.content; out.textContent = answer; log.scrollTop = log.scrollHeight; }
+          });
+          chatHistory.push({ role: 'assistant', content: answer });
+        } catch (err) { out.textContent = t('Geen antwoord: {error}', { error: err.message }); chatHistory.pop(); }
+        btn.disabled = false; input.focus();
+      }
+    });
+    body.addEventListener('keydown', (e) => {
+      if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit(); }
+    });
+  }
+
+  /* ------------------------------------------------------------ laden */
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); }
+  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); }
+  async function loadVms() {
+    try { S.vms = await api.get('/api/vms'); S.vmError = null; }
+    catch (e) { S.vmError = e.message; throw e; }
+    finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); }
+  }
+  async function loadAi(quiet) {
+    try { S.ai = await api.get('/api/ai'); S.aiError = null; }
+    catch (e) { S.aiError = e.message; if (!quiet) { /* stil in widget */ } }
+    renderAiWidget();
+  }
+
+  let failures = 0;
+  async function refresh(all) {
+    const jobs = [loadOverview(), loadApps()];
+    // Op de VM-pagina haalt een eigen, snellere timer de VM's op.
+    if (all || currentView() !== 'vms') jobs.push(loadVms().catch(() => {}));
+    if (all) jobs.push(loadAi(true));
+    const results = await Promise.allSettled(jobs);
+    const bad = results.find((r) => r.status === 'rejected');
+    if (bad) {
+      if (bad.reason && bad.reason.status === 401) return showLogin();
+      if (++failures === 1) toast(t('Server niet bereikbaar: {error}', { error: bad.reason.message }), true);
+    } else failures = 0;
+  }
+
+  /* ------------------------------------------------------------ schermen */
+  const VIEWS = { '#vms': 'vms', '#store': 'store' };
+  // Instellingen is een venster boven de pagina waar je bent (zoals Systeeminstellingen op macOS).
+  // pageHash onthoudt die pagina; #settings/... in de adresbalk opent alleen het venster.
+  let pageHash = location.hash.startsWith('#settings') ? '' : location.hash;
+  const settingsHash = () => location.hash.startsWith('#settings');
+  function currentView() { return VIEWS[settingsHash() ? pageHash : location.hash] || 'home'; }
+  let pageLoaded = false;
+  function route() {
+    const inSettings = settingsHash();
+    const view = currentView();
+    $('#desk').hidden = view !== 'home';
+    $('#vmPage').hidden = view !== 'vms';
+    $('#storePage').hidden = view !== 'store';
+    $$('.nav-btn[data-open]').forEach((b) => {
+      if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    if (inSettings) { if (!setWin.open) setWin.showModal(); showSettings(); return; }
+    // De eerste keer altijd laden (ook als de pagina meteen op #store of #vms opent).
+    const pageChanged = location.hash !== pageHash || !pageLoaded;
+    pageHash = location.hash; pageLoaded = true;
+    if (setWin.open) closeSettings();
+    if (!pageChanged && view !== 'home') return; // venster dicht: de pagina eronder blijft gewoon staan
+    if (view === 'vms') { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); }
+    if (view === 'store') { window.scrollTo(0, 0); loadStore(); }
+  }
+  const setWin = $('#setWin');
+  // Sluiten: meteen terug naar het adres van de pagina eronder, zonder die opnieuw op te bouwen.
+  // (Niet in het close-event: dat komt asynchroon en kan achterlopen op een volgende klik.)
+  function closeSettings() {
+    clearInterval(netTimer); netTimer = null;
+    if (settingsHash()) history.replaceState(null, '', pageHash || location.pathname + location.search);
+    $$('.nav-btn[data-nav="settings"]').forEach((b) => b.removeAttribute('aria-current'));
+    if (setWin.open) setWin.close();
+  }
+  $('#setClose').addEventListener('click', closeSettings);
+  setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
+  setWin.addEventListener('cancel', (e) => { e.preventDefault(); closeSettings(); }); // Escape
+  window.addEventListener('hashchange', () => { if (!$('.topnav').hidden) route(); });
+
+  function showDesk() {
+    $('#loginScreen').hidden = true; $('.topnav').hidden = false; route();
+  }
+  function showLogin() {
+    if (setWin.open) closeSettings();
+    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; $('.topnav').hidden = true; $('#pw').focus();
+  }
+
+  let timers = [];
+  function startDesk() {
+    showDesk();
+    $('#demoBadge').hidden = api === realApi;
+    $('#logoutBtn').hidden = !S.config.passwordEnabled;
+    refresh(true);
+    timers.forEach(clearInterval);
+    timers = [
+      setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
+      setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
+      setInterval(() => { if (!document.hidden) loadAi(true); }, 30000),
+    ];
+  }
+
+  function useDemo() { api = translatedApi(window.ThuisbasisDemo); S.config = { demo: true, ollama: true }; startDesk(); }
+
+  /* ------------------------------------------------------------ gebeurtenissen */
+  document.addEventListener('click', (e) => {
+    const con = e.target.closest('[data-console]');
+    if (con) { openConsole(con.dataset.console); return; }
+    const ext = e.target.closest('a[target="_blank"]');
+    if (ext && api !== realApi) {
+      e.preventDefault();
+      toast(t(ext.href.startsWith('vnc:') ? 'In de demo opent dit het scherm van de VM op je eigen server.' : 'In de demo opent dit de app op je eigen server.'));
+      return;
+    }
+    const open = e.target.closest('[data-open]');
+    if (open) { ({ storage: storageWindow, vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open](); return; }
+    // Linksklik opent de webinterface (zoals in Unraid). Geen adres of staat de app uit? Dan het menu.
+    const app = e.target.closest('[data-app]');
+    if (app && !menu.contains(app)) {
+      const a = S.apps.find((x) => x.id === app.dataset.app); if (!a) return;
+      if (app.dataset.action === 'open' && appUrl(a)) return openAppUrl(a);
+      const r = app.getBoundingClientRect();
+      openAppMenu(a, app.dataset.action === 'menu' ? r.right - 8 : r.left + 8, r.bottom + 4, app);
+    }
+  });
+  // Pictogram kan niet laden → toon de beginletter op een gekleurde tegel (apps, appstore en vensters).
+  document.addEventListener('error', (e) => {
+    const img = e.target; if (img.tagName !== 'IMG' || !img.parentNode.classList.contains('app-icon')) return;
+    const box = img.parentNode; box.style.background = box.dataset.color;
+    img.replaceWith(document.createTextNode(box.dataset.letter || '?'));
+  }, true);
+  $('#appGrid').addEventListener('contextmenu', (e) => {
+    const t = e.target.closest('[data-app]'); if (!t) return;
+    const a = S.apps.find((x) => x.id === t.dataset.app); if (!a) return;
+    e.preventDefault();
+    openAppMenu(a, e.clientX, e.clientY, t);
+  });
+  $('#search').addEventListener('input', (e) => { S.search = e.target.value; renderApps(); });
+  $('#filters').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-filter]'); if (!b) return;
+    S.filter = b.dataset.filter;
+    $$('#filters button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    renderApps();
+  });
+  $('#logoutBtn').addEventListener('click', async () => { await api.post('/api/logout').catch(() => {}); location.reload(); });
+  $('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); $('#loginError').textContent = '';
+    try { await realApi.post('/api/login', { password: $('#pw').value }); boot(); }
+    catch (err) { $('#loginError').textContent = err.message; }
+  });
+
+  /* sterren voor de avondhemel */
+  (function stars() {
+    const g = $('.wallpaper .stars'); let s = 7; const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    let html = '';
+    for (let i = 0; i < 90; i++) html += `<circle cx="${(r() * 1600).toFixed(0)}" cy="${(r() * 560).toFixed(0)}" r="${(r() * 1.3 + .3).toFixed(2)}" opacity="${(r() * .7 + .2).toFixed(2)}"/>`;
+    g.innerHTML = html;
+  })();
+
+  /* ------------------------------------------------------------ start */
+  async function boot() {
+    if (window.THUISBASIS_FORCE_DEMO) return useDemo();
+    let cfg;
+    try { cfg = await realApi.get('/api/config'); } catch (e) { return useDemo(); } // geen server: statische demo
+    S.config = cfg;
+    if (cfg.demo) return useDemo(); // in de demo bewaart de browser zelf de taal
+    if (cfg.language && cfg.language !== LANG) setLang(cfg.language); // de taal van de server geldt voor iedereen
+    if (cfg.needsLogin) return showLogin();
+    startDesk();
+  }
+  tickClock(); setInterval(tickClock, 1000 * 15);
+  boot();
+})();

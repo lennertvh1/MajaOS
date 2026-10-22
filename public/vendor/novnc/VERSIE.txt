@@ -1,0 +1,1 @@
+noVNC 1.7.0 (https://github.com/novnc/noVNC/releases/tag/v1.7.0): core/ en vendor/pako/, ongewijzigd. Licentie: MPL 2.0 (zie LICENSE.txt), pako: MIT.

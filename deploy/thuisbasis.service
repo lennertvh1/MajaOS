@@ -1,0 +1,19 @@
+[Unit]
+Description=Thuisbasis (beheer van je thuisserver)
+After=network-online.target libvirtd.service docker.service zfs.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/thuisbasis/thuisbasis.env
+ExecStart=/usr/bin/node /opt/thuisbasis/server.js
+Restart=on-failure
+RestartSec=5
+# /var/lib/thuisbasis: eigen instellingen (o.a. startuitstel van VM's)
+StateDirectory=thuisbasis
+# /run/thuisbasis: merkteken "VM's al automatisch gestart". Blijft staan tot de server herstart,
+# zodat een herstart van Thuisbasis zelf je VM's niet opnieuw start.
+RuntimeDirectory=thuisbasis
+RuntimeDirectoryPreserve=yes
+
+[Install]
+WantedBy=multi-user.target
