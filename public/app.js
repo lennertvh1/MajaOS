@@ -2594,7 +2594,7 @@
       <p class="muted small">${t('Waar HomeBaseOS je gegevens bewaart. Een nieuwe pool krijgt de mappen appdata, media, backups, vms en isos.')}</p>
       ${d.pools.length ? '' : `<p class="lead">${t('Er is nog geen pool. Maak er een bij Opslag.')} <button class="btn sm" type="button" data-open="storage">${t('Opslag openen')}</button></p>`}
       <ul class="rows">
-        ${row('appdata', t('Appgegevens'), appsText + (d.manual.length ? ' · ' + t('Niet met Docker Compose gestart (verhuizen niet mee): {list}', { list: esc(d.manual.join(', ')) }) : ''), t('Verhuizen'))}
+        ${row('appdata', t('Appgegevens'), appsText + (d.manual.length ? ' · ' + t('Verhuizen niet mee (geen compose-bestand op de server): {list}', { list: esc(d.manual.join(', ')) }) : ''), t('Verhuizen'))}
         ${row('vms', t('VM-schijven'), t('Nieuwe VM\'s komen hier. Bestaande VM-schijven blijven waar ze zijn.'), t('Opslaan'))}
         ${row('isos', t('ISO\'s en schijfbestanden'), t('Zet hier installatie-ISO\'s, bv. via een gedeelde map.'), t('Opslaan'))}
         ${row('shares', t('Gedeelde mappen van Unraid-apps'), t('/mnt/user/… uit de appstore wordt deze map.'), t('Opslaan'))}

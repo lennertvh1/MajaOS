@@ -8,7 +8,7 @@ const path = require('node:path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-test-'));
 delete process.env.APPDATA_DIR; delete process.env.VM_DIR; delete process.env.ISO_DIR; delete process.env.SHARES_DIR;
 const paths = require('../lib/paths');
-const { replacePath } = require('../lib/migrate');
+const { replacePath, groupContainers } = require('../lib/migrate');
 
 test('opslaglocaties: niets ingesteld, een nieuwe pool, en een eigen keuze', () => {
   assert.deepEqual(paths.all(), { appdata: null, vms: null, isos: null, shares: null });
@@ -42,4 +42,18 @@ test('verhuizen: alleen volledige paden vervangen', () => {
   assert.match(out, /"\/snel\/appdata2\/x:\/y"/); // ander pad, blijft staan
   assert.match(out, /source: \/tank\/appdata\/kuma/);
   assert.match(out, /homebaseos\.data: "\/tank\/appdata\/jellyfin,\/tank\/appdata\/kuma"/);
+});
+
+test('verhuizen: welke apps mee kunnen', () => {
+  const c = (name, source, labels = {}, State = 'running') => ({ Id: name + '0123456789', Names: ['/' + name], State, Labels: labels, Mounts: [{ Type: 'bind', Source: source, Destination: '/config' }] });
+  const compose = (project, file) => ({ 'com.docker.compose.project': project, 'com.docker.compose.project.config_files': file, 'com.docker.compose.project.working_dir': path.dirname(file) });
+  const onHost = new Set(['/opt/stacks/jellyfin/compose.yaml']);
+  const r = groupContainers([
+    c('jellyfin', '/snel/appdata/jellyfin', compose('jellyfin', '/opt/stacks/jellyfin/compose.yaml')),
+    c('kuma', '/snel/appdata/kuma'), // docker run
+    c('pihole', '/snel/appdata/pihole', compose('pihole', '/data/compose/3/docker-compose.yml')), // Portainer: bestand in zijn eigen container
+    c('plex', '/tank/media', compose('plex', '/opt/stacks/plex/compose.yaml')), // gebruikt de appgegevens niet
+  ], '/snel/appdata', (f) => onHost.has(f));
+  assert.deepEqual(r.projects.map((x) => x.project), ['jellyfin']);
+  assert.deepEqual(r.manual, ['kuma', 'pihole']);
 });
