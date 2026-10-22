@@ -137,7 +137,8 @@
   /* ------------------------------------------------------------ toestand */
   const S = { overview: null, apps: [], vms: [], ai: null, aiError: null, filter: 'all', search: '', config: {},
     vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
-    store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {} };
+    store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
+    layout: { items: [] }, arrange: false, folder: null };
 
   /* ------------------------------------------------------------ meldingen */
   function toast(msg, bad) {
@@ -252,11 +253,12 @@
   function iconHtml(a) {
     const dot = `<span class="dot ${isRunning(a) ? 'on' : ''}" aria-hidden="true"></span>` +
       (a.update ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : '');
-    if (a.icon) return `<span class="app-icon" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" loading="lazy">${dot}</span>`;
+    if (a.icon) return `<span class="app-icon" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" loading="lazy" draggable="false">${dot}</span>`;
     return `<span class="app-icon" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}${dot}</span>`;
   }
 
   function renderApps() {
+    if (drag && drag.started) return; // niet opnieuw tekenen tijdens het slepen (en het landen)
     const q = S.search.trim().toLowerCase();
     const list = S.apps.filter((a) => {
       if (q && !(a.name.toLowerCase().includes(q) || (a.image || '').toLowerCase().includes(q))) return false;
@@ -277,12 +279,21 @@
       grid.innerHTML = `<p class="empty">${t(S.apps.length ? 'Geen apps die hierbij passen.' : 'Nog geen containers gevonden.')}</p>`;
       return;
     }
-    grid.innerHTML = list.map((a) => {
-      const label = prettyName(a.name);
-      const busy = S.appBusy[a.id];
-      const state = busy ? t(APP_ACTS[busy].noun).toLowerCase() + '…' : t(a.update ? 'update beschikbaar' : isRunning(a) ? 'actief' : 'gestopt');
-      const hint = t(appUrl(a) ? 'klik om te openen' : 'klik voor het menu');
-      return `<div class="app ${isRunning(a) ? '' : 'stopped'}${busy ? ' busy' : ''}">
+    // Zoeken of filteren: een gewone lijst. Anders de eigen indeling met mappen.
+    const flat = !!q || S.filter !== 'all';
+    $('#arrangeBtn').disabled = flat;
+    $('#arrangeBtn').title = flat ? t('Wis de zoekopdracht en kies Alle om te rangschikken.') : '';
+    if (flat && S.arrange) setArrange(false);
+    grid.classList.toggle('arranging', S.arrange);
+    grid.innerHTML = flat ? list.map(appTile).join('') : homeItems().map((it) => (typeof it === 'string' ? appTile(appByName(it)) : folderTile(it))).join('');
+    if (S.folder) renderFolder();
+  }
+  function appTile(a) {
+    const label = prettyName(a.name);
+    const busy = S.appBusy[a.id];
+    const state = busy ? t(APP_ACTS[busy].noun).toLowerCase() + '…' : t(a.update ? 'update beschikbaar' : isRunning(a) ? 'actief' : 'gestopt');
+    const hint = t(appUrl(a) ? 'klik om te openen' : 'klik voor het menu');
+    return `<div class="app ${isRunning(a) ? '' : 'stopped'}${busy ? ' busy' : ''}" data-item="${esc(a.name)}">
         <button class="app-open" type="button" data-app="${esc(a.id)}" data-action="open" title="${esc(label)} – ${state}, ${hint}">
           ${iconHtml(a)}<span class="app-name">${esc(label)}</span>
         </button>
@@ -290,7 +301,291 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
         </button>
       </div>`;
-    }).join('');
+  }
+  // Map: een matglazen tegel met de pictogrammen van de eerste negen apps in een raster van 3 × 3, zoals op een iPad.
+  function folderTile(f) {
+    const apps = f.apps.map(appByName).filter(Boolean);
+    const mini = apps.slice(0, 9).map((a) => (a.icon ? `<span class="mini" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" draggable="false"></span>`
+      : `<span class="mini" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}</span>`)).join('');
+    const upd = apps.some((a) => a.update), on = apps.filter(isRunning).length;
+    return `<div class="app folder" data-item="f:${esc(f.folder)}">
+        <button class="app-open" type="button" data-folder-open="${esc(f.folder)}" title="${esc(t('{name} – map met {n} apps, {on} actief', { name: f.name, n: apps.length, on }))}">
+          <span class="app-icon folder-icon">${mini}${upd ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : ''}</span>
+          <span class="app-name">${esc(f.name)}</span>
+        </button>
+      </div>`;
+  }
+
+  /* --- startscherm: volgorde en mappen (zoals op een iPad) */
+  const appByName = (n) => S.apps.find((a) => a.name === n);
+  // De opgeslagen indeling, zonder verdwenen apps en met nieuwe apps achteraan.
+  function homeItems() {
+    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), out = [];
+    for (const it of S.layout.items) {
+      if (typeof it === 'string') { if (names.has(it) && !placed.has(it)) { out.push(it); placed.add(it); } continue; }
+      const apps = it.apps.filter((n) => names.has(n) && !placed.has(n));
+      apps.forEach((n) => placed.add(n));
+      if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
+    }
+    S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
+    return out;
+  }
+  // Mappen met één app worden weer een gewone app; lege mappen verdwijnen.
+  const tidy = (items) => items.flatMap((it) => (typeof it === 'string' ? [it] : it.apps.length > 1 ? [it] : it.apps));
+  let layoutTimer = null;
+  function setLayout(items) {
+    S.layout = { items: tidy(items) };
+    if (S.folder && !S.layout.items.some((it) => it.folder === S.folder)) closeFolder();
+    renderApps();
+    clearTimeout(layoutTimer);
+    layoutTimer = setTimeout(() => api.post('/api/layout', S.layout).catch((e) => toast(t('De indeling opslaan lukte niet: {error}', { error: e.message }), true)), 300);
+  }
+  async function loadLayout() { try { S.layout = await api.get('/api/layout'); } catch (e) { S.layout = { items: [] }; } renderApps(); }
+  const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  const folderOf = (name) => S.layout.items.find((it) => typeof it !== 'string' && it.apps.includes(name)) || null;
+  // Een app uit de indeling halen (thuis of uit een map). Geeft de nieuwe lijst terug.
+  function without(items, name) {
+    return items.filter((it) => it !== name).map((it) => (typeof it === 'string' ? it : { ...it, apps: it.apps.filter((n) => n !== name) }));
+  }
+  function moveToFolder(name, folderId, folderName) {
+    let items = without(homeItems(), name);
+    if (folderId) items = items.map((it) => (it.folder === folderId ? { ...it, apps: [...it.apps, name] } : it));
+    else items.push({ folder: newFolderId(), name: folderName || t('Nieuwe map'), apps: [name] });
+    setLayout(items);
+  }
+  function takeOutOfFolder(name) {
+    const items = homeItems(), at = items.findIndex((it) => typeof it !== 'string' && it.apps.includes(name));
+    if (at < 0) return;
+    const next = without(items, name);
+    next.splice(at + 1, 0, name); // net na de map
+    setLayout(next);
+  }
+
+  // Rangschikken: iconen wiebelen, klikken opent niets, slepen verplaatst.
+  function setArrange(on) {
+    S.arrange = !!on;
+    $('#arrangeBtn').setAttribute('aria-pressed', String(S.arrange));
+    $('#arrangeBtn').textContent = t(S.arrange ? 'Klaar' : 'Rangschikken');
+    $('#arrangeBtn').classList.toggle('primary', S.arrange);
+    $('#appGrid').classList.toggle('arranging', S.arrange);
+    $('#folderGrid').classList.toggle('arranging', S.arrange);
+    renderFolderHint();
+  }
+  $('#arrangeBtn').addEventListener('click', () => setArrange(!S.arrange));
+
+  /* map openen: een paneel boven het startscherm */
+  const folderPanel = $('#folderPanel'), folderOverlay = $('#folderOverlay');
+  function openFolder(id) {
+    // Het paneel zoomt open vanuit de map-tegel.
+    const tile = $(`#appGrid [data-item="f:${CSS.escape(id)}"] .app-icon`);
+    if (tile) { const r = tile.getBoundingClientRect(); folderPanel.style.setProperty('--from-x', (r.left + r.width / 2 - innerWidth / 2) + 'px'); folderPanel.style.setProperty('--from-y', (r.top + r.height / 2 - innerHeight / 2) + 'px'); }
+    S.folder = id; folderPanel.hidden = false; folderOverlay.hidden = false;
+    renderFolder();
+    const first = $('#folderGrid .app-open', folderPanel); if (first) first.focus();
+  }
+  function closeFolder() {
+    if (!S.folder) return;
+    const id = S.folder; S.folder = null; folderPanel.hidden = true; folderOverlay.hidden = true;
+    const tile = $(`#appGrid [data-item="f:${CSS.escape(id)}"] .app-open`); if (tile) tile.focus();
+  }
+  function renderFolder() {
+    const f = homeItems().find((it) => it.folder === S.folder);
+    if (!f) { closeFolder(); return; }
+    const name = $('#folderName');
+    if (document.activeElement !== name) name.value = f.name;
+    $('#folderGrid').innerHTML = f.apps.map(appByName).filter(Boolean).map(appTile).join('');
+    $('#folderGrid').classList.toggle('arranging', S.arrange);
+    renderFolderHint();
+  }
+  function renderFolderHint() {
+    $('#folderHint').textContent = S.arrange ? t('Sleep een app naar buiten om ze uit de map te halen.') : t('Klik op de naam om de map te hernoemen.');
+  }
+  $('#folderClose').addEventListener('click', closeFolder);
+  folderOverlay.addEventListener('click', () => { if (!drag) closeFolder(); });
+  $('#folderName').addEventListener('change', (e) => {
+    const name = e.target.value.trim().slice(0, 40) || t('Map');
+    setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, name } : it)));
+  });
+  $('#folderName').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+  $('#folderUngroup').addEventListener('click', () => {
+    const items = homeItems(), at = items.findIndex((it) => it.folder === S.folder);
+    if (at < 0) return;
+    items.splice(at, 1, ...items[at].apps); // de apps komen op de plaats van de map
+    closeFolder(); setLayout(items);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.folder && menu.hidden) closeFolder(); });
+
+  /* slepen (muis en touch), zoals op een iPad: de andere apps schuiven opzij; even boven een app houden maakt een map */
+  let drag = null, pressTimer = null;
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // FLIP: na een wijziging in het raster schuiven de tegels vloeiend van hun oude naar hun nieuwe plaats.
+  function flip(grid, change) {
+    const before = new Map([...grid.children].map((el) => [el, el.getBoundingClientRect()]));
+    change();
+    if (calm()) return;
+    for (const el of grid.children) {
+      const b = before.get(el); if (!b || (drag && el === drag.el)) continue;
+      const a = el.getBoundingClientRect(), dx = b.left - a.left, dy = b.top - a.top;
+      if (dx || dy) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+    }
+  }
+  // Even laten opveren (in een map gezet) of laten verschijnen (nieuwe map).
+  function bump(item, cls = 'bump') {
+    const icon = $(`#appGrid [data-item="${CSS.escape(item)}"] .app-icon`); if (!icon || calm()) return;
+    icon.classList.add(cls); icon.addEventListener('animationend', () => icon.classList.remove(cls), { once: true });
+  }
+  // Waar is de pointer? Midden van een app = map (alleen voor een app op het startscherm), elders op een tegel = verplaatsen.
+  function tileTarget(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    if (S.folder && drag.ctx === 'folder' && !folderPanel.contains(el)) return { out: true };
+    const tile = el.closest('#appGrid [data-item], #folderGrid [data-item]');
+    if (!tile || tile === drag.el) return null;
+    if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
+    const r = tile.querySelector('.app-icon').getBoundingClientRect();
+    const inner = x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2 && y > r.top + r.height * 0.2 && y < r.bottom - r.height * 0.2;
+    if (inner && drag.ctx === 'home' && !drag.item.startsWith('f:')) return { tile, mode: 'merge' };
+    return { tile, mode: 'move' };
+  }
+  function setMerge(tile) {
+    if (drag.merge) drag.merge.classList.remove('merge');
+    drag.merge = tile || null;
+    if (tile) tile.classList.add('merge');
+  }
+  // De plaats van de app die je sleept (half doorzichtig) schuift naar de app waar je boven hangt; de rest schuift mee.
+  function movePlaceholder(tile) {
+    const grid = drag.el.parentNode, kids = [...grid.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
+    if (from < 0 || to < 0) return;
+    flip(grid, () => grid.insertBefore(drag.el, to > from ? tile.nextSibling : tile));
+    drag.moved = true; drag.hoverKey = ''; drag.restX = null;
+  }
+  // Pas reageren als je stilhoudt: wie er alleen overheen schuift (op weg naar het midden van een app), verplaatst niets.
+  function hover(tg, x, y) {
+    const key = !tg ? '' : tg.out ? 'out' : tg.tile.dataset.item + ':' + tg.mode;
+    const still = drag.restX != null && Math.hypot(x - drag.restX, y - drag.restY) < 6;
+    if (key === drag.hoverKey && still) return;
+    drag.restX = x; drag.restY = y;
+    if (key !== drag.hoverKey && drag.merge) setMerge(null);
+    drag.hoverKey = key; drag.out = key === 'out';
+    clearTimeout(drag.timer);
+    folderOverlay.classList.toggle('drop-out', drag.out);
+    if (!tg || tg.out) return;
+    // Even wachten, zodat er niets verspringt als je er alleen over schuift.
+    if (tg.mode === 'merge') { if (drag.merge !== tg.tile) drag.timer = setTimeout(() => setMerge(tg.tile), 280); }
+    else { setMerge(null); drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160); }
+  }
+  function onDragStart(e) {
+    if (e.button > 0 || drag) return;
+    const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item]');
+    if (!tile || e.target.closest('.app-more')) return;
+    const ctx = tile.closest('#folderGrid') ? 'folder' : 'home';
+    if (!S.arrange) {
+      // Lang indrukken (zoals op een iPad) zet Rangschikken aan.
+      if ($('#arrangeBtn').disabled) return;
+      const x0 = e.clientX, y0 = e.clientY;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => { pressTimer = null; setArrange(true); ignoreNextClick(); }, 550);
+      const cancel = (ev) => { if (ev.type !== 'pointermove' || Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) { clearTimeout(pressTimer); off(); } };
+      const off = () => ['pointermove', 'pointerup', 'pointercancel'].forEach((t2) => document.removeEventListener(t2, cancel));
+      ['pointermove', 'pointerup', 'pointercancel'].forEach((t2) => document.addEventListener(t2, cancel));
+      return;
+    }
+    e.preventDefault(); // geen tekst selecteren of focus verspringen tijdens het slepen
+    drag = { item: tile.dataset.item, ctx, el: tile, x0: e.clientX, y0: e.clientY, started: false, hoverKey: '', moved: false };
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', onDragEnd);
+    document.addEventListener('pointercancel', onDragEnd);
+  }
+  function onDragMove(e) {
+    if (!drag || drag.ending) return;
+    if (!drag.started) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+      drag.started = true;
+      const icon = drag.el.querySelector('.app-icon'), r = icon.getBoundingClientRect();
+      drag.dx = drag.x0 - r.left; drag.dy = drag.y0 - r.top; // waar je het pictogram vastnam
+      drag.ghost = icon.cloneNode(true); drag.ghost.classList.add('drag-ghost');
+      document.body.appendChild(drag.ghost);
+      drag.el.classList.add('dragging');
+    }
+    e.preventDefault();
+    drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px) scale(1.1)`;
+    hover(tileTarget(e.clientX, e.clientY), e.clientX, e.clientY);
+  }
+  let suppressClick = false;
+  const ignoreNextClick = () => { suppressClick = true; setTimeout(() => { suppressClick = false; }, 500); };
+  function onDragEnd() {
+    ['pointermove', 'pointerup', 'pointercancel'].forEach((t2) => document.removeEventListener(t2, t2 === 'pointermove' ? onDragMove : onDragEnd));
+    const d = drag;
+    if (!d || d.ending) return;
+    clearTimeout(d.timer);
+    if (!d.started) { drag = null; return; }
+    d.ending = true;
+    ignoreNextClick(); // de klik na het loslaten mag niets openen
+    folderOverlay.classList.remove('drop-out');
+    // Het pictogram vliegt naar zijn plaats (of krimpt in de map); daarna pas de indeling bewaren.
+    const land = (rect, into, then) => {
+      const done = () => { d.ghost.remove(); d.el.classList.remove('dragging'); drag = null; then(); };
+      if (calm() || !rect) { done(); return; }
+      const to = `translate(${rect.left}px, ${rect.top}px) scale(${into ? 0.3 : 1})`;
+      const a = d.ghost.animate([{ transform: d.ghost.style.transform, opacity: 1 }, { transform: to, opacity: into ? 0 : 1 }],
+        { duration: into ? 240 : 200, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' });
+      a.onfinish = done;
+    };
+    if (d.merge) {
+      const target = d.merge.dataset.item, r = d.merge.querySelector('.app-icon').getBoundingClientRect();
+      const center = { left: r.left + r.width * 0.35, top: r.top + r.height * 0.35 };
+      land(center, true, () => {
+        d.merge.classList.remove('merge');
+        if (target.startsWith('f:')) { moveToFolder(d.item, target.slice(2)); bump(target); return; }
+        // Nieuwe map op de plaats van de app waarop je liet vallen.
+        const id = newFolderId();
+        setLayout(without(homeItems(), d.item).map((it) => (it === target ? { folder: id, name: t('Nieuwe map'), apps: [target, d.item] } : it)));
+        bump('f:' + id, 'pop-in');
+        setTimeout(() => { openFolder(id); const n = $('#folderName'); n.focus(); n.select(); }, calm() ? 0 : 260);
+      });
+      return;
+    }
+    if (d.out) { land(null, false, () => takeOutOfFolder(d.item)); return; }
+    land(d.el.querySelector('.app-icon').getBoundingClientRect(), false, () => {
+      if (!d.moved) return;
+      // De volgorde zoals ze nu in het raster staat.
+      const order = [...d.el.parentNode.children].map((x) => x.dataset.item).filter(Boolean);
+      if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order } : it)));
+      else { const by = new Map(homeItems().map((it) => [typeof it === 'string' ? it : 'f:' + it.folder, it])); setLayout(order.map((k) => by.get(k)).filter(Boolean)); }
+    });
+  }
+  $('#appGrid').addEventListener('pointerdown', onDragStart);
+  $('#folderGrid').addEventListener('pointerdown', onDragStart);
+  // Het eigen slepen van de browser (afbeelding of link) breekt ons slepen af met pointercancel: altijd tegenhouden.
+  ['#appGrid', '#folderGrid'].forEach((sel) => $(sel).addEventListener('dragstart', (e) => e.preventDefault()));
+  // Na slepen of lang indrukken: de klik die volgt negeren.
+  document.addEventListener('click', (e) => { if (suppressClick) { suppressClick = false; if (e.target.closest('#appGrid, #folderGrid')) { e.stopPropagation(); e.preventDefault(); } } }, true);
+  $('#folderGrid').addEventListener('contextmenu', (e) => {
+    const tg = e.target.closest('[data-app]'); if (!tg || S.arrange) return;
+    const a = S.apps.find((x) => x.id === tg.dataset.app); if (!a) return;
+    e.preventDefault();
+    openAppMenu(a, e.clientX, e.clientY, tg);
+  });
+
+  // Naar map…: kies een bestaande map of maak een nieuwe.
+  function folderPickWindow(a) {
+    const folders = homeItems().filter((it) => typeof it !== 'string');
+    const cur = folderOf(a.name);
+    openWindow(t('{name} naar een map', { name: prettyName(a.name) }), `
+      <ul class="rows">${folders.map((f) => `<li><div><div class="row-title">${esc(f.name)}</div><div class="row-sub">${esc(t('{n} apps', { n: f.apps.length }))}</div></div>
+        <div class="row-side">${cur && cur.folder === f.folder ? `<span class="muted">${t('zit hier al')}</span>` : `<button class="btn sm" type="button" data-pick="${esc(f.folder)}">${t('Hierin')}</button>`}</div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen mappen.')}</span></li>`}</ul>
+      <form class="inline-form" id="newFolderForm" style="margin-top:14px">
+        <input class="field" name="name" maxlength="40" placeholder="${t('Naam van een nieuwe map, bv. Media')}" aria-label="${t('Naam van een nieuwe map')}" autocomplete="off">
+        <button class="btn primary" type="submit">${t('Nieuwe map')}</button>
+      </form>`, (body) => {
+      body.addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b) { moveToFolder(a.name, b.dataset.pick); win.close(); toast(t('{name} staat nu in de map.', { name: prettyName(a.name) })); } });
+      $('#newFolderForm', body).addEventListener('submit', (e) => {
+        e.preventDefault();
+        moveToFolder(a.name, null, e.target.elements.name.value.trim().slice(0, 40)); win.close();
+        toast(t('{name} staat nu in de map.', { name: prettyName(a.name) }));
+      });
+    });
   }
 
   // Onder de titel: hoeveel updates er zijn, met Bekijken, Alles bijwerken en Nu controleren.
@@ -397,6 +692,8 @@
     logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
+    tofolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
+    outfolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9.5 13.5h5"/>',
   };
   const menu = $('#appMenu');
   let menuOpener = null;
@@ -413,8 +710,9 @@
       !run && ['start', t('Starten')], run && ['restart', t('Herstarten')], run && ['stop', t('Stoppen'), 'danger'],
       a.canUpdate && (a.update ? ['update', t('Bijwerken naar de nieuwe versie'), 'accent'] : ['update', t('Bijwerken')]),
       !a.canUpdate && a.update && ['update', t('Bijwerken kan alleen voor compose-apps'), 'off'], '-',
-      ['logs', t('Logboek')], run && ['console', t('Console')], ['settings', t('Instellingen')],
-      a.storeId && '-', a.storeId && ['remove', t('Verwijderen'), 'danger'],
+      ['logs', t('Logboek')], run && ['console', t('Console')], ['settings', t('Instellingen')], '-',
+      ['tofolder', t('Naar map…')], folderOf(a.name) && ['outfolder', t('Uit map halen')],
+      (a.storeId || a.custom) && '-', (a.storeId || a.custom) && ['remove', t('Verwijderen'), 'danger'],
     ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
     menu.innerHTML = `<div class="menu-head"><b>${esc(prettyName(a.name))}</b><span>${esc(busy ? t(APP_ACTS[busy].noun) + '…' : a.status || a.state)}</span>
         ${a.update && !busy ? `<span class="menu-upd">${t('Er is een nieuwe versie')}</span>` : ''}</div>` +
@@ -455,6 +753,8 @@
     if (act === 'console') return consoleWindow(a);
     if (act === 'settings') return appSettingsWindow(a);
     if (act === 'remove') return removeApp(a);
+    if (act === 'tofolder') return folderPickWindow(a);
+    if (act === 'outfolder') { takeOutOfFolder(a.name); return; }
     if (act === 'stop' && !(await ask(t('{name} stoppen? Wat erop draait, is dan niet meer bereikbaar.', { name: label }), t('Stoppen')))) return;
     S.appBusy[a.id] = act; renderApps();
     try { await api.post(appPath(a, '/' + act)); toast(t(APP_ACTS[act].done) + ': ' + label); }
@@ -1965,6 +2265,95 @@
     });
   }
 
+  /* --- eigen app: een image of een link naar Docker Hub, GitHub of Quay */
+  function customAppWindow(prefill = '') {
+    openWindow(t('Eigen app toevoegen'), `
+      <p class="lead">${t('Plak de naam van een image of een link naar de pagina ervan. Thuisbasis leest bij de registry welke poorten en mappen de app gebruikt en vult het formulier al in.')}</p>
+      <form class="inline-form" id="customImgForm">
+        <input class="field" name="image" value="${esc(prefill)}" placeholder="${t('bv. louislam/uptime-kuma of https://hub.docker.com/r/linuxserver/jellyfin')}" spellcheck="false" autocomplete="off" aria-label="${t('Image of link')}" required>
+        <button class="btn primary" type="submit">${t('Ophalen')}</button>
+      </form>
+      <p class="muted small" style="margin-top:8px">${t('Werkt met Docker Hub, ghcr.io, lscr.io, quay.io en andere registries. Privé-images kunnen nog niet.')}</p>
+      <p class="form-error" role="alert" id="customImgErr"></p>
+      <div id="customForm"></div>`, (body) => {
+      const imgForm = $('#customImgForm', body);
+      imgForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('[type=submit]', imgForm), err = $('#customImgErr', body); err.textContent = '';
+        btn.disabled = true; btn.textContent = t('Ophalen…');
+        try { customAppForm(body, await api.post('/api/apps/custom/inspect', { image: imgForm.elements.image.value })); }
+        catch (ex) { err.textContent = ex.message; }
+        btn.disabled = false; btn.textContent = t('Ophalen');
+      });
+      if (prefill) imgForm.requestSubmit(); else imgForm.elements.image.focus();
+    });
+  }
+  function customAppForm(body, d) {
+    // Zelfde vorm als het compose-formulier, zodat we dat formulier gewoon hergebruiken.
+    const f = { image: d.image, restart: 'unless-stopped', privileged: false, network: d.networkDefault === 'bridge' ? '' : d.networkDefault, ip: '', networkOther: null,
+      networks: [], projectNetworks: [], build: false, otherServices: [],
+      ports: d.ports.map((p) => ({ ...p, ip: '' })), volumes: d.volumes.map((v) => ({ ...v, kind: 'bind', locked: false })),
+      env: d.env.map((e) => ({ ...e })), devices: [], labels: [] };
+    $('#customForm', body).innerHTML = `
+      ${d.storeMatch ? `<p class="lead">${t('Deze app staat ook in de appstore, met een uitgewerkt formulier.')} <button class="linkish" type="button" data-store-match="${esc(d.storeMatch.id)}">${t('Bekijk {name} in de appstore', { name: esc(prettyName(d.storeMatch.name)) })}</button></p>` : ''}
+      ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('De map voor appgegevens ({dir}) bestaat niet. Maak eerst de dataset aan of pas APPDATA_DIR aan.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      <form class="form" id="storeForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.name)}">
+            <small>${t('Kleine letters, cijfers, - en _. Wordt de naam van de container en van de map {dir}/naam.', { dir: esc(d.stacksDir) })}</small></label>
+          <label class="fld"><span>${t('Pictogram')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" name="__icon" value="${esc(d.icon)}" placeholder="https://…" spellcheck="false" autocomplete="off"></label>
+        </div>
+        <label class="fld"><span>${t('Adres van de webinterface (WebUI)')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" name="__webui" value="${esc(d.webui)}" placeholder="http://[IP]:[PORT:8080]/" spellcheck="false" autocomplete="off">
+          <small>${t('[IP] wordt het adres van je server, [PORT:80] de poort op de server die aan poort 80 in de app hangt.')}</small></label>
+        <div id="customCf"></div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Installeren')}</button>
+          <button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
+      </form>
+      <div id="storeJob" hidden>
+        <p class="lead" id="jobState">${t('Installeren…')}</p>
+        <pre class="logs" id="jobLog"></pre>
+        <div class="btn-row" id="jobBtns" style="margin-top:12px"></div>
+      </div>`;
+    const form = $('#storeForm', body);
+    composeFormMount($('#customCf', form), f, d.networks);
+    // Mappen in de appgegevens volgen de naam: /snel/appdata/<naam>/…
+    let lastName = d.name;
+    form.elements.__name.addEventListener('input', (e) => {
+      const n = e.target.value.trim(), from = d.appdataDir + '/' + lastName;
+      f.volumes.forEach((v, i) => {
+        if (v.host === from || v.host.startsWith(from + '/')) {
+          v.host = d.appdataDir + '/' + n + v.host.slice(from.length);
+          const inp = $(`[data-cf="volumes:${i}:host"]`, form); if (inp) inp.value = v.host;
+        }
+      });
+      lastName = n;
+    });
+    body.addEventListener('click', (e) => { const m = e.target.closest('[data-store-match]'); if (m) storeWindow(m.dataset.storeMatch); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      const name = form.elements.__name.value.trim();
+      if (!name) { err.textContent = t('Vul {field} in.', { field: t('Naam') }); form.elements.__name.focus(); return; }
+      const problem = composeFormCheck(f); if (problem) { err.textContent = problem; return; }
+      btn.disabled = true;
+      let r;
+      try {
+        r = await api.post('/api/apps/custom', {
+          name, image: f.image, restart: f.restart, privileged: f.privileged, network: f.network || 'bridge', ip: (f.ip || '').trim(),
+          ports: f.ports, volumes: f.volumes, env: f.env, devices: f.devices, labels: f.labels,
+          webui: form.elements.__webui.value.trim(), icon: form.elements.__icon.value.trim(),
+        });
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; return; }
+      form.hidden = true; $('#storeJob', body).hidden = false;
+      $('#customImgForm', body).hidden = true;
+      followJob(r.job, prettyName(name), body, null);
+    });
+    form.elements.__name.focus();
+  }
+  $('#customAppBtn').addEventListener('click', () => customAppWindow());
+
   // Volg de installatie. Sluit je het venster, dan loopt ze gewoon door en krijg je op het einde een melding.
   async function followJob(jobId, label, body, storeId) {
     let j;
@@ -2535,6 +2924,7 @@
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     refresh(true);
+    loadLayout();
     timers.forEach(clearInterval);
     timers = [
       setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
@@ -2557,6 +2947,9 @@
     }
     const open = e.target.closest('[data-open]');
     if (open) { ({ storage: storageWindow, vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open](); return; }
+    const fo = e.target.closest('[data-folder-open]');
+    if (fo) { openFolder(fo.dataset.folderOpen); return; }
+    if (S.arrange && e.target.closest('#appGrid, #folderGrid')) return; // rangschikken: klikken opent niets
     // Linksklik opent de webinterface (zoals in Unraid). Geen adres of staat de app uit? Dan het menu.
     const app = e.target.closest('[data-app]');
     if (app && !menu.contains(app)) {
@@ -2568,12 +2961,12 @@
   });
   // Pictogram kan niet laden → toon de beginletter op een gekleurde tegel (apps, appstore en vensters).
   document.addEventListener('error', (e) => {
-    const img = e.target; if (img.tagName !== 'IMG' || !img.parentNode.classList.contains('app-icon')) return;
+    const img = e.target; if (img.tagName !== 'IMG' || !(img.parentNode.classList.contains('app-icon') || img.parentNode.classList.contains('mini'))) return;
     const box = img.parentNode; box.style.background = box.dataset.color;
     img.replaceWith(document.createTextNode(box.dataset.letter || '?'));
   }, true);
   $('#appGrid').addEventListener('contextmenu', (e) => {
-    const t = e.target.closest('[data-app]'); if (!t) return;
+    const t = e.target.closest('[data-app]'); if (!t || S.arrange) return;
     const a = S.apps.find((x) => x.id === t.dataset.app); if (!a) return;
     e.preventDefault();
     openAppMenu(a, e.clientX, e.clientY, t);

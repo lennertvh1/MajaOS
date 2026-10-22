@@ -9,6 +9,7 @@ Thuisbasis draait op een gewone **Debian 13** en beheert drie dingen voor je: **
 - **Apps**: al je Docker-containers als pictogrammen. Een oranje pijltje op een app betekent dat er een nieuwe versie is (Thuisbasis kijkt elke 6 uur, of meteen met *Nu controleren*). **Klik** om de webinterface te openen, **rechtsklik** (of ⋯) voor het menu: starten, stoppen, herstarten, bijwerken, logboek (live), console en instellingen (adres van de webinterface, pictogram, automatisch starten, en de container zelf: image, poorten, mappen, variabelen, apparaten en labels in een formulier zoals in Unraid, of het compose-bestand als tekst)
 - **Appstore**: bijna 4000 apps uit de catalogus van Unraid Community Apps. Zoeken, kiezen, een paar velden invullen en installeren. Thuisbasis maakt er een compose-bestand van
 - **VM's** (eigen pagina): aanmaken (Linux, Windows 11 of een bestaande schijf zoals Home Assistant OS), bewerken, verwijderen, live CPU en RAM, en automatisch starten **met uitstel** als de server opstart
+- **Startscherm**: apps rangschikken en in mappen zetten zoals op een iPad (*Rangschikken* of lang indrukken; sleep een app op een andere om een map te maken)
 - **Opslag**: ZFS-pools met gezondheid en de laatste controle (scrub), alle schijven met temperatuur en SMART, je datasets, een overzicht van je schijfbays en een venster om een pool aan te maken
 - **AI**: Ollama-modellen bekijken, laden, ontladen, downloaden en verwijderen, en snel iets vragen aan je eigen model
 - **Instellingen** (tandwiel rechtsboven): taal (Nederlands of Engels) en thema, de netwerkinstellingen van de server (IP-adres, DHCP of vast, DNS, hostnaam, bridge voor VM's) met automatisch terugzetten als je niet bevestigt, Docker-netwerken (bridge, macvlan, ipvlan) voor je apps, en alle info over de server, de hardware en de versies
@@ -127,6 +128,10 @@ Omdat de templates voor Unraid gemaakt zijn, vertaalt Thuisbasis ze bij het inst
 | `--runtime=nvidia`, `--gpus all` | GPU-reservering in compose |
 | netwerk `br0` of eigen netwerken | een Docker-netwerk met dezelfde naam als dat bestaat, anders het standaardnetwerk (met een waarschuwing). Bij het installeren kies je zelf een netwerk en eventueel een vast IP-adres. |
 | Unraid-mappen zoals `/usr/local/emhttp` en `/boot` | weggelaten (met een waarschuwing) |
+
+### Eigen app
+
+Staat een app niet in de appstore? Kies in de appstore **Eigen app** en plak de naam van het image (bv. `louislam/uptime-kuma`) of een link naar de pagina ervan (Docker Hub, GitHub-pakketten, Quay). Thuisbasis leest bij de registry welke poorten en mappen de app gebruikt, zonder het image al te downloaden, en vult het formulier in: een vrije poort, mappen in `APPDATA_DIR/<naam>`, PUID/PGID en de tijdzone. Je past alles aan in hetzelfde formulier als bij de instellingen van een app en installeert. Een eigen app kan je later verwijderen zoals een app uit de appstore.
 
 Per app komt er een `compose.yaml` in `STACKS_DIR/<naam>` (standaard `/opt/stacks`, dezelfde map die Dockge gebruikt). Je kan het bestand dus ook zelf aanpassen.
 Voor privileged apps, apps met toegang tot Docker, apps op het host-netwerk en extra Docker-opties die niet overgenomen worden, toont Thuisbasis eerst een waarschuwing.

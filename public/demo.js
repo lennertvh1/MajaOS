@@ -185,6 +185,22 @@
     appNet[a.name] = { net: network, ip: ip || (ownIpNet(network) ? freeIp(n) : '') };
   }
 
+  /* ---- indeling van het startscherm: twee mappen, de rest volgt vanzelf */
+  let layout = { items: ['jellyfin', 'immich', 'nextcloud', 'paperless-ngx', 'vaultwarden',
+    { folder: 'fdomotica', name: 'Domotica', apps: ['mosquitto', 'zigbee2mqtt', 'whisper', 'piper', 'frigate'] },
+    { folder: 'fai', name: 'AI', apps: ['ollama', 'open-webui'] }] };
+  function saveLayout(b) {
+    if (!b || !Array.isArray(b.items)) throw err('De indeling klopt niet.');
+    const seen = new Set();
+    const items = b.items.map((it) => {
+      if (typeof it === 'string') { if (seen.has(it)) return null; seen.add(it); return it; }
+      const apps = (it.apps || []).filter((n) => !seen.has(n) && seen.add(n));
+      return apps.length > 1 ? { folder: it.folder, name: String(it.name || 'Map').slice(0, 40), apps } : apps[0] || null;
+    }).filter(Boolean);
+    layout = { items };
+    return copy(layout);
+  }
+
   /* ---- instellingen, compose-bestand en console per app */
   const appOvr = {}, composeText = {};
   const findApp = (id) => { const a = apps.find((x) => x.id === decodeURIComponent(id)); if (!a) throw err('Deze app bestaat niet (meer).', 404); return a; };
@@ -405,12 +421,80 @@
         .map((f) => ({ public: Number(f.value), private: Number(f.target), type: /udp/.test(f.mode) ? 'UDP' : 'TCP' })).concat(ownIp ? [] : j.extraPorts || []);
       if (j.own) appNet[j.name] = j.own;
       const tplPort = j.a.webui && (j.a.webui.match(/\[PORT:(\d+)\]/) || [])[1];
-      apps.push({ id: 'demo:' + j.name, name: j.name, image: j.a.image + ':latest', state: 'RUNNING', status: 'Up minder dan een minuut', autoStart: true,
-        icon: j.a.icon, webui: ownIp ? 'http://' + j.own.ip + (tplPort ? ':' + tplPort : '') + '/' : j.webPort ? 'http://[IP]:' + j.webPort + '/' : null, ports, compose: j.name, canUpdate: true, update: null, storeId: j.a.id,
+      apps.push({ id: 'demo:' + j.name, name: j.name, image: /:[^/]+$/.test(j.a.image) ? j.a.image : j.a.image + ':latest', state: 'RUNNING', status: 'Up minder dan een minuut', autoStart: true,
+        icon: j.a.icon, webui: ownIp ? 'http://' + j.own.ip + (tplPort ? ':' + tplPort : '') + '/' : j.webPort ? 'http://[IP]:' + j.webPort + '/' : null, ports, compose: j.name, canUpdate: true, update: null,
+        storeId: j.a.id, custom: !!j.custom,
         dataDirs: [...new Set(j.fields.filter((f) => f.type === 'Path' && f.value.startsWith('/snel/appdata/')).map((f) => f.value.split('/').slice(0, 4).join('/')))] });
       apps.sort((x, y) => x.name.localeCompare(y.name));
     }
     return { done, ok: done, error: null, name: j.name, webui: j.a.webui, lines };
+  }
+
+  /* ---- eigen app: een paar bekende images, zoals de registry ze zou melden */
+  const IMAGES = {
+    nginx: { ports: ['80/tcp'], volumes: [] }, 'louislam/uptime-kuma': { ports: ['3001/tcp'], volumes: ['/app/data'] },
+    'linuxserver/jellyfin': { ports: ['8096/tcp', '8920/tcp'], volumes: ['/config'], lsio: true }, 'lscr.io/linuxserver/jellyfin': { ports: ['8096/tcp', '8920/tcp'], volumes: ['/config'], lsio: true },
+    'ghcr.io/home-assistant/home-assistant': { ports: [], volumes: [] }, 'freshrss/freshrss': { ports: ['80/tcp'], volumes: ['/var/www/FreshRSS/data'] },
+  };
+  function demoNormalize(input) {
+    let x = String(input || '').trim();
+    const pull = x.match(/^docker\s+pull\s+(\S+)$/i); if (pull) x = pull[1];
+    if (/\s/.test(x)) return null;
+    const hub = x.match(/^https?:\/\/hub\.docker\.com\/(?:r\/([^/]+\/[^/?#]+)|_\/([^/?#]+))(?:\/tags\?name=([\w.-]+))?/i);
+    if (hub) x = (hub[1] || hub[2]) + (hub[3] ? ':' + hub[3] : '');
+    else if (/^https?:\/\//i.test(x)) return null;
+    const c = x.lastIndexOf(':'), sl = x.lastIndexOf('/');
+    const repo = (c > sl ? x.slice(0, c) : x).toLowerCase(), tag = c > sl ? x.slice(c + 1) : 'latest';
+    return /^[a-z0-9][a-z0-9._\/-]*$/.test(repo) ? { repo, tag, image: repo + ':' + tag } : null;
+  }
+  function demoInspect(input) {
+    const n = demoNormalize(input);
+    if (!n) throw err('Plak de naam van een image (bv. nginx:latest of lscr.io/linuxserver/jellyfin) of een link naar Docker Hub.');
+    const info = IMAGES[n.repo];
+    if (!info) throw err('Het image ' + n.image + ' kon niet gelezen worden: deze tag bestaat niet (meer) in de registry.', 404);
+    const base = n.repo.split('/').pop().replace(/[^a-z0-9_-]+/g, '-');
+    let name = base; for (let i = 2; apps.some((a) => a.name === name); i++) name = base + '-' + i;
+    const used = new Set(apps.flatMap((a) => a.ports.map((p) => p.public + '/' + p.type)));
+    const ports = info.ports.map((k) => {
+      const [port, proto] = k.split('/'); let host = Number(port);
+      while (used.has(host + '/' + proto.toUpperCase())) host++;
+      used.add(host + '/' + proto.toUpperCase());
+      return { host: String(host), container: port, protocol: proto };
+    });
+    const st = store.find((a) => a.image.replace(/^lscr\.io\//, '') === n.repo.replace(/^lscr\.io\//, ''));
+    return {
+      image: n.image, name, ports,
+      volumes: info.volumes.map((v) => ({ host: '/snel/appdata/' + name + (v === '/config' ? '' : '/' + v.split('/').filter(Boolean).join('-')), container: v, mode: 'rw', auto: true })),
+      env: (info.lsio ? [{ name: 'PUID', value: '1000' }, { name: 'PGID', value: '1000' }] : []).concat({ name: 'TZ', value: 'Europe/Brussels' }),
+      webui: ports[0] ? 'http://[IP]:[PORT:' + ports[0].container + ']/' : '', icon: ICON(base) || '',
+      storeMatch: st ? { id: st.id, name: st.name } : null,
+      warnings: ports.length ? [] : ['Het image meldt geen poorten. Heeft de app een webinterface, voeg dan zelf een poort toe.'],
+      networks: dnets.filter((x) => !x.builtin).map((x) => ({ name: x.name, driver: x.driver, subnet: x.subnet })), networkDefault: 'bridge',
+      appdataDir: '/snel/appdata', stacksDir: '/opt/stacks', appdataMissing: false,
+    };
+  }
+  function demoInstallCustom(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) throw err('Kies een naam met kleine letters, cijfers, - of _ (maximaal 63 tekens).');
+    if (apps.some((x) => x.name === name)) throw err('Er bestaat al een app met de naam ' + name + '. Kies een andere naam.', 409);
+    const n = demoNormalize(b.image); if (!n) throw err('Plak de naam van een image (bv. nginx:latest of lscr.io/linuxserver/jellyfin) of een link naar Docker Hub.');
+    const network = b.network || 'bridge';
+    const noPorts = network === 'host' || network === 'none' || ownIpNet(network);
+    const extraPorts = noPorts ? [] : (b.ports || []).filter((p) => p.host || p.container).map((p) => {
+      if (!/^\d{1,5}$/.test(String(p.container))) throw err('Poort in de app "' + p.container + '" is geen geldige poort.');
+      if (!/^\d{1,5}$/.test(String(p.host))) throw err('Poort op de server "' + p.host + '" is geen geldige poort.');
+      const clash = apps.find((x) => x.ports.some((q) => String(q.public) === String(p.host)));
+      if (clash) throw err('Poort ' + p.host + ' is al in gebruik door ' + clash.name + '. Kies een andere poort.', 409);
+      return { public: Number(p.host), private: Number(p.container), type: p.protocol === 'udp' ? 'UDP' : 'TCP' };
+    });
+    for (const v of b.volumes || []) if (v.container && !String(v.container).startsWith('/')) throw err('De map in de app "' + v.container + '" moet met / beginnen.');
+    setAppNet({ name: '__check' }, network, String(b.ip || '').trim());
+    const own = appNet.__check; delete appNet.__check;
+    const webPort = (() => { const m = String(b.webui || '').match(/\[PORT:(\d+)\]/); const p = m && extraPorts.find((x) => String(x.private) === m[1]); return p ? p.public : null; })();
+    const id = Math.random().toString(16).slice(2, 14).padEnd(12, '0');
+    storeJobs[id] = { started: Date.now(), name, a: { id: null, image: n.image, webui: b.webui || null, icon: b.icon || ICON(n.repo.split('/').pop()) }, custom: true,
+      fields: (b.volumes || []).map((v) => ({ type: 'Path', value: String(v.host || '') })), webPort, network, own, extraPorts };
+    return { job: id, name, file: '/opt/stacks/' + name + '/compose.yaml' };
   }
 
   /* ---- VM's: Ubuntu toont het startuitstel (start 45 s na het openen van de demo) */
@@ -726,6 +810,7 @@
     if (path === '/api/about') return demoAbout();
     if (path === '/api/network') { tickNet(); return copy(net); }
     if (path === '/api/docker-networks') return dnetList();
+    if (path === '/api/layout') return copy(layout);
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {
       return apps.map((a) => { const o = appOvr[a.name] || {}; return { ...copy(a), webui: o.webui ? resolvePorts(o.webui, a.ports) : a.webui, icon: o.icon || a.icon }; });
@@ -786,6 +871,9 @@
     if (path === '/api/docker-networks') { await wait(rnd(300, 700)); return dnetCreate(body); }
     if (path === '/api/vm-networks') { await wait(rnd(400, 800)); return vmNetCreate(body); }
     if (path === '/api/bays') return saveBays(body);
+    if (path === '/api/layout') return saveLayout(body);
+    if (path === '/api/apps/custom/inspect') { await wait(rnd(500, 900)); return demoInspect(body.image); }
+    if (path === '/api/apps/custom') { await wait(rnd(300, 600)); return demoInstallCustom(body); }
     const dt = path.match(/^\/api\/disks\/([^/]+)\/test$/);
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
@@ -908,7 +996,7 @@
     if (m) {
       const i = apps.findIndex((x) => x.id === decodeURIComponent(m[1]));
       if (i < 0) throw err('Deze app bestaat niet (meer).', 404);
-      if (!apps[i].storeId) throw err('Alleen apps uit de appstore kan je hier verwijderen.', 400);
+      if (!apps[i].storeId && !apps[i].custom) throw err('Alleen apps uit de appstore of eigen apps van Thuisbasis kan je hier verwijderen. Verwijder andere apps via hun eigen compose-bestand.', 400);
       const [a] = apps.splice(i, 1);
       return { removed: m[2] ? a.dataDirs : [], kept: [] };
     }

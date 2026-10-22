@@ -18,6 +18,7 @@
   --nas-body: #d3d9de; --nas-body-2: #bfc7ce; --nas-edge: #a8b1ba; --nas-slot: #262c33; --nas-tray: #eef1f3; --nas-tray-2: #dde2e6;
   --nas-tray-edge: #b9c2ca; --nas-vent: rgba(22, 32, 42, .22); --nas-ink: #17232c; --nas-ink-2: #51606c; --led-off: #8a949d;
   --pool-1: #12786b; --pool-2: #2f63c8; --pool-3: #7c45c4; --pool-4: #a55a12; --pool-5: #a8306f;
+  --folder-bg: rgba(255, 255, 255, .5); --folder-ring: rgba(255, 255, 255, .55); /* map-pictogram: matglas */
   --m2-pcb: #1d3b34; --m2-pcb-2: #142b26; --m2-chip: #0d1412; --m2-gold: #c9a227; --m2-ink: #e3efe9; --m2-ink-2: #9fb8ae;
 }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -37,6 +38,7 @@
     --nas-body: #20262e; --nas-body-2: #171b21; --nas-edge: #323a45; --nas-slot: #07090c; --nas-tray: #2c333d; --nas-tray-2: #232931;
     --nas-tray-edge: #3c4552; --nas-vent: rgba(0, 0, 0, .55); --nas-ink: #e8eef4; --nas-ink-2: #9aa7b6; --led-off: #3d4651;
     --pool-1: #6fd3c3; --pool-2: #7aa7ff; --pool-3: #c29bff; --pool-4: #f2b35b; --pool-5: #f28bc5;
+    --folder-bg: rgba(255, 255, 255, .16); --folder-ring: rgba(255, 255, 255, .22);
   }
 }
 :root[data-theme="dark"] {
@@ -53,6 +55,7 @@
   --nas-body: #20262e; --nas-body-2: #171b21; --nas-edge: #323a45; --nas-slot: #07090c; --nas-tray: #2c333d; --nas-tray-2: #232931;
   --nas-tray-edge: #3c4552; --nas-vent: rgba(0, 0, 0, .55); --nas-ink: #e8eef4; --nas-ink-2: #9aa7b6; --led-off: #3d4651;
   --pool-1: #6fd3c3; --pool-2: #7aa7ff; --pool-3: #c29bff; --pool-4: #f2b35b; --pool-5: #f28bc5;
+  --folder-bg: rgba(255, 255, 255, .16); --folder-ring: rgba(255, 255, 255, .22);
 }
 
 * { box-sizing: border-box; }
@@ -687,3 +690,51 @@ select.field { padding-right: 8px; }
 .window.console-win { width: min(1240px, calc(100vw - 24px)); height: min(860px, 90vh); max-height: none; }
 .window.console-win[open] { display: flex; }
 .console-win iframe { flex: 1; width: 100%; border: 0; background: var(--screen-bg); }
+
+/* ---- startscherm rangschikken en mappen (zoals op een iPad) */
+.app-grid.arranging .app { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.app-grid img { -webkit-user-drag: none; user-select: none; }
+.app-grid.arranging .app-open { cursor: grab; }
+.app-grid.arranging .app-more { display: none; }
+.app-grid.arranging .app:hover { background: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .app-grid.arranging .app-icon { animation: wiggle .3s ease-in-out infinite alternate; }
+  .app-grid.arranging .app:nth-child(2n) .app-icon { animation-delay: -.15s; }
+}
+@keyframes wiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+.app.dragging { opacity: .3; }
+.app.dragging .app-icon { animation: none !important; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; transform-origin: top left; opacity: .95;
+  box-shadow: 0 22px 34px -12px rgba(0, 0, 0, .6); }
+/* boven een app houden: ze wordt groter en krijgt een matglazen rand, als teken dat er een map komt */
+.app-grid .app-icon { transition: scale .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s; }
+.app.merge .app-icon { scale: 1.16; box-shadow: 0 0 0 8px var(--folder-ring), 0 14px 26px -12px rgba(0, 0, 0, .55); animation-play-state: paused; }
+/* map-tegel: matglas met een raster van 3 × 3 kleine pictogrammen, zoals op een iPad */
+.folder-icon { place-items: stretch; align-content: stretch; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  gap: 4px; padding: 8px; background: var(--folder-bg); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); }
+.folder-icon .mini { position: relative; display: grid; place-items: center; min-width: 0; border-radius: 4px; overflow: hidden;
+  font-size: 9px; font-weight: 700; color: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.folder-icon .mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; padding: 1.5px; }
+@media (prefers-reduced-motion: no-preference) {
+  .app-icon.bump { animation: bump .45s cubic-bezier(.2, .8, .2, 1) !important; }
+  .app-icon.pop-in { animation: pop-in .4s cubic-bezier(.2, 1.4, .4, 1) !important; }
+  .folder-panel:not([hidden]) { animation: folder-open .28s cubic-bezier(.2, .9, .25, 1); }
+  .folder-overlay:not([hidden]) { animation: fade .2s ease-out; }
+}
+@keyframes bump { 0% { scale: 1; } 40% { scale: 1.18; } 100% { scale: 1; } }
+@keyframes pop-in { from { scale: .4; opacity: 0; } to { scale: 1; opacity: 1; } }
+@keyframes folder-open {
+  from { opacity: 0; transform: translate(calc(-50% + var(--from-x, 0px)), calc(-50% + var(--from-y, 0px))) scale(.2); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+/* het paneel van een geopende map */
+.folder-overlay { position: fixed; inset: 0; z-index: 40; background: rgba(5, 10, 20, .35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.folder-overlay.drop-out { background: rgba(5, 10, 20, .2); outline: 3px dashed var(--accent); outline-offset: -12px; }
+.folder-panel { position: fixed; z-index: 41; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100vw - 24px));
+  max-height: min(80vh, 720px); overflow: auto; padding: 18px 20px 14px; border-radius: 28px; background: var(--glass-strong);
+  border: 1px solid var(--glass-line); box-shadow: var(--shade); backdrop-filter: blur(28px) saturate(1.3); -webkit-backdrop-filter: blur(28px) saturate(1.3); }
+.folder-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.folder-name { flex: 1; min-width: 0; font: inherit; font-size: 22px; font-weight: 700; text-align: center; border: 0; border-radius: 10px; padding: 4px 8px;
+  background: transparent; color: var(--text); }
+.folder-name:hover, .folder-name:focus { background: var(--track); outline: none; }
+.folder-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }

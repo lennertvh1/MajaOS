@@ -54,6 +54,7 @@ const about = require('./lib/about');
 const bays = require('./lib/bays');
 const zpool = require('./lib/zpool');
 const disks = require('./lib/disks');
+const layout = require('./lib/layout');
 
 const CFG = {
   port: Number(process.env.PORT || 8080),
@@ -236,6 +237,10 @@ async function handleApi(req, res, url) {
     const apps = await docker.listApps();
     return sendJson(res, 200, apps.map((a) => (a.icon ? a : { ...a, icon: appstore.iconFor(a.image, a.name) })));
   }
+  if (p === '/api/layout' && method === 'GET') return sendJson(res, 200, layout.getLayout());
+  if (p === '/api/layout' && method === 'POST') return sendJson(res, 200, layout.saveLayout(await readBody(req)));
+  if (p === '/api/apps/custom/inspect' && method === 'POST') return sendJson(res, 200, await appstore.inspectImage((await readBody(req)).image));
+  if (p === '/api/apps/custom' && method === 'POST') return sendJson(res, 200, await appstore.installCustom(await readBody(req)));
   if (p === '/api/apps/check-updates' && method === 'POST') return sendJson(res, 200, await docker.checkUpdates(true));
   if ((m = p.match(/^\/api\/apps\/([^/]+)\/logs$/)) && method === 'GET') {
     const tail = Math.min(2000, Math.max(10, Number(url.searchParams.get('tail')) || 200));

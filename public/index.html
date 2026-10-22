@@ -138,6 +138,7 @@
               <button type="button" role="radio" aria-checked="false" data-filter="stopped">Gestopt</button>
               <button type="button" role="radio" aria-checked="false" data-filter="update">Updates</button>
             </div>
+            <button class="btn" type="button" id="arrangeBtn" aria-pressed="false">Rangschikken</button>
             <a class="btn primary" href="#store">App toevoegen</a>
           </div>
         </div>
@@ -188,6 +189,7 @@
             <option value="featured">Aanbevolen</option>
             <option value="all">Alle apps</option>
           </select>
+          <button class="btn" type="button" id="customAppBtn">Eigen app</button>
         </div>
       </div>
       <p class="store-source muted small" id="storeSource"></p>
@@ -257,6 +259,18 @@
     </div>
   </dialog>
 
+  <div class="folder-overlay" id="folderOverlay" hidden></div>
+  <section class="folder-panel" id="folderPanel" hidden role="dialog" aria-labelledby="folderName">
+    <div class="folder-head">
+      <input class="folder-name" id="folderName" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Naam van de map">
+      <button class="close" type="button" id="folderClose" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="app-grid folder-grid" id="folderGrid"></div>
+    <div class="folder-foot"><span class="muted small" id="folderHint"></span>
+      <button class="linkish" type="button" id="folderUngroup">Map opheffen</button></div>
+  </section>
   <div class="menu" id="appMenu" role="menu" aria-label="Acties voor deze app" hidden></div>
 
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
