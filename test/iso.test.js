@@ -31,9 +31,11 @@ test('late.sh, de first-boot-dienst en firstboot.sh passen bij elkaar', () => {
   assert.match(unit, /ConditionPathExists=\/opt\/homebaseos-setup\/install\.sh/);
   assert.match(first, /install\.sh/);
   assert.match(first, /systemctl disable homebaseos-firstboot\.service/);
-  // Het wachtwoord staat apart, zodat server.js het kan weghalen na een eigen wachtwoord.
-  assert.match(first, /homebaseos-wachtwoord\.issue/);
+  // Geen wachtwoord op het scherm: het account maak je in de browser. (Een oud wachtwoordbestand ruimt server.js op.)
+  assert.doesNotMatch(first, /APP_PASSWORD|homebaseos-wachtwoord\.issue/);
+  assert.match(first, /account/);
   assert.ok(fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8').includes('/etc/issue.d/homebaseos-wachtwoord.issue'));
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', 'install.sh'), 'utf8'), /APP_PASSWORD=\$/);
   // De bouwscript kopieert alles wat late.sh van /cdrom/homebaseos gebruikt.
   const build = read('build-iso.sh');
   for (const f of ['late.sh', 'homebaseos-firstboot.service', 'installing.issue']) assert.ok(build.includes('"$HERE/' + f + '"'), f);

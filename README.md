@@ -27,7 +27,7 @@ Bij elke release staat een installatie-ISO: `homebaseos-<versie>-amd64.iso`. Dat
    - **de schijf voor het systeem**: kies de SSD voor Debian, *niet* een van je dataschijven;
    - de bevestiging dat die schijf gewist mag worden;
    - een wachtwoord voor de beheerder `homebase` (voor SSH en `sudo`).
-5. Na de herstart installeert HomeBaseOS zichzelf (5 à 15 minuten). Daarna staan het adres en het eerste wachtwoord op het scherm van de server. Open dat adres in je browser: de welkomstwizard doet de rest.
+5. Na de herstart installeert HomeBaseOS zichzelf (5 à 15 minuten). Daarna staat het adres op het scherm van de server. Open dat adres in je browser: de welkomstwizard maakt je account aan en doet de rest.
 
 Taal en toetsenbord staan op Nederlands (België) en Belgisch AZERTY; de tijdzone op Europe/Brussels (aan te passen in de wizard). Mislukt de installatie bij de eerste opstart, dan staat dat op het scherm; het logboek is `/var/log/homebaseos-firstboot.log` en `sudo systemctl restart homebaseos-firstboot` probeert opnieuw.
 
@@ -50,12 +50,12 @@ sudo ./install.sh            # met een NVIDIA-kaart: sudo ./install.sh --nvidia
 ```
 
 Het script installeert ZFS, KVM/libvirt, Docker en HomeBaseOS, en zet HomeBaseOS aan als systemd-service.
-Op het einde toont het het adres en je **wachtwoord**. Dat staat ook in `/etc/homebaseos/homebaseos.env`.
+Op het einde toont het het adres. Open dat in je browser en maak in de welkomstwizard je **account** aan (gebruikersnaam en wachtwoord).
 Opnieuw uitvoeren werkt HomeBaseOS bij. Je instellingen blijven staan.
 
 ### 3. Een ZFS-pool maken
 
-Het makkelijkst gaat het in HomeBaseOS zelf: **Opslag > Pool aanmaken**. Vink de schijven aan, kies de indeling (stripe, mirror, RAID-Z1/2/3 of mirror-paren) en je ziet meteen hoeveel opslag je overhoudt, hoeveel schijven mogen uitvallen en wat er ongebruikt blijft bij schijven van verschillende grootte. Schijven waarop het systeem staat of die al in een pool zitten, kan je niet kiezen. HomeBaseOS gebruikt dezelfde opties als hieronder (ashift=12, lz4, /dev/disk/by-id). Wil je het liever met de hand doen:
+Het makkelijkst gaat het in HomeBaseOS zelf: in de welkomstwizard (stap *Opslag*) of later bij **Opslag > Pool aanmaken**. Vink de schijven aan, kies de indeling (stripe, mirror, RAID-Z1/2/3 of mirror-paren) en je ziet meteen hoeveel opslag je overhoudt, hoeveel schijven mogen uitvallen en wat er ongebruikt blijft bij schijven van verschillende grootte. Schijven waarop het systeem staat of die al in een pool zitten, kan je niet kiezen. HomeBaseOS gebruikt dezelfde opties als hieronder (ashift=12, lz4, /dev/disk/by-id) en maakt meteen de mappen (datasets) `appdata`, `media`, `backups`, `vms` en `isos` op de pool. Wat nog geen plek had (appgegevens, VM-schijven, ISO's en de gedeelde mappen van Unraid-apps), komt op die eerste pool. Verhuizen naar een andere pool kan later bij **Instellingen > Opslag** (zie *Appgegevens verhuizen*). Wil je het liever met de hand doen:
 
 > **Let op:** `zpool create` wist de schijven die je opgeeft. Controleer eerst welke schijven het zijn.
 
@@ -78,7 +78,11 @@ sudo zfs create snel/appdata     # gegevens van je Docker-apps
 sudo zfs create tank/media
 ```
 
-Zet daarna in `/etc/homebaseos/homebaseos.env` de juiste mappen, bv. `VM_DIR=/snel/vms` en `ISO_DIR=/tank/isos`, en voer `sudo systemctl restart homebaseos` uit.
+HomeBaseOS vindt zulke mappen bij de volgende start zelf (een dataset `<pool>/appdata`, `<pool>/vms` of `<pool>/isos`). Kies anders bij **Instellingen > Opslag** welke pool je voor wat gebruikt.
+
+#### Appgegevens verhuizen
+
+Bij **Instellingen > Opslag** kies je een andere pool voor de appgegevens en klik je op *Verhuizen*. HomeBaseOS stopt de apps die er een map hebben, kopieert alles met `rsync` naar `/<pool>/appdata`, past de paden in hun compose-bestanden aan (met een `.bak`) en start ze opnieuw. De oude map blijft staan: verwijder ze zelf als alles werkt. Apps die niet met Docker Compose gestart zijn, verhuizen niet mee (HomeBaseOS toont welke). Voor VM-schijven, ISO's en gedeelde mappen kies je daar ook een pool; bestaande bestanden blijven dan waar ze zijn.
 Debian voert elke maand automatisch een controle (scrub) uit. In HomeBaseOS zie je onder **Opslag** wanneer dat voor het laatst gebeurde.
 Onder **Opslag > Schijfbays** teken je je kast na: kies het aantal bays en hoeveel er op een rij staan, en sleep elke schijf naar de bay waarin ze zit. HomeBaseOS onthoudt de schijf aan haar serienummer. Valt een schijf uit of haal je ze eruit, dan kleurt haar bay rood met het model en serienummer, zodat je meteen weet welke je moet vervangen.
 
@@ -138,9 +142,9 @@ Omdat de templates voor Unraid gemaakt zijn, vertaalt HomeBaseOS ze bij het inst
 
 | In het template | Op je server |
 |---|---|
-| `/mnt/user/appdata/...`, `/mnt/cache/appdata/...` | `APPDATA_DIR/...` (standaard `/snel/appdata`) |
-| andere `/mnt/user/...`, `/mnt/diskN/...` | `SHARES_DIR/...` (standaard `/tank`) |
-| een leeg `/config`-pad | `APPDATA_DIR/<naam>` (zoals Community Apps dat ook doet) |
+| `/mnt/user/appdata/...`, `/mnt/cache/appdata/...` | de map voor appgegevens (*Instellingen > Opslag*, standaard `/<eerste pool>/appdata`) |
+| andere `/mnt/user/...`, `/mnt/diskN/...` | de map voor gedeelde mappen (standaard `/<eerste pool>`) |
+| een leeg `/config`-pad | `<appgegevens>/<naam>` (zoals Community Apps dat ook doet) |
 | `PUID=99`, `PGID=100`, `--user 99:100` | `APP_UID`, `APP_GID` (standaard 1000) |
 | `TZ` | de tijdzone van je server |
 | `--runtime=nvidia`, `--gpus all` | GPU-reservering in compose |
@@ -149,13 +153,13 @@ Omdat de templates voor Unraid gemaakt zijn, vertaalt HomeBaseOS ze bij het inst
 
 ### Eigen app
 
-Staat een app niet in de appstore? Kies in de appstore **Eigen app** en plak de naam van het image (bv. `louislam/uptime-kuma`) of een link naar de pagina ervan (Docker Hub, GitHub-pakketten, Quay). HomeBaseOS leest bij de registry welke poorten en mappen de app gebruikt, zonder het image al te downloaden, en vult het formulier in: een vrije poort, mappen in `APPDATA_DIR/<naam>`, PUID/PGID en de tijdzone. Je past alles aan in hetzelfde formulier als bij de instellingen van een app en installeert. Een eigen app kan je later verwijderen zoals een app uit de appstore.
+Staat een app niet in de appstore? Kies in de appstore **Eigen app** en plak de naam van het image (bv. `louislam/uptime-kuma`) of een link naar de pagina ervan (Docker Hub, GitHub-pakketten, Quay). HomeBaseOS leest bij de registry welke poorten en mappen de app gebruikt, zonder het image al te downloaden, en vult het formulier in: een vrije poort, mappen in `<appgegevens>/<naam>`, PUID/PGID en de tijdzone. Je past alles aan in hetzelfde formulier als bij de instellingen van een app en installeert. Een eigen app kan je later verwijderen zoals een app uit de appstore.
 
 Per app komt er een `compose.yaml` in `STACKS_DIR/<naam>` (standaard `/opt/stacks`, dezelfde map die Dockge gebruikt). Je kan het bestand dus ook zelf aanpassen.
 Voor privileged apps, apps met toegang tot Docker, apps op het host-netwerk en extra Docker-opties die niet overgenomen worden, toont HomeBaseOS eerst een waarschuwing.
 Poorten kan je altijd aanpassen, en met *+ Poort* voeg je er extra toe. Gebruikt een app het host-netwerk (bv. Plex of Home Assistant), dan luistert ze op haar eigen poorten. Pas je toch een poort aan, dan kiest HomeBaseOS het standaardnetwerk (bridge). Sommige apps zoeken toestellen in je netwerk en werken daarom het best met host.
 Apps uit de appstore kan je ook weer **verwijderen** (in het detailvenster van de app). Vink aan of hun gegevens mee weg moeten.
-HomeBaseOS wist alleen mappen binnen `APPDATA_DIR`.
+HomeBaseOS wist alleen mappen binnen de map voor appgegevens.
 
 > De templates zijn het werk van hun eigen maintainers. Community Apps (van Squid) verzamelt en controleert ze.
 > Gebruik de catalogus voor je eigen server. Wil je HomeBaseOS publiceren, vraag het dan eerst na bij de makers van Community Apps.
@@ -178,7 +182,7 @@ services:
       homebaseos.webui: "http://[IP]:[PORT:8096]/"
 ```
 
-**Ollama met je NVIDIA-kaart** (na `install.sh --nvidia` en een herstart):
+**Ollama met je NVIDIA-kaart** (na `install.sh --nvidia` en een herstart). Draait Ollama nog niet, dan zegt de AI-widget dat en brengt het AI-venster je naar Ollama in de appstore:
 
 ```yaml
 services:
@@ -211,15 +215,13 @@ In `/etc/homebaseos/homebaseos.env`, daarna `sudo systemctl restart homebaseos`.
 
 | Variabele | Betekenis |
 |---|---|
-| `APP_PASSWORD` | Wachtwoord voor de webinterface (verplicht) |
+| `APP_PASSWORD` | Alleen voor installaties van vroeger: geldt zolang er geen eigen account is. Leeg = bij de eerste keer een account aanmaken |
 | `SESSION_SECRET` | Vaste sleutel voor aanmeldingen (anders moet je na een herstart opnieuw aanmelden) |
 | `PORT` | Poort, standaard `8080` |
 | `OLLAMA_URL` | Adres van Ollama, bv. `http://127.0.0.1:11434` |
-| `VM_DIR` | Map voor VM-schijven, standaard `/tank/vms` |
-| `ISO_DIR` | Map met ISO's en schijfbestanden, standaard `/tank/isos` |
+| `VM_DIR`, `ISO_DIR` | Vroeger: map voor VM-schijven en voor ISO's. Nu bij *Instellingen > Opslag*; de variabele geldt alleen als daar niets gekozen is |
 | `VM_NETWORK` | `network=default` (NAT) of `bridge=br0` (thuisnetwerk) |
-| `APPDATA_DIR` | Gegevens van apps uit de appstore, standaard `/snel/appdata` |
-| `SHARES_DIR` | Waar Unraid-shares uit templates naartoe gaan, standaard `/tank` |
+| `APPDATA_DIR`, `SHARES_DIR` | Vroeger: appgegevens en de map voor Unraid-shares. Nu bij *Instellingen > Opslag* (zelfde voorrang) |
 | `STACKS_DIR` | Compose-bestanden van de appstore, standaard `/opt/stacks` |
 | `APP_UID`, `APP_GID` | Gebruiker voor apps (in plaats van 99:100 van Unraid), standaard `1000` |
 | `STORE_FEED_URL` | Andere bron voor de catalogus (optioneel) |
@@ -286,15 +288,17 @@ In **Instellingen > Algemeen** kies je de **tijdzone** van de server (apps uit d
 
 ## Eerste keer aanmelden
 
-Na de installatie meld je je aan met het wachtwoord dat `install.sh` toont. Daarna start een **welkomstwizard**: taal en thema, een eigen wachtwoord, de naam van de server en de tijdzone, opslag (een pool aanmaken) en tweestapsverificatie. Elke stap mag je overslaan; met *Later instellen* sluit je de wizard. Je opent hem opnieuw bij **Instellingen > Algemeen**.
+Open na de installatie het adres van de server. Er is nog geen wachtwoord: de **welkomstwizard** opent meteen (zonder dashboard erachter) en vraagt taal en thema, en daarna een **account** (gebruikersnaam en wachtwoord). Daarna volgen de naam van de server en de tijdzone, opslag (je kan meteen in die stap een pool aanmaken) en tweestapsverificatie. Die stappen mag je overslaan; met *Later instellen* sluit je de wizard. Je opent hem opnieuw bij **Instellingen > Algemeen**.
 
-Kies je een eigen wachtwoord, dan werkt het wachtwoord uit `homebaseos.env` niet meer en worden andere browsers afgemeld. Wijzigen kan later bij **Instellingen > Beveiliging**.
+> Tot het account bestaat, kan iedereen in je netwerk het aanmaken. Doe het dus meteen na de installatie.
 
-**Wachtwoord vergeten?** Voer op de server `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Dan geldt weer `APP_PASSWORD` uit `/etc/homebaseos/homebaseos.env`, en staat ook tweestapsverificatie uit.
+Wijzigen kan later bij **Instellingen > Beveiliging**. Een installatie van vroeger met `APP_PASSWORD` blijft werken; daar kies je in de wizard een eigen wachtwoord.
+
+**Wachtwoord vergeten?** Voer op de server `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Daarna maak je in de browser opnieuw een account aan (of geldt weer `APP_PASSWORD` als dat in `/etc/homebaseos/homebaseos.env` staat), en staat tweestapsverificatie uit.
 
 ## Aanmelden en tweestapsverificatie
 
-HomeBaseOS vraagt je wachtwoord (`APP_PASSWORD`). Met *Aangemeld blijven op dit toestel* blijf je 30 dagen aangemeld; zonder vinkje ben je afgemeld als je de browser sluit.
+HomeBaseOS vraagt je gebruikersnaam en wachtwoord. Met *Aangemeld blijven op dit toestel* blijf je 30 dagen aangemeld; zonder vinkje ben je afgemeld als je de browser sluit.
 
 Voor extra zekerheid zet je in **Instellingen > Beveiliging** de **tweestapsverificatie** aan. Na je wachtwoord vraagt HomeBaseOS dan een code van 6 cijfers uit een authenticator-app (Google Authenticator, Microsoft Authenticator, 1Password, Aegis, …):
 
@@ -306,20 +310,20 @@ Voor extra zekerheid zet je in **Instellingen > Beveiliging** de **tweestapsveri
 Na 10 foute pogingen (wachtwoord of code) binnen 10 minuten blokkeert HomeBaseOS dat adres 5 minuten.
 De code hangt af van de klok: staat de klok van je gsm of je server verkeerd, dan klopt de code niet. Debian houdt de klok gelijk met `systemd-timesyncd`.
 
-**Alles kwijt (gsm én herstelcodes)?** Meld je aan op de server zelf en voer `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Dan staat tweestapsverificatie uit, en geldt weer het wachtwoord uit `homebaseos.env`.
+**Alles kwijt (gsm én herstelcodes)?** Meld je aan op de server zelf en voer `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Dan staat tweestapsverificatie uit en maak je opnieuw een account aan.
 
 ## Veiligheid
 
-- HomeBaseOS draait als **root**: het kan VM's en schijfbestanden wissen. Daarom start het niet zonder wachtwoord.
+- HomeBaseOS draait als **root**: het kan VM's en schijfbestanden wissen. Daarom kan je niets doen tot er een account is: zonder account geeft de server alleen de welkomstwizard.
 - **Stel HomeBaseOS niet open naar het internet.** Gebruik voor toegang van buitenaf een VPN (WireGuard, Tailscale of de VPN van je router).
 - Het VNC-scherm van een VM is bereikbaar in je netwerk, beveiligd met een wachtwoord van 8 tekens. Ook dat hoort niet op het internet. De console in de browser loopt via HomeBaseOS en vraagt dus ook je aanmelding.
 - Stoppen, afsluiten en verwijderen vragen altijd eerst om bevestiging.
 
 ## Problemen oplossen
 
-- **HomeBaseOS start niet**: bekijk `journalctl -u homebaseos -e`. Vaak ontbreekt `APP_PASSWORD`.
+- **HomeBaseOS start niet**: bekijk `journalctl -u homebaseos -e`.
 - **"virsh is niet geïnstalleerd"** of **"Docker is niet bereikbaar"**: voer `sudo ./install.sh` opnieuw uit.
-- **"De map voor VM-schijven bestaat niet"**: maak de dataset (`zfs create snel/vms`) of pas `VM_DIR` aan.
+- **"De map voor VM-schijven bestaat niet"** of **"Er is nog geen map voor appgegevens"**: maak een pool aan bij *Opslag*, of kies een pool bij *Instellingen > Opslag*.
 - **Geen CPU/RAM bij een VM**: het geheugen komt van de balloon-driver in de VM. Zonder die driver toont HomeBaseOS wat de VM op de server inneemt.
 - **"De appcatalogus kon niet geladen worden"**: de server heeft internet nodig om de feed op te halen. Daarna werkt hij 24 uur uit de cache.
 - **App uit de appstore start niet**: open `STACKS_DIR/<naam>/compose.yaml` en bekijk het logboek van de app. Sommige templates verwachten nog een database of een andere app (zie *Vereist* in de appstore).

@@ -162,3 +162,23 @@ test('eigen wachtwoord (scrypt) en welkomstwizard', () => {
   onb.reset();
   assert.equal(onb.getState().done, false);
 });
+
+test('account aanmaken bij de eerste keer (gebruikersnaam + wachtwoord)', () => {
+  fs.rmSync(path.join(process.env.DATA_DIR, 'auth.json'), { force: true });
+  auth._reset();
+  assert.equal(auth.userName(), null);
+  assert.equal(auth.checkUser('wat dan ook'), true); // zonder gebruikersnaam telt alleen het wachtwoord
+  assert.throws(() => auth.createAccount('1x', 'paard batterij nietje'), /gebruikersnaam/);
+  assert.throws(() => auth.createAccount('Lennert', 'kort'), /minstens 10/);
+  assert.equal(auth.hasPassword(), false);
+  assert.deepEqual(auth.createAccount('Lennert', 'paard batterij nietje'), { ok: true, user: 'lennert' });
+  assert.equal(auth.hasPassword(), true);
+  assert.equal(auth.checkUser('LENNERT '), true);
+  assert.equal(auth.checkUser('admin'), false);
+  // Een tweede account kan niet, en een nieuw wachtwoord laat de gebruikersnaam staan.
+  assert.throws(() => auth.createAccount('admin', 'paard batterij nietje'), /al een account/);
+  auth.setPassword('een ander lang wachtwoord');
+  auth._reset();
+  assert.equal(auth.userName(), 'lennert');
+  assert.equal(auth.verifyPassword('een ander lang wachtwoord'), true);
+});
