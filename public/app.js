@@ -1,4 +1,4 @@
-/* Thuisbasis — frontend */
+/* HomeBaseOS — frontend */
 (function () {
   'use strict';
 
@@ -104,7 +104,7 @@
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { const e = new Error(tr(data.error) || t('Fout {status}', { status: res.status })); e.status = res.status; throw e; }
+      if (!res.ok) { const e = new Error(tr(data.error) || t('Fout {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
       return data;
     },
     get(p) { return this.req('GET', p); },
@@ -150,9 +150,11 @@
   }
 
   /* ------------------------------------------------------------ klok */
+  // Tijdnotatie uit Instellingen > Algemeen: 'auto' (volgens de taal), '24' of '12'.
+  function clockOpts(c = S.config && S.config.clock) { return c === '24' ? { hourCycle: 'h23' } : c === '12' ? { hourCycle: 'h12', hour: 'numeric' } : {}; }
   function tickClock() {
     const now = new Date();
-    $('#clock').textContent = now.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+    $('#clock').textContent = now.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() });
     const d = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
     $('#date').textContent = d.charAt(0).toUpperCase() + d.slice(1);
     const h = now.getHours();
@@ -170,7 +172,7 @@
   function renderOverview() {
     const o = S.overview; if (!o) return;
     $('#host').textContent = o.hostname || '';
-    document.title = (o.hostname ? o.hostname + ' – ' : '') + 'Thuisbasis';
+    document.title = (o.hostname ? o.hostname + ' – ' : '') + 'HomeBaseOS';
     const cpu = o.cpu && o.cpu.percent; const mem = o.memory && o.memory.percent;
     setRing('#cpuRing', cpu); $('#cpuPct').textContent = cpu == null ? '–' : Math.round(cpu) + '%';
     setRing('#memRing', mem); $('#memPct').textContent = mem == null ? '–' : Math.round(mem) + '%';
@@ -210,7 +212,7 @@
     const st = $('#aiState');
     if (S.aiError) {
       $('#aiLine').textContent = t(S.config.ollama ? 'Ollama niet bereikbaar' : 'Ollama niet ingesteld');
-      $('#aiSub').textContent = S.config.ollama ? S.aiError : t('Zet OLLAMA_URL in /etc/thuisbasis/thuisbasis.env.');
+      $('#aiSub').textContent = S.config.ollama ? S.aiError : t('Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env.');
       st.textContent = ''; st.className = 'pill'; return;
     }
     const ai = S.ai; if (!ai) return;
@@ -244,6 +246,7 @@
         <div class="vm-mini-row"><span class="vm-mini-name">${esc(v.name)}</span><span class="pill ${VM_PILL[kind]}">${esc(vmStateText(v.state))}</span></div>
         ${live ? `<div class="vm-mini-bars" aria-hidden="true"><div class="bar">${bar(vmCpuPct(v))}</div><div class="bar">${bar(vmRamPct(v))}</div></div>` : ''}
         ${sub ? `<div class="muted small">${esc(sub)}</div>` : ''}
+        ${live && v.ips && v.ips.length ? `<div class="vm-ip">${esc(v.ips[0])}${v.ips.length > 1 ? ' <span class="muted">+' + (v.ips.length - 1) + '</span>' : ''}</div>` : ''}
       </li>`;
     }).join('');
   }
@@ -316,6 +319,102 @@
       </div>`;
   }
 
+  /* --- widgets op het dashboard: volgorde en verbergen (bewaard op de server, zoals de apps) */
+  const WIDGET_NAMES = { clock: 'Klok', sys: 'Systeem', storage: 'Opslag', shares: 'Gedeelde mappen', ai: 'AI', vms: 'Virtuele machines' };
+  const WIDGET_ICONS = {
+    up: '<path d="M6 15l6-6 6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  };
+  let widgetEdit = false, wdrag = null;
+  const widgetBox = $('#widgets');
+  const slots = () => [...widgetBox.querySelectorAll(':scope > .widget-slot')];
+  function applyWidgets() {
+    const cfg = (S.layout && S.layout.widgets) || { order: [], hidden: [] };
+    const ids = slots().map((x) => x.dataset.widget);
+    const order = [...cfg.order.filter((id) => ids.includes(id)), ...ids.filter((id) => !cfg.order.includes(id))];
+    const edit = $('#widgetsEdit');
+    order.forEach((id) => widgetBox.insertBefore(widgetBox.querySelector(`:scope > [data-widget="${id}"]`), edit));
+    widgetBox.classList.toggle('editing', widgetEdit);
+    edit.textContent = t(widgetEdit ? 'Klaar' : 'Widgets aanpassen');
+    edit.classList.toggle('btn', widgetEdit); edit.classList.toggle('primary', widgetEdit); edit.classList.toggle('linkish', !widgetEdit);
+    const list = slots();
+    list.forEach((x, i) => {
+      const id = x.dataset.widget, hid = cfg.hidden.includes(id), name = t(WIDGET_NAMES[id] || id);
+      x.hidden = hid && !widgetEdit;
+      x.classList.toggle('is-hidden', hid);
+      let ctl = x.querySelector(':scope > .widget-ctl');
+      if (!widgetEdit) { if (ctl) ctl.remove(); return; }
+      if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; x.appendChild(ctl); }
+      const b = (act, icon, label, extra = '') => `<button type="button" data-wact="${act}" aria-label="${esc(label)}" title="${esc(label)}"${extra}><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS[icon]}</svg></button>`;
+      ctl.innerHTML = b('up', 'up', t('{name} naar boven', { name }), i === 0 ? ' disabled' : '') + b('down', 'down', t('{name} naar beneden', { name }), i === list.length - 1 ? ' disabled' : '')
+        + b('toggle', hid ? 'eyeOff' : 'eye', t(hid ? '{name} tonen' : '{name} verbergen', { name }), ` class="eye" aria-pressed="${!hid}"`);
+    });
+  }
+  function saveWidgets() {
+    const list = slots();
+    S.layout = { ...S.layout, widgets: { order: list.map((x) => x.dataset.widget), hidden: list.filter((x) => x.classList.contains('is-hidden')).map((x) => x.dataset.widget) } };
+    applyWidgets(); postLayout();
+  }
+  $('#widgetsEdit').addEventListener('click', () => { widgetEdit = !widgetEdit; applyWidgets(); });
+  widgetBox.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-wact]'); if (!b || !widgetEdit) return;
+    e.stopPropagation();
+    const slot = b.closest('.widget-slot');
+    if (b.dataset.wact === 'toggle') slot.classList.toggle('is-hidden');
+    else flip(widgetBox, () => {
+      if (b.dataset.wact === 'up' && slot.previousElementSibling) widgetBox.insertBefore(slot, slot.previousElementSibling);
+      if (b.dataset.wact === 'down' && slot.nextElementSibling && slot.nextElementSibling.classList.contains('widget-slot')) widgetBox.insertBefore(slot.nextElementSibling, slot);
+    });
+    saveWidgets();
+    const again = $(`[data-widget="${slot.dataset.widget}"] [data-wact="${b.dataset.wact}"]`); if (again && !again.disabled) again.focus();
+  });
+  // Slepen: de widget schuift mee, de andere maken plaats.
+  widgetBox.addEventListener('pointerdown', (e) => {
+    if (!widgetEdit || e.button > 0 || e.target.closest('[data-wact]')) return;
+    const slot = e.target.closest('.widget-slot'); if (!slot) return;
+    e.preventDefault();
+    wdrag = { slot, y0: e.clientY, started: false };
+    const move = (ev) => {
+      if (!wdrag.started && Math.abs(ev.clientY - wdrag.y0) < 6) return;
+      wdrag.started = true; slot.classList.add('lifting');
+      const over = document.elementFromPoint(ev.clientX, ev.clientY);
+      const target = over && over.closest('#widgets > .widget-slot');
+      if (!target || target === slot) return;
+      const r = target.getBoundingClientRect(), after = ev.clientY > r.top + r.height / 2;
+      const ref = after ? target.nextElementSibling : target; // invoegen vóór ref
+      if (ref === slot || slot.nextElementSibling === ref) return; // staat er al
+      flip(widgetBox, () => widgetBox.insertBefore(slot, ref));
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+      slot.classList.remove('lifting');
+      if (wdrag && wdrag.started) saveWidgets();
+      wdrag = null;
+    };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+  });
+
+  /* --- widget: gedeelde mappen */
+  async function loadShares() {
+    try { S.shares = await api.get('/api/shares'); S.sharesError = null; } catch (e) { S.sharesError = e.message; }
+    renderSharesWidget();
+  }
+  function renderSharesWidget() {
+    const ul = $('#shareMini'), pill = $('#shareConn'), d = S.shares;
+    if (!d) { ul.innerHTML = `<li class="muted small">${S.sharesError ? esc(S.sharesError) : t('Laden…')}</li>`; pill.textContent = ''; return; }
+    if (!d.installed) { ul.innerHTML = `<li class="muted small">${t('Samba is nog niet geïnstalleerd.')}</li>`; pill.textContent = ''; return; }
+    const c = d.connections || { total: 0, perShare: {} };
+    pill.textContent = c.total ? t('{n} verbonden', { n: c.total }) : (d.running ? t('Actief') : t('Uit'));
+    pill.className = 'pill ' + (c.total || d.running ? 'ok' : 'warn');
+    ul.innerHTML = d.shares.slice(0, 5).map((sh) => {
+      const users = Object.keys(sh.users).length, n = c.perShare[sh.name] || 0;
+      const side = n ? t('{n} verbonden', { n }) : [users ? t(users === 1 ? '{n} gebruiker' : '{n} gebruikers', { n: users }) : null, sh.guest ? t('gasten') : null].filter(Boolean).join(' · ');
+      return `<li><span class="name">${esc(sh.name)}</span><span class="muted small">${esc(side)}</span></li>`;
+    }).join('') + (d.shares.length > 5 ? `<li class="muted small">${t('en nog {n}', { n: d.shares.length - 5 })}</li>` : '')
+      || `<li class="muted small">${t('Nog geen gedeelde mappen. Klik om er een te maken.')}</li>`;
+  }
+
   /* --- startscherm: volgorde en mappen (zoals op een iPad) */
   const appByName = (n) => S.apps.find((a) => a.name === n);
   // De opgeslagen indeling, zonder verdwenen apps en met nieuwe apps achteraan.
@@ -334,13 +433,19 @@
   const tidy = (items) => items.flatMap((it) => (typeof it === 'string' ? [it] : it.apps.length > 1 ? [it] : it.apps));
   let layoutTimer = null;
   function setLayout(items) {
-    S.layout = { items: tidy(items) };
+    S.layout = { ...S.layout, items: tidy(items) };
     if (S.folder && !S.layout.items.some((it) => it.folder === S.folder)) closeFolder();
     renderApps();
+    postLayout();
+  }
+  function postLayout() {
     clearTimeout(layoutTimer);
     layoutTimer = setTimeout(() => api.post('/api/layout', S.layout).catch((e) => toast(t('De indeling opslaan lukte niet: {error}', { error: e.message }), true)), 300);
   }
-  async function loadLayout() { try { S.layout = await api.get('/api/layout'); } catch (e) { S.layout = { items: [] }; } renderApps(); }
+  async function loadLayout() {
+    try { S.layout = await api.get('/api/layout'); } catch (e) { S.layout = { items: [] }; }
+    renderApps(); applyWidgets();
+  }
   const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
   const folderOf = (name) => S.layout.items.find((it) => typeof it !== 'string' && it.apps.includes(name)) || null;
   // Een app uit de indeling halen (thuis of uit een map). Geeft de nieuwe lijst terug.
@@ -594,7 +699,7 @@
     const upd = S.apps.filter((a) => a.update);
     const canAll = upd.filter((a) => a.canUpdate && !S.appBusy[a.id]);
     const checked = Math.max(0, ...S.apps.map((a) => a.updateChecked || 0));
-    const when = checked ? t('Laatst gecontroleerd: {when}', { when: new Date(checked).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }) : t('Nog niet gecontroleerd');
+    const when = checked ? t('Laatst gecontroleerd: {when}', { when: new Date(checked).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) : t('Nog niet gecontroleerd');
     el.innerHTML = (upd.length
       ? `<button class="pill warn upd-pill" type="button" data-upd="show"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg>${t(upd.length === 1 ? '{n} update' : '{n} updates', { n: upd.length })}</button>
          ${canAll.length ? `<button class="linkish" type="button" data-upd="all">${t('Alles bijwerken')}</button>` : ''}`
@@ -647,6 +752,8 @@
     if (after) after(body);
   }
   $('#winClose').addEventListener('click', () => win.close());
+  // Een link naar Instellingen in een venster: het venster gaat dicht, Instellingen opent erboven.
+  win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
   win.addEventListener('click', (e) => { if (e.target === win || e.target.closest('[data-close]')) win.close(); });
   // Het close-event komt asynchroon: is er intussen al een nieuw venster open, dan dat niet leegmaken.
   win.addEventListener('close', () => { if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
@@ -795,7 +902,7 @@
         try {
           const lines = await api.get(appPath(a, '/logs?tail=' + $('#logTail', body).value));
           pre.innerHTML = lines.length ? lines.map((l) => {
-            const ts = l.timestamp ? new Date(l.timestamp).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+            const ts = l.timestamp ? new Date(l.timestamp).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', ...clockOpts() }) : '';
             return (ts ? `<span class="ts">${esc(ts)}</span>  ` : '') + esc(l.message);
           }).join('\n') : t('Nog geen logregels.');
           if (atEnd) pre.scrollTop = pre.scrollHeight;
@@ -863,7 +970,7 @@
         <dt>${t('Image')}</dt><dd>${esc(s.image)}</dd>
         <dt>${t('Versie')}</dt><dd>${a.update ? `<span class="temp-warn">${t('Er is een nieuwe versie')}</span>` + (a.canUpdate ? ' · ' + t('kies Bijwerken in het menu') : '')
           : a.update === false ? t('Up-to-date') : esc(a.updateError ? t('Onbekend: {reason}', { reason: tr(a.updateError) }) : t('Nog niet gecontroleerd'))}
-          ${a.updateChecked ? `<span class="muted small"> · ${t('gecontroleerd {when}', { when: esc(new Date(a.updateChecked).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) })}</span>` : ''}</dd>
+          ${a.updateChecked ? `<span class="muted small"> · ${t('gecontroleerd {when}', { when: esc(new Date(a.updateChecked).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() })) })}</span>` : ''}</dd>
         <dt>${t('Poorten')}</dt><dd>${esc(ports)}</dd>
         ${c ? `<dt>${t('Compose-project')}</dt><dd>${esc(c.project)}</dd>` : ''}
       </dl>
@@ -882,7 +989,7 @@
       <h3>${t('Container')}</h3>
       ${!c ? `<p class="muted small">${t('Deze app is niet met Docker Compose gestart. Poorten, mappen en variabelen pas je dan aan door de container opnieuw te maken, bv. vanuit de appstore.')}</p>`
         : !c.editable ? `<p class="muted small">${c.files.length > 1 ? t('Dit project gebruikt meerdere bestanden ({files}). Pas het daar zelf aan.', { files: esc(c.files.join(', ')) })
-          : t('Dit project gebruikt een bestand dat Thuisbasis niet kan lezen. Pas het daar zelf aan.')}</p>`
+          : t('Dit project gebruikt een bestand dat HomeBaseOS niet kan lezen. Pas het daar zelf aan.')}</p>`
         : `<p class="muted small">${esc(c.file)}${c.project !== a.name ? ' · ' + t('project {name}', { name: esc(c.project) }) : ''}</p>
           <div id="cfForm"${c.form ? '' : ' hidden'}></div>
           <div id="cfText"${c.form ? ' hidden' : ''}>
@@ -1276,7 +1383,7 @@
           </div>
           <p class="muted small">${t('Sleep een schijf naar een bay. Op een volle bay wisselen de twee van plaats. Slepen gaat niet? Tik op een schijf en daarna op een bay.')}</p>` : ''}
         <div class="bays-wrap"><div class="nas">
-          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'Thuisbasis')}</span>
+          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'HomeBaseOS')}</span>
             <span class="nas-power" title="${t('Aan')}"><i class="led"></i></span></div>
           <div class="bay-grid" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
           ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
@@ -1535,7 +1642,7 @@
       <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Pool aanmaken')}</button></div>
       ${s.pools.map(poolBlock).join('')}
       ${loose.length ? `<h3>${t('Niet in een pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
-      <h3>${t('Datasets')}</h3>
+      <div class="bays-head"><h3>${t('Datasets')}</h3><button class="btn sm" type="button" data-open="shares">${t('Gedeelde mappen beheren')}</button></div>
       <ul class="rows">${s.datasets.map((d) => `<li>
         <div><div class="row-title">${esc(d.name)}</div><div class="row-sub">${esc([d.mountpoint, d.compress > 1.01 ? t('compressie {x}×', { x: nf.format(d.compress) }) : null].filter(Boolean).join(' · '))}</div></div>
         <div class="row-side">${bytes(d.used)}</div></li>`).join('') || `<li><span class="muted">${t('Geen datasets')}</span></li>`}</ul>`;
@@ -1615,7 +1722,7 @@
   }
 
   // De console opent in een eigen tabblad (één per VM), zoals in Unraid.
-  // De console opent groot in Thuisbasis; daar kan je ze met "Los venster" in een eigen browservenster zetten.
+  // De console opent groot in HomeBaseOS; daar kan je ze met "Los venster" in een eigen browservenster zetten.
   const consoleLink = (id, cls) => `<button class="${cls}" type="button" data-console="${esc(id)}">${t('Console')}</button>`;
   const conWin = $('#conWin'), conFrame = $('#conFrame');
   function openConsole(id) {
@@ -1624,10 +1731,23 @@
     if (!conWin.open) conWin.showModal();
     conFrame.focus();
   }
+  // Terminal op de server: zelfde venster als de console, met terminal.html erin.
+  function openTerminal() {
+    if (win.open) win.close();
+    conFrame.src = 'terminal.html';
+    if (!conWin.open) conWin.showModal();
+    conFrame.focus();
+  }
+  $('#termBtn').addEventListener('click', openTerminal);
   // De console (in de iframe) roept dit op bij Sluiten of Los venster. De iframe leegmaken verbreekt de verbinding.
   window.TB_closeConsole = () => { conFrame.src = 'about:blank'; if (conWin.open) conWin.close(); };
   conWin.addEventListener('close', () => { conFrame.src = 'about:blank'; });
   conWin.addEventListener('click', (e) => { if (e.target === conWin) window.TB_closeConsole(); });
+  // IP-adressen (klikbaar om te kopiëren). Zonder adres: uitleg waarom.
+  function vmIpHtml(v) {
+    if (!v.ips || !v.ips.length) return `<span title="${esc(t('Installeer qemu-guest-agent in de VM, of wacht tot ze een adres van je router heeft.'))}">${t('IP-adres nog onbekend')}</span>`;
+    return `${t('IP')} ${v.ips.map((ip) => `<button class="linkish" type="button" data-copy="${esc(ip)}" title="${esc(t('Klik om te kopiëren'))}"><b>${esc(ip)}</b></button>`).join(', ')}`;
+  }
   function vmCardHtml(v) {
     const kind = vmKind(v.state), busy = S.vmBusy[v.id];
     const btn = (act, cls = '') => `<button class="btn ${cls}" type="button" data-vm="${esc(v.id)}" data-do="${act}"${busy ? ' disabled' : ''}>${t(VM_ACTS[act].label)}</button>`;
@@ -1650,6 +1770,7 @@
       ${kind === 'on' || kind === 'paused'
         ? `<div class="vm-meters">${meterHtml('CPU', vmCpuPct(v), vmCpuText(v))}${meterHtml('RAM', vmRamPct(v), vmRamText(v))}</div>` : ''}
       <p class="vm-specs">${esc(vmSpecs(v))}</p>
+      ${kind === 'on' || kind === 'paused' ? `<p class="vm-ip">${vmIpHtml(v)}</p>` : ''}
       <div class="btn-row">${main}</div>
       <div class="vm-force">${foot}</div>
     </article>`;
@@ -1688,7 +1809,7 @@
     const shown = all.filter((v) => vmMatches(v, S.vmFilter) && (!q || v.name.toLowerCase().includes(q)));
     if (!shown.length) return show(`<p class="empty">${t("Geen VM's die hierbij passen.")}</p>`);
 
-    const sig = shown.map((v) => [v.id, v.state, S.vmBusy[v.id] || '', v.autostart, v.delay, !!v.startsAt, v.vcpus, v.memory, v.description].join('|')).join('\n');
+    const sig = shown.map((v) => [v.id, v.state, S.vmBusy[v.id] || '', v.autostart, v.delay, !!v.startsAt, v.vcpus, v.memory, v.description, (v.ips || []).join(',')].join('|')).join('\n');
     if (sig === vmSig) { shown.forEach(patchVmCard); return; }
     vmSig = sig;
     list.innerHTML = shown.map(vmCardHtml).join('');
@@ -1981,7 +2102,7 @@
   const VM_KINDS = {
     linux: { label: 'Linux', help: 'Installeer Linux vanaf een ISO, bijvoorbeeld Debian of Ubuntu Server.', vcpus: 2, memoryGb: 4, diskGb: 32 },
     windows: { label: 'Windows 11', help: 'Windows 11 met TPM en UEFI. De schijf gebruikt SATA, zodat de installer hem meteen ziet.', vcpus: 4, memoryGb: 8, diskGb: 64 },
-    import: { label: 'Bestaande schijf', help: 'Gebruik een bestaand schijfbestand, zoals het qcow2-bestand van Home Assistant OS. Thuisbasis maakt er een kopie van.', vcpus: 2, memoryGb: 4 },
+    import: { label: 'Bestaande schijf', help: 'Gebruik een bestaand schijfbestand, zoals het qcow2-bestand van Home Assistant OS. HomeBaseOS maakt er een kopie van.', vcpus: 2, memoryGb: 4 },
   };
   async function vmCreateWindow() {
     openWindow(t('Nieuwe VM'), `<p class="lead">${t('Laden…')}</p>`);
@@ -2185,7 +2306,7 @@
         <div class="cf-list" id="storeExtra"></div>
         <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Poort')}</button></div>
         ${adv.length ? `<details class="adv"><summary>${t('Geavanceerd ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
-        <p class="muted small">${t('Image: {image}. Thuisbasis maakt er een compose-bestand van, dat je later ook in Dockge kan openen.', { image: esc(d.image) })}</p>
+        <p class="muted small">${t('Image: {image}. HomeBaseOS maakt er een compose-bestand van, dat je later ook in Dockge kan openen.', { image: esc(d.image) })}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Installeren')}</button>
           <button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
@@ -2202,8 +2323,8 @@
       if (!(n && n.subnet)) form.elements.__ip.value = '';
       form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : '';
       $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('Je koos zelf een poort, daarom gebruikt de app nu het standaardnetwerk (bridge). Met host luistert de app altijd op zijn eigen poorten.')
-        : v === 'host' ? t('De app gebruikt het netwerk van de server en luistert op zijn eigen poorten. Pas je hieronder een poort aan, dan kiest Thuisbasis het standaardnetwerk (bridge).')
-        : !ports ? t('De app krijgt een eigen adres in je thuisnetwerk en is daar bereikbaar op de poorten van de app zelf. Pas je een poort aan, dan kiest Thuisbasis het standaardnetwerk (bridge).')
+        : v === 'host' ? t('De app gebruikt het netwerk van de server en luistert op zijn eigen poorten. Pas je hieronder een poort aan, dan kiest HomeBaseOS het standaardnetwerk (bridge).')
+        : !ports ? t('De app krijgt een eigen adres in je thuisnetwerk en is daar bereikbaar op de poorten van de app zelf. Pas je een poort aan, dan kiest HomeBaseOS het standaardnetwerk (bridge).')
         : n ? t('Apps in hetzelfde netwerk vinden elkaar op naam.') : t('Nieuwe netwerken maak je bij Instellingen → Docker-netwerken.');
     };
     let switched = false;
@@ -2268,7 +2389,7 @@
   /* --- eigen app: een image of een link naar Docker Hub, GitHub of Quay */
   function customAppWindow(prefill = '') {
     openWindow(t('Eigen app toevoegen'), `
-      <p class="lead">${t('Plak de naam van een image of een link naar de pagina ervan. Thuisbasis leest bij de registry welke poorten en mappen de app gebruikt en vult het formulier al in.')}</p>
+      <p class="lead">${t('Plak de naam van een image of een link naar de pagina ervan. HomeBaseOS leest bij de registry welke poorten en mappen de app gebruikt en vult het formulier al in.')}</p>
       <form class="inline-form" id="customImgForm">
         <input class="field" name="image" value="${esc(prefill)}" placeholder="${t('bv. louislam/uptime-kuma of https://hub.docker.com/r/linuxserver/jellyfin')}" spellcheck="false" autocomplete="off" aria-label="${t('Image of link')}" required>
         <button class="btn primary" type="submit">${t('Ophalen')}</button>
@@ -2383,24 +2504,25 @@
   }
 
   /* --- instellingen (eigen pagina op #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings() {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'Algemeen', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', about: 'Over' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'Algemeen', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', security: 'Beveiliging', update: 'Software-update', about: 'Over' }[tab]);
     $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
   }
 
   function generalPane(el) {
-    const theme = themeNow();
+    const theme = themeNow(), clock = S.config.clock || 'auto';
+    const sample = (c) => new Date(2026, 0, 1, 14, 30).toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit', ...clockOpts(c) });
     el.innerHTML = `
       <h2 class="pane-title">${t('Taal')}</h2>
-      <p class="muted small">${t('Geldt voor iedereen die Thuisbasis op deze server gebruikt.')}</p>
+      <p class="muted small">${t('Geldt voor iedereen die HomeBaseOS op deze server gebruikt.')}</p>
       <div class="choice-row" role="radiogroup" aria-label="${t('Taal')}">${Object.entries(LANGS).map(([k, name]) => `
         <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
       </div>
@@ -2408,9 +2530,26 @@
       <p class="muted small">${t('Geldt alleen voor dit toestel.')}</p>
       <div class="choice-row" role="radiogroup" aria-label="${t('Thema')}">${[['auto', t('Automatisch')], ['light', t('Licht (ochtendnevel)')], ['dark', t('Donker (avond)')]].map(([k, name]) => `
         <label class="choice"><input type="radio" name="theme" value="${k}"${k === theme ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
-      </div>`;
+      </div>
+      <h2 class="pane-title">${t('Tijdnotatie')}</h2>
+      <p class="muted small">${t('Geldt voor iedereen die HomeBaseOS op deze server gebruikt.')}</p>
+      <div class="choice-row" role="radiogroup" aria-label="${t('Tijdnotatie')}">${[['auto', t('Volgens de taal')], ['24', t('24 uur')], ['12', t('12 uur')]].map(([k, name]) => `
+        <label class="choice"><input type="radio" name="clock" value="${k}"${k === clock ? ' checked' : ''}><span>${esc(name)} · ${esc(sample(k))}</span></label>`).join('')}
+      </div>
+      <div id="dtBox"><h2 class="pane-title">${t('Datum en tijd')}</h2><p class="muted small">${t('Laden…')}</p></div>
+      <h2 class="pane-title">${t('Welkomstwizard')}</h2>
+      <p class="muted small">${t('Overloop de basisinstellingen opnieuw: wachtwoord, naam, tijdzone, opslag en tweestapsverificatie.')}</p>
+      <div class="btn-row"><button class="btn" type="button" data-onb-open>${t('Welkomstwizard openen')}</button></div>`;
+    el.onclick = (e) => { if (e.target.closest('[data-onb-open]')) { closeSettings(); openOnboarding(0); } };
     el.onchange = async (e) => {
       if (e.target.name === 'theme') { setTheme(e.target.value); return; }
+      if (e.target.name === 'clock') {
+        try {
+          const r = await api.post('/api/settings', { clock: e.target.value });
+          S.config.clock = r.clock || e.target.value; tickClock(); toast(t('Tijdnotatie opgeslagen.'));
+        } catch (ex) { toast(ex.message, true); }
+        return;
+      }
       if (e.target.name !== 'lang') return;
       try {
         await api.post('/api/settings', { language: e.target.value });
@@ -2418,6 +2557,92 @@
         location.reload(); // alles opnieuw opbouwen in de nieuwe taal
       } catch (ex) { toast(t('Taal opslaan lukte niet: {error}', { error: ex.message }), true); }
     };
+    dateTimeSection($('#dtBox', el));
+  }
+
+  // Tijdzones voor een <select>, gegroepeerd per werelddeel (Europe/Brussels → Europe).
+  function zoneOptions(zones, selected) {
+    const groups = {};
+    zones.forEach((z) => { const g = z.includes('/') ? z.split('/')[0] : t('Andere'); (groups[g] = groups[g] || []).push(z); });
+    return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map((z) =>
+      `<option value="${esc(z)}"${z === selected ? ' selected' : ''}>${esc(z.replace(/_/g, ' '))}</option>`).join('')}</optgroup>`).join('');
+  }
+
+  /* --- Algemeen: datum, tijd en tijdzone van de server */
+  async function dateTimeSection(box) {
+    let d;
+    try { d = await api.get('/api/datetime'); }
+    catch (e) { box.innerHTML = `<h2 class="pane-title">${t('Datum en tijd')}</h2><p class="form-error">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const offset = d.now - Date.now(); // verschil tussen de klok van de server en die van deze computer
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zoneOpts = zoneOptions(d.timezones, d.timezone);
+    const pad = (n) => String(n).padStart(2, '0');
+    // Waarde voor <input type="datetime-local"> in de tijdzone van de server.
+    const localValue = (ms, tz) => {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+        .formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+      return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+    };
+    const sync = d.ntp == null ? '' : d.ntp
+      ? (d.synced ? `<span class="pill ok">${d.server ? t('Gelijk met {server}', { server: esc(d.server) }) : t('Gesynchroniseerd')}</span>` : `<span class="pill warn">${t('Nog niet gesynchroniseerd')}</span>`)
+      : `<span class="pill">${t('Zelf ingesteld')}</span>`;
+    const skew = Math.abs(offset) > 120000 ? `<p class="small" style="color:var(--warn)">${t('De klok van de server en die van deze computer verschillen {n} minuten.', { n: Math.round(Math.abs(offset) / 60000) })}</p>` : '';
+    box.innerHTML = `
+      <h2 class="pane-title">${t('Datum en tijd')}</h2>
+      <p class="muted small">${t('De klok van de server. Apps uit de appstore krijgen dezelfde tijdzone (TZ).')}</p>
+      <div class="dt-now"><div><div class="dt-clock" id="dtClock"></div><div class="muted small" id="dtDate"></div></div>${sync}</div>
+      ${skew}
+      <form class="form dt-form" id="dtForm">
+        <label class="fld"><span>${t('Tijdzone')}</span>
+          <select class="field" name="timezone"${d.editable ? '' : ' disabled'}>${zoneOpts}</select></label>
+        ${browserTz && browserTz !== d.timezone && d.timezones.includes(browserTz) ? `<p class="small" style="margin-top:-4px"><button class="link-btn" type="button" data-tz="${esc(browserTz)}">${t('Gebruik {zone}, de tijdzone van deze computer', { zone: esc(browserTz.replace(/_/g, ' ')) })}</button></p>` : ''}
+        <label class="check"><input type="checkbox" name="ntp"${d.ntp ? ' checked' : ''}${d.editable ? '' : ' disabled'}> ${t('Tijd automatisch instellen via internet (NTP)')}</label>
+        <div data-dt="ntp"${d.ntp ? '' : ' hidden'}>
+          <label class="fld"><span>${t('Tijdservers')}</span>
+            <input class="field" name="servers" value="${esc(d.servers.join(' '))}" spellcheck="false" autocomplete="off"
+              placeholder="${esc(d.defaultServers.length ? t('Standaard: {list}', { list: d.defaultServers.slice(0, 2).join(', ') + (d.defaultServers.length > 2 ? ', …' : '') }) : t('Standaard van Debian'))}"></label>
+          <p class="muted small">${t('Laat leeg voor de standaard van Debian. Of gebruik bv. be.pool.ntp.org of het adres van je router. Meerdere servers scheid je met een spatie.')}</p>
+        </div>
+        <div data-dt="manual"${d.ntp ? ' hidden' : ''}>
+          <label class="fld"><span>${t('Datum en tijd')}</span>
+            <input class="field" type="datetime-local" name="time" value="${localValue(d.now, d.timezone)}"></label>
+          <p class="small"><button class="link-btn" type="button" data-dt-now>${t('Neem de tijd van deze computer')}</button></p>
+        </div>
+        ${d.editable ? '' : `<p class="muted small">${t('timedatectl is niet beschikbaar op deze server.')}</p>`}
+        <p class="form-error" role="alert" id="dtErr"></p>
+        <div class="btn-row"><button class="btn primary" type="submit"${d.editable ? '' : ' disabled'}>${t('Opslaan')}</button></div>
+      </form>`;
+    const F = $('#dtForm', box).elements;
+    let timeTouched = false;
+    const tick = () => {
+      if (!box.isConnected) return;
+      const now = new Date(Date.now() + offset), tz = d.timezone;
+      $('#dtClock', box).textContent = now.toLocaleTimeString(LOCALE, { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', ...clockOpts() });
+      const ds = now.toLocaleDateString(LOCALE, { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      $('#dtDate', box).textContent = ds.charAt(0).toUpperCase() + ds.slice(1) + ' · ' + tz.replace(/_/g, ' ');
+    };
+    clearInterval(netTimer); tick(); netTimer = setInterval(tick, 1000);
+    box.onchange = (e) => {
+      if (e.target.name === 'ntp') { $('[data-dt="ntp"]', box).hidden = !F.ntp.checked; $('[data-dt="manual"]', box).hidden = F.ntp.checked; }
+      if (e.target.name === 'time') timeTouched = true;
+      if (e.target.name === 'timezone' && !timeTouched) F.time.value = localValue(Date.now() + offset, F.timezone.value);
+    };
+    box.onclick = (e) => {
+      const tz = e.target.closest('[data-tz]');
+      if (tz) { F.timezone.value = tz.dataset.tz; F.timezone.dispatchEvent(new Event('change', { bubbles: true })); tz.parentNode.remove(); return; }
+      if (e.target.closest('[data-dt-now]')) { F.time.value = localValue(Date.now(), F.timezone.value); timeTouched = true; }
+    };
+    $('#dtForm', box).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('button[type="submit"]', e.target), err = $('#dtErr', box);
+      const body = { timezone: F.timezone.value, ntp: F.ntp.checked };
+      if (F.ntp.checked) body.servers = F.servers.value;
+      else if (timeTouched || !d.ntp) body.time = F.time.value;
+      err.textContent = ''; btn.disabled = true;
+      try { await api.post('/api/datetime', body); toast(t('Datum en tijd opgeslagen.')); dateTimeSection(box); }
+      catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
   }
 
   async function networkPane(el) {
@@ -2448,7 +2673,7 @@
       <p class="muted small" style="margin-top:6px">${t('De naam van de server in je netwerk. De verbinding blijft gewoon werken.')}</p>
 
       <h2 class="pane-title">${t('IP-adres')}</h2>
-      ${!n.editable ? `<p class="lead">${t('Dit netwerk wordt beheerd door {who}. Thuisbasis kan het alleen aanpassen als Debian ifupdown gebruikt (/etc/network/interfaces), de standaard voor een server zonder desktop.', { who: esc(n.manager || t('een ander programma')) })}</p>` : `
+      ${!n.editable ? `<p class="lead">${t('Dit netwerk wordt beheerd door {who}. HomeBaseOS kan het alleen aanpassen als Debian ifupdown gebruikt (/etc/network/interfaces), de standaard voor een server zonder desktop.', { who: esc(n.manager || t('een ander programma')) })}</p>` : `
       <form class="form" id="netForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('Netwerkkaart')}</span><select class="field" name="interface">${n.physical.map((p) => `<option${c && c.interface === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
@@ -2466,7 +2691,7 @@
           <small>${t('Gescheiden door komma\'s.')}</small></label>
         <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Bridge br0 maken voor VM\'s')}</label>
         <p class="muted small" style="margin-top:-6px">${t('Nodig om VM\'s (zoals Home Assistant) een eigen adres in je thuisnetwerk te geven. Zet daarna VM_NETWORK=bridge=br0.')}</p>
-        <p class="lead">${t('Na het toepassen heb je 2 minuten om te bevestigen. Bevestig je niet, bv. omdat de server onbereikbaar werd, dan zet Thuisbasis vanzelf de oude instellingen terug.')}</p>
+        <p class="lead">${t('Na het toepassen heb je 2 minuten om te bevestigen. Bevestig je niet, bv. omdat de server onbereikbaar werd, dan zet HomeBaseOS vanzelf de oude instellingen terug.')}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Toepassen')}</button></div>
       </form>`}`;
@@ -2708,6 +2933,496 @@
     };
   }
 
+  /* --- Gedeelde mappen (Samba) en hun gebruikers: een eigen venster, bovenaan in het menu */
+  function sharesWindow() {
+    openWindow(t('Gedeelde mappen'), `<p class="lead">${t('Laden…')}</p>`, (body) => sharesPane(body));
+    onWinClose = () => loadShares(); // de widget bijwerken na wijzigingen
+  }
+  const ACCESS = { ro: 'Lezen', rw: 'Lezen en schrijven' };
+  async function sharesPane(el, editing) {
+    el.onchange = null;
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/shares'); } catch (e) { el.innerHTML = `<p class="lead">${t('De gedeelde mappen konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (!el.isConnected) return; // venster intussen dicht of iets anders geopend
+    if (!d.installed) {
+      el.innerHTML = `<p class="lead">${t('Samba is nog niet geïnstalleerd. Voer install.sh opnieuw uit, of op de server: sudo apt install samba')}</p>`;
+      return;
+    }
+    if (editing !== undefined) return shareForm(el, d, editing);
+    const host = d.hostname;
+    el.innerHTML = `
+      ${d.running ? '' : `<p class="lead temp-warn">${t('Samba draait niet. Start het op de server met: sudo systemctl start smbd')}</p>`}
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Mappen')}</h2>
+        <button class="btn sm primary" type="button" data-share-new${d.users.length ? '' : ` disabled title="${t('Maak eerst een gebruiker aan.')}"`}>+ ${t('Gedeelde map')}</button></div>
+      <ul class="rows">${d.shares.map((sh) => `<li>
+          <div><div class="row-title">${esc(sh.name)}</div>
+            <div class="row-sub">${esc([sh.path, sh.comment].filter(Boolean).join(' · '))}</div>
+            <div class="share-access">${Object.entries(sh.users).map(([u, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${esc(u)} · ${t(a === 'rw' ? 'schrijven' : 'lezen')}</span>`).join('')}
+              ${sh.guest ? `<span class="pill warn">${t('gasten · lezen')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
+            <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div></div>
+          <div class="row-side btn-row"><button class="btn sm" type="button" data-share-edit="${esc(sh.name)}">${t('Bewerken')}</button>
+            <button class="btn sm danger" type="button" data-share-del="${esc(sh.name)}">${t('Verwijderen')}</button></div></li>`).join('')
+        || `<li><span class="muted">${t(d.users.length ? 'Nog geen gedeelde mappen.' : 'Nog geen gedeelde mappen. Maak eerst hieronder een gebruiker aan.')}</span></li>`}</ul>
+      <p class="muted small" style="margin-top:8px">${t('Op een Mac: Finder → Ga → Verbind met server. Op Windows: typ het adres met \\\\ in de Verkenner.')}</p>
+
+      <h2 class="pane-title">${t('Gebruikers')}</h2>
+      <p class="muted small">${t('Met deze gebruikers en hun wachtwoord meld je aan bij een gedeelde map. Ze kunnen niet aanmelden op de server zelf.')}</p>
+      <ul class="rows" style="margin-top:8px">${d.users.map((u) => `<li>
+          <div><div class="row-title">${esc(u.name)}${u.managed ? '' : ` <span class="pill">${t('bestond al')}</span>`}</div>
+            <div class="row-sub">${u.shares.length ? t('Toegang tot: {list}', { list: esc(u.shares.join(', ')) }) : t('Nog geen toegang')}</div>
+            <form class="inline-form" data-pw-form="${esc(u.name)}" hidden style="margin-top:8px">
+              <input class="field" type="password" name="password" autocomplete="new-password" placeholder="${t('Nieuw wachtwoord (minstens 8 tekens)')}" aria-label="${t('Nieuw wachtwoord')}">
+              <button class="btn sm primary" type="submit">${t('Opslaan')}</button></form></div>
+          <div class="row-side btn-row"><button class="btn sm" type="button" data-pw="${esc(u.name)}">${t('Wachtwoord')}</button>
+            ${u.managed ? `<button class="btn sm danger" type="button" data-user-del="${esc(u.name)}">${t('Verwijderen')}</button>` : ''}</div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen gebruikers.')}</span></li>`}</ul>
+      <h2 class="pane-title">${t('Gebruiker toevoegen')}</h2>
+      <form class="form" id="userForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Gebruikersnaam')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('bv. lies')}">
+            <small>${t('Kleine letters, cijfers, - en _.')}</small></label>
+          <label class="fld"><span>${t('Wachtwoord')}</span><input class="field" type="password" name="password" autocomplete="new-password">
+            <small>${t('Minstens 8 tekens.')}</small></label>
+          <label class="fld"><span>${t('Wachtwoord herhalen')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label>
+        </div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Gebruiker toevoegen')}</button></div>
+      </form>`;
+    const uf = $('#userForm', el);
+    uf.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', uf), F = uf.elements; err.textContent = '';
+      if (F.password.value !== F.password2.value) { err.textContent = t('De twee wachtwoorden zijn niet gelijk.'); return; }
+      const btn = $('[type=submit]', uf); btn.disabled = true;
+      try { await api.post('/api/share-users', { name: F.name.value.trim(), password: F.password.value }); toast(t('Gebruiker {name} toegevoegd.', { name: F.name.value.trim() })); sharesPane(el); }
+      catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    $$('[data-pw-form]', el).forEach((f) => f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await api.post('/api/share-users/' + encodeURIComponent(f.dataset.pwForm) + '/password', { password: f.elements.password.value }); toast(t('Wachtwoord van {name} gewijzigd.', { name: f.dataset.pwForm })); f.hidden = true; f.reset(); }
+      catch (ex) { toast(ex.message, true); }
+    }));
+    el.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.shareNew != null) return sharesPane(el, null);
+      if (b.dataset.shareEdit) return sharesPane(el, b.dataset.shareEdit);
+      if (b.dataset.pw) { const f = $(`[data-pw-form="${CSS.escape(b.dataset.pw)}"]`, el); f.hidden = !f.hidden; if (!f.hidden) f.elements.password.focus(); return; }
+      if (b.dataset.shareDel) {
+        const name = b.dataset.shareDel;
+        if (!(await ask(t('{name} niet meer delen? De bestanden blijven gewoon staan; alleen het delen stopt.', { name }), t('Verwijderen')))) return;
+        try { await api.del('/api/shares/' + encodeURIComponent(name)); toast(t('{name} wordt niet meer gedeeld.', { name })); sharesPane(el); } catch (ex) { toast(ex.message, true); }
+        return;
+      }
+      if (b.dataset.userDel) {
+        const name = b.dataset.userDel;
+        if (!(await ask(t('Gebruiker {name} verwijderen? Die kan dan niet meer aan de gedeelde mappen.', { name }), t('Verwijderen')))) return;
+        try { await api.del('/api/share-users/' + encodeURIComponent(name)); toast(t('Gebruiker {name} verwijderd.', { name })); sharesPane(el); } catch (ex) { toast(ex.message, true); }
+      }
+    };
+  }
+
+  // Nieuwe of bestaande gedeelde map: naam, map, wie mag wat, gasten en Time Machine.
+  function shareForm(el, d, editName) {
+    const cur = editName ? d.shares.find((x) => x.name === editName) : null;
+    const pools = d.roots.filter((r) => !r.name.includes('/'));
+    const sh = cur || { name: '', path: '', comment: '', users: {}, guest: false, timemachine: false };
+    el.onclick = null;
+    el.innerHTML = `
+      <h2 class="pane-title">${cur ? t('{name} bewerken', { name: esc(cur.name) }) : t('Nieuwe gedeelde map')}</h2>
+      <form class="form" id="shareForm" novalidate>
+        <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="32" value="${esc(sh.name)}" autocomplete="off" spellcheck="false" placeholder="${t('bv. media')}">
+          <small>${t('Zo heet de map op je pc: smb://{host}.local/naam', { host: esc(d.hostname) })}</small></label>
+        ${cur ? `<input type="hidden" name="where" value="existing">` : `
+        <fieldset class="fld"><span>${t('Map')}</span><div class="radio-row">
+          <label class="check"><input type="radio" name="where" value="new"${pools.length ? ' checked' : ' disabled'}> ${t('Nieuwe map op een pool')}</label>
+          <label class="check"><input type="radio" name="where" value="existing"${pools.length ? '' : ' checked'}> ${t('Bestaande map')}</label></div></fieldset>`}
+        <label class="fld" data-where="new"><span>${t('Pool')}</span><select class="field" name="parent">${pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.mountpoint)})</option>`).join('')}</select>
+          <small>${t('HomeBaseOS maakt een eigen dataset, bv. tank/media, met de app-gebruiker als eigenaar.')}</small></label>
+        <label class="fld" data-where="existing"><span>${t('Map op de server')}</span><input class="field" name="path" list="shareRoots" value="${esc(sh.path)}" spellcheck="false" autocomplete="off" placeholder="/tank/media">
+          <datalist id="shareRoots">${d.roots.map((r) => `<option value="${esc(r.mountpoint)}">`).join('')}</datalist>
+          <small>${t('Een map op een van je pools.')}${d.appUser ? ' ' + t('Bestanden worden geschreven als {user}, zoals je Docker-apps.', { user: esc(d.appUser) }) : ''}</small></label>
+        <label class="fld"><span>${t('Beschrijving')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" name="comment" maxlength="100" value="${esc(sh.comment)}"></label>
+        <fieldset class="fld"><span>${t('Wie mag erbij?')}</span>
+          <div class="access-table">${d.users.map((u) => `<div class="access-row"><b>${esc(u.name)}</b>
+            <select class="field" name="u:${esc(u.name)}" aria-label="${esc(t('Toegang voor {name}', { name: u.name }))}">
+              <option value="">${t('Geen toegang')}</option>${Object.entries(ACCESS).map(([k, label]) => `<option value="${k}"${sh.users[u.name] === k ? ' selected' : ''}>${t(label)}</option>`).join('')}</select></div>`).join('')}</div></fieldset>
+        <label class="check"><input type="checkbox" name="guest"${sh.guest ? ' checked' : ''}> ${t('Gasten mogen lezen zonder wachtwoord')}</label>
+        <p class="muted small" style="margin-top:-6px">${t('Handig voor bv. muziek of documenten voor iedereen thuis. Schrijven kan alleen wie hierboven Lezen en schrijven heeft.')}</p>
+        <label class="check"><input type="checkbox" name="timemachine"${sh.timemachine ? ' checked' : ''}> ${t('Gebruiken voor Time Machine (back-ups van een Mac)')}</label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t(cur ? 'Opslaan' : 'Delen')}</button><button class="btn" type="button" data-share-cancel>${t('Annuleren')}</button></div>
+      </form>`;
+    const f = $('#shareForm', el), F = f.elements;
+    const sync = () => { const w = (f.querySelector('[name=where]:checked') || F.where).value; $$('[data-where]', f).forEach((x) => { x.hidden = x.dataset.where !== w; }); };
+    f.addEventListener('change', (e) => { if (e.target.name === 'where') sync(); }); sync();
+    f.querySelector('[data-share-cancel]').addEventListener('click', () => sharesPane(el));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', f), btn = $('[type=submit]', f); err.textContent = '';
+      const users = {};
+      d.users.forEach((u) => { const v = F['u:' + u.name].value; if (v) users[u.name] = v; });
+      const where = (f.querySelector('[name=where]:checked') || F.where).value;
+      const body = { name: F.name.value.trim(), comment: F.comment.value, users, guest: F.guest.checked, timemachine: F.timemachine.checked,
+        ...(where === 'new' ? { create: { parent: F.parent.value } } : { path: F.path.value.trim() }) };
+      btn.disabled = true;
+      try {
+        await api.post('/api/shares' + (cur ? '/' + encodeURIComponent(cur.name) : ''), body);
+        toast(t(cur ? '{name} opgeslagen.' : '{name} wordt nu gedeeld.', { name: body.name }));
+        sharesPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    F.name.focus();
+  }
+
+  /* --- Beveiliging: de terminal op de server */
+  async function securityPane(el) {
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let cur;
+    try { cur = await api.get('/api/settings'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'security') return;
+    const needsPw = !S.config.demo && S.config.passwordEnabled;
+    el.innerHTML = `
+      <div id="mfaBox"><p class="lead">${t('Laden…')}</p></div>
+      ${S.config.passwordEnabled ? `<h2 class="pane-title">${t('Wachtwoord')}</h2>
+      <p class="muted small" id="pwChanged"></p>
+      <form class="form" id="pwForm" style="max-width:440px">${passwordFields()}
+        <p class="form-error" role="alert" data-pw-err></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Wachtwoord wijzigen')}</button></div></form>` : ''}
+      <h2 class="pane-title">${t('Terminal op de server')}</h2>
+      <p class="muted small">${t('Rechtsboven opent het terminal-icoon een root-shell op de server. Wie de terminal kan openen, kan alles op de server doen: bestanden wissen, schijven formatteren, wachtwoorden lezen.')}</p>
+      <div class="form" style="margin-top:12px">
+        <label class="check"><input type="checkbox" name="terminal"${cur.terminal ? ' checked' : ''}> ${t('Terminal op de server toestaan')}</label>
+        <label class="check"><input type="checkbox" name="terminalPassword"${cur.terminalPassword ? ' checked' : ''}${cur.terminal ? '' : ' disabled'}> ${t('Wachtwoord opnieuw vragen bij het openen van de terminal')}</label>
+        <p class="muted small" style="margin-top:-4px">${t('Aanbevolen. Zo kan iemand die een aangemelde browser gebruikt (bv. een gedeelde pc) niet meteen root-commando\'s uitvoeren.')}</p>
+      </div>
+      <form class="inline-form sec-confirm" id="secConfirm" hidden>
+        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('Wachtwoord van HomeBaseOS')}" aria-label="${t('Wachtwoord van HomeBaseOS')}">
+        <button class="btn primary" type="submit">${t('Bevestigen')}</button><button class="btn" type="button" data-sec-cancel>${t('Annuleren')}</button>
+      </form>
+      <p class="muted small" id="secHint" hidden>${t('Dit maakt de beveiliging minder streng. Typ je wachtwoord om te bevestigen.')}</p>
+      <p class="form-error" role="alert" id="secErr"></p>
+      <p class="muted small">${t('Elke keer dat iemand de terminal opent of sluit, komt dat in het systeemlogboek (journalctl -u homebaseos).')}</p>`;
+    mfaSection($('#mfaBox', el));
+    const pwForm = $('#pwForm', el);
+    if (pwForm) {
+      wirePasswordMeter(pwForm);
+      api.get('/api/mfa').then((m) => { if ($('#pwChanged', el)) $('#pwChanged', el).textContent = m.passwordChanged ? t('Laatst gewijzigd op {date}.', { date: longDate(m.passwordChanged) }) : t('Je gebruikt nog het wachtwoord uit de installatie (in /etc/homebaseos/homebaseos.env).'); }, () => {});
+      pwForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('button[type="submit"]', pwForm); btn.disabled = true;
+        try { await submitPassword(pwForm); pwForm.reset(); wirePasswordMeter(pwForm); toast(t('Je nieuwe wachtwoord is ingesteld. Andere browsers zijn afgemeld.')); securityPane(el); }
+        catch (ex) { $('[data-pw-err]', pwForm).textContent = ex.message; }
+        finally { btn.disabled = false; }
+      });
+    }
+    const box = (n) => $(`[name="${n}"]`, el), confirmForm = $('#secConfirm', el);
+    let pending = null;
+    const save = async (body) => {
+      $('#secErr', el).textContent = '';
+      try {
+        const r = await api.post('/api/settings', body);
+        S.config.terminal = r.terminal; S.config.terminalPassword = r.terminalPassword && !!S.config.passwordEnabled;
+        $('#termBtn').hidden = !r.terminal;
+        toast(t('Beveiliging opgeslagen.'));
+        securityPane(el);
+      } catch (e) { $('#secErr', el).textContent = e.message; }
+    };
+    el.onchange = (e) => {
+      const n = e.target.name; if (n !== 'terminal' && n !== 'terminalPassword') return;
+      const body = { terminal: box('terminal').checked, terminalPassword: box('terminalPassword').checked };
+      const looser = (body.terminal && !cur.terminal) || (!body.terminalPassword && cur.terminalPassword);
+      if (looser && needsPw) {
+        pending = body; confirmForm.hidden = false; $('#secHint', el).hidden = false;
+        confirmForm.elements.password.focus();
+      } else save(body);
+    };
+    confirmForm.addEventListener('submit', (e) => { e.preventDefault(); if (pending) save({ ...pending, password: confirmForm.elements.password.value }); });
+    el.onclick = (e) => { if (e.target.closest('[data-sec-cancel]')) securityPane(el); };
+  }
+
+  /* --- Beveiliging: tweestapsverificatie (TOTP met een authenticator-app) */
+  async function mfaSection(box) {
+    let st;
+    try { st = await api.get('/api/mfa'); } catch (e) { box.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const head = box.dataset.noHead ? '' : `<h2 class="pane-title">${t('Tweestapsverificatie')}</h2>
+      <p class="muted small">${t('Naast je wachtwoord vraagt HomeBaseOS dan een code van 6 cijfers uit een authenticator-app op je gsm (bv. Google Authenticator, Microsoft Authenticator, 1Password of Aegis). Wie alleen je wachtwoord kent, kan zo niet aanmelden.')}</p>`;
+    if (!st.available) { box.innerHTML = head + `<p class="muted small">${t('Zet eerst een wachtwoord (APP_PASSWORD) om tweestapsverificatie te gebruiken.')}</p>`; return; }
+    const demoHint = S.config.demo ? `<p class="muted small">${t('Demo: het wachtwoord is {pw}.', { pw: '<b>demo</b>' })}</p>` : '';
+    const since = st.since ? new Date(st.since).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    box.innerHTML = head + (st.enabled ? `
+      <div class="mfa-state on"><span class="dot"></span><div><b>${t('Aan')}</b>
+        <div class="muted small">${since ? t('Sinds {date}.', { date: esc(since) }) + ' ' : ''}${t('Nog {n} herstelcodes over.', { n: st.recoveryLeft })}</div></div></div>
+      ${st.recoveryLeft < 3 ? `<p class="small" style="color:var(--warn)">${t('Je hebt bijna geen herstelcodes meer. Maak nieuwe aan.')}</p>` : ''}
+      <div class="btn-row"><button class="btn" type="button" data-mfa="recovery">${t('Nieuwe herstelcodes')}</button>
+        <button class="btn danger" type="button" data-mfa="disable">${t('Uitzetten')}</button></div>` : `
+      <div class="mfa-state"><span class="dot"></span><div><b>${t('Uit')}</b><div class="muted small">${t('Aanmelden vraagt alleen je wachtwoord.')}</div></div>
+        <button class="btn primary" type="button" data-mfa="start">${t('Aanzetten')}</button></div>`) +
+      `<div id="mfaStep"></div><p class="form-error" role="alert" id="mfaErr"></p>`;
+    const step = $('#mfaStep', box), errEl = $('#mfaErr', box);
+    const pwForm = (label, withCode) => `${demoHint}
+      <form class="inline-form" data-mfa-form>
+        <input class="field" type="password" name="password" autocomplete="current-password" required placeholder="${t('Wachtwoord van HomeBaseOS')}" aria-label="${t('Wachtwoord van HomeBaseOS')}">
+        ${withCode ? `<input class="field mfa-code" name="code" required autocomplete="one-time-code" maxlength="11" placeholder="${t('Code')}" aria-label="${t('Code uit de app of een herstelcode')}">` : ''}
+        <button class="btn primary" type="submit">${esc(label)}</button><button class="btn" type="button" data-mfa-cancel>${t('Annuleren')}</button>
+      </form>`;
+    let action = null;
+    const showStep = (html, act) => {
+      action = act; errEl.textContent = ''; step.innerHTML = html;
+      $$('[data-mfa]', box).forEach((b) => { b.disabled = true; });
+      const first = $('input', step); if (first) first.focus();
+    };
+    const group = (sec) => sec.replace(/(.{4})/g, '$1 ').trim();
+    function showSetup(r) {
+      showStep(`
+        <div class="mfa-setup">
+          <div class="mfa-qr">${window.TBQR.svg(r.uri, { size: 180 })}</div>
+          <ol class="mfa-steps">
+            <li>${t('Open je authenticator-app en scan deze QR-code.')}</li>
+            <li>${t('Lukt scannen niet? Typ dan deze sleutel in de app:')}<br>
+              <button class="mfa-secret" type="button" data-copy="${esc(r.secret)}" title="${t('Kopiëren')}">${esc(group(r.secret))}</button><br>
+              <a class="small" href="${esc(r.uri)}">${t('Of open de sleutel meteen in een app op dit toestel')}</a></li>
+            <li>${t('Typ de code van 6 cijfers die de app nu toont:')}
+              <form class="inline-form" data-mfa-form style="margin-top:6px">
+                <input class="field mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required aria-label="${t('Code uit je authenticator-app')}">
+                <button class="btn primary" type="submit">${t('Bevestigen')}</button><button class="btn" type="button" data-mfa-cancel>${t('Annuleren')}</button>
+              </form></li>
+          </ol>
+        </div>`, 'enable');
+      $('.mfa-code', step).focus();
+    }
+    function showRecovery(codes, fresh) {
+      const text = t('Herstelcodes voor HomeBaseOS') + '\n\n' + codes.join('\n') + '\n\n' + t('Elke code werkt maar één keer.') + '\n';
+      box.innerHTML = head + `
+        <div class="mfa-state on"><span class="dot"></span><div><b>${fresh ? t('Tweestapsverificatie staat aan') : t('Nieuwe herstelcodes')}</b>
+          <div class="muted small">${t('Bewaar deze herstelcodes op een veilige plaats, bv. in je wachtwoordbeheerder. Ben je je gsm kwijt, dan meld je je aan met een van deze codes. Elke code werkt maar één keer, en je ziet ze hier maar één keer.')}</div></div></div>
+        <ul class="recovery-list">${codes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+        <div class="btn-row"><button class="btn" type="button" data-rc="copy">${t('Kopiëren')}</button>
+          <button class="btn" type="button" data-rc="download">${t('Downloaden')}</button>
+          <button class="btn primary" type="button" data-rc="done">${t('Ik heb ze bewaard')}</button></div>`;
+      box.onclick = async (e) => {
+        const b = e.target.closest('[data-rc]'); if (!b) return;
+        if (b.dataset.rc === 'copy') {
+          try { await navigator.clipboard.writeText(text); toast(t('Gekopieerd.')); } catch (ex) { toast(t('Kopiëren lukte niet in deze browser.'), true); }
+        } else if (b.dataset.rc === 'download') {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'homebaseos-herstelcodes.txt';
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        } else mfaSection(box);
+      };
+      box.onsubmit = null;
+    }
+    box.onclick = async (e) => {
+      if (e.target.closest('[data-mfa-cancel]')) { mfaSection(box); return; }
+      const b = e.target.closest('[data-mfa]'); if (!b) return;
+      if (b.dataset.mfa === 'start') showStep(`<p class="small">${t('Typ je wachtwoord om te beginnen.')}</p>` + pwForm(t('Verder')), 'setup');
+      if (b.dataset.mfa === 'recovery') showStep(`<p class="small">${t('Typ je wachtwoord en een code uit de app. Je oude herstelcodes werken daarna niet meer.')}</p>` + pwForm(t('Nieuwe codes maken'), true), 'recovery');
+      if (b.dataset.mfa === 'disable') {
+        if (!(await ask(t('Tweestapsverificatie uitzetten? Dan volstaat je wachtwoord weer om aan te melden.'), t('Uitzetten')))) return;
+        showStep(`<p class="small">${t('Typ je wachtwoord en een code uit de app om tweestapsverificatie uit te zetten.')}</p>` + pwForm(t('Uitzetten'), true), 'disable');
+      }
+    };
+    box.onsubmit = async (e) => {
+      const f = e.target.closest('[data-mfa-form]'); if (!f) return;
+      e.preventDefault();
+      const btn = $('button[type="submit"]', f), body = {};
+      if (f.elements.password) body.password = f.elements.password.value;
+      if (f.elements.code) body.code = f.elements.code.value;
+      errEl.textContent = ''; btn.disabled = true;
+      try {
+        const r = await api.post('/api/mfa/' + action, body);
+        if (action === 'setup') return showSetup(r);
+        if (action === 'enable') {
+          if (!S.config.demo) toast(t('Andere browsers zijn afgemeld. Ze moeten opnieuw aanmelden, nu met een code.'));
+          return showRecovery(r.recovery, true);
+        }
+        if (action === 'recovery') return showRecovery(r.recovery, false);
+        toast(t('Tweestapsverificatie staat uit.'));
+        mfaSection(box);
+      } catch (ex) {
+        errEl.textContent = ex.message; btn.disabled = false;
+        const inp = f.elements.code || f.elements.password; if (inp) inp.select();
+        if (ex.status === 410) mfaSection(box).then(() => { $('#mfaErr', box).textContent = ex.message; });
+      }
+    };
+  }
+
+  /* --- Software-update: nieuwe versies van HomeBaseOS zelf (GitHub-releases) */
+  // Kleine Markdown-lezer voor release-notes. Eerst alles door esc(), daarna pas opmaak: er komt nooit HTML van GitHub door.
+  function mdToHtml(src) {
+    const inline = (x) => esc(x)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/__([^_]+)__/g, '<b>$1</b>')
+      .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>').replace(/(^|[\s(])_([^_\s][^_]*)_(?=[\s).,!?]|$)/g, '$1<i>$2</i>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+    const out = []; let list = null, para = [], code = null;
+    const flush = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } if (list) { out.push(`</${list}>`); list = null; } };
+    for (const line of String(src || '').replace(/\r/g, '').split('\n')) {
+      if (code != null) { if (/^\s*```/.test(line)) { out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); code = null; } else code.push(line); continue; }
+      if (/^\s*```/.test(line)) { flush(); code = []; continue; }
+      let m;
+      if (!line.trim()) { flush(); continue; }
+      if ((m = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/))) { flush(); out.push(`<h${Math.min(6, m[1].length + 3)}>${inline(m[2])}</h${Math.min(6, m[1].length + 3)}>`); continue; }
+      if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); out.push('<hr>'); continue; }
+      if ((m = line.match(/^\s*([-*+]|\d+[.)])\s+(.*)$/))) {
+        const kind = /\d/.test(m[1]) ? 'ol' : 'ul';
+        if (para.length) flush();
+        if (list !== kind) { if (list) out.push(`</${list}>`); out.push(`<${kind}>`); list = kind; }
+        out.push('<li>' + inline(m[2]) + '</li>'); continue;
+      }
+      if (list) { flush(); }
+      para.push(line.trim());
+    }
+    if (code != null) out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>');
+    flush();
+    return out.join('');
+  }
+  const longDate = (iso) => (iso ? new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+
+  // Melding: rood bolletje op Instellingen en op het tabblad, en één keer per versie een melding (per browser).
+  S.update = null;
+  async function loadUpdate() {
+    try { S.update = await api.get('/api/update'); } catch (e) { return; }
+    const u = S.update, on = !!(u && u.updateAvailable);
+    $('#updDot').hidden = !on; $('#updTabBadge').hidden = !on;
+    $('#updTabBadge').textContent = on ? String(u.newer.length) : '';
+    if (!on) return;
+    let seen = null;
+    try { seen = localStorage.getItem('tb-update-seen'); } catch (e) { /* privévenster */ }
+    if (seen === u.latest.version) return;
+    try { localStorage.setItem('tb-update-seen', u.latest.version); } catch (e) { /* privévenster */ }
+    toast(t('HomeBaseOS {version} is beschikbaar. Bekijk de nieuwigheden bij Instellingen → Software-update.', { version: u.latest.version }));
+  }
+
+  // Voortgang van "Nu bijwerken". Tijdens de herstart is de server even weg: dan blijven we gewoon vragen.
+  const UPD_STEPS = [['download', 'Downloaden'], ['extract', 'Uitpakken'], ['verify', 'Controleren'], ['backup', 'Reservekopie'],
+    ['install', 'Installeren'], ['restart', 'Herstarten'], ['check', 'Testen']];
+  const UPD_ORDER = ['start', 'download', 'extract', 'verify', 'handover', 'backup', 'install', 'packages', 'restart', 'check', 'rollback', 'done'];
+  function updateProgress(el) {
+    el.onclick = null; el.onchange = null;
+    el.innerHTML = `<div class="upd-run" aria-live="polite">
+        <div class="upd-run-head"><b id="updTitle">${t('Bijwerken…')}</b><span class="muted small" id="updPct">0%</span></div>
+        <div class="upd-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="updTitle"><span id="updFill"></span></div>
+        <p class="small" id="updMsg">${t('Bijwerken starten…')}</p>
+        <ol class="upd-steps">${UPD_STEPS.map(([k, label]) => `<li data-step="${k}">${t(label)}</li>`).join('')}</ol>
+        <p class="muted small" id="updNote">${t('Laat dit venster open. HomeBaseOS herstart straks even; je apps en VM\'s blijven draaien.')}</p>
+        <div class="btn-row" id="updBtns"></div></div>`;
+    let lost = 0, shown = 0;
+    const started = Date.now();
+    const draw = (p) => {
+      const pct = Math.max(shown, Math.min(100, Math.round(p.percent || 0))); shown = pct;
+      $('#updFill', el).style.width = pct + '%';
+      $('.upd-bar', el).setAttribute('aria-valuenow', String(pct));
+      $('#updPct', el).textContent = pct + '%';
+      let msg = tr(p.message || '');
+      if (p.step === 'download' && p.bytes) msg = t('Versie {version} downloaden… {done}', { version: p.version, done: bytes(p.bytes) + (p.total ? ' / ' + bytes(p.total) : '') });
+      $('#updMsg', el).textContent = msg;
+      if (p.step === 'rollback') return; // bij terugzetten blijven de stappen staan zoals ze waren
+      const at = UPD_ORDER.indexOf(p.step);
+      $$('.upd-steps li', el).forEach((li) => {
+        const i = UPD_ORDER.indexOf(li.dataset.step);
+        li.className = p.state === 'done' || i < at ? 'done' : i === at || (li.dataset.step === 'install' && p.step === 'packages') ? 'now' : '';
+      });
+    };
+    const finish = (p) => {
+      const ok = p.state === 'done';
+      $('.upd-run', el).classList.add(ok ? 'ok' : 'bad');
+      $('#updTitle', el).textContent = ok ? t('Bijgewerkt naar versie {version}', { version: p.version }) : p.state === 'rolledback' ? t('Bijwerken mislukt: vorige versie teruggezet') : t('Bijwerken mislukt');
+      $('#updMsg', el).textContent = tr(p.message || '') + (p.reason ? ' ' + tr(p.reason) : '');
+      $('#updNote', el).textContent = ok ? t('De pagina wordt zo vernieuwd met de nieuwe versie.') : t('Je instellingen, apps en VM\'s zijn niet aangeraakt.');
+      $('#updBtns', el).innerHTML = ok ? `<button class="btn primary" type="button" data-upd-reload>${t('Nu vernieuwen')}</button>`
+        : `<button class="btn" type="button" data-upd-back>${t('Terug')}</button>`;
+      el.onclick = (e) => {
+        if (e.target.closest('[data-upd-reload]')) { if (S.config.demo) updatePane(el); else location.reload(); }
+        if (e.target.closest('[data-upd-back]')) updatePane(el);
+      };
+      $('#updDot').hidden = ok; $('#updTabBadge').hidden = ok;
+      if (ok) { toast(t('Bijgewerkt naar versie {version}', { version: p.version })); if (!S.config.demo) setTimeout(() => location.reload(), 4000); }
+    };
+    const poll = async () => {
+      if (!el.isConnected || settingsTab() !== 'update') return; // venster dicht: bij opnieuw openen gaat het verder
+      let p;
+      try { p = await api.get('/api/update/progress'); lost = 0; }
+      catch (e) {
+        // Server herstart: even geen antwoord. Na 3 minuten opgeven.
+        if (++lost === 1) $('#updMsg', el).textContent = t('HomeBaseOS herstart… even geduld.');
+        if (Date.now() - started > 180000) { finish({ state: 'failed', message: t('HomeBaseOS antwoordt niet meer. Kijk op de server: journalctl -u homebaseos') }); return; }
+        setTimeout(poll, 1500); return;
+      }
+      if (p.state === 'idle') { updatePane(el); return; }
+      draw(p);
+      if (p.state === 'running') { setTimeout(poll, 700); return; }
+      finish(p);
+    };
+    poll();
+  }
+
+  async function updatePane(el) {
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let u;
+    try { u = await api.get('/api/update'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'update') return;
+    S.update = u;
+    const mark = '<span class="upd-logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg></span>';
+    const checked = u.checked ? t('Laatst gezocht: {when}', { when: esc(new Date(u.checked).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() })) }) : t('Nog niet gezocht naar updates.');
+    const notes = (r) => `<article class="notes">
+        <div class="notes-head"><h3>${t('Versie {version}', { version: esc(r.version) })}${r.name && r.name.replace(/^v/, '') !== r.version ? ' · ' + esc(r.name) : ''}
+          ${r.prerelease ? ` <span class="pill warn">${t('Bèta')}</span>` : ''}</h3>
+          <span class="muted small">${esc(longDate(r.published))}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">${t('Op GitHub')}</a>` : ''}</span></div>
+        <div class="md">${r.notes.trim() ? mdToHtml(r.notes) : `<p class="muted">${t('Geen release-notes bij deze versie.')}</p>`}</div></article>`;
+    const card = u.updateAvailable ? `
+      <div class="upd-card new">${mark}<div class="upd-text"><b>${t('HomeBaseOS {version} is beschikbaar', { version: esc(u.latest.version) })}</b>
+        <div class="muted small">${t('Je hebt versie {current}.', { current: esc(u.current) })} ${u.newer.length > 1 ? t('Er zijn {n} nieuwe versies.', { n: u.newer.length }) : ''}</div>
+        <div class="muted small">${checked}</div></div>
+        <div class="btn-row"><button class="btn" type="button" data-sw="check">${t('Nu zoeken')}</button>
+          <button class="btn primary" type="button" data-sw="install"${u.install && u.install.ok ? '' : ' disabled'}>${t('Nu bijwerken')}</button></div></div>
+      ${u.install && !u.install.ok ? `<p class="muted small" style="margin-top:-6px">${esc(tr(u.install.reason))}</p>` : ''}` : `
+      <div class="upd-card">${mark}<div class="upd-text"><b>${t('HomeBaseOS is up-to-date')}</b>
+        <div class="muted small">${t('Versie {current}', { current: esc(u.current) })}</div><div class="muted small">${checked}</div></div>
+        <button class="btn" type="button" data-sw="check">${t('Nu zoeken')}</button></div>`;
+    el.innerHTML = card +
+      (u.error ? `<div class="upd-error" role="alert">${esc(tr(u.error))}</div>` : '') +
+      (u.updateAvailable ? `
+        <h2 class="pane-title">${t('Wat is er nieuw')}</h2>${u.newer.map(notes).join('')}
+        ${u.install && u.install.ok ? '' : `<h2 class="pane-title">${t('Bijwerken')}</h2>
+        <div class="upd-how"><p class="muted small">${t('Haal de nieuwe versie op in de map met de code van HomeBaseOS op de server, en voer het installatiescript opnieuw uit. Je instellingen, apps en VM\'s blijven staan.')}</p>
+          <pre>cd ~/homebaseos
+git pull
+sudo ./install.sh</pre></div>`}` : '') +
+      (u.history.length ? `<details class="upd-older"${u.updateAvailable ? '' : ' open'}><summary>${u.updateAvailable ? t('Eerdere versies') : t('Release-notes')}</summary>${u.history.map(notes).join('')}</details>` : '') + `
+      <h2 class="pane-title">${t('Instellingen')}</h2>
+      <div class="form">
+        <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Automatisch zoeken naar updates (elke 12 uur)')}</label>
+        <div class="choice-row" role="radiogroup" aria-label="${t('Soort versies')}">${[['stable', t('Alleen stabiele versies')], ['beta', t('Ook bètaversies')]].map(([k, name]) => `
+          <label class="choice"><input type="radio" name="updateChannel" value="${k}"${k === u.channel ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
+        <p class="muted small">${t('HomeBaseOS zoekt naar nieuwe versies op GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('Is de repository privé, zet dan een token in UPDATE_TOKEN.')}</p>
+      </div>`;
+    if (u.running) { updateProgress(el); return; } // er loopt al een update (bv. na het vernieuwen van de pagina)
+    el.onclick = async (e) => {
+      if (e.target.closest('[data-sw="install"]')) {
+        const v = u.latest.version;
+        if (!(await ask(t('HomeBaseOS bijwerken naar versie {version}? HomeBaseOS herstart even; je apps en VM\'s blijven gewoon draaien.', { version: v }), t('Nu bijwerken')))) return;
+        try { await api.post('/api/update/install', { version: v }); updateProgress(el); }
+        catch (ex) { toast(ex.message, true); }
+        return;
+      }
+      const b = e.target.closest('[data-sw="check"]'); if (!b) return;
+      b.disabled = true; b.textContent = t('Zoeken…');
+      try { await api.post('/api/update/check'); } catch (ex) { toast(ex.message, true); }
+      await loadUpdate(); updatePane(el);
+    };
+    el.onchange = async (e) => {
+      const n = e.target.name; if (n !== 'updateCheck' && n !== 'updateChannel') return;
+      try {
+        await api.post('/api/settings', n === 'updateCheck' ? { updateCheck: e.target.checked } : { updateChannel: e.target.value });
+        toast(t('Opgeslagen.'));
+        await loadUpdate(); updatePane(el);
+      } catch (ex) { toast(ex.message, true); }
+    };
+  }
+
   async function aboutPane(el) {
     el.onchange = null;
     el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
@@ -2725,7 +3440,7 @@
         [t('Grafische kaart'), (a.gpus || []).join(', ')]]],
       [t('Besturingssysteem'), [[t('Systeem'), a.os], [t('Kernel'), a.kernel], [t('Architectuur'), a.arch], [t('Tijdzone'), a.timezone],
         [t('Aan sinds'), a.uptime != null ? duration(a.uptime) : null], [t('IP-adressen'), (a.addresses || []).map((x) => x.address + ' (' + x.interface + ')').join(', ')]]],
-      [t('Versies'), Object.entries({ Thuisbasis: a.versions.thuisbasis, 'Node.js': a.versions.node, Docker: a.versions.docker, 'Docker Compose': a.versions.compose,
+      [t('Versies'), Object.entries({ HomeBaseOS: a.versions.homebaseos, 'Node.js': a.versions.node, Docker: a.versions.docker, 'Docker Compose': a.versions.compose,
         ZFS: a.versions.zfs, libvirt: a.versions.libvirt, [t('Hypervisor')]: a.versions.hypervisor })],
     ];
     const plain = groups.map(([title, rows]) => title + '\n' + rows.map(([k, v]) => '  ' + k + ': ' + (v || '–')).join('\n')).join('\n\n');
@@ -2745,7 +3460,7 @@
     try { await loadAi(true); } catch (e) { /* fout staat in S.aiError */ }
     if (S.aiError) {
       $('#winBody').innerHTML = `<p class="lead">${esc(S.config.ollama ? t('Ollama is niet bereikbaar: {error}', { error: S.aiError })
-        : t('Ollama is nog niet gekoppeld. Zet OLLAMA_URL in /etc/thuisbasis/thuisbasis.env, bijvoorbeeld http://127.0.0.1:11434.'))}</p>`;
+        : t('Ollama is nog niet gekoppeld. Zet OLLAMA_URL in /etc/homebaseos/homebaseos.env, bijvoorbeeld http://127.0.0.1:11434.'))}</p>`;
       return;
     }
     const draw = () => {
@@ -2860,7 +3575,7 @@
     const jobs = [loadOverview(), loadApps()];
     // Op de VM-pagina haalt een eigen, snellere timer de VM's op.
     if (all || currentView() !== 'vms') jobs.push(loadVms().catch(() => {}));
-    if (all) jobs.push(loadAi(true));
+    if (all) jobs.push(loadAi(true), loadShares());
     const results = await Promise.allSettled(jobs);
     const bad = results.find((r) => r.status === 'rejected');
     if (bad) {
@@ -2915,7 +3630,14 @@
   }
   function showLogin() {
     if (setWin.open) closeSettings();
-    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; $('.topnav').hidden = true; $('#pw').focus();
+    if (win.open) win.close();
+    timers.forEach(clearInterval); timers = []; // niet verder vernieuwen (en het formulier niet leegmaken) tijdens het aanmelden
+    const wasHidden = $('#loginScreen').hidden;
+    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; $('.topnav').hidden = true;
+    const demoInfo = S.config && S.config.demo;
+    $('#loginDemo').hidden = !demoInfo;
+    if (demoInfo) $('#loginDemo').innerHTML = t('Demo: het wachtwoord is {pw}.', { pw: '<b>demo</b>' });
+    if (wasHidden) loginStep('password');
   }
 
   let timers = [];
@@ -2923,20 +3645,278 @@
     showDesk();
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
+    $('#termBtn').hidden = !S.config.terminal;
+    if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
     loadLayout();
+    loadUpdate();
     timers.forEach(clearInterval);
     timers = [
       setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
       setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
-      setInterval(() => { if (!document.hidden) loadAi(true); }, 30000),
+      setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadUpdate(); } }, 30000),
     ];
   }
 
-  function useDemo() { api = translatedApi(window.ThuisbasisDemo); S.config = { demo: true, ollama: true }; startDesk(); }
+  // Overzicht: terug naar het dashboard, en wat er nog open staat dicht.
+  function goHome() {
+    if (win.open) win.close();
+    if (conWin.open) window.TB_closeConsole();
+    closeFolder();
+    if (location.hash && location.hash !== '#') location.hash = ''; else window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  /* ------------------------------------------------------------ wachtwoord kiezen (wizard en Beveiliging) */
+  function passwordFields(currentLabel) {
+    return `<label class="fld"><span>${esc(currentLabel || t('Huidig wachtwoord'))}</span>
+        <input class="field" type="password" name="current" autocomplete="current-password"></label>
+      <label class="fld"><span>${t('Nieuw wachtwoord')}</span>
+        <input class="field" type="password" name="password" autocomplete="new-password" minlength="10">
+        <div class="pw-meter" data-score="0" aria-hidden="true"><span></span></div>
+        <span class="muted small" data-pw-hint>${t('Minstens 10 tekens. Een zin van een paar woorden is sterk én makkelijk te onthouden.')}</span></label>
+      <label class="fld"><span>${t('Herhaal het nieuwe wachtwoord')}</span>
+        <input class="field" type="password" name="repeat" autocomplete="new-password"></label>`;
+  }
+  // 0–4: lengte telt het meest, afwisseling (kleine/hoofdletters, cijfers, tekens) een beetje.
+  function pwScore(v) {
+    if (v.length < 10) return v ? 1 : 0;
+    const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(v)).length;
+    return Math.min(4, 1 + (v.length >= 14) + (v.length >= 20) + (kinds >= 3));
+  }
+  function wirePasswordMeter(root) {
+    const inp = $('input[name="password"]', root), meter = $('.pw-meter', root), hint = $('[data-pw-hint]', root);
+    const words = ['', t('Te kort'), t('Redelijk'), t('Goed'), t('Sterk')];
+    const upd = () => {
+      const sc = pwScore(inp.value);
+      meter.dataset.score = String(sc); $('span', meter).style.width = (sc * 25) + '%';
+      hint.textContent = inp.value ? words[sc] + (sc === 1 ? ' · ' + t('nog {n} tekens', { n: Math.max(0, 10 - inp.value.length) }) : '') : t('Minstens 10 tekens. Een zin van een paar woorden is sterk én makkelijk te onthouden.');
+    };
+    inp.oninput = upd; upd();
+  }
+  async function submitPassword(root) {
+    const f = (n) => $(`input[name="${n}"]`, root).value;
+    if (f('password').length < 10) throw new Error(t('Kies een wachtwoord van minstens 10 tekens.'));
+    if (f('password') !== f('repeat')) throw new Error(t('De twee nieuwe wachtwoorden zijn niet gelijk.'));
+    return api.post('/api/password', { current: f('current'), password: f('password') });
+  }
+
+  /* ------------------------------------------------------------ welkomstwizard (na de eerste aanmelding) */
+  const onbWin = $('#onbWin');
+  const ONB = { steps: [], i: 0, dir: 1, data: null };
+  const HOUSE = '<svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>';
+  const hero = (svg, line) => `<div class="onb-hero${line ? ' line' : ''}" aria-hidden="true">${svg}</div>`;
+  function onbSteps() {
+    const d = () => ONB.data;
+    const pwOn = S.config.passwordEnabled || S.config.demo;
+    return [
+      { id: 'welcome',
+        render(el) {
+          el.innerHTML = hero(HOUSE) + `<h1 id="onbTitle">${t('Welkom bij HomeBaseOS')}</h1>
+            <p class="lead">${t('In een paar stappen is je server klaar: een eigen wachtwoord, een naam, opslag en extra beveiliging. Alles kan je later nog aanpassen bij Instellingen.')}</p>
+            <h2 class="pane-title">${t('Taal')}</h2>
+            <div class="choice-row" role="radiogroup" aria-label="${t('Taal')}">${Object.entries(LANGS).map(([k, name]) => `
+              <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
+            <h2 class="pane-title">${t('Thema')}</h2>
+            <div class="choice-row" role="radiogroup" aria-label="${t('Thema')}">${[['auto', t('Automatisch')], ['light', t('Licht (ochtendnevel)')], ['dark', t('Donker (avond)')]].map(([k, name]) => `
+              <label class="choice"><input type="radio" name="theme" value="${k}"${k === themeNow() ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>`;
+          el.onchange = (e) => { if (e.target.name === 'theme') setTheme(e.target.value); };
+        },
+        async next(el) {
+          const lang = $('input[name="lang"]:checked', el).value;
+          if (lang === LANG) return true;
+          await api.post('/api/settings', { language: lang });
+          setLang(lang);
+          try { sessionStorage.setItem('tb-onb-step', '1'); } catch (e) { /* privévenster */ }
+          location.reload(); // alles opnieuw opbouwen in de nieuwe taal; de wizard gaat verder bij stap 2
+          return false;
+        },
+        focus: false },
+      { id: 'password', skip: true,
+        render(el) {
+          const ch = d().passwordChanged;
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Kies je eigen wachtwoord')}</h1>
+            <p class="lead">${ch ? t('Je hebt al een eigen wachtwoord (sinds {date}). Vul alleen iets in als je het wil wijzigen.', { date: esc(longDate(ch)) })
+              : t('Bij de installatie kreeg je een willekeurig wachtwoord. Kies er nu een dat je zelf kan onthouden, of bewaar het in je wachtwoordbeheerder.')}</p>` +
+            (pwOn ? `<form class="form" data-onb-form>${passwordFields(t('Huidig wachtwoord (uit de installatie)'))}
+              ${S.config.demo ? `<p class="muted small">${t('Demo: het huidige wachtwoord is {pw}. Aanmelden blijft met demo werken.', { pw: '<b>demo</b>' })}</p>` : ''}
+              <p class="form-error onb-err" role="alert"></p></form>`
+              : `<p class="muted">${t('HomeBaseOS draait zonder wachtwoord.')}</p>`);
+          if (pwOn) wirePasswordMeter(el);
+        },
+        async next(el) {
+          if (!pwOn) return true;
+          const val = (n) => $(`input[name="${n}"]`, el).value;
+          if (!val('current') && !val('password') && !val('repeat')) {
+            if (d().passwordChanged) return true;
+            throw new Error(t('Vul een nieuw wachtwoord in, of klik op Overslaan.'));
+          }
+          const r = await submitPassword(el);
+          d().passwordChanged = r.changed;
+          toast(t('Je nieuwe wachtwoord is ingesteld. Andere browsers zijn afgemeld.'));
+          return true;
+        } },
+      { id: 'server',
+        async render(el) {
+          el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+          let dt;
+          try { dt = await api.get('/api/datetime'); } catch (e) { dt = { timezones: [d().timezone], timezone: d().timezone }; }
+          if (!el.isConnected) return;
+          const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const suggest = /^(Etc\/)?UTC$/.test(d().timezone) && dt.timezones.includes(browserTz) ? browserTz : null;
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Je server')}</h1>
+            <p class="lead">${t('Geef je server een naam en kies de tijdzone. Apps uit de appstore krijgen dezelfde tijdzone.')}</p>
+            <form class="form" data-onb-form>
+              <label class="fld"><span>${t('Naam van de server')}</span>
+                <input class="field" name="hostname" value="${esc(d().hostname)}" spellcheck="false" autocomplete="off" maxlength="63">
+                <span class="muted small">${t('Kleine letters, cijfers en -. Zo vind je hem in je netwerk, bv. {name}.local.', { name: esc(d().hostname) })}</span></label>
+              <label class="fld"><span>${t('Tijdzone')}</span>
+                <select class="field" name="timezone">${zoneOptions(dt.timezones, suggest || d().timezone)}</select>
+                ${suggest ? `<span class="muted small">${t('Voorgesteld op basis van deze computer.')}</span>` : ''}</label>
+              <p class="form-error onb-err" role="alert"></p></form>`;
+          const hn = $('input[name="hostname"]', el);
+          hn.oninput = () => { $('.fld .muted', el).textContent = t('Kleine letters, cijfers en -. Zo vind je hem in je netwerk, bv. {name}.local.', { name: hn.value.trim().toLowerCase() || '…' }); };
+        },
+        async next(el) {
+          const hn = $('input[name="hostname"]', el), tz = $('select[name="timezone"]', el);
+          if (!hn) return true; // nog aan het laden
+          const name = hn.value.trim().toLowerCase();
+          if (name !== d().hostname) { const r = await api.post('/api/network/hostname', { hostname: name }); d().hostname = r.hostname; loadOverview().catch(() => {}); }
+          if (tz.value !== d().timezone) { await api.post('/api/datetime', { timezone: tz.value }); d().timezone = tz.value; }
+          return true;
+        } },
+      { id: 'storage',
+        render(el) {
+          const pools = d().pools, free = d().freeDisks;
+          const kind = (x) => (x.transport === 'nvme' ? 'NVMe' : x.rotational ? 'HDD' : 'SSD');
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Opslag')}</h1>
+            <p class="lead">${pools.length ? t('HomeBaseOS vond deze opslagpools. Daar komen je apps, VM\'s en gedeelde mappen.')
+              : t('Er is nog geen opslagpool. Een pool bundelt je schijven tot één grote, beschermde opslag (ZFS). Daar komen je apps, VM\'s en gedeelde mappen.')}</p>
+            ${pools.length ? `<ul class="onb-list">${pools.map((x) => `<li><span class="ok-mark">✓</span><span class="grow"><b>${esc(x.name)}</b></span>
+              <span class="muted small">${x.total ? esc(bytes(x.total)) : ''}</span><span class="pill ${x.health === 'ONLINE' ? 'ok' : 'warn'}">${esc(tr(x.health || ''))}</span></li>`).join('')}</ul>` : ''}
+            ${free.length ? `<h2 class="pane-title">${t('Vrije schijven')}</h2>
+              <ul class="onb-list">${free.map((x) => `<li><span class="pill">${kind(x)}</span><span class="grow">${esc(x.model || x.name)} <span class="muted small">(${esc(x.name)})</span></span>
+                <span class="muted small">${esc(bytes(x.size))}</span></li>`).join('')}</ul>
+              <div class="btn-row"><button class="btn${pools.length ? '' : ' primary'}" type="button" data-onb-pool>${pools.length ? t('Nog een pool aanmaken') : t('Pool aanmaken')}</button></div>`
+              : `<p class="muted small">${pools.length ? t('Er zijn geen vrije schijven meer.') : t('HomeBaseOS vond geen vrije schijven. Steek er een in en open Opslag later opnieuw.')}</p>`}`;
+          el.onclick = (e) => {
+            if (!e.target.closest('[data-onb-pool]')) return;
+            win.addEventListener('close', async () => {
+              try { ONB.data = await api.get('/api/onboarding'); } catch (ex) { return; }
+              if (ONB.steps[ONB.i] && ONB.steps[ONB.i].id === 'storage') onbRender();
+            }, { once: true });
+            poolCreateWindow(null);
+          };
+        },
+        focus: false },
+      { id: 'security',
+        render(el) {
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Tweestapsverificatie')}</h1>
+            <p class="lead">${t('Bij het aanmelden vraagt HomeBaseOS dan ook een code uit een app op je gsm. Wie alleen je wachtwoord kent, raakt er zo niet in. Aanbevolen, zeker als je HomeBaseOS ook van buitenaf gebruikt.')}</p>
+            <div id="onbMfa"><p class="muted">${t('Laden…')}</p></div>`;
+          const box = $('#onbMfa', el); box.dataset.noHead = '1';
+          mfaSection(box);
+        },
+        focus: false },
+      { id: 'done', nextLabel: t('Naar het dashboard'),
+        async render(el) {
+          try { ONB.data = await api.get('/api/onboarding'); } catch (e) { /* toon wat we weten */ }
+          if (!el.isConnected) return;
+          const row = (ok, label, value) => `<li><span class="${ok ? 'ok-mark' : 'no-mark'}">${ok ? '✓' : '–'}</span><span class="grow">${esc(label)}</span><span class="muted small">${esc(value)}</span></li>`;
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', true) +
+            `<h1 id="onbTitle">${t('Klaar!')}</h1>
+            <p class="lead">${t('HomeBaseOS is klaar voor gebruik. Dit is ingesteld:')}</p>
+            <ul class="onb-list">
+              ${row(!!d().passwordChanged, t('Wachtwoord'), d().passwordChanged ? t('Eigen wachtwoord') : t('Nog dat uit de installatie'))}
+              ${row(true, t('Naam van de server'), d().hostname)}
+              ${row(true, t('Tijdzone'), d().timezone.replace(/_/g, ' '))}
+              ${row(d().pools.length > 0, t('Opslag'), d().pools.length ? d().pools.map((x) => x.name).join(', ') : t('Nog geen pool'))}
+              ${row(d().mfa, t('Tweestapsverificatie'), d().mfa ? t('Aan') : t('Uit'))}
+            </ul>
+            <h2 class="pane-title">${t('Wat nu?')}</h2>
+            <div class="onb-next-links">
+              <button type="button" data-onb-go="store"><b>${t('Appstore')}</b><span>${t('Installeer je eerste apps.')}</span></button>
+              <button type="button" data-onb-go="vms"><b>${t('VM\'s')}</b><span>${t('Bv. Home Assistant OS.')}</span></button>
+              <button type="button" data-onb-go="shares"><b>${t('Gedeelde mappen')}</b><span>${t('Bestanden delen met je computers.')}</span></button>
+            </div>`;
+          el.onclick = async (e) => {
+            const b = e.target.closest('[data-onb-go]'); if (!b) return;
+            await onbFinish(false);
+            ({ store: () => { location.hash = 'store'; }, vms: () => { location.hash = 'vms'; }, shares: sharesWindow })[b.dataset.onbGo]();
+          };
+        },
+        next: async () => { await onbFinish(false); return false; },
+        focus: false },
+    ];
+  }
+  async function openOnboarding(startAt = 0) {
+    try { ONB.data = await api.get('/api/onboarding'); } catch (e) { toast(e.message, true); return; }
+    ONB.steps = onbSteps();
+    let resume = null;
+    try { resume = sessionStorage.getItem('tb-onb-step'); sessionStorage.removeItem('tb-onb-step'); } catch (e) { /* privévenster */ }
+    ONB.i = Math.min(ONB.steps.length - 1, resume != null ? Number(resume) || 0 : startAt);
+    ONB.dir = 1;
+    if (!onbWin.open) onbWin.showModal();
+    onbRender();
+  }
+  function onbRender() {
+    const st = ONB.steps[ONB.i], body = $('#onbBody');
+    $('#onbDots').innerHTML = ONB.steps.map((_, k) => `<li class="${k < ONB.i ? 'done' : k === ONB.i ? 'now' : ''}"></li>`).join('');
+    $('#onbDots').setAttribute('aria-label', t('Stap {n} van {total}', { n: ONB.i + 1, total: ONB.steps.length }));
+    body.innerHTML = `<div class="onb-step${ONB.dir < 0 ? ' back' : ''}"></div>`;
+    body.scrollTop = 0;
+    const el = $('.onb-step', body);
+    $('#onbBack').style.visibility = ONB.i === 0 ? 'hidden' : '';
+    $('#onbSkip').hidden = !st.skip;
+    $('#onbNext').textContent = st.nextLabel || t('Volgende');
+    $('#onbLater').hidden = ONB.i === ONB.steps.length - 1;
+    Promise.resolve(st.render(el)).then(() => {
+      const f = st.focus === false ? null : $('input:not([type=radio]):not([type=checkbox]), select', el);
+      (f || $('#onbNext')).focus();
+    });
+  }
+  async function onbGo(delta, run = true) {
+    const st = ONB.steps[ONB.i], btn = $('#onbNext'), el = $('#onbBody .onb-step');
+    if (delta > 0 && run && st.next) {
+      btn.disabled = true;
+      try { if ((await st.next(el)) === false) return; }
+      catch (e) { const er = $('.onb-err', el); if (er) er.textContent = e.message; else toast(e.message, true); return; }
+      finally { btn.disabled = false; }
+    }
+    const to = ONB.i + delta;
+    if (to >= ONB.steps.length) { await onbFinish(false); return; }
+    ONB.dir = delta; ONB.i = Math.max(0, to); onbRender();
+  }
+  async function onbFinish(skipped) {
+    try { await api.post('/api/onboarding/finish', { skipped }); } catch (e) { toast(e.message, true); return; }
+    S.config.onboarding = false;
+    if (onbWin.open) onbWin.close();
+    if (skipped) toast(t('Je vindt de welkomstwizard terug bij Instellingen → Algemeen.'));
+  }
+  $('#onbNext').addEventListener('click', () => onbGo(1));
+  $('#onbBack').addEventListener('click', () => onbGo(-1, false));
+  $('#onbSkip').addEventListener('click', () => onbGo(1, false));
+  $('#onbLater').addEventListener('click', () => onbFinish(true));
+  onbWin.addEventListener('cancel', (e) => e.preventDefault()); // Escape sluit de wizard niet per ongeluk
+  // Enter in een veld van de wizard = Volgende (niet in de formulieren van tweestapsverificatie).
+  $('#onbBody').addEventListener('submit', (e) => { if (!e.target.closest('[data-onb-form]')) return; e.preventDefault(); onbGo(1); });
+
+  function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } }
+  function demoClock() { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } }
+  function useDemo() { api = translatedApi(window.HomeBaseOSDemo); S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, clock: demoClock(), onboarding: !demoOnboarded() }; startDesk(); }
 
   /* ------------------------------------------------------------ gebeurtenissen */
   document.addEventListener('click', (e) => {
+    const cp = e.target.closest('[data-copy]');
+    if (cp) {
+      const text = cp.dataset.copy;
+      const ok = () => toast(t('Gekopieerd: {text}', { text }));
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, () => toast(t('Kopiëren lukte niet in deze browser.'), true));
+      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); const r = document.execCommand('copy'); ta.remove(); if (r) ok(); else toast(t('Kopiëren lukte niet in deze browser.'), true); }
+      return;
+    }
     const con = e.target.closest('[data-console]');
     if (con) { openConsole(con.dataset.console); return; }
     const ext = e.target.closest('a[target="_blank"]');
@@ -2946,7 +3926,10 @@
       return;
     }
     const open = e.target.closest('[data-open]');
-    if (open) { ({ storage: storageWindow, vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open](); return; }
+    if (open) {
+      ({ home: goHome, storage: storageWindow, shares: sharesWindow, vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
+      return;
+    }
     const fo = e.target.closest('[data-folder-open]');
     if (fo) { openFolder(fo.dataset.folderOpen); return; }
     if (S.arrange && e.target.closest('#appGrid, #folderGrid')) return; // rangschikken: klikken opent niets
@@ -2978,11 +3961,71 @@
     $$('#filters button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
     renderApps();
   });
-  $('#logoutBtn').addEventListener('click', async () => { await api.post('/api/logout').catch(() => {}); location.reload(); });
+  $('#logoutBtn').addEventListener('click', async () => {
+    await api.post('/api/logout').catch(() => {});
+    if (S.config.demo) showLogin(); else location.reload(); // de demo toont het aanmeldscherm
+  });
+
+  /* --- aanmelden: eerst het wachtwoord, daarna (als het aan staat) een code uit de authenticator-app of een herstelcode */
+  const loginApi = () => (S.config && S.config.demo ? api : realApi);
+  let mfaPending = null, mfaRecovery = false;
+  function loginStep(step) {
+    const two = step === 'mfa';
+    $('#loginForm').hidden = two; $('#mfaForm').hidden = !two;
+    $('#loginTitle').textContent = two ? t('Tweestapsverificatie') : t('Welkom terug');
+    $('#loginSub').textContent = two ? t('Typ de code van 6 cijfers uit je authenticator-app.') : t('Meld je aan om je server te beheren.');
+    $('#loginError').textContent = ''; $('#mfaError').textContent = '';
+    if (two) setRecoveryMode(false);
+    else { mfaPending = null; $('#pw').value = ''; $('#pw').focus(); }
+  }
+  function setRecoveryMode(on) {
+    mfaRecovery = on;
+    const c = $('#mfaCode');
+    c.value = ''; c.classList.toggle('recovery', on);
+    c.inputMode = on ? 'text' : 'numeric'; c.maxLength = on ? 11 : 7; c.autocomplete = on ? 'off' : 'one-time-code';
+    c.pattern = on ? '[A-Za-z0-9 \\-]*' : '[0-9 ]*'; c.placeholder = on ? 'xxxxx-xxxxx' : '';
+    $('#mfaLabel').textContent = on ? t('Herstelcode') : t('Code uit je authenticator-app');
+    $('#loginSub').textContent = on ? t('Typ een van de herstelcodes die je bewaard hebt. Elke code werkt maar één keer.') : t('Typ de code van 6 cijfers uit je authenticator-app.');
+    $('#mfaToggle').textContent = on ? t('Gebruik de app') : t('Gebruik een herstelcode');
+    $('#mfaError').textContent = '';
+    c.focus();
+  }
+  function shake() { const c = $('.login-card'); c.classList.remove('login-shake'); void c.offsetWidth; c.classList.add('login-shake'); }
+  function loggedIn(r) {
+    if (r && r.recovery) toast(t('Aangemeld met een herstelcode. Je hebt er nog {n} over.', { n: r.recoveryLeft }), r.recoveryLeft < 3);
+    if (S.config.demo) { $('#pw').value = ''; startDesk(); } else boot();
+  }
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault(); $('#loginError').textContent = '';
-    try { await realApi.post('/api/login', { password: $('#pw').value }); boot(); }
-    catch (err) { $('#loginError').textContent = err.message; }
+    const btn = $('#loginForm .login-go'); btn.disabled = true;
+    try {
+      const r = await loginApi().post('/api/login', { password: $('#pw').value, remember: $('#remember').checked });
+      if (r.mfa) { mfaPending = r.pending; loginStep('mfa'); } else loggedIn(r);
+    } catch (err) { $('#loginError').textContent = err.message; shake(); $('#pw').select(); }
+    finally { btn.disabled = false; }
+  });
+  $('#mfaForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#mfaForm .login-go'); if (btn.disabled) return;
+    $('#mfaError').textContent = ''; btn.disabled = true;
+    try { loggedIn(await loginApi().post('/api/login/mfa', { pending: mfaPending, code: $('#mfaCode').value, remember: $('#remember').checked })); }
+    catch (err) {
+      if (err.expired || (err.data && err.data.expired)) { loginStep('password'); $('#loginError').textContent = err.message; return; }
+      $('#mfaError').textContent = err.message; shake(); $('#mfaCode').select();
+    } finally { btn.disabled = false; }
+  });
+  // Zes cijfers getypt, geplakt of ingevuld door de gsm? Meteen bevestigen.
+  $('#mfaCode').addEventListener('input', (e) => {
+    if (!mfaRecovery && /^\d{6}$/.test(e.target.value.replace(/\s/g, ''))) $('#mfaForm').requestSubmit();
+  });
+  $('#mfaToggle').addEventListener('click', () => setRecoveryMode(!mfaRecovery));
+  $('#mfaBack').addEventListener('click', () => loginStep('password'));
+  $('#pwShow').addEventListener('click', (e) => {
+    const b = e.currentTarget, show = $('#pw').type === 'password';
+    $('#pw').type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', String(show));
+    const label = show ? t('Wachtwoord verbergen') : t('Wachtwoord tonen');
+    b.setAttribute('aria-label', label); b.title = label;
+    $('#pw').focus();
   });
 
   /* sterren voor de avondhemel */
@@ -2995,7 +4038,7 @@
 
   /* ------------------------------------------------------------ start */
   async function boot() {
-    if (window.THUISBASIS_FORCE_DEMO) return useDemo();
+    if (window.HOMEBASEOS_FORCE_DEMO) return useDemo();
     let cfg;
     try { cfg = await realApi.get('/api/config'); } catch (e) { return useDemo(); } // geen server: statische demo
     S.config = cfg;

@@ -88,7 +88,7 @@ test('compose-bestand bouwen', () => {
   const [jf, pxe] = s.normalizeFeed(FEED).apps;
   const r = s.buildCompose(jf, 'jellyfin', s.prepareFields(jf.config, 'jellyfin', 'Europe/Brussels'), { tz: 'Europe/Brussels' });
   const t = r.text;
-  assert.match(t, /^# Gemaakt door Thuisbasis uit het Community Apps-template "jellyfin" van linuxserver/);
+  assert.match(t, /^# Gemaakt door HomeBaseOS uit het Community Apps-template "jellyfin" van linuxserver/);
   assert.match(t, /\n {4}image: "lscr\.io\/linuxserver\/jellyfin"\n/);
   assert.match(t, /- "8096:8096\/tcp"/);
   assert.match(t, /- "7359:7359\/udp"/);
@@ -103,8 +103,8 @@ test('compose-bestand bouwen', () => {
   assert.match(t, /shm_size: "1gb"/);
   assert.match(t, /cap_add:\n {6}- "NET_ADMIN"/);
   assert.match(t, /driver: "nvidia"/);
-  assert.match(t, /thuisbasis\.data: "\/snel\/appdata\/jellyfin"/);
-  assert.match(t, /thuisbasis\.webui: "http:\/\/\[IP\]:\[PORT:8096\]"/);
+  assert.match(t, /homebaseos\.data: "\/snel\/appdata\/jellyfin"/);
+  assert.match(t, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:8096\]"/);
   assert.deepEqual(r.data, ['/snel/appdata/jellyfin']);
   assert.ok(r.warnings.some((w) => /NVIDIA/.test(w)));
   assert.ok(r.warnings.some((w) => /--foo-bar/.test(w)));

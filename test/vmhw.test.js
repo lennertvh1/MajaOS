@@ -221,3 +221,20 @@ test('klembord delen (qemu-vdagent) aan en uit', () => {
   assert.deepEqual(hw.validateHardware({ clipboard: true }, OPTS, hw.parseHardware(DOMAIN)), { clipboard: true });
   assert.deepEqual(hw.validateHardware({ clipboard: false }, OPTS, hw.parseHardware(DOMAIN)), {});
 });
+
+test('IP-adressen van een VM (virsh domifaddr)', () => {
+  const vms = require('../lib/vms');
+  const agent = ` Name       MAC address          Protocol     Address
+-------------------------------------------------------------------------------
+ lo         00:00:00:00:00:00    ipv4         127.0.0.1/8
+ -          -                    ipv6         ::1/128
+ enp0s2     52:54:00:6b:3c:58    ipv4         192.168.1.40/24
+ -          -                    ipv6         fd00::5054:ff:fe6b:3c58/64
+ -          -                    ipv6         fe80::5054:ff:fe6b:3c58/64
+ docker0    02:42:ac:11:00:01    ipv4         169.254.10.1/16
+`;
+  const list = vms.parseDomifaddr(agent);
+  assert.equal(list.length, 6);
+  assert.deepEqual(vms.usableIps(list), ['192.168.1.40', 'fd00::5054:ff:fe6b:3c58']);
+  assert.deepEqual(vms.usableIps(vms.parseDomifaddr(' Name       MAC address          Protocol     Address\n----\n')), []);
+});

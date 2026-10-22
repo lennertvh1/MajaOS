@@ -196,7 +196,7 @@ test('Docker-poorten en web-adres', () => {
   const ports = dk.publicPorts([{ PrivatePort: 80, PublicPort: 8096, Type: 'tcp' }, { PrivatePort: 80, PublicPort: 8096, Type: 'tcp' }, { PrivatePort: 53 }]);
   assert.deepEqual(ports, [{ public: 8096, private: 80, type: 'TCP' }]);
   assert.equal(dk.webui({}, ports), 'http://[IP]:8096/');
-  assert.equal(dk.webui({ 'thuisbasis.webui': 'http://[IP]:[PORT:80]/web' }, ports), 'http://[IP]:8096/web');
+  assert.equal(dk.webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/web' }, ports), 'http://[IP]:8096/web');
 });
 
 test('/proc: CPU-regel, meminfo en ZFS-cache', () => {

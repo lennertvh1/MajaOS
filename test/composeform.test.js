@@ -12,7 +12,7 @@ const PROJECT = {
     jellyfin: {
       container_name: 'jellyfin', image: 'lscr.io/linuxserver/jellyfin:latest', restart: 'unless-stopped',
       environment: { PUID: '1000', TZ: 'Europe/Brussels', DOORGEVEN: null },
-      labels: { 'thuisbasis.icon': 'https://x/jf.png' },
+      labels: { 'homebaseos.icon': 'https://x/jf.png' },
       ports: [
         { mode: 'ingress', target: 8096, published: '8096', protocol: 'tcp' },
         { mode: 'ingress', target: 7359, published: '7359', protocol: 'udp' },
@@ -49,7 +49,7 @@ test('formulier lezen: poorten, mappen, variabelen, apparaten en labels', () => 
     ['/mnt/x', '/x', 'rw', true], ['cache', '/cache', 'rw', false], ['', '/transcode', 'rw', true]]);
   assert.deepEqual(f.env, [{ name: 'PUID', value: '1000' }, { name: 'TZ', value: 'Europe/Brussels' }, { name: 'DOORGEVEN', value: '', unset: true }]);
   assert.deepEqual(f.devices, [{ host: '/dev/dri', container: '/dev/dri', perm: '' }]);
-  assert.deepEqual(f.labels, [{ name: 'thuisbasis.icon', value: 'https://x/jf.png' }]);
+  assert.deepEqual(f.labels, [{ name: 'homebaseos.icon', value: 'https://x/jf.png' }]);
   assert.deepEqual(cf.serviceForm(PROJECT, 'db').env, [{ name: 'POSTGRES_PASSWORD', value: 'geheim' }]);
 });
 

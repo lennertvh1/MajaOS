@@ -1,0 +1,19 @@
+[Unit]
+Description=HomeBaseOS (beheer van je thuisserver)
+After=network-online.target libvirtd.service docker.service zfs.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/homebaseos/homebaseos.env
+ExecStart=/usr/bin/node /opt/homebaseos/server.js
+Restart=on-failure
+RestartSec=5
+# /var/lib/homebaseos: eigen instellingen (o.a. startuitstel van VM's)
+StateDirectory=homebaseos
+# /run/homebaseos: merkteken "VM's al automatisch gestart". Blijft staan tot de server herstart,
+# zodat een herstart van HomeBaseOS zelf je VM's niet opnieuw start.
+RuntimeDirectory=homebaseos
+RuntimeDirectoryPreserve=yes
+
+[Install]
+WantedBy=multi-user.target

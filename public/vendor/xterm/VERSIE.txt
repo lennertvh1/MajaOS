@@ -1,0 +1,1 @@
+xterm.js 6.0.0 (@xterm/xterm) en @xterm/addon-fit 0.11.0, ongewijzigd uit npm (lib/xterm.js, css/xterm.css, lib/addon-fit.js). Licentie: MIT (zie LICENSE).

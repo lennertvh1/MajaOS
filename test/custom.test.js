@@ -33,15 +33,15 @@ test('compose-bestand van een eigen app', () => {
   assert.match(c.text, /restart: "always"/);
   assert.match(c.text, /ports:\n {6}- "3001:3001\/tcp"/);
   assert.match(c.text, /volumes:\n {6}- "\/snel\/appdata\/kuma:\/app\/data"/);
-  assert.match(c.text, /thuisbasis.custom: "1"/);
-  assert.match(c.text, /thuisbasis.data: "\/snel\/appdata\/kuma"/);
+  assert.match(c.text, /homebaseos.custom: "1"/);
+  assert.match(c.text, /homebaseos.data: "\/snel\/appdata\/kuma"/);
   assert.deepEqual(c.data, ['/snel/appdata/kuma']);
-  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'eigen', value: 'ja' }, { name: 'thuisbasis.store', value: 'x' }] },
+  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'eigen', value: 'ja' }, { name: 'homebaseos.store', value: 'x' }] },
     { network: { mode: 'bridge' }, takenPorts: [] });
   assert.match(extra.text, /devices:\n {6}- "\/dev\/dri:\/dev\/dri"/);
   assert.match(extra.text, /privileged: true/);
   assert.match(extra.text, /eigen: "ja"/);
-  assert.doesNotMatch(extra.text, /thuisbasis.store/);
+  assert.doesNotMatch(extra.text, /homebaseos.store/);
   const host = store.buildCustomCompose(body, { network: { mode: 'host' }, takenPorts: [] });
   assert.match(host.text, /network_mode: "host"/); assert.doesNotMatch(host.text, /ports:/);
   const bad = (b, re, taken = []) => assert.throws(() => store.buildCustomCompose({ ...body, ...b }, { network: { mode: 'bridge' }, takenPorts: taken }), re);
@@ -69,4 +69,10 @@ test('manifest kiezen voor de architectuur van de server', () => {
     { digest: 'c', platform: { os: 'unknown', architecture: 'unknown' } }] };
   assert.equal(pickManifest(idx, 'amd64').digest, 'b');
   assert.equal(pickManifest(idx, 'riscv64'), null);
+});
+
+test('widgets: volgorde en verborgen', () => {
+  const out = validateLayout({ items: [], widgets: { order: ['sys', 'shares', 'sys', 'Bad!', 'vms'], hidden: ['ai', 7] } });
+  assert.deepEqual(out.widgets, { order: ['sys', 'shares', 'vms'], hidden: ['ai'] });
+  assert.deepEqual(validateLayout({ items: [] }).widgets, { order: [], hidden: [] });
 });

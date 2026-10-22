@@ -46,7 +46,7 @@
   let demo = false;
 
   const name = decodeURIComponent(location.hash.slice(1));
-  // In een venster van Thuisbasis (iframe) of los (eigen browservenster)?
+  // In een venster van HomeBaseOS (iframe) of los (eigen browservenster)?
   const embedded = window.self !== window.top;
   const consoleUrl = () => location.pathname + location.hash;
   const vmPath = '/api/vms/' + encodeURIComponent(name);
@@ -100,7 +100,7 @@
     rfb.addEventListener('connect', () => { connecting = false; status(''); setTools(true); rfb.focus(); });
     rfb.addEventListener('clipboard', (e) => onVmClipboard(e.detail.text));
     rfb.addEventListener('credentialsrequired', () => rfb.sendCredentials({ password: (vm.vnc && vm.vnc.password) || '' }));
-    rfb.addEventListener('securityfailure', () => status(t('Het wachtwoord van het scherm klopt niet. Open de console opnieuw vanuit Thuisbasis.')));
+    rfb.addEventListener('securityfailure', () => status(t('Het wachtwoord van het scherm klopt niet. Open de console opnieuw vanuit HomeBaseOS.')));
     rfb.addEventListener('disconnect', () => {
       connecting = false; rfb = null; setTools(false);
       retryAt = Date.now() + 5000; // vanzelf opnieuw proberen, maar niet meteen
@@ -140,14 +140,14 @@
     $('#cTypeBar').hidden = true; $('#cType').setAttribute('aria-expanded', 'false');
   });
 
-  /* ---- los venster: de console uit Thuisbasis halen */
+  /* ---- los venster: de console uit HomeBaseOS halen */
   if (embedded) {
     $('#cPop').hidden = false; $('#cClose').hidden = false;
     document.querySelector('.console-bar .back').hidden = true;
   }
   $('#cPop').addEventListener('click', () => {
     const w = window.open(consoleUrl(), 'tb-console-' + name.replace(/[^\w-]/g, ''), 'popup=yes,width=1180,height=800');
-    if (!w) { toast(t('Je browser blokkeerde het nieuwe venster. Sta pop-ups toe voor Thuisbasis.'), true); return; }
+    if (!w) { toast(t('Je browser blokkeerde het nieuwe venster. Sta pop-ups toe voor HomeBaseOS.'), true); return; }
     disconnect();
     if (window.parent && window.parent.TB_closeConsole) window.parent.TB_closeConsole();
   });
@@ -260,14 +260,14 @@
 
   /* ---- starten */
   (async function init() {
-    if (!name) { status(t('Geen VM gekozen. Open de console vanuit de VM-pagina van Thuisbasis.')); translateStatic(); return; }
+    if (!name) { status(t('Geen VM gekozen. Open de console vanuit de VM-pagina van HomeBaseOS.')); translateStatic(); return; }
     let cfg = null;
     try { cfg = await call('GET', '/api/config'); } catch (e) { /* hieronder */ }
     if (cfg && !cfg.demo && cfg.language) LANG = cfg.language;
     translateStatic();
-    if (!cfg) { status(t('Thuisbasis is niet bereikbaar.'), [[t('Opnieuw proberen'), () => location.reload()]]); return; }
-    if (cfg.needsLogin) { status(t('Meld je eerst aan in Thuisbasis.'), [[t('Aanmelden'), () => { location.href = '/'; }, true]]); return; }
-    if (cfg.demo && window.ThuisbasisDemo) { demo = true; api = window.ThuisbasisDemo; }
+    if (!cfg) { status(t('HomeBaseOS is niet bereikbaar.'), [[t('Opnieuw proberen'), () => location.reload()]]); return; }
+    if (cfg.needsLogin) { status(t('Meld je eerst aan in HomeBaseOS.'), [[t('Aanmelden'), () => { location.href = '/'; }, true]]); return; }
+    if (cfg.demo && window.HomeBaseOSDemo) { demo = true; api = window.HomeBaseOSDemo; }
     await refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 5000);
   })();

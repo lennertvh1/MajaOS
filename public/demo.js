@@ -50,6 +50,158 @@
   Object.assign(apps.find((a) => a.name === 'pihole'), { webui: 'http://192.168.1.53/admin/', ports: [] });
 
   /* ---- instellingen: taal, over en netwerk */
+  const demoSecurity = { terminal: true, terminalPassword: true };
+  /* ---- welkomstwizard: per browser onthouden of hij al afgerond is */
+  const onb = { passwordChanged: null };
+  const onbDone = () => { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } };
+  const onbSet = (v) => { try { if (v) localStorage.setItem('tb-onboarded', '1'); else localStorage.removeItem('tb-onboarded'); } catch (e) { /* privévenster */ } };
+  function onbGet() {
+    const o = poolOptions();
+    return { done: onbDone(), finished: null, skipped: false, hostname: net.hostname, timezone: dt.timezone, passwordChanged: onb.passwordChanged, mfa: mfa.enabled,
+      pools: pools.map((x) => ({ name: x.name, total: x.total, health: x.health })),
+      freeDisks: o.disks.filter((d) => d.available).map((d) => ({ name: d.name, size: d.size, model: d.model, rotational: d.rotational, transport: d.transport })) };
+  }
+  function demoPassword(body) {
+    if (String(body.current || '') !== DEMO_PW) throw err('Je huidige wachtwoord klopt niet.', 401);
+    const v = String(body.password || '');
+    if (v.length < 10) throw err('Kies een wachtwoord van minstens 10 tekens.');
+    if (v.length > 200) throw err('Het wachtwoord is te lang (maximaal 200 tekens).');
+    if (/^(.)\1+$/.test(v) || /^(0123456789|1234567890|wachtwoord|password)/i.test(v)) throw err('Dit wachtwoord is te makkelijk te raden. Kies een ander.');
+    onb.passwordChanged = new Date().toISOString(); // in de demo blijft aanmelden met "demo" werken
+    return { ok: true, changed: onb.passwordChanged };
+  }
+  const demoClock = () => { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } };
+
+  /* ---- software-update: een nagebootste nieuwe versie met release-notes */
+  const upd = { auto: true, channel: 'stable', checked: new Date(Date.now() - 3 * 3600000).toISOString() };
+  const demoReleases = [
+    { version: '0.4.0-beta.1', name: 'v0.4.0-beta.1', prerelease: true, published: '2026-10-21T09:00:00Z',
+      notes: '## Om te testen\n\n- Snapshots van VM\'s maken en terugzetten\n- **Let op:** nog niet geschikt voor dagelijks gebruik' },
+    { version: '0.3.0', name: 'Datum, tijd en tweestapsverificatie', prerelease: false, published: '2026-10-20T18:00:00Z',
+      notes: '## Nieuw\n\n- **Aanmelden met tweestapsverificatie** (TOTP) met herstelcodes\n- Datum, tijd en tijdzone instellen bij *Instellingen > Algemeen*\n- Tijdnotatie: 24 of 12 uur\n\n## Verbeterd\n\n- Snellere lijst met apps\n- De console onthoudt de grootte van het venster\n\n## Opgelost\n\n- Een share zonder gebruikers gaf een fout bij het opslaan\n\n**Volledige lijst**: https://github.com/lennertvh1/homebaseos/compare/v0.2.0...v0.3.0' },
+    { version: '0.2.0', name: 'v0.2.0', prerelease: false, published: '2026-10-01T12:00:00Z',
+      notes: '## Nieuw\n\n- Appstore met de catalogus van Unraid Community Apps\n- Schijfbays, ZFS-pools en gedeelde mappen\n- Terminal op de server' },
+  ].map((r) => ({ ...r, url: 'https://github.com/lennertvh1/homebaseos/releases/tag/v' + r.version }));
+  function updGet() {
+    const list = demoReleases.filter((r) => upd.channel === 'beta' || !r.prerelease), cur = upd.current || '0.2.0';
+    const i = Math.max(0, list.findIndex((r) => r.version === cur)), newer = list.slice(0, i);
+    return { repo: 'lennertvh1/homebaseos', token: true, auto: upd.auto, channel: upd.channel, checked: upd.checked, error: null, current: cur,
+      latest: list[0], updateAvailable: newer.length > 0, newer, installed: list[i] || null, history: list.slice(i),
+      install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
+  }
+  // Nu bijwerken, nagebootst: dezelfde stappen als lib/updater.js + lib/update-helper.sh, met een herstart waarin de server even weg is.
+  const UPD_PLAN = [[0, 'download', 2], [4000, 'extract', 42, 'Uitpakken…'], [5000, 'verify', 50, 'De nieuwe versie controleren…'],
+    [6500, 'handover', 56, 'Klaar om te installeren…'], [7000, 'backup', 60, 'Reservekopie maken van versie {from}…'],
+    [8500, 'install', 68, 'Nieuwe bestanden installeren…'], [10000, 'restart', 85, 'HomeBaseOS herstarten…'],
+    [13500, 'check', 92, 'Controleren of versie {version} goed draait…'], [15500, 'done', 100, 'Bijgewerkt naar versie {version}.']];
+  function updProgress() {
+    const j = upd.job; if (!j) return { state: 'idle' };
+    const ms = Date.now() - j.start;
+    if (ms > 10500 && ms < 13500) throw err('Failed to fetch', 503); // de server herstart
+    const [, step, pct, msg] = UPD_PLAN.filter((x) => x[0] <= ms).pop();
+    const fill = (m) => m.replace('{from}', j.from).replace('{version}', j.version);
+    const out = { state: step === 'done' ? 'done' : 'running', step, percent: pct, version: j.version, from: j.from, message: fill(msg || 'Versie {version} downloaden…') };
+    if (step === 'download') { const total = 1.9 * 1024 * 1024; out.bytes = Math.round(total * Math.min(1, ms / 4000)); out.total = total; out.percent = Math.round(2 + 38 * out.bytes / total); }
+    if (step === 'done' && !j.finished) { j.finished = true; upd.current = j.version; }
+    return out;
+  }
+
+  /* ---- datum en tijd (zoals timedatectl): offset = verschil met de klok van de browser */
+  const dt = { timezone: 'Europe/Brussels', ntp: true, servers: [], offset: 0 };
+  const DEFAULT_NTP = ['0.debian.pool.ntp.org', '1.debian.pool.ntp.org', '2.debian.pool.ntp.org', '3.debian.pool.ntp.org'];
+  let zones = null;
+  const demoZones = () => zones || (zones = (() => { try { return Intl.supportedValuesOf('timeZone').concat('UTC').sort(); } catch (e) { return ['Europe/Brussels', 'UTC']; } })());
+  function dtGet() {
+    return { now: Date.now() + dt.offset, timezone: dt.timezone, ntp: dt.ntp, ntpAvailable: true, synced: dt.ntp, localRtc: false,
+      server: dt.ntp ? (dt.servers[0] || DEFAULT_NTP[0]) : null, servers: dt.servers.slice(), defaultServers: DEFAULT_NTP, editable: true, timezones: demoZones() };
+  }
+  function dtSet(body) {
+    if (body.timezone != null && !demoZones().includes(body.timezone)) throw err('Kies een tijdzone uit de lijst.');
+    let servers = dt.servers;
+    if (body.servers != null) {
+      servers = [...new Set(String(body.servers).split(/[\s,;]+/).filter(Boolean))];
+      if (servers.length > 6) throw err('Geef maximaal 6 tijdservers op.');
+      const bad = servers.find((h) => !/^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(h) || h.includes('..'));
+      if (bad) throw err('"' + bad + '" is geen geldige tijdserver. Gebruik een naam zoals be.pool.ntp.org of een IP-adres.');
+    }
+    const ntp = body.ntp == null ? dt.ntp : !!body.ntp;
+    let offset = ntp ? 0 : dt.offset;
+    if (body.time) {
+      if (ntp) throw err('Zet de automatische tijd eerst uit om de tijd zelf in te stellen.', 409);
+      const m = String(body.time).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if (!m) throw err('Vul een geldige datum en tijd in.');
+      // De ingevulde tijd geldt in de tijdzone van de server: reken het verschil met die tijdzone uit.
+      const tz = body.timezone || dt.timezone, guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(guess)).map((x) => [x.type, +x.value || x.value]));
+      const tzOff = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - guess;
+      offset = guess - tzOff - Date.now();
+    }
+    Object.assign(dt, { timezone: body.timezone || dt.timezone, servers, ntp, offset });
+    return dtGet();
+  }
+
+  /* ---- aanmelden met tweestapsverificatie: echte TOTP-codes (RFC 6238), zodat je het met je eigen authenticator-app kan proberen.
+     Wachtwoord in de demo: demo. Alles blijft in het geheugen van deze tab. */
+  const DEMO_PW = 'demo';
+  const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const b32enc = (bytes) => { let bits = 0, v = 0, o = ''; for (const b of bytes) { v = (v << 8) | b; bits += 8; while (bits >= 5) { o += B32[(v >>> (bits - 5)) & 31]; bits -= 5; } } return bits ? o + B32[(v << (5 - bits)) & 31] : o; };
+  const b32dec = (str) => { let bits = 0, v = 0; const o = []; for (const ch of str) { v = (v << 5) | B32.indexOf(ch); bits += 5; if (bits >= 8) { o.push((v >>> (bits - 8)) & 255); bits -= 8; } } return new Uint8Array(o); };
+  async function hotp(secret, ctr) {
+    const key = await crypto.subtle.importKey('raw', b32dec(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    const msg = new DataView(new ArrayBuffer(8)); msg.setUint32(0, Math.floor(ctr / 2 ** 32)); msg.setUint32(4, ctr >>> 0);
+    const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg.buffer)), o = h[19] & 15;
+    return String((((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1e6).padStart(6, '0');
+  }
+  const mfa = { enabled: false, secret: null, setup: null, recovery: [], lastCounter: -1, since: null, pending: null };
+  const RC = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const newCodes = () => Array.from({ length: 10 }, () => { const s = [...crypto.getRandomValues(new Uint8Array(10))].map((x) => RC[x % RC.length]).join(''); return s.slice(0, 5) + '-' + s.slice(5); });
+  async function totpCheck(secret, code, last = -1) {
+    const c = String(code || '').replace(/\s/g, ''); if (!/^\d{6}$/.test(c)) return null;
+    const base = Math.floor(Date.now() / 30000);
+    for (let d = -1; d <= 1; d++) if (base + d > last && (await hotp(secret, base + d)) === c) return base + d;
+    return null;
+  }
+  async function mfaCheck(code) {
+    const ctr = await totpCheck(mfa.secret, code, mfa.lastCounter);
+    if (ctr != null) { mfa.lastCounter = ctr; return { ok: true }; }
+    const norm = String(code || '').toLowerCase().replace(/[^a-z0-9]/g, ''), i = mfa.recovery.findIndex((x) => x.replace('-', '') === norm);
+    if (norm.length === 10 && i >= 0) { mfa.recovery.splice(i, 1); return { ok: true, recovery: true, recoveryLeft: mfa.recovery.length }; }
+    return { ok: false };
+  }
+  async function authPost(path, body) {
+    if (path === '/api/login') {
+      if (String(body.password || '') !== DEMO_PW) { await wait(800); throw err('Verkeerd wachtwoord', 401); }
+      if (mfa.enabled) { mfa.pending = { id: Math.random().toString(36).slice(2), until: Date.now() + 300000, tries: 0 }; return { mfa: true, pending: mfa.pending.id }; }
+      return { ok: true };
+    }
+    if (path === '/api/login/mfa') {
+      const p = mfa.pending;
+      if (!p || p.id !== body.pending || p.until < Date.now()) throw Object.assign(err('Je aanmelding is verlopen. Typ je wachtwoord opnieuw.', 401), { expired: true });
+      const r = await mfaCheck(body.code);
+      if (!r.ok) { if (++p.tries >= 5) mfa.pending = null; await wait(800); throw err('Die code klopt niet.', 401); }
+      mfa.pending = null;
+      return { ok: true, recovery: !!r.recovery, recoveryLeft: r.recoveryLeft };
+    }
+    const action = path.slice('/api/mfa/'.length);
+    if (action === 'enable') {
+      if (!mfa.setup) throw err('Het koppelen duurde te lang. Begin opnieuw.', 410);
+      const ctr = await totpCheck(mfa.setup, body.code);
+      if (ctr == null) throw err('Die code klopt niet. Controleer de klok van je gsm en typ de code die nu in de app staat.');
+      const codes = newCodes();
+      Object.assign(mfa, { enabled: true, secret: mfa.setup, setup: null, recovery: codes.slice(), lastCounter: ctr, since: new Date().toISOString() });
+      return { recovery: codes };
+    }
+    if (String(body.password || '') !== DEMO_PW) { await wait(800); throw err('Verkeerd wachtwoord', 401); }
+    if (action === 'setup') {
+      if (mfa.enabled) throw err('Tweestapsverificatie staat al aan. Zet ze eerst uit om opnieuw te koppelen.', 409);
+      mfa.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
+      return { secret: mfa.setup, uri: `otpauth://totp/HomeBaseOS:freddy?secret=${mfa.setup}&issuer=HomeBaseOS&algorithm=SHA1&digits=6&period=30` };
+    }
+    if (!(await mfaCheck(body.code)).ok) { await wait(800); throw err('Die code klopt niet.', 401); }
+    if (action === 'disable') { Object.assign(mfa, { enabled: false, secret: null, recovery: [], lastCounter: -1, since: null }); return { ok: true }; }
+    if (action === 'recovery') { mfa.recovery = newCodes(); return { recovery: mfa.recovery.slice() }; }
+    throw err('Onbekend endpoint', 404);
+  }
   const demoLang = () => { try { return localStorage.getItem('tb-lang') || 'nl'; } catch (e) { return 'nl'; } };
   function demoAbout() {
     return {
@@ -58,7 +210,7 @@
       ecc: { active: true, mode: 'SECDED', corrected: 0 }, gpus: ['NVIDIA GeForce RTX 3060 Ti'],
       board: { vendor: 'ASRock', product: 'B550M Steel Legend', boardVendor: 'ASRock', board: 'B550M Steel Legend', bios: 'P3.20', biosDate: '06/13/2025' },
       addresses: [{ interface: 'br0', address: net.links[1].ipv4[0].address.split('/')[0] }],
-      versions: { thuisbasis: '0.2.0', node: '20.19.2', docker: '28.5.1', compose: '2.40.0', zfs: '2.3.2', libvirt: '11.3.0', hypervisor: 'QEMU 10.0.2' },
+      versions: { homebaseos: '0.2.0', node: '20.19.2', docker: '28.5.1', compose: '2.40.0', zfs: '2.3.2', libvirt: '11.3.0', hypervisor: 'QEMU 10.0.2' },
     };
   }
   const net = {
@@ -197,8 +349,52 @@
       const apps = (it.apps || []).filter((n) => !seen.has(n) && seen.add(n));
       return apps.length > 1 ? { folder: it.folder, name: String(it.name || 'Map').slice(0, 40), apps } : apps[0] || null;
     }).filter(Boolean);
-    layout = { items };
+    const ok = (a) => [...new Set((Array.isArray(a) ? a : []).filter((x) => /^[a-z]{2,16}$/.test(x)))];
+    layout = { items, widgets: { order: ok(b.widgets && b.widgets.order), hidden: ok(b.widgets && b.widgets.hidden) } };
     return copy(layout);
+  }
+
+  /* ---- gedeelde mappen (Samba) */
+  const shareUsers = ['lies', 'tom'];
+  const shareList = [
+    { name: 'media', path: '/tank/media', comment: 'Films, series en muziek', users: { lies: 'rw', tom: 'ro' }, guest: false, timemachine: false },
+    { name: 'fotos', path: '/tank/fotos', comment: '', users: { lies: 'rw', tom: 'rw' }, guest: false, timemachine: false },
+    { name: 'TimeMachine', path: '/tank/timemachine', comment: 'Back-ups van de Macs', users: { lies: 'rw' }, guest: false, timemachine: true },
+  ];
+  const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'snel', mountpoint: '/snel' }]
+    .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
+  function sharesGet() {
+    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), appUser: 'lennert', roots: shareRoots(),
+      connections: { total: 2, perShare: { media: 2, fotos: 1 } },
+      users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => x.users[name]).map((x) => x.name) })) };
+  }
+  function shareSave(b, original) {
+    const name = String(b.name || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/.test(name) || /^(global|homes|printers)$/i.test(name)) throw err('Kies een naam met letters, cijfers, -, _ of . (maximaal 32 tekens), bv. media.');
+    if (shareList.some((x) => x.name !== original && x.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een gedeelde map met de naam ' + name + '.', 409);
+    const users = {}; for (const [u, v] of Object.entries(b.users || {})) if ((v === 'ro' || v === 'rw') && shareUsers.includes(u)) users[u] = v;
+    if (!b.guest && !Object.keys(users).length) throw err('Geef minstens één gebruiker toegang, of laat gasten lezen.');
+    let p;
+    if (b.create) { const r = shareRoots().find((x) => x.name === b.create.parent); if (!r) throw err('Kies de pool waarop de nieuwe map komt.'); p = r.mountpoint + '/' + name.toLowerCase(); }
+    else { p = String(b.path || '').replace(/\/+$/, ''); if (!shareRoots().some((r) => p === r.mountpoint || p.startsWith(r.mountpoint + '/'))) throw err('Kies een map op een van je pools (bv. /tank/media).'); }
+    const share = { name, path: p, comment: String(b.comment || '').trim().slice(0, 100), users, guest: !!b.guest, timemachine: !!b.timemachine };
+    const i = shareList.findIndex((x) => x.name === original);
+    if (original && i < 0) throw err('Deze gedeelde map bestaat niet (meer).', 404);
+    if (i >= 0) shareList[i] = share; else shareList.push(share);
+    return share;
+  }
+  function shareUserCreate(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(name)) throw err('Kies een gebruikersnaam met kleine letters, cijfers, - of _ (maximaal 32 tekens), bv. lies.');
+    if (String(b.password || '').length < 8) throw err('Kies een wachtwoord van minstens 8 tekens.');
+    if (shareUsers.includes(name) || ['root', 'lennert', 'nobody'].includes(name)) throw err('De gebruiker ' + name + ' bestaat al op de server. Kies een andere naam.', 409);
+    shareUsers.push(name); return { name };
+  }
+  function shareUserDelete(name) {
+    const only = shareList.filter((x) => !x.guest && Object.keys(x.users).length === 1 && x.users[name]).map((x) => x.name);
+    if (only.length) throw err(name + ' is de enige met toegang tot ' + only.join(', ') + '. Geef eerst iemand anders toegang, of verwijder die gedeelde map.', 409);
+    shareList.forEach((x) => { delete x.users[name]; });
+    shareUsers.splice(shareUsers.indexOf(name), 1); return { removed: name };
   }
 
   /* ---- instellingen, compose-bestand en console per app */
@@ -505,6 +701,7 @@
     { name: 'Ubuntu Server (test)', state: 'SHUTOFF', vcpus: 2, memory: 2 * GB, diskGb: 32, autostart: true, delay: 60,
       description: 'Om dingen uit te proberen.', base: [1, 8], ram: [0.3, 0.4], startsAt: Date.now() + 45000 },
   ];
+  const DEMO_IPS = { 'Home Assistant OS': ['192.168.1.40', 'fd00::5054:ff:fe6b:3c58'], 'Windows 11': ['192.168.122.45'], 'Ubuntu Server (test)': ['10.10.0.130'] };
   const VNC_PW = { 'Home Assistant OS': 'q7Rk2mPa', 'Windows 11': 'Zt4wLs9e', 'Ubuntu Server (test)': 'Hn3vB8xc' };
   // Hardware per VM, in dezelfde vorm als lib/vmhw.js parseHardware().
   const nic = (type, source, model, mac) => ({ mac, type, source, model, locked: false });
@@ -566,6 +763,7 @@
       cpu: run ? Math.round(rnd(v.base[0], v.base[1]) * 10) / 10 : isOn(v) ? 0 : null,
       memUsed: isOn(v) ? Math.round(v.memory * rnd(v.ram[0], v.ram[1])) : null,
       autostart: v.autostart, delay: v.delay, startsAt: v.startsAt || null, description: v.description,
+      ips: isOn(v) ? (DEMO_IPS[v.name] || (DEMO_IPS[v.name] = ['192.168.1.' + (60 + Object.keys(DEMO_IPS).length)])) : [],
     };
   }
   const findVm = (id) => { const v = vms.find((x) => x.name === decodeURIComponent(id)); if (!v) throw err('Deze VM bestaat niet (meer).', 404); return v; };
@@ -805,12 +1003,18 @@
 
   async function get(path) {
     await wait(rnd(120, 300));
-    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang() };
-    if (path === '/api/settings') return { language: demoLang() };
+    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone() };
+    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity };
+    if (path === '/api/datetime') return dtGet();
+    if (path === '/api/update') return updGet();
+    if (path === '/api/onboarding') return onbGet();
+    if (path === '/api/update/progress') return updProgress();
+    if (path === '/api/mfa') return { enabled: mfa.enabled, since: mfa.since, recoveryLeft: mfa.recovery.length, available: true, demoPassword: DEMO_PW, passwordChanged: onb.passwordChanged };
     if (path === '/api/about') return demoAbout();
     if (path === '/api/network') { tickNet(); return copy(net); }
     if (path === '/api/docker-networks') return dnetList();
     if (path === '/api/layout') return copy(layout);
+    if (path === '/api/shares') return sharesGet();
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {
       return apps.map((a) => { const o = appOvr[a.name] || {}; return { ...copy(a), webui: o.webui ? resolvePorts(o.webui, a.ports) : a.webui, icon: o.icon || a.icon }; });
@@ -862,6 +1066,35 @@
   }
 
   async function post(path, body = {}) {
+    if (path === '/api/login' || path === '/api/login/mfa' || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }
+    if (path === '/api/datetime') { await wait(rnd(300, 600)); return dtSet(body); }
+    if (path === '/api/onboarding/finish') { onbSet(true); return { done: true, finished: new Date().toISOString(), skipped: !!body.skipped }; }
+    if (path === '/api/onboarding/reset') { onbSet(false); return { done: false }; }
+    if (path === '/api/password') { await wait(rnd(300, 600)); return demoPassword(body); }
+    if (path === '/api/update/install') {
+      const g = updGet();
+      if (g.running) throw err('Er loopt al een update.', 409);
+      if (!g.newer.some((r) => r.version === body.version)) throw err('Deze versie is niet (meer) beschikbaar. Zoek eerst opnieuw naar updates.', 404);
+      upd.job = { start: Date.now(), version: body.version, from: g.current };
+      return { started: true, version: body.version };
+    }
+    if (path === '/api/update/check') { await wait(rnd(600, 1200)); upd.checked = new Date().toISOString(); return updGet(); }
+    if (path === '/api/settings' && (body.updateCheck != null || body.updateChannel != null)) {
+      if (body.updateCheck != null) upd.auto = !!body.updateCheck;
+      if (body.updateChannel != null) { if (!['stable', 'beta'].includes(body.updateChannel)) throw err('Kies stabiel of bèta.'); upd.channel = body.updateChannel; }
+      return { language: demoLang(), clock: demoClock(), ...demoSecurity, updateCheck: upd.auto, updateChannel: upd.channel };
+    }
+    if (path === '/api/settings' && body.clock != null) {
+      if (!['auto', '24', '12'].includes(String(body.clock))) throw err('Kies een tijdnotatie: automatisch, 24 uur of 12 uur.');
+      try { localStorage.setItem('tb-clock', String(body.clock)); } catch (e) { /* privévenster */ }
+      return { language: demoLang(), clock: String(body.clock), ...demoSecurity };
+    }
+    if (path === '/api/settings' && body.language == null) {
+      // In de demo is er geen wachtwoord (zoals de server zonder APP_PASSWORD): minder streng maken mag zonder.
+      Object.assign(demoSecurity, { terminal: body.terminal == null ? demoSecurity.terminal : !!body.terminal,
+        terminalPassword: body.terminalPassword == null ? demoSecurity.terminalPassword : !!body.terminalPassword });
+      return { language: demoLang(), ...demoSecurity };
+    }
     if (path === '/api/settings') {
       if (!['nl', 'en'].includes(body.language)) throw err('Onbekende taal.');
       try { localStorage.setItem('tb-lang', body.language); } catch (e) { /* privévenster */ }
@@ -872,6 +1105,12 @@
     if (path === '/api/vm-networks') { await wait(rnd(400, 800)); return vmNetCreate(body); }
     if (path === '/api/bays') return saveBays(body);
     if (path === '/api/layout') return saveLayout(body);
+    if (path === '/api/shares') { await wait(rnd(400, 800)); return shareSave(body, null); }
+    const shm = path.match(/^\/api\/shares\/([^/]+)$/);
+    if (shm) { await wait(rnd(300, 600)); return shareSave(body, decodeURIComponent(shm[1])); }
+    if (path === '/api/share-users') { await wait(rnd(300, 600)); return shareUserCreate(body); }
+    const pwm = path.match(/^\/api\/share-users\/([^/]+)\/password$/);
+    if (pwm) { if (String(body.password || '').length < 8) throw err('Kies een wachtwoord van minstens 8 tekens.'); return { ok: true }; }
     if (path === '/api/apps/custom/inspect') { await wait(rnd(500, 900)); return demoInspect(body.image); }
     if (path === '/api/apps/custom') { await wait(rnd(300, 600)); return demoInstallCustom(body); }
     const dt = path.match(/^\/api\/disks\/([^/]+)\/test$/);
@@ -986,7 +1225,7 @@
       else { md.loaded = false; md.vram = null; }
       return { ok: true };
     }
-    if (path === '/api/logout' || path === '/api/login') return { ok: true };
+    if (path === '/api/logout') return { ok: true };
     throw err('Onbekend endpoint', 404);
   }
 
@@ -996,7 +1235,7 @@
     if (m) {
       const i = apps.findIndex((x) => x.id === decodeURIComponent(m[1]));
       if (i < 0) throw err('Deze app bestaat niet (meer).', 404);
-      if (!apps[i].storeId && !apps[i].custom) throw err('Alleen apps uit de appstore of eigen apps van Thuisbasis kan je hier verwijderen. Verwijder andere apps via hun eigen compose-bestand.', 400);
+      if (!apps[i].storeId && !apps[i].custom) throw err('Alleen apps uit de appstore of eigen apps van HomeBaseOS kan je hier verwijderen. Verwijder andere apps via hun eigen compose-bestand.', 400);
       const [a] = apps.splice(i, 1);
       return { removed: m[2] ? a.dataDirs : [], kept: [] };
     }
@@ -1012,6 +1251,10 @@
     if (m) return dnetDelete(decodeURIComponent(m[1]));
     m = path.match(/^\/api\/vm-networks\/([^/]+)$/);
     if (m) return vmNetDelete(decodeURIComponent(m[1]));
+    m = path.match(/^\/api\/shares\/([^/]+)$/);
+    if (m) { const i = shareList.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i < 0) throw err('Deze gedeelde map bestaat niet (meer).', 404); shareList.splice(i, 1); return { removed: decodeURIComponent(m[1]) }; }
+    m = path.match(/^\/api\/share-users\/([^/]+)$/);
+    if (m) return shareUserDelete(decodeURIComponent(m[1]));
     m = path.match(/^\/api\/ai\/models\/(.+)$/);
     if (m) { const i = models.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i >= 0) models.splice(i, 1); return { ok: true }; }
     throw err('Onbekend endpoint', 404);
@@ -1046,5 +1289,5 @@
     throw err('Onbekend endpoint', 404);
   }
 
-  window.ThuisbasisDemo = { get, post, del, stream };
+  window.HomeBaseOSDemo = { get, post, del, stream };
 })();

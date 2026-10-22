@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installeert Thuisbasis op een kale Debian 13 (trixie): ZFS, KVM/libvirt, Docker en de webinterface.
+# Installeert HomeBaseOS op een kale Debian 13 (trixie): ZFS, KVM/libvirt, Docker en de webinterface.
 # Gebruik:  sudo ./install.sh            (opnieuw uitvoeren = bijwerken; je instellingen blijven staan)
 #           sudo ./install.sh --nvidia   (ook de NVIDIA-driver en GPU-ondersteuning voor Docker)
 set -euo pipefail
@@ -18,8 +18,8 @@ done
 [ "${VERSION_CODENAME:-}" = trixie ] || { echo "Dit script is gemaakt voor Debian 13 (trixie). Gevonden: ${PRETTY_NAME:-onbekend}."; exit 1; }
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-APP=/opt/thuisbasis
-ETC=/etc/thuisbasis
+APP=/opt/homebaseos
+ETC=/etc/homebaseos
 export DEBIAN_FRONTEND=noninteractive
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
@@ -34,6 +34,9 @@ apt-get update
 
 step "Basispakketten"
 apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils
+# Klok gelijk houden: de codes van tweestapsverificatie hangen af van de tijd.
+apt-get install -y systemd-timesyncd || true
+timedatectl set-ntp true || true
 
 step "ZFS"
 apt-get install -y "linux-headers-$(uname -r)" linux-headers-amd64
@@ -45,6 +48,36 @@ apt-get install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clie
 systemctl enable --now libvirtd
 virsh -c qemu:///system net-autostart default >/dev/null 2>&1 || true
 virsh -c qemu:///system net-start default >/dev/null 2>&1 || true
+
+step "Gedeelde mappen (Samba)"
+apt-get install -y samba wsdd || apt-get install -y samba
+# Eigen [global]: gewone gebruikers met wachtwoord, gasten alleen waar een map dat toelaat, en goed samenwerken met macOS.
+if ! grep -q "HomeBaseOS" /etc/samba/smb.conf 2>/dev/null; then
+  [ -f /etc/samba/smb.conf ] && cp /etc/samba/smb.conf /etc/samba/smb.conf.voor-homebaseos
+  cat > /etc/samba/smb.conf <<'SMB'
+# Samba voor HomeBaseOS. De gedeelde mappen zelf staan in homebaseos.conf (beheer ze in Instellingen → Gedeelde mappen).
+[global]
+   workgroup = WORKGROUP
+   server string = %h
+   server role = standalone server
+   security = user
+   map to guest = Bad User
+   server min protocol = SMB2_10
+   fruit:aapl = yes
+   fruit:metadata = stream
+   fruit:model = MacSamba
+   logging = systemd
+   load printers = no
+   printing = bsd
+   disable spoolss = yes
+
+# Gedeelde mappen van HomeBaseOS
+include = /etc/samba/homebaseos.conf
+SMB
+  touch /etc/samba/homebaseos.conf
+fi
+systemctl enable --now smbd
+systemctl enable --now wsdd 2>/dev/null || true
 
 step "Docker (officiële pakketbron)"
 install -m 0755 -d /etc/apt/keyrings
@@ -69,34 +102,35 @@ if [ "$NVIDIA" = 1 ]; then
   systemctl restart docker
 fi
 
-step "Thuisbasis installeren in $APP"
+step "HomeBaseOS installeren in $APP"
 mkdir -p "$APP" "$ETC" /opt/stacks
-rm -rf "$APP/lib" "$APP/public"
-cp -r "$SRC/server.js" "$SRC/package.json" "$SRC/lib" "$SRC/public" "$APP/"
+rm -rf "$APP/lib" "$APP/public" "$APP/deploy"
+cp -r "$SRC/server.js" "$SRC/package.json" "$SRC/lib" "$SRC/public" "$SRC/deploy" "$APP/"
 NEW_PASSWORD=""
-if [ ! -f "$ETC/thuisbasis.env" ]; then
+if [ ! -f "$ETC/homebaseos.env" ]; then
   NEW_PASSWORD="$(node -e "console.log(require('crypto').randomBytes(12).toString('base64url'))")"
   SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
   sed -e "s#^APP_PASSWORD=.*#APP_PASSWORD=$NEW_PASSWORD#" -e "s#^SESSION_SECRET=.*#SESSION_SECRET=$SECRET#" \
-    "$SRC/deploy/thuisbasis.env" > "$ETC/thuisbasis.env"
-  chmod 600 "$ETC/thuisbasis.env"
+    "$SRC/deploy/homebaseos.env" > "$ETC/homebaseos.env"
+  chmod 600 "$ETC/homebaseos.env"
 fi
-install -m 644 "$SRC/deploy/thuisbasis.service" /etc/systemd/system/thuisbasis.service
+install -m 644 "$SRC/deploy/homebaseos.service" /etc/systemd/system/homebaseos.service
 systemctl daemon-reload
-systemctl enable thuisbasis >/dev/null
-systemctl restart thuisbasis
+systemctl enable homebaseos >/dev/null
+systemctl restart homebaseos
 
 IP="$(hostname -I | awk '{print $1}')"
 step "Klaar"
 echo "Open http://$IP:8080"
 if [ -n "$NEW_PASSWORD" ]; then
-  echo "Je wachtwoord: $NEW_PASSWORD  (staat ook in $ETC/thuisbasis.env)"
+  echo "Je wachtwoord: $NEW_PASSWORD  (staat ook in $ETC/homebaseos.env)"
+  echo "Meld je aan: een welkomstwizard helpt je met een eigen wachtwoord, de naam, de tijdzone en je opslag."
 fi
 echo
 echo "Volgende stappen (zie README):"
 echo "  1. Maak een ZFS-pool, bv.: zpool create -o ashift=12 tank raidz1 /dev/disk/by-id/..."
 echo "  2. Maak de datasets voor VM's en ISO's: zfs create tank/vms && zfs create tank/isos"
-echo "     en voor de appstore: zfs create snel/appdata (of pas APPDATA_DIR aan in $ETC/thuisbasis.env)"
-echo "  3. Wil je VM's rechtstreeks in je thuisnetwerk? Maak een bridge br0 en zet VM_NETWORK=bridge=br0 in $ETC/thuisbasis.env"
+echo "     en voor de appstore: zfs create snel/appdata (of pas APPDATA_DIR aan in $ETC/homebaseos.env)"
+echo "  3. Wil je VM's rechtstreeks in je thuisnetwerk? Maak een bridge br0 en zet VM_NETWORK=bridge=br0 in $ETC/homebaseos.env"
 [ "$NVIDIA" = 1 ] && echo "  4. Herstart de server, zodat de NVIDIA-driver laadt."
 exit 0

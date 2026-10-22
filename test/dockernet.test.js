@@ -14,7 +14,7 @@ const opts = { parents: PARENTS, existing: EXISTING };
 test('netwerk aanmaken: bridge en macvlan', () => {
   assert.deepEqual(dn.validateNetwork({ name: 'apps', driver: 'bridge' }, opts), {
     Name: 'apps', Driver: 'bridge', Internal: false, Attachable: true, EnableIPv6: false,
-    IPAM: { Driver: 'default', Config: [] }, Options: {}, Labels: { thuisbasis: '1' } });
+    IPAM: { Driver: 'default', Config: [] }, Options: {}, Labels: { homebaseos: '1' } });
   const b = dn.validateNetwork({ name: 'db', driver: 'bridge', subnet: '172.30.0.7/24', internal: true }, opts);
   assert.deepEqual(b.IPAM.Config, [{ Subnet: '172.30.0.0/24' }]); // netwerkadres rechtgezet
   assert.equal(b.Internal, true);
@@ -44,7 +44,7 @@ test('netwerk aanmaken: foute invoer', () => {
 
 test('uitvoer van GET /networks/<id> samenvatten', () => {
   const n = dn.summarize({
-    Name: 'lan', Id: 'abc', Driver: 'macvlan', Internal: false, Options: { parent: 'br0' }, Labels: { thuisbasis: '1' },
+    Name: 'lan', Id: 'abc', Driver: 'macvlan', Internal: false, Options: { parent: 'br0' }, Labels: { homebaseos: '1' },
     IPAM: { Config: [{ Subnet: 'fd00::/64' }, { Subnet: '192.168.1.0/24', Gateway: '192.168.1.1', IPRange: '192.168.1.192/27' }] },
     Containers: { x: { Name: 'pihole', IPv4Address: '192.168.1.200/24' }, y: { Name: 'adguard', IPv4Address: '' } },
   });
@@ -101,8 +101,8 @@ test('appstore: template met br0 en een gekozen eigen netwerk', () => {
 
 test('WebUI met een eigen adres in het thuisnetwerk', () => {
   const ports = [{ public: 8080, private: 80, type: 'TCP' }];
-  assert.equal(webui({ 'thuisbasis.webui': 'http://[IP]:[PORT:80]/admin' }, ports), 'http://[IP]:8080/admin');
-  assert.equal(webui({ 'thuisbasis.webui': 'http://[IP]:[PORT:80]/admin' }, [], null, '192.168.1.200'), 'http://192.168.1.200:80/admin');
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/admin' }, ports), 'http://[IP]:8080/admin');
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/admin' }, [], null, '192.168.1.200'), 'http://192.168.1.200:80/admin');
   assert.equal(webui({}, [], null, '192.168.1.200'), null);
 });
 

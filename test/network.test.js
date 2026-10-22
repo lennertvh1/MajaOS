@@ -41,7 +41,7 @@ test('interfaces-bestand lezen: vast adres in een bridge, met netmask', () => {
 test('nieuw bestand: bridge met vast adres, andere kaarten blijven staan', () => {
   const cfg = nw.validate({ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '192.168.1.1, 1.1.1.1', bridge: true }, ['enp5s0']);
   const out = nw.buildInterfaces(cfg, DEBIAN);
-  assert.match(out, /^# Beheerd door Thuisbasis/);
+  assert.match(out, /^# Beheerd door HomeBaseOS/);
   assert.match(out, /\nauto lo\niface lo inet loopback\n/);
   assert.match(out, /\niface enp5s0 inet manual\n\nauto br0\niface br0 inet static\n {4}bridge_ports enp5s0\n {4}bridge_stp off\n {4}bridge_fd 0\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n {4}dns-nameservers 192\.168\.1\.1 1\.1\.1\.1\n/);
   assert.doesNotMatch(out, /enp5s0 inet dhcp/);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Thuisbasis</title>
+  <title>HomeBaseOS</title>
   <meta name="theme-color" content="#101a33">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,11 +39,15 @@
     <header class="topbar">
       <div class="brand">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>
-        <span class="brand-name">Thuisbasis</span>
+        <span class="brand-name">HomeBaseOS</span>
         <span class="host" id="host"></span>
         <span class="demo-badge" id="demoBadge" hidden>Demo</span>
       </div>
       <nav class="topnav" aria-label="Beheer">
+        <button class="nav-btn" data-open="home" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg>
+          <span>Overzicht</span>
+        </button>
         <button class="nav-btn" data-open="store" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
           <span>Appstore</span>
@@ -51,6 +55,10 @@
         <button class="nav-btn" data-open="storage" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
           <span>Opslag</span>
+        </button>
+        <button class="nav-btn" data-open="shares" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg>
+          <span>Gedeelde mappen</span>
         </button>
         <button class="nav-btn" data-open="vms" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -60,7 +68,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2.1 2.2.9-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.9z"/></svg>
           <span>AI</span>
         </button>
-        <a class="nav-btn icon-only" href="#settings" data-nav="settings" aria-label="Instellingen" title="Instellingen">
+        <button class="nav-btn icon-only" type="button" id="termBtn" hidden aria-label="Terminal op de server" title="Terminal op de server">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/></svg>
+        </button>
+        <a class="nav-btn icon-only has-dot" href="#settings" data-nav="settings" aria-label="Instellingen" title="Instellingen">
+          <span class="nav-dot" id="updDot" hidden></span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         </a>
         <button class="nav-btn icon-only" id="logoutBtn" type="button" hidden aria-label="Afmelden">
@@ -70,55 +82,74 @@
     </header>
 
     <main class="desk" id="desk">
-      <aside class="widgets" aria-label="Overzicht">
-        <section class="widget clock-widget">
-          <p class="greeting" id="greeting">Goedendag</p>
-          <p class="clock" id="clock">--:--</p>
-          <p class="date" id="date"></p>
-        </section>
+      <aside class="widgets" aria-label="Overzicht" id="widgets">
+        <div class="widget-slot" data-widget="clock">
+          <section class="widget clock-widget">
+            <p class="greeting" id="greeting">Goedendag</p>
+            <p class="clock" id="clock">--:--</p>
+            <p class="date" id="date"></p>
+          </section>
+        </div>
 
-        <section class="widget" id="sysWidget" aria-labelledby="sysTitle">
-          <header class="widget-head"><h2 id="sysTitle">Systeem</h2><span class="muted small" id="uptime"></span></header>
-          <div class="sys-grid">
-            <div class="ring-wrap">
-              <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
-                <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="cpuRing" cx="22" cy="22" r="18"/>
-              </svg>
-              <div class="ring-label"><strong id="cpuPct">–</strong><span>CPU</span></div>
+        <div class="widget-slot" data-widget="sys">
+          <section class="widget" id="sysWidget" aria-labelledby="sysTitle">
+            <header class="widget-head"><h2 id="sysTitle">Systeem</h2><span class="muted small" id="uptime"></span></header>
+            <div class="sys-grid">
+              <div class="ring-wrap">
+                <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="cpuRing" cx="22" cy="22" r="18"/>
+                </svg>
+                <div class="ring-label"><strong id="cpuPct">–</strong><span>CPU</span></div>
+              </div>
+              <div class="ring-wrap">
+                <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="memRing" cx="22" cy="22" r="18"/>
+                </svg>
+                <div class="ring-label"><strong id="memPct">–</strong><span>RAM</span></div>
+              </div>
+              <div class="ring-wrap" id="gpuRingWrap" hidden>
+                <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="gpuRing" cx="22" cy="22" r="18"/>
+                </svg>
+                <div class="ring-label"><strong id="gpuPct">–</strong><span>VRAM</span></div>
+              </div>
             </div>
-            <div class="ring-wrap">
-              <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
-                <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="memRing" cx="22" cy="22" r="18"/>
-              </svg>
-              <div class="ring-label"><strong id="memPct">–</strong><span>RAM</span></div>
-            </div>
-            <div class="ring-wrap" id="gpuRingWrap" hidden>
-              <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
-                <circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="gpuRing" cx="22" cy="22" r="18"/>
-              </svg>
-              <div class="ring-label"><strong id="gpuPct">–</strong><span>VRAM</span></div>
-            </div>
-          </div>
-          <dl class="facts" id="sysFacts"></dl>
-        </section>
+            <dl class="facts" id="sysFacts"></dl>
+          </section>
+        </div>
 
-        <button class="widget widget-btn" data-open="storage" type="button" aria-label="Opslag openen">
-          <header class="widget-head"><h2>Opslag</h2><span class="pill" id="arrayState"></span></header>
-          <p class="big-stat"><strong id="storeFree">–</strong> <span id="storeFreeLabel">vrij</span></p>
-          <div class="bar" aria-hidden="true"><span id="storeBar"></span></div>
-          <p class="muted small" id="storeLine"></p>
-        </button>
+        <div class="widget-slot" data-widget="storage">
+          <button class="widget widget-btn" data-open="storage" type="button" aria-label="Opslag openen">
+            <header class="widget-head"><h2>Opslag</h2><span class="pill" id="arrayState"></span></header>
+            <p class="big-stat"><strong id="storeFree">–</strong> <span id="storeFreeLabel">vrij</span></p>
+            <div class="bar" aria-hidden="true"><span id="storeBar"></span></div>
+            <p class="muted small" id="storeLine"></p>
+          </button>
+        </div>
 
-        <button class="widget widget-btn" data-open="ai" type="button" aria-label="AI openen">
-          <header class="widget-head"><h2>AI</h2><span class="pill" id="aiState"></span></header>
-          <p class="ai-line" id="aiLine">–</p>
-          <p class="muted small" id="aiSub"></p>
-        </button>
+        <div class="widget-slot" data-widget="shares">
+          <button class="widget widget-btn" data-open="shares" type="button" aria-label="Gedeelde mappen openen">
+            <header class="widget-head"><h2>Gedeelde mappen</h2><span class="pill" id="shareConn"></span></header>
+            <ul class="share-mini" id="shareMini"></ul>
+          </button>
+        </div>
 
-        <button class="widget widget-btn" data-open="vms" type="button" aria-label="Virtuele machines openen">
-          <header class="widget-head"><h2>Virtuele machines</h2><span class="muted small" id="vmWidgetCount"></span></header>
-          <ul class="vm-mini" id="vmMini"></ul>
-        </button>
+        <div class="widget-slot" data-widget="ai">
+          <button class="widget widget-btn" data-open="ai" type="button" aria-label="AI openen">
+            <header class="widget-head"><h2>AI</h2><span class="pill" id="aiState"></span></header>
+            <p class="ai-line" id="aiLine">–</p>
+            <p class="muted small" id="aiSub"></p>
+          </button>
+        </div>
+
+        <div class="widget-slot" data-widget="vms">
+          <button class="widget widget-btn" data-open="vms" type="button" aria-label="Virtuele machines openen">
+            <header class="widget-head"><h2>Virtuele machines</h2><span class="muted small" id="vmWidgetCount"></span></header>
+            <ul class="vm-mini" id="vmMini"></ul>
+          </button>
+        </div>
+
+        <button class="linkish widgets-edit" type="button" id="widgetsEdit">Widgets aanpassen</button>
       </aside>
 
       <section class="apps-area" aria-labelledby="appsTitle">
@@ -198,13 +229,36 @@
     </main>
 
     <main class="center-screen" id="loginScreen" hidden>
-      <form class="panel login" id="loginForm">
-        <h1>Welkom terug</h1>
-        <label for="pw">Wachtwoord</label>
-        <input id="pw" type="password" autocomplete="current-password" required>
-        <p class="form-error" id="loginError" role="alert"></p>
-        <button class="btn primary" type="submit">Aanmelden</button>
-      </form>
+      <div class="panel login-card">
+        <div class="login-head">
+          <span class="login-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg></span>
+          <h1 id="loginTitle">Welkom terug</h1>
+          <p class="login-sub" id="loginSub">Meld je aan om je server te beheren.</p>
+        </div>
+        <form class="login" id="loginForm">
+          <label for="pw">Wachtwoord</label>
+          <div class="pw-wrap">
+            <input id="pw" type="password" autocomplete="current-password" required>
+            <button class="pw-eye" type="button" id="pwShow" aria-label="Wachtwoord tonen" title="Wachtwoord tonen" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path class="eye-off" d="M4 20 20 4"/></svg>
+            </button>
+          </div>
+          <label class="check"><input type="checkbox" id="remember" checked> Aangemeld blijven op dit toestel</label>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="btn primary login-go" type="submit">Aanmelden</button>
+          <p class="muted small login-demo" id="loginDemo" hidden></p>
+        </form>
+        <form class="login" id="mfaForm" hidden>
+          <label for="mfaCode" id="mfaLabel">Code uit je authenticator-app</label>
+          <input id="mfaCode" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required spellcheck="false">
+          <p class="form-error" id="mfaError" role="alert"></p>
+          <button class="btn primary login-go" type="submit">Bevestigen</button>
+          <div class="login-links">
+            <button class="link-btn" type="button" id="mfaToggle">Gebruik een herstelcode</button>
+            <button class="link-btn" type="button" id="mfaBack">Ander wachtwoord</button>
+          </div>
+        </form>
+      </div>
     </main>
   </div>
 
@@ -230,6 +284,10 @@
         <span class="set-ico cyan"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg></span>Docker-netwerken</a>
       <a role="tab" href="#settings/vmnet" data-tab="vmnet" id="tab-vmnet" aria-controls="setPane">
         <span class="set-ico indigo"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span>VM-netwerken</a>
+      <a role="tab" href="#settings/security" data-tab="security" id="tab-security" aria-controls="setPane">
+        <span class="set-ico green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span>Beveiliging</a>
+      <a role="tab" href="#settings/update" data-tab="update" id="tab-update" aria-controls="setPane">
+        <span class="set-ico orange"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4.5h-4.5"/><path d="M12 8v5l3 2"/></svg></span>Software-update<span class="tab-badge" id="updTabBadge" hidden>1</span></a>
       <a role="tab" href="#settings/about" data-tab="about" id="tab-about" aria-controls="setPane">
         <span class="set-ico slate"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg></span>Over</a>
     </nav>
@@ -246,6 +304,21 @@
 
   <dialog class="window console-win" id="conWin" aria-label="Console">
     <iframe id="conFrame" title="Console" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+  </dialog>
+
+  <!-- Welkomstwizard: na de eerste aanmelding (en opnieuw te openen bij Instellingen > Algemeen) -->
+  <dialog class="window onboard" id="onbWin" aria-labelledby="onbTitle">
+    <div class="onb-top">
+      <ol class="onb-dots" id="onbDots" aria-label="Stappen"></ol>
+      <button class="link-btn" type="button" id="onbLater">Later instellen</button>
+    </div>
+    <div class="onb-body" id="onbBody"></div>
+    <footer class="onb-foot">
+      <button class="btn" type="button" id="onbBack">Vorige</button>
+      <span class="onb-spacer"></span>
+      <button class="btn" type="button" id="onbSkip">Overslaan</button>
+      <button class="btn primary" type="button" id="onbNext">Volgende</button>
+    </footer>
   </dialog>
 
   <dialog class="window ask" id="ask" aria-labelledby="askText">
@@ -276,6 +349,7 @@
   <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
   <script src="lang/en.js"></script>
+  <script src="qr.js"></script>
   <script src="demo.js"></script>
   <script src="app.js"></script>
 </body>

@@ -1,5 +1,5 @@
 {
-  "name": "thuisbasis",
+  "name": "homebaseos",
   "version": "0.2.0",
   "description": "Eenvoudig beheersysteem voor je thuisserver op Debian, met ZFS, VM's en Docker",
   "main": "server.js",
