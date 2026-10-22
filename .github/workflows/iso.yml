@@ -22,7 +22,7 @@ jobs:
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
@@ -35,7 +35,7 @@ jobs:
           [ "v$v" = "$TAG" ] || { echo "::error::package.json heeft versie $v, maar de tag is $TAG. Zet ze gelijk."; exit 1; }
 
       - name: Debian-ISO bewaren tussen runs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .iso-cache
           key: debian-netinst-${{ github.run_id }}
