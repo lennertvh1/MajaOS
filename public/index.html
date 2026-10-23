@@ -60,6 +60,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg>
           <span>Gedeelde mappen</span>
         </button>
+        <button class="nav-btn" data-open="backup" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/></svg>
+          <span>Back-ups</span>
+        </button>
         <button class="nav-btn" data-open="vms" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           <span>VM's</span>
@@ -131,6 +135,13 @@
           <button class="widget widget-btn" data-open="shares" type="button" aria-label="Gedeelde mappen openen">
             <header class="widget-head"><h2>Gedeelde mappen</h2><span class="pill" id="shareConn"></span></header>
             <ul class="share-mini" id="shareMini"></ul>
+          </button>
+        </div>
+
+        <div class="widget-slot" data-widget="backup">
+          <button class="widget widget-btn" data-open="backup" type="button" aria-label="Back-ups openen">
+            <header class="widget-head"><h2>Back-ups</h2><span class="pill" id="bkState"></span></header>
+            <ul class="share-mini" id="bkMini"></ul>
           </button>
         </div>
 

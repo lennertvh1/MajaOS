@@ -416,6 +416,270 @@
     shareUsers.splice(shareUsers.indexOf(name), 1); return { removed: name };
   }
 
+  /* ---- back-ups: verbindingen (rclone), taken en toestellen */
+  const MB = 1024 ** 2, HOUR = 3600000;
+  const BK_PROVIDERS = {
+    drive: { label: 'Google Drive', group: 'cloud', oauth: true, hint: '', fields: [] },
+    onedrive: { label: 'OneDrive', group: 'cloud', oauth: true, hint: '', fields: [] },
+    dropbox: { label: 'Dropbox', group: 'cloud', oauth: true, hint: '', fields: [] },
+    s3: { label: 'S3-opslag', group: 'cloud', oauth: false, hint: 'Backblaze B2, Wasabi, Cloudflare R2, Amazon S3 of MinIO', fields: [
+      { key: 'provider', label: 'Aanbieder', type: 'select', required: false, default: 'Other',
+        options: [['Other', 'Andere (bv. Backblaze B2)'], ['AWS', 'Amazon S3'], ['Cloudflare', 'Cloudflare R2'], ['Wasabi', 'Wasabi'], ['Minio', 'MinIO']] },
+      { key: 'endpoint', label: 'Endpoint', type: 'text', required: false, placeholder: 's3.eu-central-003.backblazeb2.com', help: 'Het adres van de opslag. Leeg laten bij Amazon S3.' },
+      { key: 'region', label: 'Regio', type: 'text', required: false, placeholder: 'eu-central-003' },
+      { key: 'access_key_id', label: 'Access key', type: 'text', required: true },
+      { key: 'secret_access_key', label: 'Secret key', type: 'password', required: true }] },
+    sftp: { label: 'Andere NAS of server (SFTP)', group: 'nas', oauth: false, hint: 'Via SSH: Synology, QNAP, TrueNAS, een andere HomeBaseOS of een Linux-server', fields: [
+      { key: 'host', label: 'Adres', type: 'text', required: true, placeholder: '192.168.1.20' },
+      { key: 'port', label: 'Poort', type: 'number', required: false, default: '22' },
+      { key: 'user', label: 'Gebruiker', type: 'text', required: true },
+      { key: 'pass', label: 'Wachtwoord', type: 'password', required: true }] },
+    smb: { label: 'Andere NAS (SMB)', group: 'nas', oauth: false, hint: 'Een gedeelde map op een andere NAS of een Windows-pc', fields: [
+      { key: 'host', label: 'Adres', type: 'text', required: true, placeholder: '192.168.1.20' },
+      { key: 'user', label: 'Gebruiker', type: 'text', required: true },
+      { key: 'pass', label: 'Wachtwoord', type: 'password', required: true },
+      { key: 'domain', label: 'Werkgroep', type: 'text', required: false, placeholder: 'WORKGROUP' }] },
+    webdav: { label: 'WebDAV', group: 'nas', oauth: false, hint: 'Nextcloud, ownCloud of een andere NAS met WebDAV', fields: [
+      { key: 'url', label: 'Adres (URL)', type: 'text', required: true, placeholder: 'https://cloud.voorbeeld.be/remote.php/dav/files/lies' },
+      { key: 'vendor', label: 'Soort server', type: 'select', required: false, default: 'other', options: [['nextcloud', 'Nextcloud'], ['owncloud', 'ownCloud'], ['other', 'Andere']] },
+      { key: 'user', label: 'Gebruiker', type: 'text', required: true },
+      { key: 'pass', label: 'Wachtwoord', type: 'password', required: true }] },
+  };
+  const bkRemotes = [{ name: 'google', type: 'drive', detail: '' }, { name: 'nas-mama', type: 'sftp', detail: 'freddy@nas-mama.thuis.be' }];
+  const bkResult = (hoursAgo, mins, files, size, extra = {}) => ({ kind: 'backup', dryRun: false, scheduled: true, started: Date.now() - hoursAgo * HOUR,
+    ended: Date.now() - hoursAgo * HOUR + mins * 60000, state: 'ok', bytes: size, files, checks: 1840, deletes: 0, errors: 0, error: null, ...extra });
+  const bkJobs = [
+    { id: 'a1b2c3d4', name: "Foto's naar Google Drive", direction: 'push', mode: 'copy', remote: 'google', remotePath: 'Back-ups/Freddy/fotos', localPath: '/tank/fotos',
+      encrypt: false, versions: false, keepDays: 30, schedule: { every: 'daily', time: '02:00', day: 0 }, excludes: ['.DS_Store'], bwlimit: '',
+      created: Date.now() - 40 * 86400000, lastScheduled: Date.now() - 7 * HOUR, lastRun: bkResult(7, 12, 34, 210 * MB) },
+    { id: 'b2c3d4e5', name: 'Documenten naar de NAS van mama', direction: 'push', mode: 'sync', remote: 'nas-mama', remotePath: 'backup-freddy', localPath: '/tank/documenten',
+      encrypt: true, versions: true, keepDays: 90, schedule: { every: 'weekly', time: '03:30', day: 0 }, excludes: [], bwlimit: '5M',
+      created: Date.now() - 60 * 86400000, lastScheduled: Date.now() - 5 * 86400000, lastRun: bkResult(5 * 24, 4, 112, 380 * MB, { deletes: 3 }) },
+    { id: 'c3d4e5f6', name: 'Google Drive thuis bewaren', direction: 'pull', mode: 'copy', remote: 'google', remotePath: '', localPath: '/tank/backups/google-drive',
+      encrypt: false, versions: false, keepDays: 30, schedule: { every: 'daily', time: '04:00', day: 0 }, excludes: [], bwlimit: '',
+      created: Date.now() - 20 * 86400000, lastScheduled: Date.now() - 5 * HOUR,
+      lastRun: bkResult(5, 1, 0, 0, { state: 'failed', errors: 1, error: "couldn't connect: dial tcp: lookup www.googleapis.com: no such host" }) },
+  ];
+  bkJobs.forEach((j) => { j.history = [j.lastRun]; });
+  const bkLogs = {};
+  const bkDevs = [
+    { name: 'MacBook-Lies', kind: 'mac', method: 'share', dataset: 'tank/backups/macbook-lies', path: '/tank/backups/macbook-lies', user: 'lies', created: Date.now() - 90 * 86400000,
+      used: 412 * GB, quota: 1000 * GB, avail: 588 * GB, missing: false, lastChange: Date.now() - 40 * 60000, connected: 1 },
+    { name: 'pc-tom', kind: 'windows', method: 'kopia', user: 'pc-tom@pc-tom', created: Date.now() - 30 * 86400000,
+      used: 186 * GB, lastChange: Date.now() - 50 * 60000, snapshots: 212, folders: ['C:\\Users\\tom'] },
+  ];
+  // Back-up-app (Kopia) op de NAS: staat aan, met één pc.
+  const demoKopia = { installed: true, version: '0.19.0', enabled: true, running: true, port: 51515, hostname: 'Freddy', addresses: ['192.168.1.10'],
+    fingerprint: '3f9a1c0be47d52a86e0f1b93c4d7a2e5f60b8c1d9e2a3b4c5d6e7f8091a2b3c4', pool: 'tank', path: '/tank/backups/kopia', used: 141 * GB,
+    appUrl: 'https://github.com/lennertvh1/kopia/releases/latest' };
+  const demoCode = () => { const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const c = Array.from({ length: 8 }, () => abc[Math.floor(Math.random() * abc.length)]).join(''); return c.slice(0, 4) + '-' + c.slice(4); };
+  const demoPairing = () => ({ code: demoCode(), expires: Date.now() + 15 * 60000, password: demoPw() });
+  const demoPw = () => Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 7).padEnd(5, 'x')).join('-');
+  const bkLive = {};
+  function bkNext(s, from) {
+    if (!s || s.every === 'manual') return null;
+    const [h, m] = s.time.split(':').map(Number), d = new Date(from);
+    if (s.every === 'hourly') { d.setMinutes(m, 0, 0); if (d.getTime() <= from) d.setHours(d.getHours() + 1); return d.getTime(); }
+    d.setHours(h, m, 0, 0);
+    if (s.every === 'weekly') d.setDate(d.getDate() + ((s.day - d.getDay() + 7) % 7));
+    if (d.getTime() <= from) d.setDate(d.getDate() + (s.every === 'weekly' ? 7 : 1));
+    return d.getTime();
+  }
+  // Een lopende taak: de voortgang volgt de klok; is de tijd om, dan komt het resultaat in de geschiedenis.
+  function bkInfo(id) {
+    const r = bkLive[id]; if (!r) return null;
+    const f = Math.min(1, (Date.now() - r.started) / r.dur);
+    if (f >= 1 || r.cancelled) {
+      const j = bkJobs.find((x) => x.id === id);
+      const files = Math.round(r.files * f), bytesDone = Math.round(r.total * f);
+      const entry = { kind: r.kind, dryRun: r.dryRun, scheduled: false, started: r.started, ended: Date.now(), state: r.cancelled ? 'cancelled' : 'ok',
+        bytes: r.dryRun ? 0 : bytesDone, files: r.dryRun ? 0 : files, checks: 1840, deletes: 0, errors: 0, error: null };
+      const t0 = new Date().toISOString();
+      bkLogs[id] = r.lines.concat(Array.from({ length: Math.min(files, 12) }, (_, i) => ({ time: t0, level: r.dryRun ? 'notice' : 'info', text: `2026/IMG_${4100 + i}.HEIC: ${r.dryRun ? 'Skipped copy as --dry-run is set' : 'Copied (new)'}` })),
+        [{ time: t0, level: r.cancelled ? 'error' : 'info', text: r.cancelled ? 'Gestopt.' : 'Klaar.' }]);
+      if (j) { j.history = [entry, ...(j.history || [])].slice(0, 20); if (r.kind === 'backup' && !r.dryRun) j.lastRun = entry; }
+      delete bkLive[id];
+      return null;
+    }
+    const done = r.total * f;
+    return { kind: r.kind, dryRun: r.dryRun, started: r.started, bytes: Math.round(done), totalBytes: r.total, files: Math.round(r.files * f), totalFiles: r.files,
+      checks: 0, deletes: 0, errors: 0, speed: Math.round(r.total / (r.dur / 1000)), eta: Math.round((r.dur - (Date.now() - r.started)) / 1000), percent: Math.round(f * 1000) / 10 };
+  }
+  const bkPublic = (j) => ({ ...copy(j), history: (j.history || []).slice(0, 10), next: bkNext(j.schedule, j.lastScheduled || j.created), running: bkInfo(j.id) });
+  const bkFolders = () => shareRoots().map((x) => x.mountpoint);
+  function bkGet(brief) {
+    const jobs = bkJobs.map(bkPublic);
+    if (brief) return { installed: true, jobs, devices: bkDevs.length };
+    return { installed: true, version: '1.69.1', providers: copy(BK_PROVIDERS), jobs, devices: copy(bkDevs), kopia: copy(demoKopia), samba: true, hostname: net.hostname,
+      remotes: bkRemotes.map((r) => ({ name: r.name, type: r.type, label: BK_PROVIDERS[r.type].label, detail: r.detail, usedBy: bkJobs.filter((j) => j.remote === r.name).map((j) => j.name) })),
+      users: shareUsers.slice().sort(), pools: pools.map((p) => ({ name: p.name, mountpoint: '/' + p.name, free: p.free })), folders: bkFolders() };
+  }
+  function bkNewRemote(name) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(name) || name.startsWith('hb-crypt-')) throw err('Kies een naam met letters, cijfers, - of _ (maximaal 32 tekens), bv. google.');
+    if (bkRemotes.some((r) => r.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een verbinding met de naam ' + name + '.', 409);
+  }
+  function bkRemoteCreate(b) {
+    const name = String(b.name || '').trim(); bkNewRemote(name);
+    const p = BK_PROVIDERS[b.type]; if (!p || p.oauth) throw err('Kies een soort verbinding.');
+    for (const f of p.fields) if (f.required && !String(b[f.key] || '').trim()) throw err('Vul ' + f.label.toLowerCase() + ' in.');
+    if (b.host && !/^[A-Za-z0-9._:[\]-]+$/.test(String(b.host).trim())) throw err('"' + b.host + '" is geen geldig adres. Gebruik een IP-adres of een naam, bv. 192.168.1.20.');
+    if (b.url && !/^https?:\/\/\S+$/i.test(String(b.url).trim())) throw err('Het adres moet beginnen met http:// of https://.');
+    const detail = b.type === 'webdav' ? b.url : b.type === 's3' ? (b.endpoint || b.provider) : String(b.user).trim() + '@' + String(b.host).trim();
+    bkRemotes.push({ name, type: b.type, detail }); return { name };
+  }
+  function bkAuthFinish(b) {
+    const name = String(b.name || '').trim();
+    if (b.reconnect) { if (!bkRemotes.some((r) => r.name === name && r.type === b.type)) throw err('Deze verbinding bestaat niet (meer).', 404); } else bkNewRemote(name);
+    if (!BK_PROVIDERS[b.type] || !BK_PROVIDERS[b.type].oauth) throw err('Kies Google Drive, OneDrive of Dropbox.');
+    if (!b.token) {
+      if (b.session !== 'demo') throw err('Het aanmelden is verlopen. Begin opnieuw.', 410);
+      let u = null; try { u = new URL(String(b.url || '').trim()); } catch (e) { /* hieronder */ }
+      if (!u || !u.searchParams.get('code') || !u.searchParams.get('state')) throw err('Plak het volledige adres uit de adresbalk. Het begint met http://127.0.0.1:53682/.');
+    } else if (!/access_token|^[A-Za-z0-9+/=\s]{40,}$/.test(b.token)) throw err('Dat is geen geldige token. Plak alles tussen ---> en <---End paste.');
+    if (!b.reconnect) bkRemotes.push({ name, type: b.type, detail: b.type === 'onedrive' ? 'OneDrive (persoonlijk)' : '' });
+    return { name };
+  }
+  function bkJobSave(b, id) {
+    const cur = id ? bkJobs.find((j) => j.id === id) : null;
+    if (id && !cur) throw err('Deze taak bestaat niet (meer).', 404);
+    if (id && bkInfo(id)) throw err('Deze taak loopt nu. Stop ze eerst, of wacht tot ze klaar is.', 409);
+    const name = String(b.name || '').trim().slice(0, 60);
+    if (!name) throw err("Geef de taak een naam, bv. Foto's naar Google Drive.");
+    const direction = b.direction === 'pull' ? 'pull' : 'push', mode = b.mode === 'sync' ? 'sync' : 'copy';
+    if (!bkRemotes.some((r) => r.name === b.remote)) throw err('Kies een verbinding. Maak er eerst een aan bij Verbindingen.');
+    const remotePath = String(b.remotePath || '').trim().replace(/\/{2,}/g, '/').replace(/(.)\/+$/, '$1');
+    if (remotePath.split('/').some((x) => x === '..' || x === '.')) throw err('Die map op het doel kan niet. Gebruik gewone mapnamen, gescheiden door /.');
+    const lp = String(b.localPath || '').trim().replace(/(.)\/+$/, '$1');
+    if (!lp.startsWith('/') || !bkFolders().some((r) => lp === r || lp.startsWith(r + '/'))) throw err('Kies een map op een van je pools, bv. /tank/fotos.');
+    if (direction === 'pull' && pools.some((p) => '/' + p.name === lp)) throw err('Kies een eigen map om in te bewaren, bv. /tank/backups/google-drive, niet de hele pool.');
+    const encrypt = direction === 'push' && (cur ? !!cur.encrypt : !!b.encrypt);
+    const root = remotePath === '' || remotePath === '/';
+    if (mode === 'sync' && direction === 'push' && !encrypt && root) throw err('Kies een map op het doel. Synchroniseren naar de hoofdmap zou alles wissen wat daar nog staat.');
+    const versions = direction === 'push' && !!b.versions;
+    if (versions && !encrypt && root) throw err('Kies een map op het doel om oude versies te kunnen bewaren.');
+    if (encrypt && !cur && String(b.password || '').length < 10) throw err('Kies een wachtwoord voor de versleuteling van minstens 10 tekens.');
+    const bw = String(b.bwlimit || '').trim();
+    if (bw && !/^\d+(\.\d+)?[KMG]?$/i.test(bw)) throw err('Schrijf de bandbreedte als een getal met K, M of G, bv. 10M (10 MB per seconde).');
+    const s = b.schedule || {};
+    const schedule = { every: ['manual', 'hourly', 'daily', 'weekly'].includes(s.every) ? s.every : 'manual', time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time || '') ? s.time : '03:00', day: Number(s.day) >= 0 && Number(s.day) <= 6 ? Number(s.day) : 0 };
+    const job = { name, direction, mode, remote: b.remote, remotePath, localPath: lp, encrypt, versions, keepDays: Math.min(3650, Math.max(1, Math.round(Number(b.keepDays) || 30))),
+      schedule, excludes: String(b.excludes || '').split('\n').map((x) => x.trim()).filter(Boolean), bwlimit: bw };
+    if (cur) { if (JSON.stringify(cur.schedule) !== JSON.stringify(schedule)) cur.lastScheduled = Date.now(); Object.assign(cur, job); return bkPublic(cur); }
+    const out = { id: Math.random().toString(16).slice(2, 10).padEnd(8, '0'), ...job, created: Date.now(), lastScheduled: Date.now(), lastRun: null, history: [] };
+    bkJobs.push(out); return bkPublic(out);
+  }
+  function bkStart(id, kind, dryRun, target) {
+    const j = bkJobs.find((x) => x.id === id); if (!j) throw err('Deze taak bestaat niet (meer).', 404);
+    if (bkInfo(id)) throw err('Deze taak loopt al.', 409);
+    const t0 = new Date().toISOString(), dest = j.remote + ':' + j.remotePath;
+    bkLive[id] = { kind, dryRun, started: Date.now(), dur: rnd(10000, 16000), total: rnd(80, 900) * MB, files: Math.round(rnd(20, 140)), cancelled: false,
+      lines: [{ time: t0, level: 'info', text: kind === 'restore' ? 'Terugzetten naar ' + target : (dryRun ? 'Proef (er verandert niets): ' : '') + (j.direction === 'pull' ? dest + ' → ' + j.localPath : j.localPath + ' → ' + dest) }] };
+    return { started: true, kind, dryRun };
+  }
+  function bkDeviceCreate(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(name)) throw err('Kies een naam met letters, cijfers, - of _ (maximaal 32 tekens), bv. MacBook-Lies.');
+    if (bkDevs.some((d) => d.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een toestel met de naam ' + name + '.', 409);
+    if (b.method !== 'kopia' && shareList.some((s) => s.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een gedeelde map met de naam ' + name + '.', 409);
+    if (!['mac', 'windows', 'linux', 'phone'].includes(b.kind)) throw err('Kies wat voor toestel het is.');
+    if (b.method === 'kopia') {
+      if (!demoKopia.enabled) throw err('Zet eerst de back-up-app (Kopia) aan.', 409);
+      if (b.kind === 'phone') throw err("De back-up-app bestaat niet voor gsm's. Kies een gedeelde map.");
+      const dev = { name, kind: b.kind, method: 'kopia', user: name.toLowerCase() + '@' + name.toLowerCase(), created: Date.now(), used: 0, lastChange: null, snapshots: 0, folders: [] };
+      bkDevs.push(dev); return { ...copy(dev), ...demoPairing() };
+    }
+    const pool = pools.find((p) => p.name === b.pool); if (!pool) throw err('Kies de pool waarop de back-ups komen.');
+    const q = b.quotaGb === '' || b.quotaGb == null ? 0 : Number(b.quotaGb);
+    if (!Number.isInteger(q) || q < 0 || q > 1e6) throw err('Vul de maximale grootte in als een getal in GB, of laat het leeg.');
+    let user = b.user;
+    if (b.newUser) user = shareUserCreate(b.newUser).name;
+    else if (!shareUsers.includes(user)) throw err('Kies wie de back-ups mag maken.');
+    const ds = pool.name + '/backups/' + name.toLowerCase();
+    shareList.push({ name, path: '/' + ds, comment: 'Back-ups van ' + name, users: { [user]: 'rw' }, guest: false, timemachine: b.kind === 'mac' });
+    const dev = { name, kind: b.kind, method: 'share', dataset: ds, path: '/' + ds, user, created: Date.now(), used: 0, quota: q * GB, avail: q ? q * GB : pool.free, missing: false, lastChange: null, connected: 0 };
+    bkDevs.push(dev); return copy(dev);
+  }
+  function bkDeviceDelete(name, data) {
+    const i = bkDevs.findIndex((d) => d.name === name); if (i < 0) throw err('Dit toestel bestaat niet (meer).', 404);
+    if (bkDevs[i].method !== 'kopia') { const s = shareList.findIndex((x) => x.name === name); if (s >= 0) shareList.splice(s, 1); }
+    const [d] = bkDevs.splice(i, 1); return { removed: name, dataset: data && d.method !== 'kopia' ? d.dataset : null };
+  }
+  async function bkPost(path, b) {
+    if (path === '/api/backup/remotes') { await wait(rnd(900, 1600)); return bkRemoteCreate(b); }
+    if (path === '/api/backup/auth') {
+      if (!BK_PROVIDERS[b.type] || !BK_PROVIDERS[b.type].oauth) throw err('Kies Google Drive, OneDrive of Dropbox.');
+      return { session: 'demo', url: 'https://accounts.google.com/o/oauth2/auth?client_id=demo&redirect_uri=http%3A%2F%2F127.0.0.1%3A53682%2F&state=demo' };
+    }
+    if (path === '/api/backup/auth/finish') { await wait(rnd(800, 1400)); return bkAuthFinish(b); }
+    if (path === '/api/backup/jobs') return bkJobSave(b, null);
+    if (path === '/api/backup/devices') { await wait(rnd(600, 1000)); return bkDeviceCreate(b); }
+    if (path === '/api/backup/kopia') {
+      if (!b.enabled) { demoKopia.enabled = demoKopia.running = false; return { enabled: false }; }
+      await wait(rnd(1200, 2000));
+      const first = !demoKopia.pool;
+      if (first) { const p = pools.find((x) => x.name === b.pool); if (!p) throw err('Kies de pool waarop de back-ups komen.'); demoKopia.pool = p.name; demoKopia.path = '/' + p.name + '/backups/kopia'; }
+      demoKopia.enabled = demoKopia.running = true;
+      return first ? { enabled: true, repoPassword: demoPw() } : { enabled: true };
+    }
+    const dpr = path.match(/^\/api\/backup\/devices\/([^/]+)\/pair$/);
+    if (dpr) {
+      const dev = bkDevs.find((x) => x.name === decodeURIComponent(dpr[1])); if (!dev) throw err('Dit toestel bestaat niet (meer).', 404);
+      if (dev.method !== 'kopia') throw err('Koppelen kan alleen bij een toestel met de back-up-app.');
+      if (!demoKopia.enabled) throw err('Zet eerst de back-up-app (Kopia) aan.', 409);
+      return { name: dev.name, ...demoPairing() };
+    }
+    const dpw = path.match(/^\/api\/backup\/devices\/([^/]+)\/password$/);
+    if (dpw) {
+      const dev = bkDevs.find((x) => x.name === decodeURIComponent(dpw[1])); if (!dev) throw err('Dit toestel bestaat niet (meer).', 404);
+      if (dev.method !== 'kopia') throw err('Het wachtwoord van een gedeelde map wijzig je bij Gedeelde mappen → Gebruikers.');
+      if (!demoKopia.enabled) throw err('Zet eerst de back-up-app (Kopia) aan.', 409);
+      return { name: dev.name, password: demoPw() };
+    }
+    let m = path.match(/^\/api\/backup\/remotes\/([^/]+)\/test$/);
+    if (m) {
+      await wait(rnd(700, 1300));
+      const r = bkRemotes.find((x) => x.name === decodeURIComponent(m[1])); if (!r) throw err('Deze verbinding bestaat niet (meer).', 404);
+      return { ok: true, about: r.type === 'drive' ? { total: 2048 * GB, used: 731 * GB, free: 1317 * GB } : r.type === 'sftp' ? { total: 3.6 * TB, used: 1.2 * TB, free: 2.4 * TB } : null };
+    }
+    m = path.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})$/);
+    if (m) return bkJobSave(b, m[1]);
+    m = path.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})\/(run|stop|restore)$/);
+    if (!m) throw err('Onbekend endpoint', 404);
+    if (m[2] === 'stop') { if (!bkInfo(m[1])) throw err('Deze taak loopt niet.', 409); bkLive[m[1]].cancelled = true; return { stopping: true }; }
+    if (m[2] === 'run') return bkStart(m[1], 'backup', !!b.dryRun);
+    const j = bkJobs.find((x) => x.id === m[1]); if (!j) throw err('Deze taak bestaat niet (meer).', 404);
+    if (j.direction !== 'push') throw err('Terugzetten kan alleen bij een taak die naar de cloud of een andere NAS gaat.');
+    const target = String(b.target || '').trim();
+    if (!target.startsWith('/') || !bkFolders().some((r) => target === r || target.startsWith(r + '/'))) throw err('Kies een map op een van je pools, bv. /tank/fotos.');
+    if (pools.some((p) => '/' + p.name === target)) throw err('Kies een eigen map om in te bewaren, bv. /tank/backups/google-drive, niet de hele pool.');
+    return bkStart(j.id, 'restore', false, target);
+  }
+  function bkBrowse(name, p) {
+    if (!bkRemotes.some((r) => r.name === name)) throw err('Deze verbinding bestaat niet (meer).', 404);
+    const tree = { '': ['Back-ups', 'Documenten', "Foto's", 'Gedeeld'], 'Back-ups': ['Freddy', 'Laptop'], 'Back-ups/Freddy': ['fotos'], Documenten: ['Belastingen', 'Huis'], backup: [] };
+    const clean = String(p || '').replace(/^\/+|\/+$/g, '');
+    return { path: clean, dirs: tree[clean] || [] };
+  }
+  function bkDel(path) {
+    let m = path.match(/^\/api\/backup\/remotes\/([^/]+)$/);
+    if (m) {
+      const name = decodeURIComponent(m[1]), i = bkRemotes.findIndex((r) => r.name === name);
+      if (i < 0) throw err('Deze verbinding bestaat niet (meer).', 404);
+      const used = bkJobs.filter((j) => j.remote === name).map((j) => j.name);
+      if (used.length) throw err('De verbinding ' + name + ' wordt nog gebruikt door ' + used.join(', ') + '. Verwijder of wijzig die taken eerst.', 409);
+      bkRemotes.splice(i, 1); return { removed: name };
+    }
+    m = path.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})$/);
+    if (m) {
+      const i = bkJobs.findIndex((j) => j.id === m[1]); if (i < 0) throw err('Deze taak bestaat niet (meer).', 404);
+      if (bkInfo(m[1])) throw err('Deze taak loopt nu. Stop ze eerst, of wacht tot ze klaar is.', 409);
+      bkJobs.splice(i, 1); return { removed: m[1] };
+    }
+    m = path.match(/^\/api\/backup\/devices\/([^/?]+)(\?data=1)?$/);
+    if (m) return bkDeviceDelete(decodeURIComponent(m[1]), !!m[2]);
+    return null;
+  }
+
   /* ---- instellingen, compose-bestand en console per app */
   const appOvr = {}, composeText = {};
   const findApp = (id) => { const a = apps.find((x) => x.id === decodeURIComponent(id)); if (!a) throw err('Deze app bestaat niet (meer).', 404); return a; };
@@ -1069,6 +1333,18 @@
     await wait(rnd(120, 300));
     if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
     if (path === '/api/storage-paths') return spGet();
+    if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
+    const bkb = path.match(/^\/api\/backup\/remotes\/([^/]+)\/browse\?path=(.*)$/);
+    if (bkb) { await wait(rnd(300, 700)); return bkBrowse(decodeURIComponent(bkb[1]), decodeURIComponent(bkb[2])); }
+    const bkl = path.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})\/log$/);
+    if (bkl) {
+      if (!bkJobs.some((j) => j.id === bkl[1])) throw err('Deze taak bestaat niet (meer).', 404);
+      const running = bkInfo(bkl[1]), j = bkJobs.find((x) => x.id === bkl[1]);
+      const t0 = new Date().toISOString(), live = bkLive[bkl[1]];
+      const lines = running ? live.lines.concat(Array.from({ length: Math.min(12, running.files) }, (_, i) => ({ time: t0, level: live.dryRun ? 'notice' : 'info', text: `2026/IMG_${4100 + i}.HEIC: ${live.dryRun ? 'Skipped copy as --dry-run is set' : 'Copied (new)'}` })))
+        : bkLogs[bkl[1]] || [];
+      return { running, lines: copy(lines), last: (j.history || [])[0] || null };
+    }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
     if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity };
     if (path === '/api/datetime') return dtGet();
@@ -1139,6 +1415,7 @@
     if (path === '/api/password') { await wait(rnd(300, 600)); return demoPassword(body); }
     if (path === '/api/setup') { await wait(rnd(300, 600)); return demoSetup(body); }
     if (path === '/api/storage-paths') { await wait(rnd(300, 600)); return spSet(body); }
+    if (path.startsWith('/api/backup/')) { await wait(rnd(200, 500)); return bkPost(path, body); }
     if (path === '/api/update/install') {
       const g = updGet();
       if (g.running) throw err('Er loopt al een update.', 409);
@@ -1319,6 +1596,7 @@
     if (m) return dnetDelete(decodeURIComponent(m[1]));
     m = path.match(/^\/api\/vm-networks\/([^/]+)$/);
     if (m) return vmNetDelete(decodeURIComponent(m[1]));
+    if (path.startsWith('/api/backup/')) { const r = bkDel(path); if (r) return r; }
     m = path.match(/^\/api\/shares\/([^/]+)$/);
     if (m) { const i = shareList.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i < 0) throw err('Deze gedeelde map bestaat niet (meer).', 404); shareList.splice(i, 1); return { removed: decodeURIComponent(m[1]) }; }
     m = path.match(/^\/api\/share-users\/([^/]+)$/);

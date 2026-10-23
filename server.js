@@ -64,6 +64,8 @@ const updater = require('./lib/updater');
 const onboarding = require('./lib/onboarding');
 const paths = require('./lib/paths');
 const migrate = require('./lib/migrate');
+const backup = require('./lib/backup');
+const kopia = require('./lib/kopia');
 
 const CFG = {
   port: Number(process.env.PORT || 8080),
@@ -280,6 +282,14 @@ async function handleApi(req, res, url) {
     res.setHeader('Set-Cookie', 'tb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return sendJson(res, 200, { ok: true });
   }
+  // Koppelen van de app HomeBase Back-up op een pc: zonder aanmelding, met een eenmalige code van 15 minuten (lib/kopia.js).
+  const pair = p.match(/^\/api\/backup\/pair\/([A-Za-z0-9-]{1,20})$/);
+  if (pair && method === 'GET' && !CFG.demo) {
+    res.setHeader('Access-Control-Allow-Origin', '*'); // de app vraagt het op vanaf een ander adres
+    const r = kopia.usePairing(pair[1], clientIp(req));
+    if (r.status !== 200) await slow();
+    return sendJson(res, r.status, r.data || { error: r.status === 429 ? 'Te veel foute codes. Wacht 5 minuten en probeer opnieuw.' : 'Die koppelcode klopt niet of is verlopen.' });
+  }
   if (!isAuthed(req)) return sendJson(res, 401, { error: 'Niet aangemeld' });
   if (CFG.demo) return sendJson(res, 409, { error: 'Demo-modus: de browser gebruikt voorbeelddata.' });
 
@@ -433,6 +443,31 @@ async function handleApi(req, res, url) {
   if (p === '/api/share-users' && method === 'POST') return sendJson(res, 200, await shares.createUser(await readBody(req)));
   if ((m = p.match(/^\/api\/share-users\/([^/]+)\/password$/)) && method === 'POST') return sendJson(res, 200, await shares.setPassword(decodeURIComponent(m[1]), (await readBody(req)).password));
   if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteUser(decodeURIComponent(m[1])));
+  // Back-ups: toestellen naar de NAS, en de NAS naar de cloud of een andere NAS (rclone).
+  if (p === '/api/backup' && method === 'GET') return sendJson(res, 200, await backup.overview({ brief: url.searchParams.get('brief') === '1' }));
+  if (p === '/api/backup/remotes' && method === 'POST') return sendJson(res, 200, await backup.createRemote(await readBody(req)));
+  if (p === '/api/backup/auth' && method === 'POST') return sendJson(res, 200, await backup.startAuth((await readBody(req)).type));
+  if (p === '/api/backup/auth/finish' && method === 'POST') return sendJson(res, 200, await backup.finishAuth(await readBody(req)));
+  if ((m = p.match(/^\/api\/backup\/remotes\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await backup.testRemote(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/backup\/remotes\/([^/]+)\/browse$/)) && method === 'GET') return sendJson(res, 200, await backup.browse(decodeURIComponent(m[1]), url.searchParams.get('path') || ''));
+  if ((m = p.match(/^\/api\/backup\/remotes\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, backup.deleteRemote(decodeURIComponent(m[1])));
+  if (p === '/api/backup/jobs' && method === 'POST') return sendJson(res, 200, await backup.saveJob(await readBody(req)));
+  if ((m = p.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})$/)) && method === 'POST') return sendJson(res, 200, await backup.saveJob(await readBody(req), m[1]));
+  if ((m = p.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})$/)) && method === 'DELETE') return sendJson(res, 200, backup.deleteJob(m[1]));
+  if ((m = p.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})\/log$/)) && method === 'GET') return sendJson(res, 200, backup.jobLog(m[1]));
+  if ((m = p.match(/^\/api\/backup\/jobs\/([0-9a-f]{8})\/(run|stop|restore)$/)) && method === 'POST') {
+    const body = await readBody(req);
+    if (m[2] === 'stop') return sendJson(res, 200, backup.stopRun(m[1]));
+    if (m[2] === 'restore') return sendJson(res, 200, await backup.restore(m[1], body));
+    return sendJson(res, 200, await backup.startRun(m[1], { dryRun: !!body.dryRun }));
+  }
+  if (p === '/api/backup/devices' && method === 'POST') return sendJson(res, 200, await backup.createDevice(await readBody(req)));
+  if ((m = p.match(/^\/api\/backup\/devices\/([^/]+)\/password$/)) && method === 'POST') return sendJson(res, 200, await backup.devicePassword(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/backup\/devices\/([^/]+)\/pair$/)) && method === 'POST') return sendJson(res, 200, await backup.devicePairing(decodeURIComponent(m[1])));
+  if (p === '/api/backup/kopia' && method === 'POST') return sendJson(res, 200, await backup.setKopia(await readBody(req)));
+  if ((m = p.match(/^\/api\/backup\/devices\/([^/]+)$/)) && method === 'DELETE') {
+    return sendJson(res, 200, await backup.deleteDevice(decodeURIComponent(m[1]), url.searchParams.get('data') === '1'));
+  }
   if (p === '/api/storage' && method === 'GET') return sendJson(res, 200, await storage.storage());
   if ((m = p.match(/^\/api\/disks\/([^/]+)$/)) && method === 'GET') return sendJson(res, 200, await disks.diskInfo(decodeURIComponent(m[1]), url.searchParams.get('wake') === '1'));
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
@@ -557,5 +592,6 @@ server.listen(CFG.port, () => {
     setTimeout(check, 2 * 60000);
     setInterval(check, 6 * 3600000);
     release.startSchedule((msg) => console.log(msg)); // nieuwe versies van HomeBaseOS zelf
+    backup.startSchedule(); // geplande back-uptaken
   }
 });

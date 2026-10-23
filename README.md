@@ -11,6 +11,7 @@ HomeBaseOS draait op een gewone **Debian 13** en beheert drie dingen voor je: **
 - **VM's** (eigen pagina): aanmaken (Linux, Windows 11 of een bestaande schijf zoals Home Assistant OS), bewerken, verwijderen, live CPU en RAM, en automatisch starten **met uitstel** als de server opstart
 - **Startscherm**: apps rangschikken en in mappen zetten zoals op een iPad (*Rangschikken* of lang indrukken; sleep een app op een andere om een map te maken), en de widgets links verbergen of verplaatsen (*Widgets aanpassen*)
 - **Gedeelde mappen** (Samba) met gebruikers en rechten per map (lezen of lezen en schrijven), gasten en Time Machine
+- **Back-ups**: je toestellen (Mac met Time Machine, Windows, Linux, gsm) naar de NAS, en mappen van de NAS naar Google Drive, OneDrive, Dropbox, S3 of een andere NAS (en terug), op vaste tijden, eventueel versleuteld en met oude versies
 - **Opslag**: ZFS-pools met gezondheid en de laatste controle (scrub), alle schijven met temperatuur en SMART, je datasets, een overzicht van je schijfbays en een venster om een pool aan te maken
 - **AI**: Ollama-modellen bekijken, laden, ontladen, downloaden en verwijderen, en snel iets vragen aan je eigen model
 - **Instellingen** (tandwiel rechtsboven): taal (Nederlands of Engels) en thema, de netwerkinstellingen van de server (IP-adres, DHCP of vast, DNS, hostnaam, bridge voor VM's) met automatisch terugzetten als je niet bevestigt, Docker-netwerken (bridge, macvlan, ipvlan) voor je apps, en alle info over de server, de hardware en de versies
@@ -259,6 +260,34 @@ Verbinden: op een Mac via Finder → Ga → Verbind met server (`smb://freddy.lo
 Bestanden worden geschreven als de app-gebruiker (`APP_UID`), dezelfde als bij je Docker-apps, zodat bv. Jellyfin en je pc dezelfde mappen gebruiken zonder rechtenproblemen.
 Een gedeelde map verwijderen stopt alleen het delen; de bestanden blijven staan.
 
+## Back-ups
+
+Met de knop **Back-ups** bovenaan. Er zijn drie tabbladen:
+
+**Toestellen**: back-ups van je pc's, Macs en gsm's op de NAS, op twee manieren.
+
+*Met de back-up-app Kopia* (aanbevolen voor Windows en Linux): zet de back-up-app één keer aan en kies een pool. HomeBaseOS start dan een Kopia-server op de NAS (poort 51515) met een versleuteld archief in `<pool>/backups/kopia`. Het **wachtwoord van het archief** zie je maar één keer: bewaar het goed. Voeg daarna per pc een toestel toe; je krijgt een **koppelcode**. Installeer op de pc de app **HomeBase Back-up** (een versie van KopiaUI in dezelfde stijl als HomeBaseOS, [downloaden](https://github.com/lennertvh1/kopia/releases/latest)), typ het adres van je HomeBaseOS en de code, en kies wat je wil bewaren (Documenten, Bureaublad, Afbeeldingen …). De gewone KopiaUI of de opdrachtregel kan ook: de stappen (adres, vingerafdruk, naam, wachtwoord) staan bij het toestel. Het toestel maakt dan elk uur een back-up zolang KopiaUI draait, en oude versies blijven bewaard (24 per uur, 14 dagen, 8 weken, 12 maanden, 3 jaar). Terugzetten doe je in de app (*Bekijken en terugzetten*). HomeBaseOS toont per toestel wanneer de laatste back-up was.
+
+*Met een eigen gedeelde map*: elk toestel krijgt een eigen dataset (`<pool>/backups/<naam>`) met een maximale grootte, en een gedeelde map waar alleen de gekozen gebruiker aan kan. Bij een Mac staat Time Machine meteen aan. Onder *Zo stel je het in* staan de stappen per soort toestel (Time Machine, Bestandsgeschiedenis van Windows, Déjà Dup op Linux, PhotoSync of FolderSync op je gsm).
+
+**Verbindingen**: plekken buiten de NAS. Google Drive, OneDrive en Dropbox koppel je door aan te melden in je browser:
+
+1. Klik op *Aanmelden bij …*. Er opent een tabblad van Google, Microsoft of Dropbox.
+2. Meld je aan en klik op *Toestaan*. Het tabblad komt daarna uit op `http://127.0.0.1:53682/…` en toont een fout. Dat is normaal.
+3. Kopieer dat adres uit de adresbalk en plak het in HomeBaseOS.
+
+Lukt dat niet, dan kan je ook `rclone authorize "drive"` (of `onedrive`, `dropbox`) uitvoeren op een pc met rclone en de token plakken.
+Een andere NAS gaat via SFTP (SSH: Synology, QNAP, TrueNAS, een andere HomeBaseOS), SMB (een gedeelde map) of WebDAV (Nextcloud). Daarnaast kan S3-opslag (Backblaze B2, Wasabi, Cloudflare R2, Amazon S3, MinIO).
+
+**Synchroniseren**: taken die een map op de NAS naar een verbinding zetten (of omgekeerd), met de hand, elk uur, elke dag of elke week:
+
+- *Kopiëren* zet nieuwe en gewijzigde bestanden over en wist nooit iets aan de andere kant. *Synchroniseren* maakt er een exacte kopie van: wat je op de NAS wist, verdwijnt daar ook.
+- *Versleutelen* (rclone crypt): bestanden en mapnamen zijn versleuteld vóór ze de NAS verlaten. Zonder het wachtwoord krijgt niemand ze terug, ook jij niet. Met rclone en hetzelfde wachtwoord haal je ze ook zonder HomeBaseOS terug.
+- *Oude versies bewaren*: wat overschreven of gewist wordt, gaat naar een map ernaast (`… (oude versies)/<datum>`) en verdwijnt na het gekozen aantal dagen.
+- *Proef* toont in het logboek wat een taak zou doen, zonder iets te veranderen. *Terugzetten* haalt alles terug naar een (nieuwe) map op de NAS.
+
+HomeBaseOS gebruikt [rclone](https://rclone.org) (`install.sh` installeert het). Verbindingen staan in `/var/lib/homebaseos/rclone.conf` (alleen leesbaar voor root). Een synchronisatie start niet als de bronmap leeg is of de pool niet gekoppeld is, zodat er aan de andere kant niets per ongeluk gewist wordt.
+
 ## Terminal op de server
 
 Rechtsboven opent het terminal-icoon een **root-shell op de server**, met kleuren, `top`, `nano`, tab-aanvulling, kopiëren en plakken (xterm.js). Met *Los venster* zet je ze in een eigen browservenster.
@@ -328,6 +357,7 @@ De code hangt af van de klok: staat de klok van je gsm of je server verkeerd, da
 - **"De appcatalogus kon niet geladen worden"**: de server heeft internet nodig om de feed op te halen. Daarna werkt hij 24 uur uit de cache.
 - **App uit de appstore start niet**: open `STACKS_DIR/<naam>/compose.yaml` en bekijk het logboek van de app. Sommige templates verwachten nog een database of een andere app (zie *Vereist* in de appstore).
 - **Ollama niet bereikbaar**: controleer of de container draait en of `OLLAMA_URL` klopt.
+- **Back-up mislukt**: open het *Logboek* van de taak. Met *Testen* bij Verbindingen zie je of de verbinding nog werkt; bij Google, Microsoft en Dropbox kan het aanmelden verlopen zijn (bv. na een nieuw wachtwoord): klik dan op *Opnieuw aanmelden*.
 
 ## Licenties
 

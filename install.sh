@@ -33,7 +33,7 @@ fi
 apt-get update
 
 step "Basispakketten"
-apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils rsync
+apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils rsync rclone
 # Klok gelijk houden: de codes van tweestapsverificatie hangen af van de tijd.
 apt-get install -y systemd-timesyncd || true
 timedatectl set-ntp true || true
@@ -78,6 +78,13 @@ SMB
 fi
 systemctl enable --now smbd
 systemctl enable --now wsdd 2>/dev/null || true
+
+step "Back-up-app voor je pc's (Kopia, officiële pakketbron)"
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://kopia.io/signing-key | gpg --dearmor --yes -o /etc/apt/keyrings/kopia-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kopia-keyring.gpg] http://packages.kopia.io/apt/ stable main" > /etc/apt/sources.list.d/kopia.list
+apt-get update
+apt-get install -y kopia
 
 step "Docker (officiële pakketbron)"
 install -m 0755 -d /etc/apt/keyrings

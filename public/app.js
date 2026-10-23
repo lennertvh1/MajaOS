@@ -320,7 +320,7 @@
   }
 
   /* --- widgets op het dashboard: volgorde en verbergen (bewaard op de server, zoals de apps) */
-  const WIDGET_NAMES = { clock: 'Klok', sys: 'Systeem', storage: 'Opslag', shares: 'Gedeelde mappen', ai: 'AI', vms: 'Virtuele machines' };
+  const WIDGET_NAMES = { clock: 'Klok', sys: 'Systeem', storage: 'Opslag', shares: 'Gedeelde mappen', backup: 'Back-ups', ai: 'AI', vms: 'Virtuele machines' };
   const WIDGET_ICONS = {
     up: '<path d="M6 15l6-6 6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
     eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
@@ -413,6 +413,28 @@
       return `<li><span class="name">${esc(sh.name)}</span><span class="muted small">${esc(side)}</span></li>`;
     }).join('') + (d.shares.length > 5 ? `<li class="muted small">${t('en nog {n}', { n: d.shares.length - 5 })}</li>` : '')
       || `<li class="muted small">${t('Nog geen gedeelde mappen. Klik om er een te maken.')}</li>`;
+  }
+
+  /* --- widget: back-ups */
+  async function loadBackups() {
+    try { S.backup = await api.get('/api/backup?brief=1'); S.backupError = null; } catch (e) { S.backupError = e.message; }
+    renderBackupWidget();
+  }
+  function renderBackupWidget() {
+    const ul = $('#bkMini'), pill = $('#bkState'), d = S.backup;
+    if (!d) { ul.innerHTML = `<li class="muted small">${S.backupError ? esc(S.backupError) : t('Laden…')}</li>`; pill.textContent = ''; return; }
+    const running = d.jobs.filter((j) => j.running).length, failed = d.jobs.filter((j) => !j.running && j.lastRun && j.lastRun.state === 'failed').length;
+    pill.textContent = running ? t('Bezig') : failed ? t('{n} mislukt', { n: failed }) : d.jobs.length ? t('In orde') : '';
+    pill.className = 'pill ' + (running ? '' : failed ? 'bad' : 'ok');
+    const side = (j) => {
+      if (j.running) return t('bezig') + (j.running.percent != null ? ' ' + Math.floor(j.running.percent) + '%' : '');
+      if (!j.lastRun) return t('nog niet gedaan');
+      return (j.lastRun.state === 'ok' ? '' : t(j.lastRun.state === 'failed' ? 'mislukt' : 'gestopt') + ' · ') + ago(j.lastRun.ended);
+    };
+    ul.innerHTML = d.jobs.slice(0, 5).map((j) => `<li><span class="name">${esc(j.name)}</span><span class="muted small${!j.running && j.lastRun && j.lastRun.state === 'failed' ? ' temp-bad' : ''}">${esc(side(j))}</span></li>`).join('')
+      + (d.jobs.length > 5 ? `<li class="muted small">${t('en nog {n}', { n: d.jobs.length - 5 })}</li>` : '')
+      + (d.devices ? `<li><span class="name">${t('Toestellen')}</span><span class="muted small">${esc(t(d.devices === 1 ? '{n} toestel' : '{n} toestellen', { n: d.devices }))}</span></li>` : '')
+      || `<li class="muted small">${t('Nog geen back-ups. Klik om er een te maken.')}</li>`;
   }
 
   /* --- startscherm: volgorde en mappen (zoals op een iPad) */
@@ -3166,6 +3188,639 @@
     F.name.focus();
   }
 
+  /* --- Back-ups: de NAS naar de cloud of een andere NAS (rclone), en toestellen naar de NAS (een gedeelde map per toestel) */
+  const BK_TABS = [['jobs', 'Synchroniseren'], ['devices', 'Toestellen'], ['remotes', 'Verbindingen']];
+  const DEV_KINDS = { mac: 'Mac', windows: 'Windows-pc', linux: 'Linux-pc', phone: 'Gsm of tablet' };
+  const bk = { tab: 'jobs', timer: null, openDevice: null, secret: null }; // secret: een wachtwoord dat je maar één keer ziet
+  function backupWindow(tab) {
+    if (tab) bk.tab = tab;
+    openWindow(t('Back-ups'), `<p class="lead">${t('Laden…')}</p>`, (body) => backupPane(body));
+    onWinClose = () => { clearTimeout(bk.timer); bk.timer = null; loadBackups(); }; // de widget bijwerken na wijzigingen
+  }
+  function ago(ms) {
+    const s = Math.round((ms - Date.now()) / 1000), a = Math.abs(s);
+    const rtf = new Intl.RelativeTimeFormat(LOCALE, { numeric: 'auto' });
+    if (a < 60) return rtf.format(0, 'second');
+    if (a < 3600) return rtf.format(Math.round(s / 60), 'minute');
+    if (a < 86400) return rtf.format(Math.round(s / 3600), 'hour');
+    return rtf.format(Math.round(s / 86400), 'day');
+  }
+  const hhmm = (v) => { const [h, m] = String(v || '03:00').split(':').map(Number); return new Date(2026, 0, 1, h, m).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }); };
+  const weekday = (n) => new Date(2026, 9, 18 + Number(n)).toLocaleDateString(LOCALE, { weekday: 'long' }); // 18 oktober 2026 is een zondag
+  const when = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+  function scheduleText(s) {
+    if (!s || s.every === 'manual') return t('Alleen met de hand');
+    if (s.every === 'hourly') return t('Elk uur');
+    if (s.every === 'daily') return t('Elke dag om {time}', { time: hhmm(s.time) });
+    return t('Elke {day} om {time}', { day: weekday(s.day), time: hhmm(s.time) });
+  }
+  const eta = (sec) => (sec == null ? '' : sec < 60 ? t('{s} s', { s: Math.max(1, Math.round(sec)) }) : duration(sec));
+  function runSummary(x) {
+    const parts = [t(x.files === 1 ? '{n} bestand overgezet' : '{n} bestanden overgezet', { n: nf0.format(x.files || 0) }) + (x.bytes ? ' (' + bytes(x.bytes) + ')' : '')];
+    if (x.deletes) parts.push(t('{n} gewist', { n: nf0.format(x.deletes) }));
+    return parts.join(' · ');
+  }
+  function bkProgress(r) {
+    const pct = r.percent == null ? 0 : r.percent;
+    const line = r.totalBytes ? t('{done} van {total}', { done: bytes(r.bytes), total: bytes(r.totalBytes) }) : t('Bestanden vergelijken…');
+    return `<div class="bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
+      <div class="row-sub">${esc(line)}${r.speed ? ' · ' + esc(bytes(r.speed)) + '/s' : ''}${r.eta ? ' · ' + esc(t('nog {time}', { time: eta(r.eta) })) : ''}</div>`;
+  }
+  function runPill(j) {
+    const r = j.running;
+    if (r) return `<span class="pill">${t(r.kind === 'restore' ? 'Terugzetten' : r.dryRun ? 'Proef' : 'Bezig')}${r.percent != null ? ' ' + Math.floor(r.percent) + '%' : '…'}</span>`;
+    const l = j.lastRun;
+    if (!l) return `<span class="pill">${t('Nog niet gedaan')}</span>`;
+    return `<span class="pill ${l.state === 'ok' ? 'ok' : l.state === 'failed' ? 'bad' : 'warn'}">${t(l.state === 'ok' ? 'Gelukt' : l.state === 'failed' ? 'Mislukt' : 'Gestopt')}</span>`;
+  }
+
+  async function backupPane(el, quiet) {
+    clearTimeout(bk.timer); bk.timer = null;
+    if (!quiet) el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/backup'); } catch (e) { if (!quiet) el.innerHTML = `<p class="lead">${t('De back-ups konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (!el.isConnected) return; // venster intussen dicht of iets anders geopend
+    S.backup = { installed: d.installed, jobs: d.jobs, devices: d.devices.length }; renderBackupWidget();
+    const scroll = el.scrollTop;
+    el.innerHTML = `
+      <div class="seg vm-tabs" role="tablist" aria-label="${t('Onderdelen')}">${BK_TABS.map(([k, label]) =>
+        `<button type="button" role="tab" aria-selected="${k === bk.tab}" data-bktab="${k}">${t(label)}</button>`).join('')}</div>
+      <div id="bkBody"></div>`;
+    el.onclick = (e) => { const b = e.target.closest('[data-bktab]'); if (b) { bk.tab = b.dataset.bktab; backupPane(el); } };
+    const box = $('#bkBody', el);
+    ({ jobs: bkJobs, devices: bkDevices, remotes: bkRemotes })[bk.tab](box, d, el);
+    if (quiet) el.scrollTop = scroll;
+    if (bk.tab === 'jobs' && d.jobs.some((j) => j.running)) bk.timer = setTimeout(() => { if (el.isConnected && $('#bkJobList', el)) backupPane(el, true); }, 2000);
+  }
+
+  /* taken: synchroniseren met de cloud of een andere NAS */
+  function bkJobs(box, d, el) {
+    if (!d.installed) {
+      box.innerHTML = `<div class="notice warn">${t('rclone is niet geïnstalleerd op de server. Voer install.sh opnieuw uit, of op de server: sudo apt install rclone')}</div>`;
+      return;
+    }
+    const remote = (n) => d.remotes.find((r) => r.name === n);
+    const row = (j) => {
+      const dest = j.remote + ':' + (j.remotePath || '/');
+      const route = j.direction === 'pull' ? `${dest} → ${j.localPath}` : `${j.localPath} → ${dest}`;
+      const r = remote(j.remote), l = j.lastRun;
+      const tags = [t(j.mode === 'sync' ? 'Synchroniseren' : 'Kopiëren'), j.encrypt ? t('Versleuteld') : null, j.versions ? t('Versies {n} dagen', { n: j.keepDays }) : null].filter(Boolean);
+      return `<li>
+        <div><div class="row-title">${esc(j.name)} ${runPill(j)}</div>
+          <div class="row-sub">${esc(route)}${r ? ' · ' + esc(tr(r.label)) : ''}</div>
+          <div class="row-sub">${esc(scheduleText(j.schedule))}${j.next ? ' · ' + esc(t('volgende: {when}', { when: when(j.next) })) : ''} · ${esc(tags.join(' · '))}</div>
+          ${!j.running && l ? `<div class="row-sub">${esc(t('Laatst: {when}', { when: ago(l.ended) }))}${l.state === 'ok' ? ' · ' + esc(runSummary(l)) : ''}</div>` : ''}
+          ${!j.running && l && l.state === 'failed' && l.error ? `<div class="row-sub temp-bad">${esc(tr(l.error))}</div>` : ''}</div>
+        <div class="row-side btn-row">
+          ${j.running ? `<button class="btn sm" type="button" data-bk-stop="${esc(j.id)}">${t('Stoppen')}</button>` : `<button class="btn sm primary" type="button" data-bk-run="${esc(j.id)}">${t('Nu starten')}</button>`}
+          <button class="btn sm" type="button" data-bk-log="${esc(j.id)}">${t('Logboek')}</button>
+          <button class="btn sm" type="button" data-bk-edit="${esc(j.id)}"${j.running ? ' disabled' : ''}>${t('Bewerken')}</button></div>
+        ${j.running ? `<div class="row-bar">${bkProgress(j.running)}</div>` : ''}</li>`;
+    };
+    box.innerHTML = `
+      <p class="lead">${t('Zet bestanden van je NAS in de cloud (Google Drive, OneDrive, Dropbox, S3) of op een andere NAS, op vaste tijden. Of haal ze daar op.')}</p>
+      ${d.remotes.length ? '' : `<div class="notice">${t('Maak eerst een verbinding met je cloud of je andere NAS.')}<div><button class="btn sm primary" type="button" data-bktab="remotes">${t('Verbinding toevoegen')}</button></div></div>`}
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Taken')}</h2>
+        <button class="btn sm primary" type="button" data-bk-new${d.remotes.length ? '' : ' disabled'}>+ ${t('Taak')}</button></div>
+      <ul class="rows bk-rows" id="bkJobList">${d.jobs.map(row).join('') || `<li><span class="muted">${t('Nog geen taken.')}</span></li>`}</ul>`;
+    const job = (id) => d.jobs.find((j) => j.id === id);
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.bktab) return;
+      if (b.dataset.bkNew != null) return bkJobForm(box, d, el, null);
+      if (b.dataset.bkEdit) return bkJobForm(box, d, el, job(b.dataset.bkEdit));
+      if (b.dataset.bkLog) return bkLog(box, el, job(b.dataset.bkLog));
+      if (b.dataset.bkRun) {
+        const j = job(b.dataset.bkRun);
+        return withBusy(b, async () => { await api.post('/api/backup/jobs/' + j.id + '/run', {}); toast(t('{name} gestart.', { name: j.name })); backupPane(el, true); });
+      }
+      if (b.dataset.bkStop) {
+        const j = job(b.dataset.bkStop);
+        if (!(await ask(t('{name} stoppen? Wat al overgezet is, blijft staan.', { name: j.name }), t('Stoppen')))) return;
+        return withBusy(b, async () => { await api.post('/api/backup/jobs/' + j.id + '/stop', {}); toast(t('{name} wordt gestopt.', { name: j.name })); backupPane(el, true); });
+      }
+    };
+  }
+
+  function bkJobForm(box, d, el, job) {
+    clearTimeout(bk.timer);
+    const j = job || { name: '', direction: 'push', mode: 'copy', remote: d.remotes[0].name, remotePath: '', localPath: '', schedule: { every: 'daily', time: '03:00', day: 0 },
+      versions: false, keepDays: 30, excludes: [], bwlimit: '', encrypt: false };
+    const opt = (v, cur, label) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(label)}</option>`;
+    const radio = (name, v, cur, title, help) => `<label class="check dev"><input type="radio" name="${name}" value="${v}"${v === cur ? ' checked' : ''}><span><b>${title}</b><small class="muted">${help}</small></span></label>`;
+    box.innerHTML = `
+      <h2 class="pane-title">${job ? t('{name} bewerken', { name: esc(job.name) }) : t('Nieuwe taak')}</h2>
+      <form class="form" id="bkJobForm" novalidate>
+        <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="60" value="${esc(j.name)}" autocomplete="off" placeholder="${t("bv. Foto's naar Google Drive")}"></label>
+        <fieldset class="fld"><span>${t('Richting')}</span><div class="form" style="gap:8px">
+          ${radio('direction', 'push', j.direction, t('Van de NAS naar de cloud of een andere NAS'), t('Een back-up van je bestanden buiten de deur.'))}
+          ${radio('direction', 'pull', j.direction, t('Van de cloud of een andere NAS naar de NAS'), t('Bv. je Google Drive of OneDrive ook thuis bewaren.'))}</div></fieldset>
+        <label class="fld"><span>${t('Map op de NAS')}</span><input class="field" name="localPath" list="bkFolders" value="${esc(j.localPath)}" spellcheck="false" autocomplete="off" placeholder="/tank/fotos">
+          <datalist id="bkFolders">${d.folders.map((f) => `<option value="${esc(f)}">`).join('')}</datalist><small data-local-help></small></label>
+        <label class="fld"><span>${t('Verbinding')}</span><select class="field" name="remote">${d.remotes.map((r) => opt(r.name, j.remote, r.name + ' (' + tr(r.label) + ')')).join('')}</select></label>
+        <label class="fld"><span>${t('Map op het doel')}</span><span class="inline-form"><input class="field" name="remotePath" value="${esc(j.remotePath)}" spellcheck="false" autocomplete="off" placeholder="${t('bv. Back-ups/Freddy')}">
+          <button class="btn" type="button" data-browse>${t('Bladeren')}</button></span><small>${t('Leeg = de hoofdmap.')}</small></label>
+        <div class="bk-browse" id="bkBrowse" hidden></div>
+        <fieldset class="fld"><span>${t('Hoe')}</span><div class="form" style="gap:8px">
+          ${radio('mode', 'copy', j.mode, t('Kopiëren'), t('Nieuwe en gewijzigde bestanden overzetten. Wat je wist, blijft aan de andere kant staan.'))}
+          ${radio('mode', 'sync', j.mode, t('Synchroniseren'), t('Het doel wordt een exacte kopie: wat je wist, verdwijnt daar ook.'))}</div></fieldset>
+        <fieldset class="fld"><span>${t('Wanneer')}</span><span class="inline-form">
+          <select class="field" name="every">${[['manual', 'Alleen met de hand'], ['hourly', 'Elk uur'], ['daily', 'Elke dag'], ['weekly', 'Elke week']].map(([v, l]) => opt(v, j.schedule.every, t(l))).join('')}</select>
+          <select class="field" name="day" data-sched="weekly" aria-label="${t('Dag')}">${[1, 2, 3, 4, 5, 6, 0].map((n) => opt(n, j.schedule.day, weekday(n))).join('')}</select>
+          <input class="field" type="time" name="time" data-sched="time" value="${esc(j.schedule.time)}" aria-label="${t('Tijd')}"></span>
+          <small data-sched-help>${t('Op een vast uur, bv. \'s nachts. Stond de server uit, dan haalt hij het in zodra hij weer aan staat.')}</small></fieldset>
+        <div class="form" data-push>
+          ${job ? (j.encrypt ? `<p class="muted small">${t('Deze taak is versleuteld. Het wachtwoord kan je niet meer wijzigen.')}</p>` : '') : `
+          <label class="check"><input type="checkbox" name="encrypt"> ${t('Versleutelen')}</label>
+          <div class="form" data-encrypt hidden>
+            <p class="muted small">${t('Bestanden en mapnamen worden versleuteld vóór ze de NAS verlaten. Zonder dit wachtwoord krijgt niemand ze terug, ook jij niet. Bewaar het goed, bv. in je wachtwoordbeheerder.')}</p>
+            <div class="fld-row">
+              <label class="fld"><span>${t('Wachtwoord')}</span><input class="field" type="password" name="password" autocomplete="new-password"><small>${t('Minstens 10 tekens.')}</small></label>
+              <label class="fld"><span>${t('Wachtwoord herhalen')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label></div></div>`}
+          <label class="check"><input type="checkbox" name="versions"${j.versions ? ' checked' : ''}> ${t('Oude versies bewaren')}</label>
+          <div class="form" data-versions hidden>
+            <p class="muted small">${t('Wat overschreven of gewist wordt, gaat eerst naar een map ernaast ("… (oude versies)"). Na het aantal dagen hieronder verdwijnt het.')}</p>
+            <label class="fld" style="max-width:220px"><span>${t('Aantal dagen bewaren')}</span><input class="field" type="number" name="keepDays" min="1" max="3650" value="${esc(j.keepDays)}"></label></div>
+        </div>
+        <details class="adv"><summary>${t('Geavanceerd')}</summary><div class="form" style="margin-top:10px">
+          <label class="fld"><span>${t('Uitsluiten')}</span><textarea class="field" name="excludes" rows="3" spellcheck="false" placeholder="*.tmp&#10;.DS_Store&#10;cache/**">${esc((j.excludes || []).join('\n'))}</textarea>
+            <small>${t('Eén patroon per regel, zoals in rclone.')}</small></label>
+          <label class="fld" style="max-width:260px"><span>${t('Maximale snelheid')}</span><input class="field" name="bwlimit" value="${esc(j.bwlimit)}" placeholder="${t('bv. 10M')}">
+            <small>${t('In bytes per seconde, met K, M of G. Leeg = zo snel als het kan.')}</small></label></div></details>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t(job ? 'Opslaan' : 'Aanmaken')}</button><button class="btn" type="button" data-cancel>${t('Annuleren')}</button></div>
+      </form>
+      ${job ? `<h2 class="pane-title">${t('Meer')}</h2>
+        <div class="btn-row"><button class="btn" type="button" data-bk-dry>${t('Proef')}</button>
+          ${job.direction === 'push' ? `<button class="btn" type="button" data-bk-restore>${t('Terugzetten…')}</button>` : ''}
+          <button class="btn danger" type="button" data-bk-del>${t('Verwijderen')}</button></div>
+        <p class="muted small" style="margin-top:8px">${t('Proef toont in het logboek wat de taak zou doen, zonder iets te veranderen.')}</p>` : ''}`;
+    const f = $('#bkJobForm', box), F = f.elements, err = $('.form-error', f);
+    const val = (n) => (f.querySelector(`[name=${n}]:checked`) || {}).value;
+    const sync = () => {
+      const push = val('direction') === 'push';
+      $('[data-push]', f).hidden = !push;
+      $('[data-local-help]', f).textContent = push ? t('De map die je wil bewaren.') : t('Hier komen de bestanden. HomeBaseOS maakt de map als ze nog niet bestaat.');
+      $$('[data-sched]', f).forEach((x) => { x.hidden = x.dataset.sched === 'weekly' ? F.every.value !== 'weekly' : F.every.value === 'manual'; });
+      $('[data-sched-help]', f).hidden = F.every.value === 'manual';
+      if ($('[data-encrypt]', f)) $('[data-encrypt]', f).hidden = !F.encrypt.checked;
+      $('[data-versions]', f).hidden = !F.versions.checked;
+    };
+    f.addEventListener('change', sync); sync();
+    $('[data-cancel]', f).addEventListener('click', () => backupPane(el));
+
+    // Bladeren in de mappen van de verbinding.
+    const br = $('#bkBrowse', box);
+    async function browseTo(p) {
+      br.hidden = false; br.innerHTML = `<p class="muted small">${t('Laden…')}</p>`;
+      let r;
+      try { r = await api.get('/api/backup/remotes/' + encodeURIComponent(F.remote.value) + '/browse?path=' + encodeURIComponent(p)); }
+      catch (ex) { br.innerHTML = `<p class="form-error">${esc(ex.message)}</p>`; return; }
+      F.remotePath.value = r.path;
+      const up = r.path.replace(/\/?[^/]*$/, '');
+      br.innerHTML = `<div class="bk-browse-head"><b>${esc(F.remote.value)}:${esc(r.path || '/')}</b>
+          ${r.path && r.path !== '/' ? `<button class="btn sm" type="button" data-dir-up="${esc(up)}">${t('Map hoger')}</button>` : ''}
+          <button class="btn sm primary" type="button" data-dir-close>${t('Kies deze map')}</button></div>
+        <div class="bk-dirs">${r.dirs.map((x) => `<button class="btn sm" type="button" data-dir="${esc(x)}">${esc(x)}</button>`).join('') || `<span class="muted small">${t('Geen mappen.')}</span>`}</div>`;
+      br.onclick = (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.dirClose != null) { br.hidden = true; return; }
+        if (b.dataset.dirUp != null) return browseTo(b.dataset.dirUp);
+        if (b.dataset.dir) return browseTo((r.path && r.path !== '/' ? r.path.replace(/\/$/, '') + '/' : r.path) + b.dataset.dir);
+      };
+    }
+    $('[data-browse]', f).addEventListener('click', () => browseTo(F.remotePath.value));
+    F.remote.addEventListener('change', () => { if (!br.hidden) browseTo(''); });
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      const body = {
+        name: F.name.value, direction: val('direction'), mode: val('mode'), remote: F.remote.value, remotePath: F.remotePath.value, localPath: F.localPath.value.trim(),
+        schedule: { every: F.every.value, time: F.time.value || '03:00', day: Number(F.day.value) },
+        versions: F.versions.checked, keepDays: Number(F.keepDays.value), excludes: F.excludes.value, bwlimit: F.bwlimit.value,
+      };
+      if (F.encrypt && F.encrypt.checked && body.direction === 'push') {
+        if (F.password.value.length < 10) { err.textContent = t('Kies een wachtwoord voor de versleuteling van minstens 10 tekens.'); return; }
+        if (F.password.value !== F.password2.value) { err.textContent = t('De twee wachtwoorden zijn niet gelijk.'); return; }
+        body.encrypt = true; body.password = F.password.value;
+      }
+      if (body.mode === 'sync' && (!job || job.mode !== 'sync' || job.direction !== body.direction)) {
+        const dest = body.remote + ':' + (body.remotePath || '/');
+        const [src, dst] = body.direction === 'push' ? [body.localPath, dest] : [dest, body.localPath];
+        if (!(await ask(t('Synchroniseren maakt van {dest} een exacte kopie van {src}: wat in {dest} staat en niet in {src}, wordt gewist. Doorgaan?', { src, dest: dst }), t('Synchroniseren')))) return;
+      }
+      const btn = $('[type=submit]', f); btn.disabled = true;
+      try {
+        await api.post('/api/backup/jobs' + (job ? '/' + job.id : ''), body);
+        toast(t(job ? '{name} opgeslagen.' : 'Taak {name} aangemaakt.', { name: body.name.trim() }));
+        backupPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    if (!job) { F.name.focus(); return; }
+    box.querySelector('[data-bk-dry]').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+      await api.post('/api/backup/jobs/' + job.id + '/run', { dryRun: true });
+      bkLog(box, el, job);
+    }));
+    const rs = box.querySelector('[data-bk-restore]');
+    if (rs) rs.addEventListener('click', () => bkRestore(box, el, job));
+    box.querySelector('[data-bk-del]').addEventListener('click', async (e) => {
+      const msg = t('Taak {name} verwijderen? De bestanden op de NAS en op het doel blijven staan.', { name: job.name })
+        + (job.encrypt ? ' ' + t('Let op: de sleutel van de versleuteling verdwijnt mee. Zonder je wachtwoord kan je de versleutelde bestanden dan niet meer lezen.') : '');
+      if (!(await ask(msg, t('Verwijderen')))) return;
+      withBusy(e.target, async () => { await api.del('/api/backup/jobs/' + job.id); toast(t('Taak {name} verwijderd.', { name: job.name })); backupPane(el); });
+    });
+  }
+
+  // Terugzetten: alles van het doel terug naar een map op de NAS (standaard een nieuwe map naast de oorspronkelijke).
+  function bkRestore(box, el, job) {
+    clearTimeout(bk.timer);
+    box.innerHTML = `
+      <h2 class="pane-title">${t('{name} terugzetten', { name: esc(job.name) })}</h2>
+      <p class="lead">${t('HomeBaseOS haalt alles op van {dest} en zet het in de map hieronder. Bestaande bestanden met dezelfde naam worden overschreven.', { dest: esc(job.remote + ':' + (job.remotePath || '/')) })}${job.encrypt ? ' ' + t('De bestanden worden meteen ontsleuteld.') : ''}</p>
+      <form class="form" id="bkRestoreForm" novalidate>
+        <label class="fld"><span>${t('Terugzetten naar')}</span><input class="field" name="target" value="${esc(job.localPath.replace(/\/$/, '') + '-teruggezet')}" spellcheck="false" autocomplete="off">
+          <small>${t('Een nieuwe map is het veiligst: dan kies je zelf wat je terugzet. Kies {path} om de oorspronkelijke map aan te vullen.', { path: esc(job.localPath) })}</small></label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Terugzetten')}</button><button class="btn" type="button" data-cancel>${t('Annuleren')}</button></div>
+      </form>`;
+    const f = $('#bkRestoreForm', box);
+    $('[data-cancel]', f).addEventListener('click', () => backupPane(el));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const target = f.elements.target.value.trim().replace(/\/+$/, '');
+      if (target === job.localPath && !(await ask(t('Terugzetten in {path}? Bestanden met dezelfde naam worden overschreven door de versie van het doel.', { path: target }), t('Terugzetten')))) return;
+      const btn = $('[type=submit]', f); btn.disabled = true;
+      try { await api.post('/api/backup/jobs/' + job.id + '/restore', { target }); toast(t('Terugzetten gestart.')); bkLog(box, el, job); }
+      catch (ex) { $('.form-error', f).textContent = ex.message; btn.disabled = false; }
+    });
+  }
+
+  async function bkLog(box, el, job) {
+    clearTimeout(bk.timer);
+    let l;
+    try { l = await api.get('/api/backup/jobs/' + job.id + '/log'); } catch (e) { toast(e.message, true); return; }
+    if (!box.isConnected) return;
+    const old = $('.logs', box), atEnd = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 20;
+    const r = l.running, x = l.last;
+    const time = (s) => (s ? new Date(s).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', second: '2-digit', ...clockOpts() }) : '');
+    box.innerHTML = `
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${esc(job.name)}</h2>
+        <span class="btn-row">${r ? `<button class="btn sm" type="button" data-log-stop>${t('Stoppen')}</button>` : ''}<button class="btn sm" type="button" data-log-back>${t('Terug')}</button></span></div>
+      ${r ? `<p class="lead">${t(r.kind === 'restore' ? 'Bezig met terugzetten…' : r.dryRun ? 'Proef bezig: er verandert niets.' : 'Bezig…')}</p><div style="margin-bottom:14px">${bkProgress(r)}</div>`
+        : x ? `<p class="lead"><span class="pill ${x.state === 'ok' ? 'ok' : x.state === 'failed' ? 'bad' : 'warn'}">${t(x.state === 'ok' ? 'Gelukt' : x.state === 'failed' ? 'Mislukt' : 'Gestopt')}</span>
+            ${esc(t(x.kind === 'restore' ? 'Terugzetten' : x.dryRun ? 'Proef' : 'Back-up'))} · ${esc(ago(x.ended))} · ${esc(runSummary(x))}${x.error ? `<br><span class="temp-bad">${esc(tr(x.error))}</span>` : ''}</p>` : ''}
+      <pre class="logs logs-big">${l.lines.map((z) => `<span class="ts">${esc(time(z.time))}</span> ${['error', 'critical', 'fatal'].includes(z.level) ? `<span class="err">${esc(tr(z.text))}</span>` : esc(tr(z.text))}`).join('\n') || esc(t('Nog geen logboek. Start de taak om er een te maken.'))}</pre>`;
+    const pre = $('.logs', box);
+    if (atEnd) pre.scrollTop = pre.scrollHeight;
+    $('[data-log-back]', box).addEventListener('click', () => backupPane(el));
+    const stop = $('[data-log-stop]', box);
+    if (stop) stop.addEventListener('click', async () => {
+      if (!(await ask(t('{name} stoppen? Wat al overgezet is, blijft staan.', { name: job.name }), t('Stoppen')))) return;
+      withBusy(stop, () => api.post('/api/backup/jobs/' + job.id + '/stop', {}));
+    });
+    if (r) bk.timer = setTimeout(() => { if (box.isConnected && $('.logs', box)) bkLog(box, el, job); }, 2000);
+  }
+
+  /* toestellen: met de back-up-app (Kopia) of met een eigen gedeelde map op de NAS */
+  function devHowTo(dev, d) {
+    const host = d.hostname, smb = `smb://${host}.local/${dev.name}`, unc = `\\\\${host}\\${dev.name}`;
+    const v = { name: '<b>' + esc(dev.name) + '</b>', host: esc(host), user: '<b>' + esc(dev.user) + '</b>', smb: '<code>' + esc(smb) + '</code>', unc: '<code>' + esc(unc) + '</code>' };
+    const steps = {
+      mac: ['Open Systeeminstellingen → Algemeen → Time Machine.', 'Klik op + (Voeg reservekopieschijf toe) en kies {name} op {host}.', 'Meld je aan als {user} met het wachtwoord van die gebruiker. Time Machine maakt voortaan elk uur een back-up als je Mac thuis is.'],
+      windows: ['Open in de Verkenner {unc} en meld je aan als {user}. Vink Mijn referenties onthouden aan.', 'Open het Configuratiescherm → Bestandsgeschiedenis → Station selecteren → Netwerklocatie toevoegen, en kies {unc}.', 'Klik op Inschakelen. Een ander back-upprogramma kan ook: kies {unc} als doel.'],
+      linux: ['Open Back-ups (Déjà Dup) → Voorkeuren → Opslaglocatie → Netwerkserver.', 'Typ {smb} en meld je aan als {user}.', 'Zet automatische back-ups aan.'],
+      phone: ['Installeer een app die naar een SMB-map kan back-uppen, bv. PhotoSync (iPhone en Android) of FolderSync (Android).', 'Kies als doel SMB (Windows-share): server {host}, map {name}, gebruiker {user}.', 'Zet automatisch back-uppen aan, bv. \'s nachts tijdens het opladen.'],
+    }[dev.kind] || [];
+    return `<ol class="bk-steps">${steps.map((s) => `<li>${t(s, v)}</li>`).join('')}</ol>
+      ${dev.kind === 'mac' ? `<p class="muted small">${t('Zie je de map niet? Verbind eerst in de Finder (Ga → Verbind met server) met {smb}.', v)}</p>` : ''}`;
+  }
+  const kopiaUrl = (k, d) => `https://${k.addresses[0] || d.hostname + '.local'}:${k.port}`;
+  // Adres van HomeBaseOS zoals je het nu in je browser gebruikt (de app gaat uit van poort 8080).
+  const nasAddress = () => location.hostname + (location.port && location.port !== '8080' ? ':' + location.port : !location.port ? ':' + (location.protocol === 'https:' ? 443 : 80) : '');
+  // Op het toestel: de app HomeBase Back-up (koppelen met een code), of de gewone KopiaUI / opdrachtregel.
+  function kopiaHowTo(dev, d) {
+    const k = d.kopia, url = kopiaUrl(k, d), name = dev.user.split('@')[0];
+    const home = { windows: 'C:\\Users\\…', mac: '/Users/…', linux: '/home/…' }[dev.kind] || '';
+    const v = { app: `<a href="${esc(k.appUrl)}" target="_blank" rel="noopener">HomeBase Back-up</a>`, nas: '<code>' + esc(nasAddress()) + '</code>',
+      link: '<a href="https://kopia.io/docs/installation/" target="_blank" rel="noopener">kopia.io</a>', url: '<code>' + esc(url) + '</code>',
+      fp: '<code>' + esc(k.fingerprint || '') + '</code>', user: '<code>' + esc(name) + '</code>', home: '<code>' + esc(home) + '</code>' };
+    const cli = `kopia repository connect server --url=${url} --server-cert-fingerprint=${k.fingerprint || ''} --override-username=${name} --override-hostname=${name}`;
+    const steps = (list) => `<ol class="bk-steps">${list.map((x) => `<li>${t(x, v)}</li>`).join('')}</ol>`;
+    return steps([
+      'Download {app} voor Windows, Mac of Linux en installeer de app op het toestel.',
+      'Klik hier op Koppelcode. Open de app en typ {nas} als adres, en de code.',
+      'Kies wat je wil bewaren, bv. Documenten en Afbeeldingen. De app maakt voortaan elk uur een back-up en houdt oude versies bij.',
+    ]) + `<details class="adv" style="margin-top:10px"><summary>${t('Met de gewone KopiaUI of de opdrachtregel')}</summary>
+      ${steps([
+        'Download KopiaUI op {link} en installeer het op het toestel.',
+        'Open KopiaUI en kies Kopia Repository Server.',
+        'Vul bij Server Address {url} in, en bij de vingerafdruk (Trusted server certificate fingerprint) {fp}.',
+        'Open de geavanceerde opties (Show Advanced Options) en vul bij gebruikersnaam en bij computernaam (Override Username en Override Hostname) allebei {user} in.',
+        'Klik op Next en typ het wachtwoord van dit toestel.',
+        'Klik op New Snapshot en kies je gebruikersmap ({home}). Kopia maakt er voortaan elk uur een back-up van zolang KopiaUI draait, en houdt oude versies bij.',
+      ])}
+      <p class="muted small" style="margin-top:8px">${t('Terugzetten doe je in KopiaUI: kies een back-up en klik op Restore, of open ze als map (Mount).')}</p>
+      <p class="muted small" style="margin:8px 0 4px">${t('Liever de opdrachtregel?')}</p><pre class="logs">${esc(cli)}</pre></details>`;
+  }
+  // Een wachtwoord dat je maar één keer ziet (archief of toestel), bovenaan tot je bevestigt dat je het bewaard hebt.
+  const secretBox = (s) => `<div class="notice warn bk-secret"><b>${esc(s.title)}</b><code class="bk-secret-val${s.code ? ' bk-code' : ''}">${esc(s.value)}</code>
+    <span class="muted small">${esc(s.text)}</span>
+    ${s.password ? `<details class="adv"><summary>${t('Wachtwoord voor KopiaUI of de opdrachtregel')}</summary><code class="bk-secret-val" style="margin-top:8px;display:inline-block">${esc(s.password)}</code></details>` : ''}
+    <div class="btn-row"><button class="btn sm" type="button" data-copy="${esc(s.value)}">${t('Kopiëren')}</button>
+      <button class="btn sm primary" type="button" data-secret-done>${t('Ik heb het bewaard')}</button></div></div>`;
+  const pairSecret = (name, r) => ({ title: t('Koppelcode voor {name}', { name }), value: r.code, code: true, password: r.password,
+    text: t('Open HomeBase Back-up op {name}, typ {nas} als adres en deze code. De code werkt één keer en tot {time}.', { name, nas: nasAddress(), time: new Date(r.expires).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) });
+  function kopiaCard(d) {
+    const k = d.kopia, head = `<b>${t('Back-up-app (Kopia)')}</b>`;
+    if (!k.installed) return `<div class="notice">${head}<span>${t('Kopia is niet geïnstalleerd op de server. Voer install.sh opnieuw uit.')}</span></div>`;
+    if (!k.enabled) {
+      return `<div class="notice">${head}
+        <span>${t('Met de gratis app Kopia maken je Windows-pc\'s, Macs en Linux-pc\'s elk uur een versleutelde back-up naar de NAS. Oude versies blijven bewaard: 24 per uur, 14 dagen, 8 weken, 12 maanden en 3 jaar.')}</span>
+        <form class="inline-form" id="kopiaOn">${k.pool ? '' : `<select class="field" name="pool" aria-label="${t('Pool')}">${d.pools.map((p) => `<option value="${esc(p.name)}">${esc(t('Archief op {pool} ({size} vrij)', { pool: p.name, size: bytes(p.free) }))}</option>`).join('')}</select>`}
+          <button class="btn primary" type="submit"${k.pool || d.pools.length ? '' : ' disabled'}>${t('Aanzetten')}</button></form></div>`;
+    }
+    return `<div class="notice">${head} <span class="pill ${k.running ? 'ok' : 'bad'}" style="justify-self:start">${t(k.running ? 'Actief' : 'Draait niet')}</span>
+      <dl class="kv" style="margin:0"><dt>${t('Adres')}</dt><dd><code>${esc(kopiaUrl(k, d))}</code></dd>
+        <dt>${t('Vingerafdruk')}</dt><dd><code>${esc(k.fingerprint || '–')}</code></dd>
+        <dt>${t('Archief')}</dt><dd>${esc(k.path)}${k.used != null ? ' · ' + esc(bytes(k.used)) : ''}</dd></dl>
+      <div class="btn-row"><button class="btn sm" type="button" data-kopia-off>${t('Uitzetten')}</button></div></div>`;
+  }
+  function bkDevices(box, d, el) {
+    const k = d.kopia;
+    const row = (x) => {
+      const app = x.method === 'kopia';
+      const pct = !app && x.quota ? Math.min(100, (x.used / x.quota) * 100) : null;
+      const size = app ? (x.used ? bytes(x.used) : '') : x.used == null ? '' : x.quota ? t('{used} van {total}', { used: bytes(x.used), total: bytes(x.quota) }) : t('{used} gebruikt, geen limiet', { used: bytes(x.used) });
+      const old = x.lastChange && Date.now() - x.lastChange > 3 * 86400000;
+      const last = x.lastChange ? t(app ? 'laatste back-up {when}' : 'laatst gewijzigd {when}', { when: ago(x.lastChange) }) : t('nog geen back-up');
+      return `<li>
+        <div><div class="row-title">${esc(x.name)} <span class="pill">${t(DEV_KINDS[x.kind] || x.kind)}</span> <span class="pill">${app ? 'Kopia' : t('Gedeelde map')}</span>${x.connected ? ` <span class="pill ok">${t('verbonden')}</span>` : ''}</div>
+          <div class="row-sub"><span class="${old ? 'temp-warn' : ''}">${esc(last)}</span>${size ? ' · ' + esc(size) : ''}${app && x.folders && x.folders.length ? ' · ' + esc(t(x.folders.length === 1 ? '{n} map' : '{n} mappen', { n: x.folders.length })) : ''}</div>
+          ${x.missing ? `<div class="row-sub temp-bad">${t('De dataset {name} ontbreekt. Is de pool gekoppeld?', { name: esc(x.dataset) })}</div>` : ''}
+          ${app && !k.enabled ? `<div class="row-sub temp-warn">${t('De back-up-app staat uit: dit toestel kan geen back-ups maken.')}</div>` : ''}</div>
+        <div class="row-side btn-row">${app ? `<button class="btn sm primary" type="button" data-dev-pair="${esc(x.name)}"${k.enabled ? '' : ' disabled'}>${t('Koppelcode')}</button>
+          <button class="btn sm" type="button" data-dev-pw="${esc(x.name)}"${k.enabled ? '' : ' disabled'}>${t('Nieuw wachtwoord')}</button>` : ''}
+          <button class="btn sm danger" type="button" data-dev-del="${esc(x.name)}">${t('Verwijderen')}</button></div>
+        <div class="row-bar">${pct != null ? `<div class="bar" aria-hidden="true"><span class="${level(pct, 80, 92)}" style="width:${pct.toFixed(1)}%"></span></div>` : ''}
+          ${app && !k.enabled ? '' : `<details class="adv" style="margin-top:8px"${bk.openDevice === x.name ? ' open' : ''}><summary>${t('Zo stel je het in')}</summary>${app ? kopiaHowTo(x, d) : devHowTo(x, d)}</details>`}</div></li>`;
+    };
+    const canAdd = d.pools.length && (k.enabled || d.samba);
+    box.innerHTML = `
+      ${bk.secret ? secretBox(bk.secret) : ''}
+      <p class="lead">${t('Back-ups van je pc\'s, Macs en gsm\'s op de NAS. Met de back-up-app Kopia (Windows, Mac en Linux), of met een eigen gedeelde map: voor Time Machine op een Mac en apps op je gsm.')}</p>
+      ${kopiaCard(d)}
+      ${d.samba ? '' : `<div class="notice warn">${t('Samba is nog niet geïnstalleerd. Voer install.sh opnieuw uit, of op de server: sudo apt install samba')}</div>`}
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Toestellen')}</h2>
+        <button class="btn sm primary" type="button" data-dev-new${canAdd ? '' : ` disabled title="${t('Maak eerst een pool aan.')}"`}>+ ${t('Toestel')}</button></div>
+      <ul class="rows bk-rows">${d.devices.map(row).join('') || `<li><span class="muted">${t(d.pools.length ? 'Nog geen toestellen.' : 'Nog geen toestellen. Maak eerst een pool aan bij Opslag.')}</span></li>`}</ul>`;
+    const on = $('#kopiaOn', box);
+    if (on) on.addEventListener('submit', (e) => {
+      e.preventDefault();
+      withBusy($('[type=submit]', on), async () => {
+        const r = await api.post('/api/backup/kopia', { enabled: true, pool: on.elements.pool ? on.elements.pool.value : undefined });
+        if (r.repoPassword) bk.secret = { title: t('Wachtwoord van het archief'), value: r.repoPassword, text: t('Bewaar het op een veilige plaats, bv. in je wachtwoordbeheerder. Zonder dit wachtwoord kan niemand het archief openen, ook niet als de server stuk is. Het staat ook op de server in /var/lib/homebaseos/kopia/server.env.') };
+        toast(t('De back-up-app staat aan.'));
+        backupPane(el);
+      });
+    });
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.bktab) return;
+      if (b.dataset.secretDone != null) { bk.secret = null; return backupPane(el); }
+      if (b.dataset.devNew != null) return bkDeviceForm(box, d, el);
+      if (b.dataset.kopiaOff != null) {
+        if (!(await ask(t('De back-up-app uitzetten? Pc\'s en Macs met Kopia kunnen dan geen back-ups meer maken. De back-ups zelf blijven staan.'), t('Uitzetten')))) return;
+        return withBusy(b, async () => { await api.post('/api/backup/kopia', { enabled: false }); toast(t('De back-up-app staat uit.')); backupPane(el); });
+      }
+      if (b.dataset.devPair) {
+        const name = b.dataset.devPair, x = d.devices.find((y) => y.name === name);
+        if (x.lastChange && !(await ask(t('Een koppelcode maken voor {name}? Het toestel krijgt daarbij een nieuw wachtwoord: koppel het daarna opnieuw in de app.', { name }), t('Koppelcode')))) return;
+        return withBusy(b, async () => {
+          const r = await api.post('/api/backup/devices/' + encodeURIComponent(name) + '/pair', {});
+          bk.secret = pairSecret(name, r);
+          bk.openDevice = name; backupPane(el);
+        });
+      }
+      if (b.dataset.devPw) {
+        const name = b.dataset.devPw;
+        if (!(await ask(t('Een nieuw wachtwoord maken voor {name}? Het oude werkt dan meteen niet meer: typ het nieuwe in KopiaUI op het toestel.', { name }), t('Nieuw wachtwoord')))) return;
+        return withBusy(b, async () => {
+          const r = await api.post('/api/backup/devices/' + encodeURIComponent(name) + '/password', {});
+          bk.secret = { title: t('Wachtwoord voor {name}', { name }), value: r.password, text: t('Typ dit wachtwoord in KopiaUI op het toestel. Je ziet het hier maar één keer.') };
+          bk.openDevice = name; backupPane(el);
+        });
+      }
+      if (b.dataset.devDel) {
+        const x = d.devices.find((y) => y.name === b.dataset.devDel), app = x.method === 'kopia';
+        const r = await ask(t(app ? '{name} verwijderen? Het toestel kan dan geen back-ups meer maken.' : '{name} verwijderen? De gedeelde map verdwijnt; het toestel kan er geen back-ups meer in maken.', { name: x.name }), t('Verwijderen'),
+          t('Ook alle back-ups van dit toestel wissen ({size})', { size: bytes(x.used || 0) }));
+        if (!r) return;
+        withBusy(b, async () => {
+          await api.del('/api/backup/devices/' + encodeURIComponent(x.name) + (r.checked ? '?data=1' : ''));
+          toast(t(r.checked ? '{name} en de back-ups zijn verwijderd.' : app ? '{name} verwijderd. De back-ups blijven in het archief van Kopia.' : '{name} verwijderd. De back-ups staan nog in {path}.', { name: x.name, path: x.path }));
+          backupPane(el);
+        });
+      }
+    };
+  }
+
+  function bkDeviceForm(box, d, el) {
+    const k = d.kopia;
+    const radio = (v, title, help, off) => `<label class="check dev"><input type="radio" name="method" value="${v}"${off ? ' disabled' : ''}><span><b>${title}</b><small class="muted">${help}</small></span></label>`;
+    box.innerHTML = `
+      <h2 class="pane-title">${t('Nieuw toestel')}</h2>
+      <form class="form" id="bkDevForm" novalidate>
+        <fieldset class="fld"><span>${t('Hoe maakt dit toestel back-ups?')}</span><div class="form" style="gap:8px">
+          ${radio('kopia', t('Met de app HomeBase Back-up'), k.enabled ? t('Voor Windows, Mac en Linux. Koppelen met een code; versleuteld, elk uur, en oude versies blijven bewaard.') : t('Zet eerst de back-up-app aan (bij Toestellen, bovenaan).'), !k.enabled)}
+          ${radio('share', t('Met een eigen gedeelde map'), d.samba ? t('Voor Time Machine op een Mac, Bestandsgeschiedenis op Windows en apps op je gsm.') : t('Samba is nog niet geïnstalleerd.'), !d.samba)}</div></fieldset>
+        <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('bv. MacBook-Lies')}">
+          <small data-name-help></small></label>
+        <fieldset class="fld"><span>${t('Soort toestel')}</span><div class="choice-row">${Object.entries(DEV_KINDS).map(([kd, l]) =>
+          `<label class="choice"><input type="radio" name="kind" value="${kd}"><span>${t(l)}</span></label>`).join('')}</div></fieldset>
+        <div class="form" data-share>
+          <div class="fld-row">
+            <label class="fld"><span>${t('Pool')}</span><select class="field" name="pool">${d.pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(t('{size} vrij', { size: bytes(p.free) }))})</option>`).join('')}</select></label>
+            <label class="fld"><span>${t('Maximale grootte (GB)')}</span><input class="field" type="number" name="quotaGb" min="1" step="1" placeholder="${t('geen limiet')}"></label>
+          </div>
+          <p class="muted small" style="margin-top:-6px" data-quota-help></p>
+          <label class="fld"><span>${t('Wie maakt de back-ups?')}</span><select class="field" name="user">${d.users.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}
+            <option value="">${t('Nieuwe gebruiker…')}</option></select>
+            <small>${t('Met deze gebruiker meldt het toestel zich aan bij de NAS. Alleen die gebruiker kan aan de back-ups.')}</small></label>
+          <div class="fld-row" data-new-user hidden>
+            <label class="fld"><span>${t('Gebruikersnaam')}</span><input class="field" name="newName" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('bv. lies')}"></label>
+            <label class="fld"><span>${t('Wachtwoord')}</span><input class="field" type="password" name="newPw" autocomplete="new-password"><small>${t('Minstens 8 tekens.')}</small></label>
+            <label class="fld"><span>${t('Wachtwoord herhalen')}</span><input class="field" type="password" name="newPw2" autocomplete="new-password"></label>
+          </div>
+        </div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Aanmaken')}</button><button class="btn" type="button" data-cancel>${t('Annuleren')}</button></div>
+      </form>`;
+    const f = $('#bkDevForm', box), F = f.elements, err = $('.form-error', f);
+    const val = (n) => (f.querySelector(`[name=${n}]:checked`) || {}).value;
+    const pick = (n, v) => { const x = f.querySelector(`[name=${n}][value=${v}]`); if (x && !x.disabled) x.checked = true; };
+    pick('method', k.enabled ? 'kopia' : 'share'); pick('kind', 'windows');
+    const sync = (e) => {
+      // Een Mac gebruikt het liefst Time Machine; de app bestaat niet voor gsm's.
+      if (e && e.target.name === 'kind' && e.target.value === 'mac' && d.samba) pick('method', 'share');
+      const app = val('method') === 'kopia';
+      f.querySelector('[name=kind][value=phone]').disabled = app;
+      if (app && val('kind') === 'phone') pick('kind', 'windows');
+      $('[data-share]', f).hidden = app;
+      $('[data-new-user]', f).hidden = F.user.value !== '';
+      $('[data-name-help]', f).textContent = app ? t('Letters, cijfers, - en _. Dit vul je ook in op het toestel.') : t('Letters, cijfers, - en _. Zo heet ook de gedeelde map.');
+      $('[data-quota-help]', f).textContent = val('kind') === 'mac' ? t('Voor Time Machine: ongeveer twee keer de schijf van je Mac. Time Machine ruimt zelf oude back-ups op als de map vol is.')
+        : t('Zo kan één toestel niet de hele pool vullen. Leeg = geen limiet.');
+    };
+    f.addEventListener('change', sync); sync();
+    $('[data-cancel]', f).addEventListener('click', () => backupPane(el));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      const method = val('method');
+      const body = { name: F.name.value.trim(), kind: val('kind'), method };
+      if (method === 'share') {
+        Object.assign(body, { pool: F.pool.value, quotaGb: F.quotaGb.value === '' ? '' : Number(F.quotaGb.value) });
+        if (F.user.value) body.user = F.user.value;
+        else {
+          if (F.newPw.value !== F.newPw2.value) { err.textContent = t('De twee wachtwoorden zijn niet gelijk.'); return; }
+          body.newUser = { name: F.newName.value.trim(), password: F.newPw.value };
+        }
+      }
+      const btn = $('[type=submit]', f); btn.disabled = true;
+      try {
+        const r = await api.post('/api/backup/devices', body);
+        if (r.code) bk.secret = pairSecret(body.name, r);
+        toast(t(r.code ? '{name} is klaar. Installeer HomeBase Back-up op het toestel en koppel met de code.' : 'De map voor {name} is klaar. Volg de stappen om de back-ups aan te zetten.', { name: body.name }));
+        bk.openDevice = body.name; backupPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    F.name.focus();
+  }
+
+  /* verbindingen: cloud en andere NAS (rclone) */
+  function bkRemotes(box, d, el) {
+    if (!d.installed) { bkJobs(box, d, el); return; }
+    box.innerHTML = `
+      <p class="lead">${t('Een verbinding is een plek buiten deze NAS: je cloud of een andere NAS. Wachtwoorden en sleutels blijven op de server.')}</p>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Verbindingen')}</h2>
+        <button class="btn sm primary" type="button" data-rm-new>+ ${t('Verbinding')}</button></div>
+      <ul class="rows bk-rows">${d.remotes.map((r) => `<li>
+          <div><div class="row-title">${esc(r.name)}</div>
+            <div class="row-sub">${esc([tr(r.label), tr(r.detail)].filter(Boolean).join(' · '))}</div>
+            <div class="row-sub">${r.usedBy.length ? esc(t('Gebruikt door: {list}', { list: r.usedBy.join(', ') })) : t('Nog door geen enkele taak gebruikt.')}</div>
+            <div class="row-sub" data-rm-about="${esc(r.name)}"></div></div>
+          <div class="row-side btn-row"><button class="btn sm" type="button" data-rm-test="${esc(r.name)}">${t('Testen')}</button>
+            ${(d.providers[r.type] || {}).oauth ? `<button class="btn sm" type="button" data-rm-reauth="${esc(r.name)}">${t('Opnieuw aanmelden')}</button>` : ''}
+            <button class="btn sm danger" type="button" data-rm-del="${esc(r.name)}"${r.usedBy.length ? ` disabled title="${esc(t('Wordt nog gebruikt door een taak.'))}"` : ''}>${t('Verwijderen')}</button></div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen verbindingen.')}</span></li>`}</ul>`;
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.bktab) return;
+      if (b.dataset.rmNew != null) return bkRemoteForm(box, d, el, null);
+      if (b.dataset.rmReauth) return bkRemoteForm(box, d, el, d.remotes.find((r) => r.name === b.dataset.rmReauth).type, b.dataset.rmReauth);
+      if (b.dataset.rmTest) {
+        const name = b.dataset.rmTest, out = $(`[data-rm-about="${CSS.escape(name)}"]`, box);
+        out.textContent = t('Verbinden…'); out.className = 'row-sub';
+        return withBusy(b, async () => {
+          try {
+            const r = await api.post('/api/backup/remotes/' + encodeURIComponent(name) + '/test', {});
+            out.className = 'row-sub temp-ok';
+            out.textContent = r.about && r.about.free != null ? t('Werkt. {free} vrij{total}.', { free: bytes(r.about.free), total: r.about.total ? ' ' + t('van {total}', { total: bytes(r.about.total) }) : '' }) : t('Werkt.');
+          } catch (ex) { out.className = 'row-sub temp-bad'; out.textContent = ex.message; }
+        });
+      }
+      if (b.dataset.rmDel) {
+        const name = b.dataset.rmDel;
+        if (!(await ask(t('Verbinding {name} verwijderen? De bestanden aan de andere kant blijven staan.', { name }), t('Verwijderen')))) return;
+        withBusy(b, async () => { await api.del('/api/backup/remotes/' + encodeURIComponent(name)); toast(t('Verbinding {name} verwijderd.', { name })); backupPane(el); });
+      }
+    };
+  }
+
+  const RM_NAME = { drive: 'google', onedrive: 'onedrive', dropbox: 'dropbox', s3: 's3', sftp: 'nas', smb: 'nas', webdav: 'webdav' };
+  // reconnect: de naam van een bestaande verbinding die opnieuw moet aanmelden.
+  function bkRemoteForm(box, d, el, type, reconnect) {
+    const P = d.providers;
+    if (!type) {
+      const group = (g, title) => `<h3>${t(title)}</h3><div class="bk-providers">${Object.entries(P).filter(([, p]) => p.group === g).map(([k, p]) =>
+        `<button class="store-card widget" type="button" data-rm-type="${esc(k)}"><span><b>${esc(tr(p.label))}</b>${p.hint ? `<small class="muted">${esc(tr(p.hint))}</small>` : ''}</span></button>`).join('')}</div>`;
+      box.innerHTML = `<h2 class="pane-title">${t('Nieuwe verbinding')}</h2>${group('cloud', 'Cloud')}${group('nas', 'Andere NAS of server')}
+        <div class="btn-row" style="margin-top:16px"><button class="btn" type="button" data-cancel>${t('Annuleren')}</button></div>`;
+      box.onclick = (e) => {
+        const b = e.target.closest('button'); if (!b || b.dataset.bktab) return;
+        if (b.dataset.rmType) bkRemoteForm(box, d, el, b.dataset.rmType);
+        if (b.dataset.cancel != null) backupPane(el);
+      };
+      return;
+    }
+    box.onclick = null;
+    const p = P[type], label = tr(p.label);
+    const taken = (n) => d.remotes.some((r) => r.name.toLowerCase() === n.toLowerCase());
+    let name = reconnect || RM_NAME[type] || type; for (let i = 2; !reconnect && taken(name); i++) name = (RM_NAME[type] || type) + '-' + i;
+    const field = (x) => {
+      const attrs = `class="field" name="f:${esc(x.key)}" ${x.placeholder ? `placeholder="${esc(x.placeholder)}"` : ''} autocomplete="${x.type === 'password' ? 'new-password' : 'off'}" spellcheck="false"`;
+      const input = x.type === 'select'
+        ? `<select class="field" name="f:${esc(x.key)}">${x.options.map(([v, l]) => `<option value="${esc(v)}"${v === x.default ? ' selected' : ''}>${esc(tr(l))}</option>`).join('')}</select>`
+        : `<input ${attrs} type="${x.type === 'password' ? 'password' : x.type === 'number' ? 'number' : 'text'}" value="${esc(x.type === 'select' ? '' : x.default || '')}">`;
+      return `<label class="fld"><span>${esc(tr(x.label))}${x.required ? '' : ` <em class="muted">${t('(optioneel)')}</em>`}</span>${input}${x.help ? `<small>${esc(tr(x.help))}</small>` : ''}</label>`;
+    };
+    box.innerHTML = `
+      <h2 class="pane-title">${reconnect ? t('{name} opnieuw aanmelden', { name: esc(reconnect) }) : esc(label)}</h2>
+      <form class="form" id="bkRmForm" novalidate>
+        ${reconnect ? `<input type="hidden" name="name" value="${esc(name)}"><p class="lead">${t('De taken blijven deze verbinding gebruiken. Meld je aan met hetzelfde account, anders komen de bestanden ergens anders terecht.')}</p>` : `
+        <label class="fld"><span>${t('Naam van de verbinding')}</span><input class="field" name="name" maxlength="32" value="${esc(name)}" autocomplete="off" spellcheck="false">
+          <small>${t('Letters, cijfers, - en _. Zo zie je ze terug bij de taken.')}</small></label>`}
+        ${p.oauth ? `
+        <ol class="bk-steps">
+          <li>${t('Klik op Aanmelden. Er opent een nieuw tabblad van {label}.', { label: esc(label) })}
+            <div style="margin-top:8px"><button class="btn primary" type="button" data-auth>${t('Aanmelden bij {label}', { label: esc(label) })}</button> <span class="small" data-auth-link></span></div></li>
+          <li>${t('Meld je aan en klik op Toestaan. Daarna toont dat tabblad een foutmelding, zoals "Deze site is niet bereikbaar". Dat is normaal.')}</li>
+          <li>${t('Kopieer het adres uit de adresbalk van dat tabblad (het begint met http://127.0.0.1:53682/) en plak het hier:')}
+            <input class="field" name="url" style="margin-top:8px" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:53682/?state=…&amp;code=…" aria-label="${t('Adres uit de adresbalk')}"></li>
+        </ol>
+        <details class="adv"><summary>${t('Lukt het niet?')}</summary>
+          <p class="muted small" style="margin:8px 0">${t('Installeer rclone op je pc (rclone.org) en voer dit uit in een terminal. Meld je aan, en plak daarna alles tussen ---> en <---End paste hieronder.')}</p>
+          <pre class="logs">rclone authorize "${esc(type)}"</pre>
+          <textarea class="field" name="token" rows="3" spellcheck="false" style="margin-top:8px" aria-label="${t('Token')}"></textarea></details>`
+        : p.fields.map(field).join('')}
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t(p.oauth ? 'Opslaan' : 'Verbinden')}</button><button class="btn" type="button" data-cancel>${t('Annuleren')}</button></div>
+      </form>`;
+    const f = $('#bkRmForm', box), F = f.elements, err = $('.form-error', f);
+    $('[data-cancel]', f).addEventListener('click', () => (reconnect ? backupPane(el) : bkRemoteForm(box, d, el, null)));
+    let session = null;
+    const authBtn = $('[data-auth]', f);
+    if (authBtn) authBtn.addEventListener('click', async () => {
+      err.textContent = '';
+      // Het tabblad meteen openen (anders houdt de browser het tegen), en het adres invullen zodra de server het geeft.
+      const w = api === realApi ? window.open('', '_blank') : null;
+      authBtn.disabled = true;
+      try {
+        const r = await api.post('/api/backup/auth', { type });
+        session = r.session;
+        $('[data-auth-link]', f).innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener">${t('Opent er niets? Klik hier.')}</a>`;
+        if (w) { w.opener = null; w.location.href = r.url; }
+        if (api !== realApi) { F.url.value = 'http://127.0.0.1:53682/?state=demo&code=demo'; toast(t('In de demo meld je niet echt aan. Het adres om te plakken staat al ingevuld.')); }
+        F.url.focus();
+      } catch (ex) { if (w) w.close(); err.textContent = ex.message; }
+      finally { authBtn.disabled = false; }
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      const btn = $('[type=submit]', f); btn.disabled = true; btn.textContent = t('Verbinden…');
+      try {
+        if (p.oauth) {
+          const token = F.token.value.trim();
+          if (!token && !session) throw new Error(t('Klik eerst op Aanmelden bij {label}.', { label }));
+          await api.post('/api/backup/auth/finish', { name: F.name.value.trim(), type, reconnect: !!reconnect, ...(token ? { token } : { session, url: F.url.value.trim() }) });
+        } else {
+          const body = { name: F.name.value.trim(), type };
+          p.fields.forEach((x) => { body[x.key] = F['f:' + x.key].value; });
+          await api.post('/api/backup/remotes', body);
+        }
+        toast(t(reconnect ? 'Opnieuw aangemeld: {name}' : 'Verbinding {name} toegevoegd.', { name: F.name.value.trim() }));
+        backupPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t(p.oauth ? 'Opslaan' : 'Verbinden'); }
+    });
+    if (!reconnect) F.name.select();
+  }
+
   /* --- Beveiliging: de terminal op de server */
   async function securityPane(el) {
     el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
@@ -3671,7 +4326,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const jobs = [loadOverview(), loadApps()];
     // Op de VM-pagina haalt een eigen, snellere timer de VM's op.
     if (all || currentView() !== 'vms') jobs.push(loadVms().catch(() => {}));
-    if (all) jobs.push(loadAi(true), loadShares());
+    if (all) jobs.push(loadAi(true), loadShares(), loadBackups());
     const results = await Promise.allSettled(jobs);
     const bad = results.find((r) => r.status === 'rejected');
     if (bad) {
@@ -3750,7 +4405,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     timers = [
       setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
       setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
-      setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadUpdate(); } }, 30000),
+      setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadBackups(); loadUpdate(); } }, 30000),
     ];
   }
 
@@ -4100,7 +4755,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const open = e.target.closest('[data-open]');
     if (open) {
-      ({ home: goHome, storage: storageWindow, shares: sharesWindow, vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
+      ({ home: goHome, storage: storageWindow, shares: sharesWindow, backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
       return;
     }
     const fo = e.target.closest('[data-folder-open]');
