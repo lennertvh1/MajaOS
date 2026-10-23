@@ -133,6 +133,11 @@ Je kan de bridge ook maken in *Instellingen > Netwerk*. Het netwerk van een VM k
 - **Verwijderen** kan alleen als de VM uit staat. Vink *Ook de schijfbestanden wissen* aan om ook de schijven te verwijderen.
   HomeBaseOS wist alleen bestanden binnen `VM_DIR`. Alles daarbuiten blijft staan, en dat zie je in de melding.
 
+
+### Snapshots
+
+In het venster van een VM, tabblad **Snapshots**: leg de VM vast zoals ze nu is (bv. vóór een update) en ga er later naar terug. Draait de VM, dan bewaart de snapshot ook het geheugen; ga je terug, dan loopt de VM verder waar ze was. Een snapshot is geen back-up (hij staat op dezelfde schijf): gebruik daarvoor *Back-ups → Apps en VM's*.
+
 ## Appstore
 
 De appstore gebruikt de catalogus van **Unraid Community Apps** (de feed `applicationFeed.json`, niet de Unraid-plugin zelf).
@@ -252,9 +257,12 @@ Een app in een netwerk zetten doe je bij de instellingen van de app (compose-for
 
 Met de knop **Gedeelde mappen** bovenaan deel je mappen met je pc's, Macs en telefoons (Samba):
 
-1. Maak eerst een **gebruiker** met een wachtwoord (bv. voor elk gezinslid). Die kan alleen aan de gedeelde mappen, niet aanmelden op de server.
-2. Maak een **gedeelde map**: een nieuwe map op een pool (HomeBaseOS maakt er een eigen dataset van, bv. `tank/media`) of een bestaande map.
-3. Kies per gebruiker *Geen toegang*, *Lezen* of *Lezen en schrijven*. Optioneel mogen gasten lezen zonder wachtwoord, of gebruik je de map voor **Time Machine**.
+1. Maak eerst **gebruikers** met een wachtwoord (bv. voor elk gezinslid) bij **Instellingen → Gebruikers**. Ze kunnen alleen aan de gedeelde mappen, niet aanmelden op de server of het dashboard.
+2. Maak eventueel **groepen** (bv. *Gezin*, *Ouders*) en zet de gebruikers erin. Een groep geeft al haar leden dezelfde rechten; wie in meerdere groepen zit, krijgt het hoogste recht.
+3. Maak een **gedeelde map**: een nieuwe map op een pool (HomeBaseOS maakt er een eigen dataset van, bv. `tank/media`) of een bestaande map.
+4. Kies per gebruiker en per groep *Geen toegang*, *Lezen* of *Lezen en schrijven*. Optioneel mogen gasten lezen zonder wachtwoord, of gebruik je de map voor **Time Machine**.
+
+Bij **Instellingen → Gebruikers** zie je per gebruiker wat die mag in elke map, en of dat rechtstreeks is of via een groep.
 
 Verbinden: op een Mac via Finder → Ga → Verbind met server (`smb://freddy.local/media`), op Windows met `\\freddy\media` in de Verkenner.
 Bestanden worden geschreven als de app-gebruiker (`APP_UID`), dezelfde als bij je Docker-apps, zodat bv. Jellyfin en je pc dezelfde mappen gebruiken zonder rechtenproblemen.
@@ -263,6 +271,8 @@ Een gedeelde map verwijderen stopt alleen het delen; de bestanden blijven staan.
 ## Back-ups
 
 Met de knop **Back-ups** bovenaan. Er zijn drie tabbladen:
+
+**Apps en VM's**: een kopie van de apps en VM's die je aanvinkt, in een map op de NAS (bv. `/tank/backups/systeem`), met de hand of op een schema; de laatste *n* blijven bewaard. Van een app gaan de compose-bestanden, de mappen in de appgegevens en de Docker-volumes mee (je media niet: die bewaar je met Synchroniseren); de app stopt even zodat databases een consistente kopie geven. Een VM wordt gekopieerd terwijl ze draait (libvirt) of even afgesloten. *Terugzetten…* zet een app of VM terug uit een gekozen back-up; wat er stond, gaat eerst opzij (`.voor-terugzetten-<datum>`). Wil je die map ook buiten de deur, maak er dan een taak voor bij Synchroniseren.
 
 **Toestellen**: back-ups van je pc's, Macs en gsm's op de NAS, op twee manieren.
 
@@ -287,6 +297,10 @@ Een andere NAS gaat via SFTP (SSH: Synology, QNAP, TrueNAS, een andere HomeBaseO
 - *Proef* toont in het logboek wat een taak zou doen, zonder iets te veranderen. *Terugzetten* haalt alles terug naar een (nieuwe) map op de NAS.
 
 HomeBaseOS gebruikt [rclone](https://rclone.org) (`install.sh` installeert het). Verbindingen staan in `/var/lib/homebaseos/rclone.conf` (alleen leesbaar voor root). Een synchronisatie start niet als de bronmap leeg is of de pool niet gekoppeld is, zodat er aan de andere kant niets per ongeluk gewist wordt.
+
+## Herstarten en afsluiten
+
+Met de aan/uit-knop bovenaan (naast Instellingen) herstart je de server of sluit je hem af, altijd na een bevestiging. Bij herstarten komt de pagina vanzelf terug zodra de server weer draait.
 
 ## Terminal op de server
 

@@ -23,7 +23,7 @@ test('Samba-configuratie maken', () => {
 test('gedeelde map controleren', () => {
   const ctx = { names: ['media'], users: ['lies', 'tom'], roots: ['/tank', '/snel'] };
   const ok = sh.validateShare({ name: 'fotos', path: '/tank/fotos/', comment: 'Foto\'s\nvan ons', users: { lies: 'rw', tom: 'none' }, timemachine: 1 }, ctx);
-  assert.deepEqual(ok, { name: 'fotos', path: '/tank/fotos', comment: "Foto's van ons", users: { lies: 'rw' }, guest: false, timemachine: true });
+  assert.deepEqual(ok, { name: 'fotos', path: '/tank/fotos', comment: "Foto's van ons", users: { lies: 'rw' }, groups: {}, guest: false, timemachine: true });
   assert.equal(sh.validateShare({ name: 'nieuw', create: { parent: 'tank' }, users: { tom: 'ro' } }, ctx).path, null);
   const bad = (b, re) => assert.throws(() => sh.validateShare({ name: 'x', path: '/tank/x', users: { lies: 'ro' }, ...b }, ctx), re);
   bad({ name: 'Media' }, /bestaat al/);
@@ -50,4 +50,27 @@ test('verbonden apparaten (smbstatus -j)', () => {
     tcons: { a: { service: 'media', machine: '192.168.1.20' }, b: { service: 'media', machine: '192.168.1.21' }, c: { service: 'IPC$' }, d: { service: 'fotos' } } };
   assert.deepEqual(sh.parseSmbstatus(j), { total: 2, perShare: { media: 2, fotos: 1 } });
   assert.deepEqual(sh.parseSmbstatus({}), { total: 0, perShare: {} });
+});
+
+test('groepen: rechten via een groep, hoogste recht telt', () => {
+  const groups = [{ name: 'Gezin', members: ['lies', 'tom', 'kim'] }, { name: 'Ouders', members: ['lies'] }];
+  const share = { name: 'fotos', path: '/tank/fotos', users: { tom: 'rw' }, groups: { Gezin: 'ro', Ouders: 'rw' } };
+  assert.deepEqual(sh.effectiveUsers(share, groups), { tom: 'rw', lies: 'rw', kim: 'ro' });
+  assert.deepEqual(sh.effectiveUsers({ users: {}, groups: { Weg: 'rw' } }, groups), {}); // verdwenen groep telt niet
+  const conf = sh.buildSmbConf([share, { name: 'leeg', path: '/tank/leeg', users: {}, groups: { Ouders: 'ro' } }], { groups });
+  assert.match(conf, /\[fotos\][\s\S]*valid users = kim lies tom\n[\s\S]*write list = lies tom/);
+  assert.match(conf, /\[leeg\][\s\S]*valid users = lies\n/);
+  assert.doesNotMatch(conf, /\[leeg\][^[]*write list/);
+});
+
+test('groep controleren', () => {
+  const ctx = { names: ['Gezin'], users: ['lies', 'tom'] };
+  assert.deepEqual(sh.validateGroup({ name: 'Ouders', comment: 'mama\nen papa', members: ['tom', 'lies', 'tom'] }, ctx), { name: 'Ouders', comment: 'mama en papa', members: ['lies', 'tom'] });
+  assert.throws(() => sh.validateGroup({ name: 'gezin' }, ctx), /bestaat al/);
+  assert.throws(() => sh.validateGroup({ name: 'a b' }, ctx), /groepsnaam/);
+  assert.throws(() => sh.validateGroup({ name: 'X', members: ['kim'] }, ctx), /bestaat niet/);
+  // een map met alleen een groep is geldig
+  const share = sh.validateShare({ name: 'docs', path: '/tank/docs', users: {}, groups: { Gezin: 'ro', Weg: 'none' } }, { users: ['lies'], groups: ['Gezin'], roots: ['/tank'] });
+  assert.deepEqual(share.groups, { Gezin: 'ro' });
+  assert.throws(() => sh.validateShare({ name: 'd2', path: '/tank/d2', users: {}, groups: { Onbekend: 'ro' } }, { groups: ['Gezin'], roots: ['/tank'] }), /bestaat niet/);
 });

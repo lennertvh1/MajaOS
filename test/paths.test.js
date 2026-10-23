@@ -57,3 +57,22 @@ test('verhuizen: welke apps mee kunnen', () => {
   assert.deepEqual(r.projects.map((x) => x.project), ['jellyfin']);
   assert.deepEqual(r.manual, ['kuma', 'pihole']);
 });
+
+test('bestaande map voor appgegevens vinden', () => {
+  // waar de containers hun gegevens al hebben, de meest gebruikte eerst
+  const containers = [
+    { Mounts: [{ Type: 'bind', Source: '/snel/appdata/jellyfin' }, { Type: 'bind', Source: '/tank/media' }] },
+    { Mounts: [{ Type: 'bind', Source: '/snel/appdata/immich/upload' }, { Type: 'volume', Source: '/var/lib/docker/volumes/x/_data' }] },
+    { Mounts: [{ Type: 'bind', Source: '/mnt/user/appdata/oud' }] },
+  ];
+  assert.deepEqual(paths.appdataFromMounts(containers), ['/snel/appdata', '/mnt/user/appdata']);
+  const list = [{ name: 'tank', mountpoint: '/tank' }, { name: 'tank/data', mountpoint: '/tank/data' }, { name: 'tank/data/appdata', mountpoint: '/tank/data/appdata' }, { name: '/snel', mountpoint: '/snel' }];
+  const has = (set) => (p) => set.includes(p);
+  // containers eerst, maar alleen wat bestaat (/mnt/user/appdata van Unraid niet)
+  assert.equal(paths.pickFolder('appdata', { list, mounts: ['/mnt/user/appdata', '/snel/appdata'], existsFn: has(['/snel/appdata', '/tank/data/appdata']) }), '/snel/appdata');
+  // dan een dataset die zo heet, ook dieper
+  assert.equal(paths.pickFolder('appdata', { list, existsFn: has(['/tank/data/appdata', '/tank/appdata']) }), '/tank/data/appdata');
+  // dan een gewone map op een pool
+  assert.equal(paths.pickFolder('vms', { list, existsFn: has(['/tank/vms']) }), '/tank/vms');
+  assert.equal(paths.pickFolder('isos', { list, existsFn: has([]) }), null);
+});

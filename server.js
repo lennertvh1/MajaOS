@@ -66,6 +66,8 @@ const paths = require('./lib/paths');
 const migrate = require('./lib/migrate');
 const backup = require('./lib/backup');
 const kopia = require('./lib/kopia');
+const vmsnap = require('./lib/vmsnap');
+const sysbackup = require('./lib/sysbackup');
 
 const CFG = {
   port: Number(process.env.PORT || 8080),
@@ -301,6 +303,15 @@ async function handleApi(req, res, url) {
 
   let m;
   if (p === '/api/overview' && method === 'GET') return sendJson(res, 200, await apiOverview());
+  // Server herstarten of afsluiten. Eerst antwoorden, dan pas het commando (anders komt het antwoord nooit aan).
+  if (p === '/api/system/power' && method === 'POST') {
+    const action = (await readBody(req)).action;
+    if (action !== 'reboot' && action !== 'shutdown') return sendJson(res, 400, { error: 'Kies herstarten of afsluiten.' });
+    console.log(`Server ${action === 'reboot' ? 'herstart' : 'afgesloten'} vanaf ${clientIp(req)}.`);
+    sendJson(res, 200, { ok: true, action });
+    setTimeout(() => sys.run('systemctl', [action === 'reboot' ? 'reboot' : 'poweroff'], { timeout: 30000 }).catch((e) => console.error('Aan/uit mislukt: ' + e.message)), 1000);
+    return;
+  }
 
   if (p === '/api/apps' && method === 'GET') {
     const apps = await docker.listApps();
@@ -352,6 +363,11 @@ async function handleApi(req, res, url) {
   if (p === '/api/vm-networks' && method === 'POST') return sendJson(res, 200, await vmnet.createVmNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/vm-networks\/([^/]+)\/start$/)) && method === 'POST') return sendJson(res, 200, await vmnet.startVmNetwork(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/vm-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await vmnet.deleteVmNetwork(decodeURIComponent(m[1])));
+  // Snapshots van een VM (lib/vmsnap.js).
+  if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots$/)) && method === 'GET') return sendJson(res, 200, await vmsnap.listSnapshots(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots$/)) && method === 'POST') return sendJson(res, 200, await vmsnap.createSnapshot(decodeURIComponent(m[1]), await readBody(req)));
+  if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots\/([^/]+)\/revert$/)) && method === 'POST') return sendJson(res, 200, await vmsnap.revertSnapshot(decodeURIComponent(m[1]), decodeURIComponent(m[2])));
+  if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await vmsnap.deleteSnapshot(decodeURIComponent(m[1]), decodeURIComponent(m[2])));
   if ((m = p.match(/^\/api\/vms\/([^/]+)$/)) && method === 'GET') return sendJson(res, 200, await vms.vmDetails(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/vms\/([^/]+)$/)) && method === 'DELETE') {
     return sendJson(res, 200, await vms.deleteVm(decodeURIComponent(m[1]), url.searchParams.get('disks') === '1'));
@@ -436,15 +452,32 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
 
-  if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, await shares.listShares());
+  if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), admin: auth.userName() });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteShare(decodeURIComponent(m[1])));
   if (p === '/api/share-users' && method === 'POST') return sendJson(res, 200, await shares.createUser(await readBody(req)));
   if ((m = p.match(/^\/api\/share-users\/([^/]+)\/password$/)) && method === 'POST') return sendJson(res, 200, await shares.setPassword(decodeURIComponent(m[1]), (await readBody(req)).password));
+  if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveUserAccess(decodeURIComponent(m[1]), await readBody(req)));
+  if (p === '/api/share-groups' && method === 'POST') return sendJson(res, 200, await shares.saveGroup(await readBody(req)));
+  if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveGroup(await readBody(req), decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteGroup(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteUser(decodeURIComponent(m[1])));
   // Back-ups: toestellen naar de NAS, en de NAS naar de cloud of een andere NAS (rclone).
   if (p === '/api/backup' && method === 'GET') return sendJson(res, 200, await backup.overview({ brief: url.searchParams.get('brief') === '1' }));
+  // Back-ups van apps en VM's naar een map op de NAS (lib/sysbackup.js).
+  if (p === '/api/sysbackups' && method === 'GET') return sendJson(res, 200, await sysbackup.overview());
+  if (p === '/api/sysbackups' && method === 'POST') return sendJson(res, 200, await sysbackup.saveJob(await readBody(req)));
+  if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})$/)) && method === 'POST') return sendJson(res, 200, await sysbackup.saveJob(await readBody(req), m[1]));
+  if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})$/)) && method === 'DELETE') return sendJson(res, 200, sysbackup.deleteJob(m[1]));
+  if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})\/log$/)) && method === 'GET') return sendJson(res, 200, sysbackup.jobLog(m[1]));
+  if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})\/runs$/)) && method === 'GET') return sendJson(res, 200, sysbackup.listRuns(m[1]));
+  if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})\/(run|stop|restore)$/)) && method === 'POST') {
+    const body = await readBody(req);
+    if (m[2] === 'stop') return sendJson(res, 200, sysbackup.stopRun(m[1]));
+    if (m[2] === 'restore') return sendJson(res, 200, await sysbackup.restore(m[1], body));
+    return sendJson(res, 200, await sysbackup.startRun(m[1]));
+  }
   if (p === '/api/backup/remotes' && method === 'POST') return sendJson(res, 200, await backup.createRemote(await readBody(req)));
   if (p === '/api/backup/auth' && method === 'POST') return sendJson(res, 200, await backup.startAuth((await readBody(req)).type));
   if (p === '/api/backup/auth/finish' && method === 'POST') return sendJson(res, 200, await backup.finishAuth(await readBody(req)));
@@ -477,6 +510,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/storage-paths' && method === 'GET') return sendJson(res, 200, await migrate.overview());
   if (p === '/api/storage-paths' && method === 'POST') {
     const body = await readBody(req);
+    if (body.path) return sendJson(res, 200, await migrate.usePath(body.kind, body.path)); // bestaande map aanwijzen, niets verhuist
     if (body.kind === 'appdata') return sendJson(res, 200, await migrate.migrateAppdata(body.pool));
     return sendJson(res, 200, await migrate.setLocation(body.kind, body.pool));
   }
@@ -593,5 +627,6 @@ server.listen(CFG.port, () => {
     setInterval(check, 6 * 3600000);
     release.startSchedule((msg) => console.log(msg)); // nieuwe versies van HomeBaseOS zelf
     backup.startSchedule(); // geplande back-uptaken
+    sysbackup.startSchedule(); // geplande back-ups van apps en VM's
   }
 });

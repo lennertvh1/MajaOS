@@ -931,3 +931,22 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .bk-code { font-size: 26px; letter-spacing: .14em; }
 .bk-secret-val { font-size: 17px; justify-self: start; padding: 6px 10px; user-select: all; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .bk-rows > li { grid-template-columns: 1fr; } .bk-rows .row-side { justify-content: flex-start; } }
+
+/* ---- aan/uit */
+.power-win { width: min(440px, calc(100vw - 32px)); }
+.power-body { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 28px 24px; }
+.power-body h2 { font-size: 19px; font-weight: 600; }
+.power-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--track); border-top-color: var(--accent); animation: power-spin 1s linear infinite; }
+@keyframes power-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .power-spin { animation-duration: 3s; } }
+
+/* ---- gebruikers en groepen */
+.rights { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0 10px; }
+.rights th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--glass-line); }
+.rights td { padding: 6px 8px; border-bottom: 1px solid var(--glass-line); vertical-align: middle; }
+.rights tr:last-child td { border-bottom: 0; }
+.rights .field { height: 32px; min-width: 0; width: 100%; font-size: 13.5px; }
+.rights .via { color: var(--muted); font-size: 12.5px; }
+.check-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.user-edit { grid-column: 1 / -1; padding-top: 4px; }
+@media (max-width: 560px) { .rights th:nth-child(3), .rights td:nth-child(3) { display: none; } }

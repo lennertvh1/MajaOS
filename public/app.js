@@ -408,7 +408,10 @@
     pill.textContent = c.total ? t('{n} verbonden', { n: c.total }) : (d.running ? t('Actief') : t('Uit'));
     pill.className = 'pill ' + (c.total || d.running ? 'ok' : 'warn');
     ul.innerHTML = d.shares.slice(0, 5).map((sh) => {
-      const users = Object.keys(sh.users).length, n = c.perShare[sh.name] || 0;
+      // ook wie via een groep toegang heeft
+      const members = new Set(Object.keys(sh.users));
+      Object.keys(sh.groups || {}).forEach((g) => { const gr = (d.groups || []).find((x) => x.name === g); (gr ? gr.members : []).forEach((m) => members.add(m)); });
+      const users = members.size, n = c.perShare[sh.name] || 0;
       const side = n ? t('{n} verbonden', { n }) : [users ? t(users === 1 ? '{n} gebruiker' : '{n} gebruikers', { n: users }) : null, sh.guest ? t('gasten') : null].filter(Boolean).join(' · ');
       return `<li><span class="name">${esc(sh.name)}</span><span class="muted small">${esc(side)}</span></li>`;
     }).join('') + (d.shares.length > 5 ? `<li class="muted small">${t('en nog {n}', { n: d.shares.length - 5 })}</li>` : '')
@@ -1949,7 +1952,7 @@
 
   const GIB = 1073741824;
   const NIC_MODELS = [['virtio', 'virtio (snelst: Linux, Home Assistant)'], ['e1000e', 'e1000e (Windows zonder extra drivers)'], ['rtl8139', 'rtl8139 (oude systemen)']];
-  const VM_TABS = [['general', 'Algemeen'], ['cpu', 'CPU en geheugen'], ['net', 'Netwerk'], ['storage', 'Opslag'], ['devices', 'Apparaten'], ['screen', 'Scherm']];
+  const VM_TABS = [['general', 'Algemeen'], ['cpu', 'CPU en geheugen'], ['net', 'Netwerk'], ['storage', 'Opslag'], ['devices', 'Apparaten'], ['snapshots', 'Snapshots'], ['screen', 'Scherm']];
 
   async function vmEditWindow(id, tab = 'general') {
     openWindow(t('VM bewerken'), `<p class="lead">${t('Laden…')}</p>`);
@@ -1975,6 +1978,7 @@
         <section class="form" role="tabpanel" id="vp-net" aria-labelledby="vt-net" data-vpane="net"></section>
         <section class="form" role="tabpanel" id="vp-storage" aria-labelledby="vt-storage" data-vpane="storage"></section>
         <section class="form" role="tabpanel" id="vp-devices" aria-labelledby="vt-devices" data-vpane="devices"></section>
+        <section class="form" role="tabpanel" id="vp-snapshots" aria-labelledby="vt-snapshots" data-vpane="snapshots"></section>
         <section role="tabpanel" id="vp-screen" aria-labelledby="vt-screen" data-vpane="screen">
           <div class="btn-row" style="margin-bottom:14px">${vmKind(d.state) === 'off' ? `<span class="muted">${t('Start de VM om het scherm te zien.')}</span>` : consoleLink(d.id, 'btn primary')}</div>
           <p class="muted small" style="margin-bottom:10px">${t('De console toont het scherm van de VM, met toetsenbord en muis. Met Los venster zet je ze in een eigen browservenster. Plakken (Cmd/Ctrl+V) typt de tekst van je klembord in de VM.')}</p>
@@ -1983,7 +1987,7 @@
           <p class="muted small" style="margin-bottom:10px">${t('Liever een eigen VNC-programma? Gebruik dan dit adres en wachtwoord.')}</p>
           ${vncHtml(d.vnc)}</section>
         <p class="form-error" role="alert"></p>
-        <div class="btn-row"><button class="btn primary" type="submit">${t('Opslaan')}</button><button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
+        <div class="btn-row" data-vsave><button class="btn primary" type="submit">${t('Opslaan')}</button><button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
       </form>`;
     const form = $('#vmForm', body);
     const pane = (k) => $(`[data-vpane="${k}"]`, form);
@@ -2071,9 +2075,58 @@
     };
 
     drawCpu(); drawNet(); drawStorage(); drawDevices();
+    /* Snapshots: meteen uitgevoerd, niet via Opslaan */
+    const snapPane = pane('snapshots');
+    async function drawSnaps() {
+      snapPane.innerHTML = `<p class="muted">${t('Laden…')}</p>`;
+      let r;
+      try { r = await api.get('/api/vms/' + encodeURIComponent(id) + '/snapshots'); }
+      catch (ex) { snapPane.innerHTML = `<p class="form-error">${esc(ex.message)}</p>`; return; }
+      if (!snapPane.isConnected) return;
+      const on = vmKind(d.state) === 'on';
+      snapPane.innerHTML = `
+        <p class="muted small">${t('Een snapshot legt de VM vast zoals ze nu is. Ga je later terug, dan is alles wat daarna veranderde weg. Handig vóór een update. Een snapshot is geen back-up: hij staat op dezelfde schijf.')}</p>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam')}</span><input class="field" data-snap="name" maxlength="48" spellcheck="false" autocomplete="off" placeholder="${t('bv. voor-update')}"><small>${t('Leeg = de datum en het uur.')}</small></label>
+          <label class="fld"><span>${t('Beschrijving')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" data-snap="description" maxlength="200"></label>
+        </div>
+        ${on ? `<label class="check"><input type="checkbox" data-snap="diskOnly"> ${t('Alleen de schijven (sneller, zonder het geheugen)')}</label>
+          <p class="muted small" style="margin-top:-6px">${t('Met het geheugen loopt de VM na terugzetten verder waar ze was. Zonder is het alsof de stroom op dat moment uitviel.')}</p>` : ''}
+        <div class="btn-row"><button class="btn primary" type="button" data-snap-make>${t('Snapshot maken')}</button></div>
+        <ul class="rows">${r.snapshots.map((x) => `<li>
+            <div><div class="row-title">${esc(x.name)}${x.current ? ` <span class="pill ok">${t('nu')}</span>` : ''} <span class="pill">${t(x.memory ? 'met geheugen' : x.state === 'shutoff' ? 'uitgeschakeld' : 'alleen schijven')}</span></div>
+              <div class="row-sub">${esc([x.created ? new Date(x.created).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short', ...clockOpts() }) : '', x.description].filter(Boolean).join(' · '))}</div></div>
+            <div class="row-side btn-row"><button class="btn sm" type="button" data-snap-revert="${esc(x.name)}">${t('Terugzetten')}</button>
+              <button class="btn sm danger" type="button" data-snap-del="${esc(x.name)}">${t('Verwijderen')}</button></div></li>`).join('')
+          || `<li><span class="muted">${t('Nog geen snapshots.')}</span></li>`}</ul>`;
+    }
+    snapPane.addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const base = '/api/vms/' + encodeURIComponent(id) + '/snapshots';
+      if (b.dataset.snapMake != null) {
+        const v = (k) => $(`[data-snap="${k}"]`, snapPane);
+        const bodyS = { name: v('name').value.trim(), description: v('description').value, diskOnly: v('diskOnly') ? v('diskOnly').checked : false };
+        return withBusy(b, async () => { const r = await api.post(base, bodyS); toast(t('Snapshot {name} gemaakt.', { name: r.name })); drawSnaps(); });
+      }
+      if (b.dataset.snapRevert) {
+        const n = b.dataset.snapRevert;
+        if (!(await ask(t('{vm} terugzetten naar {name}? Alles wat sindsdien in de VM veranderde, is weg.', { vm: d.name, name: n }), t('Terugzetten')))) return;
+        return withBusy(b, async () => { await api.post(base + '/' + encodeURIComponent(n) + '/revert', {}); toast(t('{vm} staat terug op {name}.', { vm: d.name, name: n })); drawSnaps(); loadVms().catch(() => {}); });
+      }
+      if (b.dataset.snapDel) {
+        const n = b.dataset.snapDel;
+        if (!(await ask(t('Snapshot {name} verwijderen? De VM zelf verandert niet; je kan alleen niet meer naar dit moment terug.', { name: n }), t('Verwijderen')))) return;
+        return withBusy(b, async () => { await api.del(base + '/' + encodeURIComponent(n)); toast(t('Snapshot {name} verwijderd.', { name: n })); drawSnaps(); });
+      }
+    });
+    // Enter in een veld van de snapshots verstuurt niet het formulier van de VM, maar maakt de snapshot.
+    snapPane.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); const mk = $('[data-snap-make]', snapPane); if (mk && !mk.disabled) mk.click(); } });
+    let snapsLoaded = false;
     const showTab = (k) => {
       $$('[data-vtab]', body).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vtab === k)));
       $$('[data-vpane]', body).forEach((p) => { p.hidden = p.dataset.vpane !== k; });
+      $('[data-vsave]', form).hidden = k === 'snapshots';
+      if (k === 'snapshots' && !snapsLoaded) { snapsLoaded = true; drawSnaps(); }
     };
     showTab(tab);
     wireAutostart(form);
@@ -2329,7 +2382,7 @@
       ${d.requires ? `<p class="lead"><b>${t('Vereist:')}</b> ${esc(tr(d.requires))}</p>` : ''}
       ${d.installed ? `<p class="lead temp-ok">${t('Deze app staat al op je server. Je kan hem nog eens installeren onder een andere naam.')}</p>` : ''}
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
-      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Instellingen → Opslag openen')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         <label class="fld"><span>${t('Naam')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
@@ -2451,7 +2504,7 @@
     $('#customForm', body).innerHTML = `
       ${d.storeMatch ? `<p class="lead">${t('Deze app staat ook in de appstore, met een uitgewerkt formulier.')} <button class="linkish" type="button" data-store-match="${esc(d.storeMatch.id)}">${t('Bekijk {name} in de appstore', { name: esc(prettyName(d.storeMatch.name)) })}</button></p>` : ''}
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
-      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) })}</p>` : ''}
+      ${d.appdataMissing ? `<p class="lead temp-bad">${t('Er is nog geen map voor appgegevens ({dir}). Maak eerst een pool aan bij Opslag, of kies een map bij Instellingen → Opslag.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Instellingen → Opslag openen')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('Naam')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.name)}">
@@ -2537,17 +2590,17 @@
   }
 
   /* --- instellingen (eigen pagina op #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings() {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'Algemeen', storage: 'Opslag', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', security: 'Beveiliging', update: 'Software-update', about: 'Over' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'Algemeen', storage: 'Opslag', network: 'Netwerk', docker: 'Docker-netwerken', vmnet: 'VM-netwerken', security: 'Beveiliging', users: 'Gebruikers', update: 'Software-update', about: 'Over' }[tab]);
     $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
   }
 
   function generalPane(el) {
@@ -2610,7 +2663,12 @@
     const busy = d.migration && d.migration.state === 'running';
     const row = (k, title, help, btn) => `<li>
         <div><div class="row-title">${title}</div><div class="row-sub">${where(k)}</div><div class="row-sub">${help}</div></div>
-        <div class="row-side btn-row">${d.pools.length ? select(k) + `<button class="btn sm${k === 'appdata' ? ' primary' : ''}" type="button" data-sp-save="${k}"${busy ? ' disabled' : ''}>${btn}</button>` : ''}</div></li>`;
+        <div class="row-side btn-row">${d.pools.length ? select(k) + `<button class="btn sm${k === 'appdata' ? ' primary' : ''}" type="button" data-sp-save="${k}"${busy ? ' disabled' : ''}>${btn}</button>` : ''}
+          <button class="btn sm" type="button" data-sp-own="${k}"${busy ? ' disabled' : ''}>${t('Bestaande map…')}</button></div>
+        <form class="inline-form user-edit" data-sp-form="${k}" hidden>
+          <input class="field" name="path" spellcheck="false" autocomplete="off" value="${esc(d.paths[k] || '')}" placeholder="/tank/${esc(d.folders[k] || '')}" aria-label="${t('Map op de server')}">
+          <button class="btn sm primary" type="submit">${t('Deze map gebruiken')}</button>
+          <span class="muted small" style="flex-basis:100%">${t('Er verhuist niets: HomeBaseOS gebruikt voortaan deze map.')}</span></form></li>`;
     const appsText = d.apps.length ? t('Gebruikt door: {list}', { list: esc(d.apps.map((a) => a.project).join(', ')) }) : t('Nog geen apps.');
     el.innerHTML = `
       <p class="muted small">${t('Waar HomeBaseOS je gegevens bewaart. Een nieuwe pool krijgt de mappen appdata, media, backups, vms en isos.')}</p>
@@ -2647,7 +2705,18 @@
       const keep = mig.innerHTML; await storagePane(box); const m2 = $('#spMig', box); if (m2 && !m2.innerHTML) m2.innerHTML = keep;
     };
     if (busy) follow();
+    // Een bestaande map aanwijzen (bv. waar je appgegevens al staan): er verhuist niets.
+    $$('[data-sp-form]', el).forEach((f) => f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const kind = f.dataset.spForm, dir = f.elements.path.value.trim();
+      await withBusy($('[type=submit]', f), async () => {
+        try { await api.post('/api/storage-paths', { kind, path: dir }); toast(t('HomeBaseOS gebruikt nu {dir}.', { dir })); storagePane(el); }
+        catch (ex) { toast(ex.message, true); }
+      });
+    }));
     el.onclick = async (e) => {
+      const own = e.target.closest('[data-sp-own]');
+      if (own) { const f = $(`[data-sp-form="${own.dataset.spOwn}"]`, el); f.hidden = !f.hidden; if (!f.hidden) f.elements.path.focus(); return; }
       const b = e.target.closest('[data-sp-save]'); if (!b) return;
       const kind = b.dataset.spSave, pool = $(`[data-sp-pool="${kind}"]`, el).value, p = d.pools.find((x) => x.name === pool);
       const cur = poolOf(d.paths[kind]);
@@ -3067,70 +3136,31 @@
     el.innerHTML = `
       ${d.running ? '' : `<p class="lead temp-warn">${t('Samba draait niet. Start het op de server met: sudo systemctl start smbd')}</p>`}
       <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Mappen')}</h2>
-        <button class="btn sm primary" type="button" data-share-new${d.users.length ? '' : ` disabled title="${t('Maak eerst een gebruiker aan.')}"`}>+ ${t('Gedeelde map')}</button></div>
+        <button class="btn sm primary" type="button" data-share-new>+ ${t('Gedeelde map')}</button></div>
       <ul class="rows">${d.shares.map((sh) => `<li>
           <div><div class="row-title">${esc(sh.name)}</div>
             <div class="row-sub">${esc([sh.path, sh.comment].filter(Boolean).join(' · '))}</div>
             <div class="share-access">${Object.entries(sh.users).map(([u, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${esc(u)} · ${t(a === 'rw' ? 'schrijven' : 'lezen')}</span>`).join('')}
+              ${Object.entries(sh.groups || {}).map(([g, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${t('groep {name}', { name: esc(g) })} · ${t(a === 'rw' ? 'schrijven' : 'lezen')}</span>`).join('')}
               ${sh.guest ? `<span class="pill warn">${t('gasten · lezen')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
             <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div></div>
           <div class="row-side btn-row"><button class="btn sm" type="button" data-share-edit="${esc(sh.name)}">${t('Bewerken')}</button>
             <button class="btn sm danger" type="button" data-share-del="${esc(sh.name)}">${t('Verwijderen')}</button></div></li>`).join('')
-        || `<li><span class="muted">${t(d.users.length ? 'Nog geen gedeelde mappen.' : 'Nog geen gedeelde mappen. Maak eerst hieronder een gebruiker aan.')}</span></li>`}</ul>
+        || `<li><span class="muted">${t(d.users.length ? 'Nog geen gedeelde mappen.' : 'Nog geen gedeelde mappen. Maak eerst een gebruiker aan bij Instellingen → Gebruikers.')}</span></li>`}</ul>
       <p class="muted small" style="margin-top:8px">${t('Op een Mac: Finder → Ga → Verbind met server. Op Windows: typ het adres met \\\\ in de Verkenner.')}</p>
 
-      <h2 class="pane-title">${t('Gebruikers')}</h2>
-      <p class="muted small">${t('Met deze gebruikers en hun wachtwoord meld je aan bij een gedeelde map. Ze kunnen niet aanmelden op de server zelf.')}</p>
-      <ul class="rows" style="margin-top:8px">${d.users.map((u) => `<li>
-          <div><div class="row-title">${esc(u.name)}${u.managed ? '' : ` <span class="pill">${t('bestond al')}</span>`}</div>
-            <div class="row-sub">${u.shares.length ? t('Toegang tot: {list}', { list: esc(u.shares.join(', ')) }) : t('Nog geen toegang')}</div>
-            <form class="inline-form" data-pw-form="${esc(u.name)}" hidden style="margin-top:8px">
-              <input class="field" type="password" name="password" autocomplete="new-password" placeholder="${t('Nieuw wachtwoord (minstens 8 tekens)')}" aria-label="${t('Nieuw wachtwoord')}">
-              <button class="btn sm primary" type="submit">${t('Opslaan')}</button></form></div>
-          <div class="row-side btn-row"><button class="btn sm" type="button" data-pw="${esc(u.name)}">${t('Wachtwoord')}</button>
-            ${u.managed ? `<button class="btn sm danger" type="button" data-user-del="${esc(u.name)}">${t('Verwijderen')}</button>` : ''}</div></li>`).join('')
-        || `<li><span class="muted">${t('Nog geen gebruikers.')}</span></li>`}</ul>
-      <h2 class="pane-title">${t('Gebruiker toevoegen')}</h2>
-      <form class="form" id="userForm" novalidate>
-        <div class="fld-row">
-          <label class="fld"><span>${t('Gebruikersnaam')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('bv. lies')}">
-            <small>${t('Kleine letters, cijfers, - en _.')}</small></label>
-          <label class="fld"><span>${t('Wachtwoord')}</span><input class="field" type="password" name="password" autocomplete="new-password">
-            <small>${t('Minstens 8 tekens.')}</small></label>
-          <label class="fld"><span>${t('Wachtwoord herhalen')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label>
-        </div>
-        <p class="form-error" role="alert"></p>
-        <div class="btn-row"><button class="btn primary" type="submit">${t('Gebruiker toevoegen')}</button></div>
-      </form>`;
-    const uf = $('#userForm', el);
-    uf.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const err = $('.form-error', uf), F = uf.elements; err.textContent = '';
-      if (F.password.value !== F.password2.value) { err.textContent = t('De twee wachtwoorden zijn niet gelijk.'); return; }
-      const btn = $('[type=submit]', uf); btn.disabled = true;
-      try { await api.post('/api/share-users', { name: F.name.value.trim(), password: F.password.value }); toast(t('Gebruiker {name} toegevoegd.', { name: F.name.value.trim() })); sharesPane(el); }
-      catch (ex) { err.textContent = ex.message; btn.disabled = false; }
-    });
-    $$('[data-pw-form]', el).forEach((f) => f.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try { await api.post('/api/share-users/' + encodeURIComponent(f.dataset.pwForm) + '/password', { password: f.elements.password.value }); toast(t('Wachtwoord van {name} gewijzigd.', { name: f.dataset.pwForm })); f.hidden = true; f.reset(); }
-      catch (ex) { toast(ex.message, true); }
-    }));
+      <h2 class="pane-title">${t('Gebruikers en groepen')}</h2>
+      <p class="muted small">${t('{users} en {groups}. Gebruikers aanmaken, wachtwoorden en wie in welke groep zit, beheer je bij Instellingen → Gebruikers.', { users: t(d.users.length === 1 ? '{n} gebruiker' : '{n} gebruikers', { n: d.users.length }), groups: t(d.groups.length === 1 ? '{n} groep' : '{n} groepen', { n: d.groups.length }) })}</p>
+      <div class="btn-row" style="margin-top:8px"><a class="btn" href="#settings/users">${t('Gebruikers en groepen beheren')}</a></div>`;
     el.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.shareNew != null) return sharesPane(el, null);
       if (b.dataset.shareEdit) return sharesPane(el, b.dataset.shareEdit);
-      if (b.dataset.pw) { const f = $(`[data-pw-form="${CSS.escape(b.dataset.pw)}"]`, el); f.hidden = !f.hidden; if (!f.hidden) f.elements.password.focus(); return; }
       if (b.dataset.shareDel) {
         const name = b.dataset.shareDel;
         if (!(await ask(t('{name} niet meer delen? De bestanden blijven gewoon staan; alleen het delen stopt.', { name }), t('Verwijderen')))) return;
         try { await api.del('/api/shares/' + encodeURIComponent(name)); toast(t('{name} wordt niet meer gedeeld.', { name })); sharesPane(el); } catch (ex) { toast(ex.message, true); }
         return;
-      }
-      if (b.dataset.userDel) {
-        const name = b.dataset.userDel;
-        if (!(await ask(t('Gebruiker {name} verwijderen? Die kan dan niet meer aan de gedeelde mappen.', { name }), t('Verwijderen')))) return;
-        try { await api.del('/api/share-users/' + encodeURIComponent(name)); toast(t('Gebruiker {name} verwijderd.', { name })); sharesPane(el); } catch (ex) { toast(ex.message, true); }
       }
     };
   }
@@ -3139,7 +3169,7 @@
   function shareForm(el, d, editName) {
     const cur = editName ? d.shares.find((x) => x.name === editName) : null;
     const pools = d.roots.filter((r) => !r.name.includes('/'));
-    const sh = cur || { name: '', path: '', comment: '', users: {}, guest: false, timemachine: false };
+    const sh = cur || { name: '', path: '', comment: '', users: {}, groups: {}, guest: false, timemachine: false };
     el.onclick = null;
     el.innerHTML = `
       <h2 class="pane-title">${cur ? t('{name} bewerken', { name: esc(cur.name) }) : t('Nieuwe gedeelde map')}</h2>
@@ -3159,7 +3189,11 @@
         <fieldset class="fld"><span>${t('Wie mag erbij?')}</span>
           <div class="access-table">${d.users.map((u) => `<div class="access-row"><b>${esc(u.name)}</b>
             <select class="field" name="u:${esc(u.name)}" aria-label="${esc(t('Toegang voor {name}', { name: u.name }))}">
-              <option value="">${t('Geen toegang')}</option>${Object.entries(ACCESS).map(([k, label]) => `<option value="${k}"${sh.users[u.name] === k ? ' selected' : ''}>${t(label)}</option>`).join('')}</select></div>`).join('')}</div></fieldset>
+              <option value="">${t('Geen toegang')}</option>${Object.entries(ACCESS).map(([k, label]) => `<option value="${k}"${sh.users[u.name] === k ? ' selected' : ''}>${t(label)}</option>`).join('')}</select></div>`).join('')}
+            ${d.groups.map((g) => `<div class="access-row"><b>${t('groep {name}', { name: esc(g.name) })}</b>
+            <select class="field" name="g:${esc(g.name)}" aria-label="${esc(t('Toegang voor groep {name}', { name: g.name }))}">
+              <option value="">${t('Geen toegang')}</option>${Object.entries(ACCESS).map(([k, label]) => `<option value="${k}"${(sh.groups || {})[g.name] === k ? ' selected' : ''}>${t(label)}</option>`).join('')}</select></div>`).join('')}</div>
+          ${d.users.length ? '' : `<small>${t('Nog geen gebruikers. Maak ze aan bij Instellingen → Gebruikers.')}</small>`}</fieldset>
         <label class="check"><input type="checkbox" name="guest"${sh.guest ? ' checked' : ''}> ${t('Gasten mogen lezen zonder wachtwoord')}</label>
         <p class="muted small" style="margin-top:-6px">${t('Handig voor bv. muziek of documenten voor iedereen thuis. Schrijven kan alleen wie hierboven Lezen en schrijven heeft.')}</p>
         <label class="check"><input type="checkbox" name="timemachine"${sh.timemachine ? ' checked' : ''}> ${t('Gebruiken voor Time Machine (back-ups van een Mac)')}</label>
@@ -3175,8 +3209,10 @@
       const err = $('.form-error', f), btn = $('[type=submit]', f); err.textContent = '';
       const users = {};
       d.users.forEach((u) => { const v = F['u:' + u.name].value; if (v) users[u.name] = v; });
+      const groups = {};
+      d.groups.forEach((g) => { const v = F['g:' + g.name].value; if (v) groups[g.name] = v; });
       const where = (f.querySelector('[name=where]:checked') || F.where).value;
-      const body = { name: F.name.value.trim(), comment: F.comment.value, users, guest: F.guest.checked, timemachine: F.timemachine.checked,
+      const body = { name: F.name.value.trim(), comment: F.comment.value, users, groups, guest: F.guest.checked, timemachine: F.timemachine.checked,
         ...(where === 'new' ? { create: { parent: F.parent.value } } : { path: F.path.value.trim() }) };
       btn.disabled = true;
       try {
@@ -3189,7 +3225,7 @@
   }
 
   /* --- Back-ups: de NAS naar de cloud of een andere NAS (rclone), en toestellen naar de NAS (een gedeelde map per toestel) */
-  const BK_TABS = [['jobs', 'Synchroniseren'], ['devices', 'Toestellen'], ['remotes', 'Verbindingen']];
+  const BK_TABS = [['jobs', 'Synchroniseren'], ['system', "Apps en VM's"], ['devices', 'Toestellen'], ['remotes', 'Verbindingen']];
   const DEV_KINDS = { mac: 'Mac', windows: 'Windows-pc', linux: 'Linux-pc', phone: 'Gsm of tablet' };
   const bk = { tab: 'jobs', timer: null, openDevice: null, secret: null }; // secret: een wachtwoord dat je maar één keer ziet
   function backupWindow(tab) {
@@ -3248,7 +3284,7 @@
       <div id="bkBody"></div>`;
     el.onclick = (e) => { const b = e.target.closest('[data-bktab]'); if (b) { bk.tab = b.dataset.bktab; backupPane(el); } };
     const box = $('#bkBody', el);
-    ({ jobs: bkJobs, devices: bkDevices, remotes: bkRemotes })[bk.tab](box, d, el);
+    ({ jobs: bkJobs, system: bkSystem, devices: bkDevices, remotes: bkRemotes })[bk.tab](box, d, el);
     if (quiet) el.scrollTop = scroll;
     if (bk.tab === 'jobs' && d.jobs.some((j) => j.running)) bk.timer = setTimeout(() => { if (el.isConnected && $('#bkJobList', el)) backupPane(el, true); }, 2000);
   }
@@ -3454,10 +3490,12 @@
     });
   }
 
-  async function bkLog(box, el, job) {
+  // base: /api/backup/jobs/ (synchroniseren) of /api/sysbackups/ (apps en VM's).
+  async function bkLog(box, el, job, base = '/api/backup/jobs/') {
     clearTimeout(bk.timer);
+    const sys = base.includes('sysbackups');
     let l;
-    try { l = await api.get('/api/backup/jobs/' + job.id + '/log'); } catch (e) { toast(e.message, true); return; }
+    try { l = await api.get(base + job.id + '/log'); } catch (e) { toast(e.message, true); return; }
     if (!box.isConnected) return;
     const old = $('.logs', box), atEnd = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 20;
     const r = l.running, x = l.last;
@@ -3465,9 +3503,9 @@
     box.innerHTML = `
       <div class="bays-head"><h2 class="pane-title" style="margin:0">${esc(job.name)}</h2>
         <span class="btn-row">${r ? `<button class="btn sm" type="button" data-log-stop>${t('Stoppen')}</button>` : ''}<button class="btn sm" type="button" data-log-back>${t('Terug')}</button></span></div>
-      ${r ? `<p class="lead">${t(r.kind === 'restore' ? 'Bezig met terugzetten…' : r.dryRun ? 'Proef bezig: er verandert niets.' : 'Bezig…')}</p><div style="margin-bottom:14px">${bkProgress(r)}</div>`
+      ${r ? `<p class="lead">${t(r.kind === 'restore' ? 'Bezig met terugzetten…' : r.dryRun ? 'Proef bezig: er verandert niets.' : 'Bezig…')}</p><div style="margin-bottom:14px">${sys ? sysProgress(r) : bkProgress(r)}</div>`
         : x ? `<p class="lead"><span class="pill ${x.state === 'ok' ? 'ok' : x.state === 'failed' ? 'bad' : 'warn'}">${t(x.state === 'ok' ? 'Gelukt' : x.state === 'failed' ? 'Mislukt' : 'Gestopt')}</span>
-            ${esc(t(x.kind === 'restore' ? 'Terugzetten' : x.dryRun ? 'Proef' : 'Back-up'))} · ${esc(ago(x.ended))} · ${esc(runSummary(x))}${x.error ? `<br><span class="temp-bad">${esc(tr(x.error))}</span>` : ''}</p>` : ''}
+            ${esc(t(x.kind === 'restore' ? 'Terugzetten' : x.dryRun ? 'Proef' : 'Back-up'))} · ${esc(ago(x.ended))} · ${esc(sys ? sysSummary(x) : runSummary(x))}${x.error ? `<br><span class="temp-bad">${esc(tr(x.error))}</span>` : ''}</p>` : ''}
       <pre class="logs logs-big">${l.lines.map((z) => `<span class="ts">${esc(time(z.time))}</span> ${['error', 'critical', 'fatal'].includes(z.level) ? `<span class="err">${esc(tr(z.text))}</span>` : esc(tr(z.text))}`).join('\n') || esc(t('Nog geen logboek. Start de taak om er een te maken.'))}</pre>`;
     const pre = $('.logs', box);
     if (atEnd) pre.scrollTop = pre.scrollHeight;
@@ -3475,9 +3513,152 @@
     const stop = $('[data-log-stop]', box);
     if (stop) stop.addEventListener('click', async () => {
       if (!(await ask(t('{name} stoppen? Wat al overgezet is, blijft staan.', { name: job.name }), t('Stoppen')))) return;
-      withBusy(stop, () => api.post('/api/backup/jobs/' + job.id + '/stop', {}));
+      withBusy(stop, () => api.post(base + job.id + '/stop', {}));
     });
-    if (r) bk.timer = setTimeout(() => { if (box.isConnected && $('.logs', box)) bkLog(box, el, job); }, 2000);
+    if (r) bk.timer = setTimeout(() => { if (box.isConnected && $('.logs', box)) bkLog(box, el, job, base); }, 2000);
+  }
+
+  /* apps en VM's: een kopie van de gekozen apps (Docker) en VM's in een map op de NAS (lib/sysbackup.js) */
+  const sysProgress = (r) => `<div class="bar" aria-hidden="true"><span style="width:${r.total ? Math.round(((r.done + (r.percent || 0) / 100) / r.total) * 100) : 0}%"></span></div>
+    <div class="row-sub">${esc(t('{done} van {total} klaar', { done: r.done, total: r.total }))}${r.current ? ' · ' + esc(t('nu: {name}', { name: r.current })) : ''}${r.percent != null ? ' (' + Math.floor(r.percent) + '%)' : ''}</div>`;
+  const sysSummary = (x) => [t(x.items === 1 ? '{n} onderdeel' : '{n} onderdelen', { n: x.items || 0 }), x.size ? bytes(x.size) : null, x.errors ? t('{n} fouten', { n: x.errors }) : null].filter(Boolean).join(' · ');
+
+  async function bkSystem(box, d, el) {
+    box.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let s;
+    try { s = await api.get('/api/sysbackups'); } catch (e) { box.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const label = (id) => { const a = s.apps.find((x) => x.id === id); return prettyName(a ? a.name : id.split(':')[1]); };
+    const row = (j) => {
+      const l = j.lastRun;
+      const what = [...j.apps.map(label), ...j.vms].join(', ');
+      return `<li>
+        <div><div class="row-title">${esc(j.name)} ${runPill(j)}</div>
+          <div class="row-sub">${esc(what)} → ${esc(j.dest)}</div>
+          <div class="row-sub">${esc(scheduleText(j.schedule))}${j.next ? ' · ' + esc(t('volgende: {when}', { when: when(j.next) })) : ''} · ${esc(t('de laatste {n} bewaren', { n: j.keep }))}</div>
+          ${!j.running && l ? `<div class="row-sub">${esc(t('Laatst: {when}', { when: ago(l.ended) }))} · ${esc(sysSummary(l))}</div>` : ''}
+          ${!j.running && l && l.state === 'failed' && l.error ? `<div class="row-sub temp-bad">${esc(tr(l.error))}</div>` : ''}</div>
+        <div class="row-side btn-row">
+          ${j.running ? `<button class="btn sm" type="button" data-sys-stop="${esc(j.id)}">${t('Stoppen')}</button>` : `<button class="btn sm primary" type="button" data-sys-run="${esc(j.id)}">${t('Nu starten')}</button>`}
+          <button class="btn sm" type="button" data-sys-log="${esc(j.id)}">${t('Logboek')}</button>
+          <button class="btn sm" type="button" data-sys-restore="${esc(j.id)}"${j.running ? ' disabled' : ''}>${t('Terugzetten…')}</button>
+          <button class="btn sm" type="button" data-sys-edit="${esc(j.id)}"${j.running ? ' disabled' : ''}>${t('Bewerken')}</button></div>
+        ${j.running ? `<div class="row-bar">${sysProgress(j.running)}</div>` : ''}</li>`;
+    };
+    box.innerHTML = `
+      <p class="lead">${t('Een kopie van je apps (instellingen en gegevens) en VM\'s (schijven en instellingen) in een map op de NAS. Wil je ze ook buiten de deur, maak dan bij Synchroniseren een taak voor die map.')}</p>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Taken')}</h2>
+        <button class="btn sm primary" type="button" data-sys-new>+ ${t('Taak')}</button></div>
+      <ul class="rows bk-rows" id="sysList">${s.jobs.map(row).join('') || `<li><span class="muted">${t('Nog geen taken.')}</span></li>`}</ul>`;
+    const job = (id) => s.jobs.find((j) => j.id === id);
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.bktab) return;
+      if (b.dataset.sysNew != null) return sysJobForm(box, s, el, null);
+      if (b.dataset.sysEdit) return sysJobForm(box, s, el, job(b.dataset.sysEdit));
+      if (b.dataset.sysLog) return bkLog(box, el, job(b.dataset.sysLog), '/api/sysbackups/');
+      if (b.dataset.sysRestore) return sysRestore(box, el, job(b.dataset.sysRestore), s);
+      if (b.dataset.sysRun) {
+        const j = job(b.dataset.sysRun);
+        return withBusy(b, async () => { await api.post('/api/sysbackups/' + j.id + '/run', {}); toast(t('{name} gestart.', { name: j.name })); bkSystem(box, d, el); });
+      }
+      if (b.dataset.sysStop) {
+        const j = job(b.dataset.sysStop);
+        if (!(await ask(t('{name} stoppen? Wat al bewaard is, blijft staan; de apps en VM\'s starten weer.', { name: j.name }), t('Stoppen')))) return;
+        return withBusy(b, async () => { await api.post('/api/sysbackups/' + j.id + '/stop', {}); toast(t('{name} wordt gestopt.', { name: j.name })); });
+      }
+    };
+    clearTimeout(bk.timer);
+    if (s.jobs.some((j) => j.running)) bk.timer = setTimeout(() => { if (box.isConnected && $('#sysList', box)) bkSystem(box, d, el); }, 3000);
+  }
+
+  function sysJobForm(box, s, el, job) {
+    clearTimeout(bk.timer);
+    const j = job || { name: '', dest: s.defaultDest || '', apps: [], vms: [], stopApps: true, vmMode: 'live', keep: 7, schedule: { every: 'daily', time: '02:00', day: 0 } };
+    const opt = (v, cur, l) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(l)}</option>`;
+    const appRow = (a) => {
+      const on = a.containers.some((c) => c.state === 'running');
+      const extra = [t(a.containers.length === 1 ? '{n} container' : '{n} containers', { n: a.containers.length }), a.paths.length ? t('{n} mappen', { n: a.paths.length }) : t('geen gegevens')];
+      return `<label class="check dev"><input type="checkbox" name="app" value="${esc(a.id)}"${j.apps.includes(a.id) ? ' checked' : ''}>
+        <span><span><b>${esc(prettyName(a.name))}</b> <span class="pill${on ? ' ok' : ''}">${t(on ? 'actief' : 'gestopt')}</span></span>
+          <small class="muted">${esc(extra.join(' · '))}${a.paths.length ? ': ' + esc(a.paths.join(', ')) : ''}</small>
+          ${a.skipped.length ? `<small class="muted">${esc(t('Niet mee: {list}', { list: a.skipped.map((x) => x.path + ' (' + t(x.reason) + ')').join(', ') }))}</small>` : ''}</span></label>`;
+    };
+    box.innerHTML = `
+      <h2 class="pane-title">${job ? t('{name} bewerken', { name: esc(job.name) }) : t('Nieuwe taak')}</h2>
+      <form class="form" id="sysForm" novalidate>
+        <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="60" value="${esc(j.name)}" autocomplete="off" placeholder="${t('bv. Apps en Home Assistant')}"></label>
+        <label class="fld"><span>${t('Map op de NAS')}</span><input class="field" name="dest" list="sysFolders" value="${esc(j.dest)}" spellcheck="false" autocomplete="off" placeholder="/tank/backups/systeem">
+          <datalist id="sysFolders">${s.folders.map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
+          <small>${t('Hier komt elke keer een map met de datum. Kies bij voorkeur een andere pool dan die van je apps en VM\'s.')}</small></label>
+        <fieldset class="fld"><span>${t('Apps')}</span>
+          ${s.apps.length ? `<div class="form" style="gap:6px">${s.apps.map(appRow).join('')}</div>` : `<span class="muted small">${t('Geen apps gevonden.')}</span>`}
+          <small>${t('Mee: de compose-bestanden, mappen in de appgegevens en Docker-volumes. Andere gekoppelde mappen, zoals je media, niet: die bewaar je met Synchroniseren.')}</small></fieldset>
+        <label class="check"><input type="checkbox" name="stopApps"${j.stopApps ? ' checked' : ''}> ${t('Apps even stoppen tijdens de kopie (aanbevolen voor databases)')}</label>
+        <fieldset class="fld"><span>${t('VM\'s')}</span>
+          ${s.vms.length ? `<div class="check-grid">${s.vms.map((v) => `<label class="check"><input type="checkbox" name="vm" value="${esc(v.name)}"${j.vms.includes(v.name) ? ' checked' : ''}> ${esc(v.name)} <span class="pill${vmKind(v.state) === 'on' ? ' ok' : ''}">${t(vmKind(v.state) === 'on' ? 'aan' : 'uit')}</span></label>`).join('')}</div>`
+            : `<span class="muted small">${t('Geen VM\'s gevonden.')}</span>`}</fieldset>
+        <fieldset class="fld"><span>${t('VM\'s die aan staan')}</span><div class="form" style="gap:8px">
+          <label class="check dev"><input type="radio" name="vmMode" value="live"${j.vmMode !== 'shutdown' ? ' checked' : ''}><span><b>${t('Kopiëren terwijl ze draaien')}</b><small class="muted">${t('Geen onderbreking. Zoals een stroomonderbreking op dat moment: meestal goed, maar niet voor elke database.')}</small></span></label>
+          <label class="check dev"><input type="radio" name="vmMode" value="shutdown"${j.vmMode === 'shutdown' ? ' checked' : ''}><span><b>${t('Even afsluiten')}</b><small class="muted">${t('De VM sluit netjes af, wordt gekopieerd en start weer. Zeker in orde, maar een paar minuten niet bereikbaar.')}</small></span></label></div></fieldset>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Wanneer')}</span><select class="field" name="every">${[['manual', 'Alleen met de hand'], ['daily', 'Elke dag'], ['weekly', 'Elke week']].map(([v, l]) => opt(v, j.schedule.every, t(l))).join('')}</select></label>
+          <label class="fld" data-sched="weekly"><span>${t('Dag')}</span><select class="field" name="day">${[1, 2, 3, 4, 5, 6, 0].map((n) => opt(n, j.schedule.day, weekday(n))).join('')}</select></label>
+          <label class="fld" data-sched="time"><span>${t('Tijd')}</span><input class="field" type="time" name="time" value="${esc(j.schedule.time)}"></label>
+          <label class="fld"><span>${t('Hoeveel bewaren')}</span><input class="field" type="number" name="keep" min="1" max="365" value="${esc(j.keep)}"></label>
+        </div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t(job ? 'Opslaan' : 'Aanmaken')}</button><button class="btn" type="button" data-cancel>${t('Annuleren')}</button>
+          ${job ? `<button class="btn danger" type="button" data-sys-del>${t('Verwijderen')}</button>` : ''}</div>
+      </form>`;
+    const f = $('#sysForm', box), F = f.elements, err = $('.form-error', f);
+    const sync = () => { $$('[data-sched]', f).forEach((x) => { x.hidden = x.dataset.sched === 'weekly' ? F.every.value !== 'weekly' : F.every.value === 'manual'; }); };
+    f.addEventListener('change', sync); sync();
+    $('[data-cancel]', f).addEventListener('click', () => backupPane(el));
+    const del = $('[data-sys-del]', f);
+    if (del) del.addEventListener('click', async () => {
+      if (!(await ask(t('Taak {name} verwijderen? De back-ups in {dir} blijven staan.', { name: job.name, dir: job.dest }), t('Verwijderen')))) return;
+      withBusy(del, async () => { await api.del('/api/sysbackups/' + job.id); toast(t('Taak {name} verwijderd.', { name: job.name })); backupPane(el); });
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      const body = { name: F.name.value, dest: F.dest.value.trim(), apps: $$('[name=app]:checked', f).map((x) => x.value), vms: $$('[name=vm]:checked', f).map((x) => x.value),
+        stopApps: F.stopApps.checked, vmMode: (f.querySelector('[name=vmMode]:checked') || {}).value, keep: Number(F.keep.value),
+        schedule: { every: F.every.value, time: F.time.value || '02:00', day: Number(F.day.value) } };
+      const btn = $('[type=submit]', f); btn.disabled = true;
+      try { await api.post('/api/sysbackups' + (job ? '/' + job.id : ''), body); toast(t(job ? '{name} opgeslagen.' : 'Taak {name} aangemaakt.', { name: body.name.trim() })); backupPane(el); }
+      catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    if (!job) F.name.focus();
+  }
+
+  // Terugzetten: per back-up (datum) een app of VM. Wat er nu staat, gaat opzij (.voor-terugzetten-<datum>), niet weg.
+  async function sysRestore(box, el, job, s) {
+    clearTimeout(bk.timer);
+    box.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let r;
+    try { r = await api.get('/api/sysbackups/' + job.id + '/runs'); } catch (e) { box.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const item = (stamp, kind, x) => `<div class="access-row"><span><b>${esc(kind === 'app' ? prettyName(x.name) : x.name)}</b> <span class="muted small">${esc(t(kind === 'app' ? 'app' : 'VM'))}${x.size ? ' · ' + esc(bytes(x.size)) : ''}</span>
+        ${x.error ? `<span class="small temp-bad">${esc(tr(x.error))}</span>` : ''}</span>
+      ${x.error || (kind === 'app' && !x.file) ? '' : `<button class="btn sm" type="button" data-rs="${esc(stamp)}" data-rs-${kind}="${esc(kind === 'app' ? x.id : x.name)}" data-rs-name="${esc(x.name)}">${t('Terugzetten')}</button>`}</div>`;
+    box.innerHTML = `
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('{name} terugzetten', { name: esc(job.name) })}</h2><button class="btn sm" type="button" data-rs-back>${t('Terug')}</button></div>
+      <p class="lead">${t('Kies een back-up en wat je wil terugzetten. Wat er nu staat, gaat eerst opzij (naam + .voor-terugzetten-<datum>) en blijft staan tot je het zelf weghaalt.')}</p>
+      ${r.runs.length ? r.runs.map((x, i) => `<details class="adv" style="margin-bottom:8px"${i === 0 ? ' open' : ''}><summary>${esc(new Date(x.created).toLocaleString(LOCALE, { dateStyle: 'full', timeStyle: 'short', ...clockOpts() }))} · ${esc(bytes(x.size))}${x.errors.length ? ` · <span class="temp-bad">${t('{n} fouten', { n: x.errors.length })}</span>` : ''}</summary>
+          <div class="access-table" style="margin-top:8px">${x.apps.map((a) => item(x.stamp, 'app', a)).join('')}${x.vms.map((v) => item(x.stamp, 'vm', v)).join('')}</div></details>`).join('')
+        : `<p class="muted">${t('Nog geen back-ups in {dir}.', { dir: esc(r.dest) })}</p>`}`;
+    box.onclick = async (e) => {
+      if (e.target.closest('[data-rs-back]')) return backupPane(el);
+      const b = e.target.closest('[data-rs]'); if (!b) return;
+      const app = b.dataset.rsApp, vm = b.dataset.rsVm, name = b.dataset.rsName;
+      const q = app ? t('{name} terugzetten naar deze back-up? De app stopt even; de gegevens van nu gaan opzij.', { name: prettyName(name) })
+        : t('{name} terugzetten naar deze back-up? Zet de VM eerst uit. De schijven van nu gaan opzij.', { name });
+      if (!(await ask(q, t('Terugzetten')))) return;
+      withBusy(b, async () => {
+        await api.post('/api/sysbackups/' + job.id + '/restore', { stamp: b.dataset.rs, ...(app ? { app } : { vm }) });
+        toast(t('{name} is teruggezet.', { name: app ? prettyName(name) : name }));
+      });
+    };
   }
 
   /* toestellen: met de back-up-app (Kopia) of met een eigen gedeelde map op de NAS */
@@ -3819,6 +4000,194 @@
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t(p.oauth ? 'Opslaan' : 'Verbinden'); }
     });
     if (!reconnect) F.name.select();
+  }
+
+  /* --- Instellingen > Gebruikers: wie aan welke gedeelde map mag, rechtstreeks of via een groep */
+  const LEVEL = { ro: 'Lezen', rw: 'Lezen en schrijven' };
+  let usersTab = 'users';
+  // Zoals effectiveUsers in lib/shares.js: rechtstreeks of via een groep, het hoogste recht telt.
+  function accessOf(share, groups, user) {
+    const via = [];
+    let level = share.users[user] || null;
+    if (level) via.push(t('rechtstreeks'));
+    for (const [g, l] of Object.entries(share.groups || {})) {
+      const gr = groups.find((x) => x.name === g);
+      if (!gr || !gr.members.includes(user)) continue;
+      via.push(t('via {group}', { group: g }));
+      if (level !== 'rw') level = l;
+    }
+    return { level, via };
+  }
+  const levelSelect = (name, cur, label) => `<select class="field" name="${esc(name)}" aria-label="${esc(label)}">
+    <option value="">${t('Geen')}</option>${Object.entries(LEVEL).map(([k, l]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${t(l)}</option>`).join('')}</select>`;
+
+  async function usersPane(el, opts = {}) {
+    el.innerHTML = `<p class="lead">${t('Laden…')}</p>`;
+    let d;
+    try { d = await api.get('/api/shares'); } catch (e) { el.innerHTML = `<p class="lead">${t('De gebruikers konden niet geladen worden: {error}', { error: esc(e.message) })}</p>`; return; }
+    if (settingsTab() !== 'users') return;
+    if (!d.installed) { el.innerHTML = `<p class="lead">${t('Samba is nog niet geïnstalleerd. Voer install.sh opnieuw uit, of op de server: sudo apt install samba')}</p>`; return; }
+    el.innerHTML = `
+      <div class="seg vm-tabs" role="tablist" aria-label="${t('Onderdelen')}">
+        <button type="button" role="tab" aria-selected="${usersTab === 'users'}" data-utab="users">${t('Gebruikers')} (${d.users.length})</button>
+        <button type="button" role="tab" aria-selected="${usersTab === 'groups'}" data-utab="groups">${t('Groepen')} (${d.groups.length})</button></div>
+      <div id="usersBody"></div>`;
+    el.onclick = (e) => { const b = e.target.closest('[data-utab]'); if (b) { usersTab = b.dataset.utab; usersPane(el); } };
+    el.onchange = null;
+    (usersTab === 'groups' ? groupsList : usersList)($('#usersBody', el), d, el, opts);
+  }
+
+  function usersList(box, d, el, opts) {
+    const row = (u) => {
+      const rights = d.shares.map((sh) => ({ sh, ...accessOf(sh, d.groups, u.name) })).filter((x) => x.level);
+      const open = opts.open === u.name;
+      return `<li>
+        <div><div class="row-title">${esc(u.name)}${u.managed ? '' : ` <span class="pill">${t('bestond al')}</span>`} ${u.groups.map((g) => `<span class="pill ok">${esc(g)}</span>`).join(' ')}</div>
+          <div class="row-sub">${rights.length ? esc(rights.map((x) => x.sh.name + ' (' + t(x.level === 'rw' ? 'schrijven' : 'lezen') + ')').join(', ')) : t('Nog geen toegang')}</div></div>
+        <div class="row-side btn-row"><button class="btn sm" type="button" data-uedit="${esc(u.name)}" aria-expanded="${open}">${t('Rechten')}</button>
+          <button class="btn sm" type="button" data-upw="${esc(u.name)}">${t('Wachtwoord')}</button>
+          ${u.managed ? `<button class="btn sm danger" type="button" data-udel="${esc(u.name)}">${t('Verwijderen')}</button>` : ''}</div>
+        <form class="inline-form user-edit" data-pw-form="${esc(u.name)}" hidden>
+          <input class="field" type="password" name="password" autocomplete="new-password" placeholder="${t('Nieuw wachtwoord (minstens 8 tekens)')}" aria-label="${t('Nieuw wachtwoord')}">
+          <button class="btn sm primary" type="submit">${t('Opslaan')}</button></form>
+        ${open ? userRightsForm(u, d) : ''}</li>`;
+    };
+    box.innerHTML = `
+      ${d.admin ? `<div class="notice"><div><b>${esc(d.admin)}</b> <span class="pill">${t('Beheerder')}</span></div>
+        <span class="muted small">${t('Meldt zich aan op dit dashboard en beheert alles. Het wachtwoord en de tweestapsverificatie wijzig je bij {link}.', { link: `<a href="#settings/security">${t('Beveiliging')}</a>` })}</span></div>` : ''}
+      <p class="muted small">${t('Met deze gebruikers en hun wachtwoord meld je aan bij een gedeelde map en maak je back-ups. Ze kunnen niet aanmelden op de server zelf of op dit dashboard.')}</p>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Gebruikers')}</h2>
+        <button class="btn sm primary" type="button" data-unew>+ ${t('Gebruiker')}</button></div>
+      <div id="userNew"></div>
+      <ul class="rows">${d.users.map(row).join('') || `<li><span class="muted">${t('Nog geen gebruikers.')}</span></li>`}</ul>`;
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.utab) return;
+      if (b.dataset.unew != null) return newUserForm($('#userNew', box), d, el);
+      if (b.dataset.uedit) return usersPane(el, { open: opts.open === b.dataset.uedit ? null : b.dataset.uedit });
+      if (b.dataset.upw) { const f = $(`[data-pw-form="${CSS.escape(b.dataset.upw)}"]`, box); f.hidden = !f.hidden; if (!f.hidden) f.elements.password.focus(); return; }
+      if (b.dataset.udel) {
+        const name = b.dataset.udel;
+        if (!(await ask(t('Gebruiker {name} verwijderen? Die kan dan niet meer aan de gedeelde mappen, en haalt ook geen back-ups meer binnen.', { name }), t('Verwijderen')))) return;
+        withBusy(b, async () => { await api.del('/api/share-users/' + encodeURIComponent(name)); toast(t('Gebruiker {name} verwijderd.', { name })); usersPane(el); });
+      }
+    };
+    $$('[data-pw-form]', box).forEach((f) => f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await api.post('/api/share-users/' + encodeURIComponent(f.dataset.pwForm) + '/password', { password: f.elements.password.value }); toast(t('Wachtwoord van {name} gewijzigd.', { name: f.dataset.pwForm })); f.hidden = true; f.reset(); }
+      catch (ex) { toast(ex.message, true); }
+    }));
+    const rf = $('[data-rights-form]', box);
+    if (rf) rf.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = rf.dataset.rightsForm, F = rf.elements;
+      const body = { groups: d.groups.filter((g) => F['g:' + g.name].checked).map((g) => g.name), access: {} };
+      d.shares.forEach((sh) => { body.access[sh.name] = F['s:' + sh.name].value; });
+      const btn = $('[type=submit]', rf); btn.disabled = true;
+      try { await api.post('/api/share-users/' + encodeURIComponent(name), body); toast(t('Rechten van {name} opgeslagen.', { name })); usersPane(el, { open: name }); }
+      catch (ex) { $('.form-error', rf).textContent = ex.message; btn.disabled = false; }
+    });
+  }
+
+  // Rechten van één gebruiker: groepen aanvinken, rechtstreekse rechten per map, en wat dat samen geeft.
+  function userRightsForm(u, d) {
+    return `<form class="form user-edit" data-rights-form="${esc(u.name)}" novalidate>
+      <fieldset class="fld"><span>${t('Groepen')}</span>
+        ${d.groups.length ? `<div class="check-grid">${d.groups.map((g) => `<label class="check"><input type="checkbox" name="g:${esc(g.name)}"${g.members.includes(u.name) ? ' checked' : ''}> ${esc(g.name)}</label>`).join('')}</div>`
+          : `<span class="muted small">${t('Nog geen groepen. Maak er een bij Groepen.')}</span>`}</fieldset>
+      ${d.shares.length ? `<table class="rights"><thead><tr><th>${t('Gedeelde map')}</th><th>${t('Rechtstreeks')}</th><th>${t('Samen')}</th></tr></thead><tbody>
+        ${d.shares.map((sh) => { const a = accessOf(sh, d.groups, u.name); return `<tr><td><b>${esc(sh.name)}</b>${sh.timemachine ? ' <span class="pill">Time Machine</span>' : ''}${sh.guest ? ` <span class="pill warn">${t('gasten')}</span>` : ''}</td>
+          <td>${levelSelect('s:' + sh.name, sh.users[u.name] || '', t('Rechtstreeks recht op {name}', { name: sh.name }))}</td>
+          <td>${a.level ? `${t(LEVEL[a.level])} <span class="via">${esc(a.via.join(', '))}</span>` : `<span class="via">${t('Geen toegang')}</span>`}</td></tr>`; }).join('')}</tbody></table>
+        <p class="muted small" style="margin-top:-4px">${t('"Samen" is wat de gebruiker echt mag: rechtstreeks of via een groep, het hoogste recht telt. Wat je hier wijzigt, zie je na het opslaan.')}</p>`
+        : `<p class="muted small">${t('Nog geen gedeelde mappen.')}</p>`}
+      <p class="form-error" role="alert"></p>
+      <div class="btn-row"><button class="btn primary" type="submit">${t('Opslaan')}</button></div></form>`;
+  }
+
+  function newUserForm(box, d, el) {
+    box.innerHTML = `<form class="form" id="userForm" novalidate style="margin-bottom:14px">
+        <div class="fld-row">
+          <label class="fld"><span>${t('Gebruikersnaam')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('bv. lies')}">
+            <small>${t('Kleine letters, cijfers, - en _.')}</small></label>
+          <label class="fld"><span>${t('Wachtwoord')}</span><input class="field" type="password" name="password" autocomplete="new-password"><small>${t('Minstens 8 tekens.')}</small></label>
+          <label class="fld"><span>${t('Wachtwoord herhalen')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label>
+        </div>
+        ${d.groups.length ? `<fieldset class="fld"><span>${t('Groepen')}</span><div class="check-grid">${d.groups.map((g) => `<label class="check"><input type="checkbox" name="g:${esc(g.name)}"> ${esc(g.name)}</label>`).join('')}</div></fieldset>` : ''}
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Gebruiker toevoegen')}</button><button class="btn" type="button" data-ucancel>${t('Annuleren')}</button></div></form>`;
+    const f = $('#userForm', box), F = f.elements;
+    $('[data-ucancel]', f).addEventListener('click', () => { box.innerHTML = ''; });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', f); err.textContent = '';
+      if (F.password.value !== F.password2.value) { err.textContent = t('De twee wachtwoorden zijn niet gelijk.'); return; }
+      const name = F.name.value.trim(), btn = $('[type=submit]', f); btn.disabled = true;
+      try {
+        await api.post('/api/share-users', { name, password: F.password.value, groups: d.groups.filter((g) => F['g:' + g.name].checked).map((g) => g.name) });
+        toast(t('Gebruiker {name} toegevoegd.', { name })); usersPane(el, { open: name });
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    F.name.focus();
+  }
+
+  function groupsList(box, d, el, opts) {
+    if (opts.editGroup !== undefined) return groupForm(box, d, el, opts.editGroup);
+    const rightsOf = (g) => d.shares.filter((sh) => sh.groups && sh.groups[g.name]).map((sh) => sh.name + ' (' + t(sh.groups[g.name] === 'rw' ? 'schrijven' : 'lezen') + ')');
+    box.innerHTML = `
+      <p class="muted small">${t('Een groep geeft al haar leden dezelfde rechten op gedeelde mappen, bv. Gezin mag lezen in media, Ouders mag schrijven in documenten. Iemand kan in meerdere groepen zitten; het hoogste recht telt.')}</p>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Groepen')}</h2>
+        <button class="btn sm primary" type="button" data-gnew${d.users.length ? '' : ` disabled title="${t('Maak eerst een gebruiker aan.')}"`}>+ ${t('Groep')}</button></div>
+      <ul class="rows">${d.groups.map((g) => `<li>
+          <div><div class="row-title">${esc(g.name)}${g.comment ? ` <span class="muted small">${esc(g.comment)}</span>` : ''}</div>
+            <div class="share-access">${g.members.map((m) => `<span class="pill">${esc(m)}</span>`).join('') || `<span class="muted small">${t('Nog geen leden')}</span>`}</div>
+            <div class="row-sub">${rightsOf(g).length ? esc(t('Rechten: {list}', { list: rightsOf(g).join(', ') })) : t('Nog geen rechten op gedeelde mappen')}</div></div>
+          <div class="row-side btn-row"><button class="btn sm" type="button" data-gedit="${esc(g.name)}">${t('Bewerken')}</button>
+            <button class="btn sm danger" type="button" data-gdel="${esc(g.name)}">${t('Verwijderen')}</button></div></li>`).join('')
+        || `<li><span class="muted">${t('Nog geen groepen.')}</span></li>`}</ul>`;
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.utab) return;
+      if (b.dataset.gnew != null) return groupForm(box, d, el, null);
+      if (b.dataset.gedit) return groupForm(box, d, el, b.dataset.gedit);
+      if (b.dataset.gdel) {
+        const name = b.dataset.gdel;
+        if (!(await ask(t('Groep {name} verwijderen? De leden verliezen de rechten die ze via deze groep hadden. De gebruikers zelf blijven.', { name }), t('Verwijderen')))) return;
+        withBusy(b, async () => { await api.del('/api/share-groups/' + encodeURIComponent(name)); toast(t('Groep {name} verwijderd.', { name })); usersPane(el); });
+      }
+    };
+  }
+
+  function groupForm(box, d, el, editName) {
+    const g = editName ? d.groups.find((x) => x.name === editName) : { name: '', comment: '', members: [] };
+    box.onclick = null;
+    box.innerHTML = `<h2 class="pane-title">${editName ? t('{name} bewerken', { name: esc(editName) }) : t('Nieuwe groep')}</h2>
+      <form class="form" id="groupForm" novalidate>
+        <div class="fld-row">
+          <label class="fld"><span>${t('Naam')}</span><input class="field" name="name" maxlength="32" value="${esc(g.name)}" autocomplete="off" spellcheck="false" placeholder="${t('bv. Gezin')}">
+            <small>${t('Letters, cijfers, -, _ en .')}</small></label>
+          <label class="fld"><span>${t('Beschrijving')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" name="comment" maxlength="100" value="${esc(g.comment)}"></label>
+        </div>
+        <fieldset class="fld"><span>${t('Leden')}</span>
+          <div class="check-grid">${d.users.map((u) => `<label class="check"><input type="checkbox" name="m:${esc(u.name)}"${g.members.includes(u.name) ? ' checked' : ''}> ${esc(u.name)}</label>`).join('') || `<span class="muted small">${t('Nog geen gebruikers.')}</span>`}</div></fieldset>
+        ${d.shares.length ? `<fieldset class="fld"><span>${t('Rechten op gedeelde mappen')}</span>
+          <table class="rights"><tbody>${d.shares.map((sh) => `<tr><td><b>${esc(sh.name)}</b>${sh.comment ? ` <span class="via">${esc(sh.comment)}</span>` : ''}</td>
+            <td style="width:45%">${levelSelect('s:' + sh.name, editName && sh.groups ? sh.groups[editName] || '' : '', t('Recht van de groep op {name}', { name: sh.name }))}</td></tr>`).join('')}</tbody></table></fieldset>` : ''}
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t(editName ? 'Opslaan' : 'Aanmaken')}</button><button class="btn" type="button" data-gcancel>${t('Annuleren')}</button></div>
+      </form>`;
+    const f = $('#groupForm', box), F = f.elements;
+    $('[data-gcancel]', f).addEventListener('click', () => usersPane(el));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', f); err.textContent = '';
+      const body = { name: F.name.value.trim(), comment: F.comment.value, members: d.users.filter((u) => F['m:' + u.name].checked).map((u) => u.name), shares: {} };
+      d.shares.forEach((sh) => { body.shares[sh.name] = F['s:' + sh.name].value; });
+      const btn = $('[type=submit]', f); btn.disabled = true;
+      try {
+        await api.post('/api/share-groups' + (editName ? '/' + encodeURIComponent(editName) : ''), body);
+        toast(t(editName ? '{name} opgeslagen.' : 'Groep {name} aangemaakt.', { name: body.name })); usersPane(el);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
+    F.name.focus();
   }
 
   /* --- Beveiliging: de terminal op de server */
@@ -4396,6 +4765,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     showDesk();
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
+    $('#powerBtn').hidden = false;
     $('#termBtn').hidden = !S.config.terminal;
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
@@ -4407,6 +4777,68 @@ sudo ./install.sh</pre></div>`}` : '') +
       setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
       setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadBackups(); loadUpdate(); } }, 30000),
     ];
+  }
+
+  /* --- aan/uit: de server herstarten of afsluiten (knop bovenaan) */
+  const powerMenu = $('#powerMenu'), powerBtn = $('#powerBtn'), powerWin = $('#powerWin');
+  function closePowerMenu(focus) {
+    powerMenu.hidden = true; powerBtn.setAttribute('aria-expanded', 'false');
+    if (focus) powerBtn.focus();
+  }
+  powerBtn.addEventListener('click', () => {
+    if (!powerMenu.hidden) { closePowerMenu(false); return; }
+    powerMenu.hidden = false; powerBtn.setAttribute('aria-expanded', 'true');
+    const b = powerBtn.getBoundingClientRect(), r = powerMenu.getBoundingClientRect();
+    powerMenu.style.left = Math.max(8, Math.min(b.right - r.width, innerWidth - r.width - 8)) + 'px';
+    powerMenu.style.top = (b.bottom + 6) + 'px';
+    $('.menu-item', powerMenu).focus();
+  });
+  powerMenu.addEventListener('keydown', (e) => {
+    const items = $$('.menu-item', powerMenu), i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePowerMenu(true); }
+    else if (e.key === 'Tab') closePowerMenu(false);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!powerMenu.hidden && !powerMenu.contains(e.target) && !powerBtn.contains(e.target)) closePowerMenu(false); }, true);
+  powerMenu.addEventListener('click', (e) => { const b = e.target.closest('[data-power]'); if (b) { closePowerMenu(false); powerAction(b.dataset.power); } });
+
+  function showPower(title, text, spinning, buttons = '') {
+    $('#powerTitle').textContent = title; $('#powerText').textContent = text;
+    $('#powerSpin').hidden = !spinning; $('#powerBtns').innerHTML = buttons;
+    if (!powerWin.open) powerWin.showModal();
+  }
+  powerWin.addEventListener('cancel', (e) => e.preventDefault()); // niet wegklikken terwijl de server weg is
+  powerWin.addEventListener('click', (e) => { if (e.target.closest('[data-power-reload]')) location.reload(); });
+
+  async function powerAction(act) {
+    const reboot = act === 'reboot';
+    const vms = S.vms.filter((v) => vmKind(v.state) === 'on').length;
+    const backups = S.backup ? S.backup.jobs.filter((j) => j.running).length : 0;
+    const extra = [vms ? t(vms === 1 ? '{n} VM wordt netjes afgesloten.' : '{n} VM\'s worden netjes afgesloten.', { n: vms }) : '',
+      backups ? t('Een back-up die nu loopt, stopt.') : ''].filter(Boolean).join(' ');
+    const q = reboot ? t('De server herstarten? Apps, VM\'s en gedeelde mappen zijn een paar minuten niet bereikbaar.')
+      : t('De server afsluiten? Apps, VM\'s en gedeelde mappen blijven onbereikbaar tot je hem weer aanzet met de aan-knop.');
+    if (!(await ask(q + (extra ? ' ' + extra : ''), t(reboot ? 'Herstarten' : 'Afsluiten')))) return;
+    try { await api.post('/api/system/power', { action: act }); } catch (e) { toast(e.message, true); return; }
+    if (api !== realApi) { toast(t(reboot ? 'In de demo herstart er niets.' : 'In de demo wordt er niets afgesloten.')); return; }
+    timers.forEach(clearInterval); timers = [];
+    if (!reboot) {
+      showPower(t('De server wordt afgesloten'), t('Zet hem weer aan met de aan-knop. Vernieuw daarna deze pagina.'), false,
+        `<button class="btn" type="button" data-power-reload>${t('Pagina vernieuwen')}</button>`);
+      return;
+    }
+    showPower(t('De server herstart…'), t('Dit duurt meestal een paar minuten. Deze pagina komt vanzelf terug.'), true);
+    const start = Date.now();
+    await new Promise((r) => setTimeout(r, 15000)); // eerst echt weg laten gaan
+    for (;;) {
+      try { await realApi.get('/api/config'); location.reload(); return; } catch (e) { /* nog niet terug */ }
+      if (Date.now() - start > 6 * 60000) {
+        showPower(t('De server komt niet terug'), t('Kijk of hij aan staat en of het netwerk werkt. Vernieuw daarna deze pagina.'), false,
+          `<button class="btn primary" type="button" data-power-reload>${t('Pagina vernieuwen')}</button>`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
   }
 
   // Overzicht: terug naar het dashboard, en wat er nog open staat dicht.

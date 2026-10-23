@@ -374,29 +374,43 @@
   }
 
   /* ---- gedeelde mappen (Samba) */
-  const shareUsers = ['lies', 'tom'];
-  const shareList = [
-    { name: 'media', path: '/tank/media', comment: 'Films, series en muziek', users: { lies: 'rw', tom: 'ro' }, guest: false, timemachine: false },
-    { name: 'fotos', path: '/tank/fotos', comment: '', users: { lies: 'rw', tom: 'rw' }, guest: false, timemachine: false },
-    { name: 'TimeMachine', path: '/tank/timemachine', comment: 'Back-ups van de Macs', users: { lies: 'rw' }, guest: false, timemachine: true },
+  const shareUsers = ['kim', 'lies', 'tom'];
+  const shareGroups = [
+    { name: 'Gezin', comment: 'Iedereen thuis', members: ['kim', 'lies', 'tom'] },
+    { name: 'Ouders', comment: '', members: ['lies', 'tom'] },
   ];
+  const shareList = [
+    { name: 'media', path: '/tank/media', comment: 'Films, series en muziek', users: { lies: 'rw' }, groups: { Gezin: 'ro' }, guest: false, timemachine: false },
+    { name: 'fotos', path: '/tank/fotos', comment: '', users: {}, groups: { Ouders: 'rw', Gezin: 'ro' }, guest: false, timemachine: false },
+    { name: 'documenten', path: '/tank/documenten', comment: 'Belastingen, huis en school', users: {}, groups: { Ouders: 'rw' }, guest: false, timemachine: false },
+    { name: 'TimeMachine', path: '/tank/timemachine', comment: 'Back-ups van de Macs', users: { lies: 'rw' }, groups: {}, guest: false, timemachine: true },
+  ];
+  // Zoals effectiveUsers in lib/shares.js.
+  function shareEffective(sh, groups = shareGroups) {
+    const out = { ...sh.users };
+    for (const [g, l] of Object.entries(sh.groups || {})) { const gr = groups.find((x) => x.name === g); (gr ? gr.members : []).forEach((m) => { if (out[m] !== 'rw') out[m] = l; }); }
+    return out;
+  }
+  const shareEmpty = (groups = shareGroups) => shareList.filter((x) => !x.guest && !Object.keys(shareEffective(x, groups)).length).map((x) => x.name);
   const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'snel', mountpoint: '/snel' }]
     .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
   function sharesGet() {
-    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), appUser: 'lennert', roots: shareRoots(),
-      connections: { total: 2, perShare: { media: 2, fotos: 1 } },
-      users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => x.users[name]).map((x) => x.name) })) };
+    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
+      connections: { total: 2, perShare: { media: 2, fotos: 1 } }, admin: acct.user,
+      users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => shareEffective(x)[name]).map((x) => x.name),
+        groups: shareGroups.filter((g) => g.members.includes(name)).map((g) => g.name) })) };
   }
   function shareSave(b, original) {
     const name = String(b.name || '').trim();
     if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/.test(name) || /^(global|homes|printers)$/i.test(name)) throw err('Kies een naam met letters, cijfers, -, _ of . (maximaal 32 tekens), bv. media.');
     if (shareList.some((x) => x.name !== original && x.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een gedeelde map met de naam ' + name + '.', 409);
     const users = {}; for (const [u, v] of Object.entries(b.users || {})) if ((v === 'ro' || v === 'rw') && shareUsers.includes(u)) users[u] = v;
-    if (!b.guest && !Object.keys(users).length) throw err('Geef minstens één gebruiker toegang, of laat gasten lezen.');
+    const groups = {}; for (const [g, v] of Object.entries(b.groups || {})) if ((v === 'ro' || v === 'rw') && shareGroups.some((x) => x.name === g)) groups[g] = v;
+    if (!b.guest && !Object.keys(users).length && !Object.keys(groups).length) throw err('Geef minstens één gebruiker of groep toegang, of laat gasten lezen.');
     let p;
     if (b.create) { const r = shareRoots().find((x) => x.name === b.create.parent); if (!r) throw err('Kies de pool waarop de nieuwe map komt.'); p = r.mountpoint + '/' + name.toLowerCase(); }
     else { p = String(b.path || '').replace(/\/+$/, ''); if (!shareRoots().some((r) => p === r.mountpoint || p.startsWith(r.mountpoint + '/'))) throw err('Kies een map op een van je pools (bv. /tank/media).'); }
-    const share = { name, path: p, comment: String(b.comment || '').trim().slice(0, 100), users, guest: !!b.guest, timemachine: !!b.timemachine };
+    const share = { name, path: p, comment: String(b.comment || '').trim().slice(0, 100), users, groups, guest: !!b.guest, timemachine: !!b.timemachine };
     const i = shareList.findIndex((x) => x.name === original);
     if (original && i < 0) throw err('Deze gedeelde map bestaat niet (meer).', 404);
     if (i >= 0) shareList[i] = share; else shareList.push(share);
@@ -407,13 +421,56 @@
     if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(name)) throw err('Kies een gebruikersnaam met kleine letters, cijfers, - of _ (maximaal 32 tekens), bv. lies.');
     if (String(b.password || '').length < 8) throw err('Kies een wachtwoord van minstens 8 tekens.');
     if (shareUsers.includes(name) || ['root', 'lennert', 'nobody'].includes(name)) throw err('De gebruiker ' + name + ' bestaat al op de server. Kies een andere naam.', 409);
-    shareUsers.push(name); return { name };
+    shareUsers.push(name);
+    (Array.isArray(b.groups) ? b.groups : []).forEach((g) => { const gr = shareGroups.find((x) => x.name === g); if (gr && !gr.members.includes(name)) gr.members.push(name); });
+    return { name };
   }
   function shareUserDelete(name) {
-    const only = shareList.filter((x) => !x.guest && Object.keys(x.users).length === 1 && x.users[name]).map((x) => x.name);
+    const without = shareGroups.map((g) => ({ ...g, members: g.members.filter((m) => m !== name) }));
+    const only = shareList.filter((x) => { if (x.guest || !shareEffective(x)[name]) return false; const u = { ...x.users }; delete u[name]; return !Object.keys(shareEffective({ ...x, users: u }, without)).length; }).map((x) => x.name);
     if (only.length) throw err(name + ' is de enige met toegang tot ' + only.join(', ') + '. Geef eerst iemand anders toegang, of verwijder die gedeelde map.', 409);
     shareList.forEach((x) => { delete x.users[name]; });
+    shareGroups.forEach((g) => { g.members = g.members.filter((m) => m !== name); });
     shareUsers.splice(shareUsers.indexOf(name), 1); return { removed: name };
+  }
+  function shareUserAccess(name, b) {
+    if (!shareUsers.includes(name)) throw err('Deze gebruiker bestaat niet (meer).', 404);
+    const groups = copy(shareGroups), saved = copy(shareList);
+    if (Array.isArray(b.groups)) groups.forEach((g) => { g.members = g.members.filter((m) => m !== name); if (b.groups.includes(g.name)) g.members.push(name); });
+    for (const [sh, level] of Object.entries(b.access || {})) {
+      const x = shareList.find((y) => y.name === sh); if (!x) throw err('De gedeelde map ' + sh + ' bestaat niet (meer).');
+      if (level === 'ro' || level === 'rw') x.users[name] = level; else delete x.users[name];
+    }
+    const empty = shareEmpty(groups);
+    if (empty.length) { shareList.splice(0, shareList.length, ...saved); throw err('Dan kan niemand nog aan ' + empty.join(', ') + '. Geef eerst iemand anders toegang, of verwijder die gedeelde map.', 409); }
+    shareGroups.splice(0, shareGroups.length, ...groups);
+    return { name, groups: groups.filter((g) => g.members.includes(name)).map((g) => g.name) };
+  }
+  function shareGroupSave(b, original) {
+    if (original && !shareGroups.some((g) => g.name === original)) throw err('Deze groep bestaat niet (meer).', 404);
+    const name = String(b.name || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/.test(name)) throw err('Kies een groepsnaam met letters, cijfers, -, _ of . (maximaal 32 tekens), bv. Gezin.');
+    if (shareGroups.some((g) => g.name !== original && g.name.toLowerCase() === name.toLowerCase())) throw err('Er bestaat al een groep met de naam ' + name + '.', 409);
+    const members = [...new Set(Array.isArray(b.members) ? b.members : [])];
+    const bad = members.find((m) => !shareUsers.includes(m)); if (bad) throw err('De gebruiker ' + bad + ' bestaat niet (meer).');
+    const group = { name, comment: String(b.comment || '').trim().slice(0, 100), members: members.sort() };
+    const groups = shareGroups.filter((g) => g.name !== original).concat(group).sort((x, y) => x.name.localeCompare(y.name));
+    const saved = copy(shareList);
+    shareList.forEach((x) => { const g = { ...(x.groups || {}) }; const old = original && g[original]; delete g[original]; const w = b.shares ? b.shares[x.name] : old; if (w === 'ro' || w === 'rw') g[name] = w; x.groups = g; });
+    const empty = shareEmpty(groups);
+    if (empty.length) { shareList.splice(0, shareList.length, ...saved); throw err('Dan kan niemand nog aan ' + empty.join(', ') + '. Geef eerst iemand anders toegang, of verwijder die gedeelde map.', 409); }
+    shareGroups.splice(0, shareGroups.length, ...groups);
+    return group;
+  }
+  function shareGroupDelete(name) {
+    if (!shareGroups.some((g) => g.name === name)) throw err('Deze groep bestaat niet (meer).', 404);
+    const groups = shareGroups.filter((g) => g.name !== name);
+    const saved = copy(shareList);
+    shareList.forEach((x) => { delete (x.groups || {})[name]; });
+    const empty = shareEmpty(groups);
+    if (empty.length) { shareList.splice(0, shareList.length, ...saved); throw err('Alleen deze groep heeft toegang tot ' + empty.join(', ') + '. Geef eerst iemand anders toegang, of verwijder die gedeelde map.', 409); }
+    shareGroups.splice(0, shareGroups.length, ...groups);
+    return { removed: name };
   }
 
   /* ---- back-ups: verbindingen (rclone), taken en toestellen */
@@ -1246,6 +1303,14 @@
       apps: spApps().map((a) => ({ project: a.compose, containers: [a.name], running: /RUNNING/.test(a.state) })), manual: [], migration: spMigration() };
   }
   function spSet(b) {
+    if (b.path) {
+      // Bestaande map aanwijzen: in de demo bestaat elke map onder een pool.
+      if (!['appdata', 'vms', 'isos', 'shares'].includes(b.kind)) throw err('Onbekende soort map.');
+      const dir = String(b.path).trim().replace(/(.)\/+$/, '$1');
+      if (!dir.startsWith('/')) throw err('Kies een volledig pad, bv. /tank/appdata.');
+      if (!spPools().some((x) => dir === x.mountpoint || dir.startsWith(x.mountpoint + '/'))) throw err('De map ' + dir + ' bestaat niet.');
+      sp[b.kind] = dir; return spGet();
+    }
     const p = spPools().find((x) => x.name === b.pool);
     if (!p) throw err('Kies een pool.');
     if (b.kind === 'appdata') {
@@ -1329,8 +1394,125 @@
     return msgs.map((m, i) => ({ timestamp: new Date(now - (msgs.length - i) * 61000).toISOString(), message: m }));
   };
 
+  /* ---- snapshots van VM's */
+  const vmSnaps = {
+    'Home Assistant OS': [
+      { name: 'voor-2026.10', description: 'Voor de update naar Home Assistant 2026.10', state: 'running', created: Date.now() - 6 * 86400000, parent: null, memory: true, current: false },
+      { name: 'snapshot-20261021-2210', description: '', state: 'running', created: Date.now() - 2 * 86400000, parent: 'voor-2026.10', memory: false, current: true },
+    ],
+  };
+  function snapRoute(method, path, body) {
+    const m = path.match(/^\/api\/vms\/([^/]+)\/snapshots(?:\/([^/]+))?(\/revert)?$/);
+    if (!m) return undefined;
+    const v = findVm(m[1]), list = vmSnaps[v.name] || (vmSnaps[v.name] = []);
+    const name = m[2] ? decodeURIComponent(m[2]) : null;
+    if (method === 'GET') return { snapshots: copy(list).sort((a, b) => b.created - a.created) };
+    if (method === 'POST' && !name) {
+      const p = (x) => String(x).padStart(2, '0'), d = new Date();
+      const n = String(body.name || '').trim() || `snapshot-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/.test(n)) throw err('Kies een naam met letters, cijfers, punt, - of _ (maximaal 48 tekens), bv. voor-update.');
+      if (list.some((x) => x.name === n)) throw err('Er bestaat al een snapshot met de naam ' + n + '.', 409);
+      const on = v.state === 'RUNNING';
+      const cur = list.find((x) => x.current);
+      list.forEach((x) => { x.current = false; });
+      list.push({ name: n, description: String(body.description || '').trim().slice(0, 200), state: on ? 'running' : 'shutoff', created: Date.now(), parent: cur ? cur.name : null, memory: on && !body.diskOnly, current: true });
+      return { name: n, memory: on && !body.diskOnly };
+    }
+    const s = list.find((x) => x.name === name);
+    if (!s) throw err('Deze snapshot bestaat niet (meer).', 404);
+    if (method === 'POST' && m[3]) { list.forEach((x) => { x.current = x === s; }); v.state = s.memory ? 'RUNNING' : 'SHUTOFF'; return { reverted: name }; }
+    if (method === 'DELETE') { list.splice(list.indexOf(s), 1); if (s.current && list.length) list[list.length - 1].current = true; return { removed: name }; }
+    return undefined;
+  }
+
+  /* ---- back-ups van apps en VM's */
+  const sysUnits = () => {
+    const by = new Map();
+    for (const a of apps) {
+      const id = a.compose ? 'compose:' + a.compose : 'container:' + a.name;
+      if (!by.has(id)) by.set(id, { id, name: a.compose || a.name, compose: !!a.compose, workingDir: a.compose ? '/opt/stacks/' + a.compose : null, containers: [], paths: [], skipped: [] });
+      const u = by.get(id);
+      u.containers.push({ id: a.id, name: a.name, state: a.state.toLowerCase(), image: a.image });
+      if (a.compose) u.paths = ['/opt/stacks/' + a.compose + '/compose.yaml'];
+      u.paths = [...new Set([...u.paths, AD() + '/' + a.name])].sort();
+      if (a.name === 'jellyfin') u.skipped = [{ path: '/tank/media', reason: 'buiten de appgegevens' }];
+      if (a.name === 'dockge') u.skipped = [{ path: '/var/run/docker.sock', reason: 'systeem' }];
+    }
+    return [...by.values()].sort((x, y) => x.name.localeCompare(y.name));
+  };
+  const sysJobs = [{
+    id: 'd4e5f6a7', name: 'Apps en Home Assistant', dest: '/tank/backups/systeem', apps: ['compose:immich', 'compose:domotica', 'compose:vaultwarden', 'compose:paperless'],
+    vms: ['Home Assistant OS'], stopApps: true, vmMode: 'live', keep: 7, schedule: { every: 'daily', time: '02:00', day: 0 }, created: Date.now() - 30 * 86400000,
+    lastScheduled: Date.now() - 8 * HOUR, lastRun: null, history: [],
+  }];
+  sysJobs[0].lastRun = { kind: 'backup', scheduled: true, started: Date.now() - 8 * HOUR, ended: Date.now() - 8 * HOUR + 14 * 60000, state: 'ok', stamp: '', size: 41 * GB, items: 5, errors: 0, error: null };
+  sysJobs[0].history = [sysJobs[0].lastRun];
+  const sysLive = {}, sysLogs = {};
+  const sysRuns = { d4e5f6a7: [0, 1, 2].map((dd) => ({ stamp: new Date(Date.now() - (dd + 0.33) * 86400000).toISOString().slice(0, 10) + '_020000', created: Date.now() - (dd + 0.33) * 86400000, size: (41 - dd) * GB, errors: [],
+    apps: ['immich', 'domotica', 'vaultwarden', 'paperless'].map((n) => ({ id: 'compose:' + n, name: n, size: rnd(0.2, 6) * GB, error: null, file: true })),
+    vms: [{ name: 'Home Assistant OS', size: 9.6 * GB, error: null, mode: 'live' }] })) };
+  function sysInfo(id) {
+    const r = sysLive[id]; if (!r) return null;
+    const f = Math.min(1, (Date.now() - r.started) / r.dur), done = Math.floor(f * r.total);
+    if (f >= 1 || r.cancelled) {
+      const j = sysJobs.find((x) => x.id === id);
+      const entry = { kind: 'backup', scheduled: false, started: r.started, ended: Date.now(), state: r.cancelled ? 'cancelled' : 'ok', stamp: '', size: r.cancelled ? 0 : rnd(20, 45) * GB, items: r.total, errors: 0, error: null };
+      sysLogs[id] = r.lines.concat(r.names.slice(0, done || r.total).map((n) => ({ time: new Date().toISOString(), level: 'info', text: n + ': klaar' })), [{ time: new Date().toISOString(), level: r.cancelled ? 'error' : 'info', text: r.cancelled ? 'Gestopt.' : 'Klaar.' }]);
+      if (j) { j.history = [entry, ...j.history].slice(0, 20); j.lastRun = entry; if (!r.cancelled) (sysRuns[id] = sysRuns[id] || []).unshift({ stamp: new Date().toISOString().slice(0, 10) + '_nu', created: Date.now(), size: entry.size, errors: [],
+        apps: j.apps.map((a) => ({ id: a, name: a.split(':')[1], size: rnd(0.2, 6) * GB, error: null, file: true })), vms: j.vms.map((v) => ({ name: v, size: 9.6 * GB, error: null, mode: j.vmMode })) }); }
+      delete sysLive[id];
+      return null;
+    }
+    return { kind: 'backup', started: r.started, current: r.names[done] || null, done, total: r.total, percent: Math.round(((f * r.total) % 1) * 100) };
+  }
+  const sysPublic = (j) => ({ ...copy(j), next: bkNext(j.schedule, j.lastScheduled || j.created), running: sysInfo(j.id) });
+  function sysValidate(b) {
+    const name = String(b.name || '').trim().slice(0, 60);
+    if (!name) throw err('Geef de taak een naam, bv. Apps en Home Assistant.');
+    const dest = String(b.dest || '').trim().replace(/(.)\/+$/, '$1');
+    if (!dest.startsWith('/') || !bkFolders().some((r) => dest === r || dest.startsWith(r + '/'))) throw err('Kies een map op een van je pools, bv. /tank/fotos.');
+    if (pools.some((p) => '/' + p.name === dest)) throw err('Kies een eigen map om in te bewaren, bv. /tank/backups/google-drive, niet de hele pool.');
+    const a = [...new Set(Array.isArray(b.apps) ? b.apps : [])], v = [...new Set(Array.isArray(b.vms) ? b.vms : [])];
+    if (!a.length && !v.length) throw err('Kies minstens één app of VM.');
+    const s = b.schedule || {};
+    return { name, dest, apps: a, vms: v, stopApps: b.stopApps !== false, vmMode: b.vmMode === 'shutdown' ? 'shutdown' : 'live', keep: Math.min(365, Math.max(1, Math.round(Number(b.keep) || 7))),
+      schedule: { every: ['manual', 'hourly', 'daily', 'weekly'].includes(s.every) ? s.every : 'manual', time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time || '') ? s.time : '02:00', day: Number(s.day) >= 0 && Number(s.day) <= 6 ? Number(s.day) : 0 } };
+  }
+  function sysRoute(method, path, body) {
+    if (path === '/api/sysbackups' && method === 'GET') {
+      return { jobs: sysJobs.map(sysPublic), apps: sysUnits(), vms: vms.map((v) => ({ name: v.name, state: v.state })), folders: bkFolders(), defaultDest: '/tank/backups/systeem' };
+    }
+    if (path === '/api/sysbackups' && method === 'POST') {
+      const j = { id: Math.random().toString(16).slice(2, 10).padEnd(8, '0'), ...sysValidate(body), created: Date.now(), lastScheduled: Date.now(), lastRun: null, history: [] };
+      sysJobs.push(j); return sysPublic(j);
+    }
+    const m = path.match(/^\/api\/sysbackups\/([0-9a-f]{8})(?:\/(run|stop|log|runs|restore))?$/);
+    if (!m) return undefined;
+    const j = sysJobs.find((x) => x.id === m[1]); if (!j) throw err('Deze taak bestaat niet (meer).', 404);
+    const act = m[2];
+    if (!act && method === 'POST') { if (sysInfo(j.id)) throw err('Deze taak loopt nu. Stop ze eerst, of wacht tot ze klaar is.', 409); Object.assign(j, sysValidate(body)); return sysPublic(j); }
+    if (!act && method === 'DELETE') { if (sysInfo(j.id)) throw err('Deze taak loopt nu. Stop ze eerst, of wacht tot ze klaar is.', 409); sysJobs.splice(sysJobs.indexOf(j), 1); return { removed: j.id }; }
+    if (act === 'log') { const r = sysInfo(j.id); return { running: r, lines: copy(r ? sysLive[j.id].lines : sysLogs[j.id] || []), last: j.history[0] || null }; }
+    if (act === 'runs') return { dest: j.dest, runs: copy(sysRuns[j.id] || []) };
+    if (act === 'run') {
+      if (sysInfo(j.id)) throw err('Deze taak loopt al.', 409);
+      const names = [...j.apps.map((a) => a.split(':')[1]), ...j.vms];
+      sysLive[j.id] = { started: Date.now(), dur: 9000 + names.length * 2500, total: names.length, names, cancelled: false,
+        lines: [{ time: new Date().toISOString(), level: 'info', text: 'Naar ' + j.dest }] };
+      return { started: true };
+    }
+    if (act === 'stop') { if (!sysInfo(j.id)) throw err('Deze taak loopt niet.', 409); sysLive[j.id].cancelled = true; return { stopping: true }; }
+    if (act === 'restore') {
+      if (body.vm) { const v = vms.find((x) => x.name === body.vm); if (v && v.state !== 'SHUTOFF') throw err('Zet ' + body.vm + ' eerst uit. Daarna kan je de back-up terugzetten.', 409); if ((vmSnaps[body.vm] || []).length) throw err(body.vm + ' heeft snapshots. Verwijder die eerst: de schijven van de back-up passen niet in die rij.', 409); return { restored: body.vm, moved: [] }; }
+      if (body.app) return { restored: body.app.split(':')[1], moved: [] };
+      throw err('Kies een app of VM om terug te zetten.');
+    }
+    return undefined;
+  }
+
   async function get(path) {
     await wait(rnd(120, 300));
+    { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
     if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
     if (path === '/api/storage-paths') return spGet();
     if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
@@ -1408,6 +1590,8 @@
   }
 
   async function post(path, body = {}) {
+    if (path.includes('/snapshots')) { await wait(rnd(800, 1600)); const r = snapRoute('POST', path, body); if (r !== undefined) return r; }
+    if (path.startsWith('/api/sysbackups')) { await wait(rnd(200, 500)); const r = sysRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/login' || path === '/api/login/mfa' || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }
     if (path === '/api/datetime') { await wait(rnd(300, 600)); return dtSet(body); }
     if (path === '/api/onboarding/finish') { onbSet(true); return { done: true, finished: new Date().toISOString(), skipped: !!body.skipped }; }
@@ -1454,6 +1638,12 @@
     const shm = path.match(/^\/api\/shares\/([^/]+)$/);
     if (shm) { await wait(rnd(300, 600)); return shareSave(body, decodeURIComponent(shm[1])); }
     if (path === '/api/share-users') { await wait(rnd(300, 600)); return shareUserCreate(body); }
+    if (path === '/api/share-groups') { await wait(rnd(300, 600)); return shareGroupSave(body, null); }
+    const sgm = path.match(/^\/api\/share-groups\/([^/]+)$/);
+    if (sgm) { await wait(rnd(300, 600)); return shareGroupSave(body, decodeURIComponent(sgm[1])); }
+    const sum = path.match(/^\/api\/share-users\/([^/]+)$/);
+    if (sum) { await wait(rnd(300, 600)); return shareUserAccess(decodeURIComponent(sum[1]), body); }
+    if (path === '/api/system/power') { if (body.action !== 'reboot' && body.action !== 'shutdown') throw err('Kies herstarten of afsluiten.'); return { ok: true, action: body.action }; }
     const pwm = path.match(/^\/api\/share-users\/([^/]+)\/password$/);
     if (pwm) { if (String(body.password || '').length < 8) throw err('Kies een wachtwoord van minstens 8 tekens.'); return { ok: true }; }
     if (path === '/api/apps/custom/inspect') { await wait(rnd(500, 900)); return demoInspect(body.image); }
@@ -1576,6 +1766,7 @@
 
   async function del(path) {
     await wait(400);
+    { const r = path.includes('/snapshots') ? snapRoute('DELETE', path) : path.startsWith('/api/sysbackups') ? sysRoute('DELETE', path) : undefined; if (r !== undefined) return r; }
     let m = path.match(/^\/api\/apps\/([^/?]+)(\?data=1)?$/);
     if (m) {
       const i = apps.findIndex((x) => x.id === decodeURIComponent(m[1]));
@@ -1601,6 +1792,8 @@
     if (m) { const i = shareList.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i < 0) throw err('Deze gedeelde map bestaat niet (meer).', 404); shareList.splice(i, 1); return { removed: decodeURIComponent(m[1]) }; }
     m = path.match(/^\/api\/share-users\/([^/]+)$/);
     if (m) return shareUserDelete(decodeURIComponent(m[1]));
+    m = path.match(/^\/api\/share-groups\/([^/]+)$/);
+    if (m) return shareGroupDelete(decodeURIComponent(m[1]));
     m = path.match(/^\/api\/ai\/models\/(.+)$/);
     if (m) { const i = models.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i >= 0) models.splice(i, 1); return { ok: true }; }
     throw err('Onbekend endpoint', 404);
