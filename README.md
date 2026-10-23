@@ -171,7 +171,9 @@ Is an app not in the app store? Choose **Own app** in the app store and paste th
 
 Each app gets a `compose.yaml` in `STACKS_DIR/<name>` (default `/opt/stacks`, the same folder Dockge uses). So you can also edit the file yourself.
 For privileged apps, apps with access to Docker, apps on the host network and extra Docker options that aren't taken over, HomeBaseOS shows a warning first.
-You can always change ports, and *+ Port* adds extra ones. If an app uses the host network (e.g. Plex or Home Assistant), it listens on its own ports. If you change a port anyway, HomeBaseOS chooses the default network (bridge). Some apps look for devices in your network and therefore work best with host.
+You can always change ports, and *+ Port* adds extra ones (that needs the default network, bridge). If an app uses the host network (e.g. Plex or Home Assistant), it listens on its own ports: Docker can't remap them. If you change a port there, HomeBaseOS sets the app's own port setting when the template has one (e.g. `WEBUI_PORT`) and the WebUI follows; otherwise the app keeps its port and you get a warning. Some apps look for devices in your network and therefore work best with host.
+
+**Fixed IP address.** On the default network (bridge) you can fill in a fixed address: the app then joins the HomeBaseOS network `homebase` (172.30.0.0/16, created the first time), where apps also find each other by name. In a network of your own with a subnet, or a macvlan/ipvlan network, the address must be in that network.
 You can also **remove** apps from the app store again (in the app's detail window). Tick whether their data should go too.
 HomeBaseOS only erases folders inside the app data folder.
 

@@ -1133,12 +1133,13 @@
               ${f.networkOther ? `<small>${t('Uses {name}. Change that in text mode.', { name: esc(f.networkOther) })}</small>` : ''}</label>
           </div>
           ${f.networkOther ? '' : `<p class="muted small" style="margin-top:-6px">${t('Create new networks in Settings → Docker networks.')}</p>`}
-          ${f.network === 'host' ? `<p class="lead small">${t('With the host network the app listens directly on its own ports and Docker ignores the ports below. To choose ports yourself, set Network to Default (bridge) and add them with + Port.')}</p>` : ''}
-          ${['', 'host', 'none', '*'].includes(f.network) || f.networkOther ? '' : (() => {
+          ${f.network === 'host' ? `<p class="lead small">${t('With the host network the app listens directly on its own ports and Docker ignores the ports below. Another port only works through the app\'s own port setting, e.g. a variable like WEBUI_PORT; then set the same port below, so the WebUI follows.')}</p>` : ''}
+          ${['host', 'none', '*'].includes(f.network) || f.networkOther ? '' : (() => {
             const n = dockerNets.find((x) => x.name === f.network), ownIp = n && /^(macvlan|ipvlan)$/.test(n.driver);
             return `<label class="fld"><span>${t('Fixed IP address (optional)')}</span><input class="field" data-cf-top="ip" value="${esc(f.ip || '')}" spellcheck="false" autocomplete="off"
-              placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : '')}">
+              placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : f.network === '' ? '172.30.0.10' : '')}">
               <small>${ownIp ? t('The app\'s address in your home network. Empty = Docker picks one from the network\'s IP range.')
+                : f.network === '' ? t('Empty = Docker picks an address. With an address the app joins the HomeBaseOS network homebase (172.30.0.0/16), where apps also find each other by name.')
                 : t('Empty = Docker picks an address. A fixed address only works in a network with its own subnet.')}</small></label>`;
           })()}
           <label class="check"><input type="checkbox" data-cf-top="privileged"${f.privileged ? ' checked' : ''}> ${t('Privileged (almost full access to the server, only if the app really needs it)')}</label>
@@ -1154,7 +1155,7 @@
       const tg = e.target;
       if (tg.dataset.cfTop) {
         f[tg.dataset.cfTop] = tg.type === 'checkbox' ? tg.checked : tg.value;
-        if (tg.dataset.cfTop === 'network') { if (['', 'host', 'none'].includes(f.network)) f.ip = ''; draw(); }
+        if (tg.dataset.cfTop === 'network') { if (['host', 'none'].includes(f.network)) f.ip = ''; draw(); }
         return;
       }
       if (!tg.dataset.cf) return;
@@ -2487,22 +2488,26 @@
     const form = $('#storeForm', body);
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
-      $('[data-store-ip]', form).hidden = !(n && n.subnet);
-      if (!(n && n.subnet)) form.elements.__ip.value = '';
-      form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : '';
-      $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You chose a port yourself, so the app now uses the default network (bridge). With host, the app always listens on its own ports.')
-        : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, HomeBaseOS switches to the default network (bridge).')
-        : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port, HomeBaseOS switches to the default network (bridge).')
+      // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared homebase network).
+      const ipOk = v === 'bridge' || !!(n && n.subnet);
+      $('[data-store-ip]', form).hidden = !ipOk;
+      if (!ipOk) form.elements.__ip.value = '';
+      form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : v === 'bridge' ? '172.30.0.10' : '';
+      $('[data-store-ip] small', form).textContent = v === 'bridge' ? t('Empty = Docker picks an address. With an address the app joins the HomeBaseOS network homebase (172.30.0.0/16), where apps also find each other by name.')
+        : t('Empty = Docker picks an address.');
+      $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You added an extra port, so the app now uses the default network (bridge): only there Docker can publish extra ports.')
+        : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
+        : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one).')
         : n ? t('Apps in the same network find each other by name.') : t('Create new networks in Settings → Docker networks.');
     };
     let switched = false;
     form.elements.__network.addEventListener('change', () => { switched = false; syncNet(); });
-    // A port can only be changed if Docker handles the ports: then switch to the default network.
+    // Extra ports can only be published by Docker on a network with ports: then switch to the default network.
+    // Changing a template port doesn't switch: with host or an own address it becomes the app's own port (see buildCompose).
     const needPorts = () => {
       if (storeNetPorts(d, form.elements.__network.value)) return;
       form.elements.__network.value = 'bridge'; switched = true; syncNet();
     };
-    form.addEventListener('input', (e) => { if (e.target.dataset.port) needPorts(); });
     syncNet();
     // Extra ports that aren't in the template.
     const extra = [];

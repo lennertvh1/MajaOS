@@ -127,3 +127,16 @@ test('app store: extra ports, and not with host or an own address', () => {
   assert.doesNotMatch(host.text, /ports:/);
   assert.match(host.warnings.join(), /Change a port or pick the default network/);
 });
+
+test('the shared homebase network: a free subnet and a free address', () => {
+  const c = (x) => dn.parseCidr(x, 0, 32);
+  assert.equal(dn.pickHomebaseSubnet([c('172.17.0.0/16'), c('192.168.1.0/24')]).text, '172.30.0.0/16');
+  assert.equal(dn.pickHomebaseSubnet([c('172.30.5.0/24')]).text, '172.29.0.0/16');
+  const n = { name: 'homebase', subnet: '172.30.0.0/16', gateway: '172.30.0.1', containers: [{ name: 'jellyfin', ip: '172.30.0.10/16' }] };
+  assert.equal(dn.checkFreeIp('172.30.0.11', n), '172.30.0.11');
+  assert.equal(dn.checkFreeIp('172.30.0.10', n, 'jellyfin'), '172.30.0.10'); // its own address when editing
+  assert.throws(() => dn.checkFreeIp('172.30.0.10', n, 'plex'), /already used by jellyfin/);
+  assert.throws(() => dn.checkFreeIp('172.30.0.1', n), /gateway/);
+  assert.throws(() => dn.checkFreeIp('172.30.255.255', n), /can't be used/);
+  assert.throws(() => dn.checkFreeIp('10.0.0.5', n), /not in this network's subnet/);
+});

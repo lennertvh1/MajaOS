@@ -149,3 +149,19 @@ test('docker compose pull: one line per layer, with progress', () => {
   assert.deepEqual(job.lines.slice(3), ['Network jellyfin_default  Created', 'Container jellyfin  Started']);
   assert.equal(s.jobProgress(job).phase, 'start');
 });
+
+test('host network: a changed port goes to the template\'s port setting', () => {
+  const app = { id: 'abc', name: 'qbit', image: 'lscr.io/linuxserver/qbittorrent', webui: 'http://[IP]:[PORT:8080]', network: 'host', extraParams: '', postArgs: '' };
+  const fields = [
+    { key: 'c0', type: 'Port', name: 'WebUI', target: '8080', value: '8090', mode: 'tcp' },
+    { key: 'c1', type: 'Variable', name: 'WebUI port', target: 'WEBUI_PORT', value: '8080' },
+    { key: 'c2', type: 'Port', name: 'Torrents', target: '6881', value: '6999', mode: 'tcp' },
+  ];
+  const r = s.buildCompose(app, 'qbit', fields, { tz: 'UTC', network: { mode: 'host', name: null, ownIp: false } });
+  assert.match(r.text, /network_mode: "host"/);
+  assert.doesNotMatch(r.text, /ports:/);
+  assert.match(r.text, /WEBUI_PORT: "8090"/);
+  assert.match(r.text, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:8090\]"/);
+  assert.ok(r.warnings.some((w) => /own port 6881/.test(w)));
+  assert.equal(fields[1].value, '8080'); // the caller's fields are not changed
+});

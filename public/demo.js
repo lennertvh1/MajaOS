@@ -366,7 +366,18 @@
     return { removed: n.name };
   }
   // Set the network of an app. With its own address there are no ports on the server and the WebUI points to that address.
+  // Like networkFor() in lib/dockernet.js: a fixed address on the default network → the shared homebase network.
+  function homebaseNet() {
+    let n = dnets.find((x) => x.name === 'homebase');
+    if (!n) { n = { id: 'homebase0000', name: 'homebase', driver: 'bridge', builtin: false, internal: false, subnet: '172.30.0.0/16', gateway: '172.30.0.1', ipRange: null, parent: null, compose: null, ours: true, containers: [] }; dnets.push(n); }
+    return n;
+  }
   function setAppNet(a, network, ip) {
+    if (ip && (network === 'host' || network === 'none')) throw err('A fixed IP address doesn\'t work with the host network or without a network.');
+    if (ip && (!network || network === 'bridge')) network = homebaseNet().name;
+    if (ip && Object.entries(appNet).some(([app, x]) => x.ip === ip && app !== a.name)) {
+      throw err(ip + ' is already used by ' + Object.entries(appNet).find(([app, x]) => x.ip === ip && app !== a.name)[0] + '. Choose another address.', 409);
+    }
     if (!network || network === 'host' || network === 'none' || network === 'bridge') { delete appNet[a.name]; return; }
     const n = dnets.find((x) => x.name === network); if (!n) throw err('The network ' + network + ' does not exist. Create it in Settings → Docker networks or choose another network.');
     if (ip && !ip4.test(ip)) throw err('"' + ip + '" is not a valid IP address.');
