@@ -2,6 +2,9 @@
  * To add a language: copy this file to lang/<code>.js, translate the values and add the language to lang/languages.js. */
 window.TB_LANG = window.TB_LANG || {};
 window.TB_LANG.nl = {
+  // Words with two meanings: "<context>\u0004<English>" (see t() in app.js).
+  "backup\u0004Device": "Toestel",
+  "backup\u0004Devices": "Toestellen",
   "\"{mac}\" is not a valid MAC address, e.g. 52:54:00:12:34:56.": "\"{mac}\" is geen geldig MAC-adres, bv. 52:54:00:12:34:56.",
   "\"{name}\" is not a valid app name.": "\"{name}\" is geen geldige naam van een app.",
   "\"{name}\" is not a valid name for a variable.": "\"{name}\" is geen geldige naam voor een variabele.",
@@ -104,7 +107,7 @@ window.TB_LANG.nl = {
   "{name} is no longer shared.": "{name} wordt niet meer gedeeld.",
   "{name} is now in the folder.": "{name} staat nu in de map.",
   "{name} is now shared.": "{name} wordt nu gedeeld.",
-  "{name} is ready. Install HomeBase Back-up on the device and pair with the code.": "{name} is klaar. Installeer HomeBase Back-up op het toestel en koppel met de code.",
+  "{name} is ready. Install HomeBase Backup on the device and pair with the code.": "{name} is klaar. Installeer HomeBase Backup op het toestel en koppel met de code.",
   "{name} is ready. Install Kopia on the device and follow the steps.": "{name} is klaar. Installeer Kopia op het toestel en volg de stappen.",
   "{name} is starting…": "{name} start…",
   "{name} is stopping.": "{name} wordt gestopt.",
@@ -1172,7 +1175,7 @@ window.TB_LANG.nl = {
   "Open backups": "Back-ups openen",
   "Open Backups (Déjà Dup) → Preferences → Storage location → Network server.": "Open Back-ups (Déjà Dup) → Voorkeuren → Opslaglocatie → Netwerkserver.",
   "Open Control Panel → File History → Select drive → Add network location, and choose {unc}.": "Open het Configuratiescherm → Bestandsgeschiedenis → Station selecteren → Netwerklocatie toevoegen, en kies {unc}.",
-  "Open HomeBase Back-up on {name}, type {nas} as the address and this code. The code works once and until {time}.": "Open HomeBase Back-up op {name}, typ {nas} als adres en deze code. De code werkt één keer en tot {time}.",
+  "Open HomeBase Backup on {name}, type {nas} as the address and this code. The code works once and until {time}.": "Open HomeBase Backup op {name}, typ {nas} als adres en deze code. De code werkt één keer en tot {time}.",
   "Open KopiaUI and choose Kopia Repository Server.": "Open KopiaUI en kies Kopia Repository Server.",
   "Open Settings → Storage": "Instellingen → Opslag openen",
   "Open shared folders": "Gedeelde mappen openen",
@@ -1940,7 +1943,7 @@ window.TB_LANG.nl = {
   "with memory": "met geheugen",
   "With memory, the VM continues where it was after restoring. Without, it is as if the power failed at that moment.": "Met het geheugen loopt de VM na terugzetten verder waar ze was. Zonder is het alsof de stroom op dat moment uitviel.",
   "With the free Kopia app, your Windows PCs, Macs and Linux PCs make an encrypted backup to the NAS every hour. Old versions are kept: 24 hourly, 14 days, 8 weeks, 12 months and 3 years.": "Met de gratis app Kopia maken je Windows-pc's, Macs en Linux-pc's elk uur een versleutelde back-up naar de NAS. Oude versies blijven bewaard: 24 per uur, 14 dagen, 8 weken, 12 maanden en 3 jaar.",
-  "With the HomeBase Back-up app": "Met de app HomeBase Back-up",
+  "With the HomeBase Backup app": "Met de app HomeBase Backup",
   "With the host network the app listens directly on its own ports and Docker ignores the ports below. To choose ports yourself, set Network to Default (bridge) and add them with + Port.": "Met het host-netwerk luistert de app rechtstreeks op zijn eigen poorten en negeert Docker de poorten hieronder. Wil je zelf poorten kiezen, zet Netwerk dan op Standaard (bridge) en voeg ze toe met + Poort.",
   "With the host network the app listens on its own ports. Choose the default network (bridge) to add ports.": "Met het host-netwerk luistert de app op zijn eigen poorten. Kies het standaardnetwerk (bridge) om poorten toe te voegen.",
   "With the Kopia backup app": "Met de back-up-app Kopia",

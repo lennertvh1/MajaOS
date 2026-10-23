@@ -16,7 +16,12 @@
   let nf = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
   let nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
   const fill = (s, vars) => (vars ? String(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : String(s));
-  function t(s, vars) { const d = DICTS[LANG]; return fill(d && d[s] != null ? d[s] : s, vars); }
+  // ctx: a context for a word with two meanings (like gettext's msgctxt), e.g. t('Devices', null, 'backup'): the dictionary key is
+  // 'backup\u0004Devices'; without it, the plain word is used.
+  function t(s, vars, ctx) {
+    const d = DICTS[LANG], k = ctx && d && d[ctx + '\u0004' + s] != null ? ctx + '\u0004' + s : s;
+    return fill(d && d[k] != null ? d[k] : s, vars);
+  }
   // Server messages are always in English: recognise them by a template from the dictionary and fill in the values.
   let patterns = null;
   function tr(msg) {
@@ -436,7 +441,7 @@
     };
     ul.innerHTML = d.jobs.slice(0, 5).map((j) => `<li><span class="name">${esc(j.name)}</span><span class="muted small${!j.running && j.lastRun && j.lastRun.state === 'failed' ? ' temp-bad' : ''}">${esc(side(j))}</span></li>`).join('')
       + (d.jobs.length > 5 ? `<li class="muted small">${t('and {n} more', { n: d.jobs.length - 5 })}</li>` : '')
-      + (d.devices ? `<li><span class="name">${t('Devices')}</span><span class="muted small">${esc(t(d.devices === 1 ? '{n} device' : '{n} devices', { n: d.devices }))}</span></li>` : '')
+      + (d.devices ? `<li><span class="name">${t('Devices', null, 'backup')}</span><span class="muted small">${esc(t(d.devices === 1 ? '{n} device' : '{n} devices', { n: d.devices }))}</span></li>` : '')
       || `<li class="muted small">${t('No backups yet. Click to create one.')}</li>`;
   }
 
@@ -3453,7 +3458,7 @@
     const scroll = el.scrollTop;
     el.innerHTML = `
       <div class="seg vm-tabs" role="tablist" aria-label="${t('Sections')}">${BK_TABS.map(([k, label]) =>
-        `<button type="button" role="tab" aria-selected="${k === bk.tab}" data-bktab="${k}">${t(label)}</button>`).join('')}</div>
+        `<button type="button" role="tab" aria-selected="${k === bk.tab}" data-bktab="${k}">${t(label, null, 'backup')}</button>`).join('')}</div>
       <div id="bkBody"></div>`;
     el.onclick = (e) => { const b = e.target.closest('[data-bktab]'); if (b) { bk.tab = b.dataset.bktab; backupPane(el); } };
     const box = $('#bkBody', el);
@@ -3854,7 +3859,7 @@
   function kopiaHowTo(dev, d) {
     const k = d.kopia, url = kopiaUrl(k, d), name = dev.user.split('@')[0];
     const home = { windows: 'C:\\Users\\…', mac: '/Users/…', linux: '/home/…' }[dev.kind] || '';
-    const v = { app: `<a href="${esc(k.appUrl)}" target="_blank" rel="noopener">HomeBase Back-up</a>`, nas: '<code>' + esc(nasAddress()) + '</code>',
+    const v = { app: `<a href="${esc(k.appUrl)}" target="_blank" rel="noopener">HomeBase Backup</a>`, nas: '<code>' + esc(nasAddress()) + '</code>',
       link: '<a href="https://kopia.io/docs/installation/" target="_blank" rel="noopener">kopia.io</a>', url: '<code>' + esc(url) + '</code>',
       fp: '<code>' + esc(k.fingerprint || '') + '</code>', user: '<code>' + esc(name) + '</code>', home: '<code>' + esc(home) + '</code>' };
     const cli = `kopia repository connect server --url=${url} --server-cert-fingerprint=${k.fingerprint || ''} --override-username=${name} --override-hostname=${name}`;
@@ -3882,7 +3887,7 @@
     <div class="btn-row"><button class="btn sm" type="button" data-copy="${esc(s.value)}">${t('Copy')}</button>
       <button class="btn sm primary" type="button" data-secret-done>${t('I\'ve saved it')}</button></div></div>`;
   const pairSecret = (name, r) => ({ title: t('Pairing code for {name}', { name }), value: r.code, code: true, password: r.password,
-    text: t('Open HomeBase Back-up on {name}, type {nas} as the address and this code. The code works once and until {time}.', { name, nas: nasAddress(), time: new Date(r.expires).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) });
+    text: t('Open HomeBase Backup on {name}, type {nas} as the address and this code. The code works once and until {time}.', { name, nas: nasAddress(), time: new Date(r.expires).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) });
   function kopiaCard(d) {
     const k = d.kopia, head = `<b>${t('Backup app (Kopia)')}</b>`;
     if (!k.installed) return `<div class="notice">${head}<span>${t('Kopia is not installed on the server. Run install.sh again.')}</span></div>`;
@@ -3923,8 +3928,8 @@
       <p class="lead">${t('Backups of your PCs, Macs and phones on the NAS. With the Kopia backup app (Windows, Mac and Linux), or with a shared folder of their own: for Time Machine on a Mac and apps on your phone.')}</p>
       ${kopiaCard(d)}
       ${d.samba ? '' : `<div class="notice warn">${t('Samba is not installed yet. Run install.sh again, or on the server: sudo apt install samba')}</div>`}
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Devices')}</h2>
-        <button class="btn sm primary" type="button" data-dev-new${canAdd ? '' : ` disabled title="${t('Create a pool first.')}"`}>+ ${t('Device')}</button></div>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Devices', null, 'backup')}</h2>
+        <button class="btn sm primary" type="button" data-dev-new${canAdd ? '' : ` disabled title="${t('Create a pool first.')}"`}>+ ${t('Device', null, 'backup')}</button></div>
       <ul class="rows bk-rows">${d.devices.map(row).join('') || `<li><span class="muted">${t(d.pools.length ? 'No devices yet.' : 'No devices yet. First create a pool under Storage.')}</span></li>`}</ul>`;
     const on = $('#kopiaOn', box);
     if (on) on.addEventListener('submit', (e) => {
@@ -3983,7 +3988,7 @@
       <h2 class="pane-title">${t('New device')}</h2>
       <form class="form" id="bkDevForm" novalidate>
         <fieldset class="fld"><span>${t('How does this device make backups?')}</span><div class="form" style="gap:8px">
-          ${radio('kopia', t('With the HomeBase Back-up app'), k.enabled ? t('For Windows, Mac and Linux. Pair with a code; encrypted, every hour, and old versions are kept.') : t('First turn on the backup app (under Devices, at the top).'), !k.enabled)}
+          ${radio('kopia', t('With the HomeBase Backup app'), k.enabled ? t('For Windows, Mac and Linux. Pair with a code; encrypted, every hour, and old versions are kept.') : t('First turn on the backup app (under Devices, at the top).'), !k.enabled)}
           ${radio('share', t('With a shared folder of its own'), d.samba ? t('For Time Machine on a Mac, File History on Windows and apps on your phone.') : t('Samba is not installed yet.'), !d.samba)}</div></fieldset>
         <label class="fld"><span>${t('Name')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. MacBook-Lies')}">
           <small data-name-help></small></label>
@@ -4041,7 +4046,7 @@
       try {
         const r = await api.post('/api/backup/devices', body);
         if (r.code) bk.secret = pairSecret(body.name, r);
-        toast(t(r.code ? '{name} is ready. Install HomeBase Back-up on the device and pair with the code.' : 'The folder for {name} is ready. Follow the steps to turn on backups.', { name: body.name }));
+        toast(t(r.code ? '{name} is ready. Install HomeBase Backup on the device and pair with the code.' : 'The folder for {name} is ready. Follow the steps to turn on backups.', { name: body.name }));
         bk.openDevice = body.name; backupPane(el);
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
