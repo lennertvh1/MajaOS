@@ -4690,9 +4690,12 @@ sudo ./install.sh</pre></div>`}` : '') +
       <h2 class="pane-title">${t('Settings')}</h2>
       <div class="form">
         <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Check for updates automatically (every 12 hours)')}</label>
-        <div class="choice-row" role="radiogroup" aria-label="${t('Kind of versions')}">${[['stable', t('Stable versions only')], ['beta', t('Include beta versions')], ['dev', t('Development (branch {branch})', { branch: u.branch || 'dev' })]].map(([k, name]) => `
+        <div class="choice-row" role="radiogroup" aria-label="${t('Kind of versions')}">${[['stable', t('Stable versions only')], ['beta', t('Include beta versions')], ['dev', t('Dev versions (branch {branch})', { branch: u.branch || 'dev' })]].map(([k, name]) => `
           <label class="choice"><input type="radio" name="updateChannel" value="${k}"${k === u.channel ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
-        ${u.channel === 'dev' ? `<p class="muted small">${t('Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.', { branch: esc(u.branch || 'dev') })}</p>` : ''}
+        ${u.channel === 'dev' ? `<p class="muted small">${t('Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.', { branch: esc(u.branch || 'dev') })}</p>
+        <div class="upd-how"><p class="muted small">${t('Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:', { branch: esc(u.branch || 'dev') })}</p>
+          <pre>sudo bash /opt/homebaseos/deploy/install-branch.sh ${esc(u.branch || 'dev')}</pre>
+          <p class="muted small">${t('Back to official versions: the same command with main.')}</p></div>` : ''}
         <p class="muted small">${t('HomeBaseOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
     if (u.running) { updateProgress(el); return; } // an update is already running (e.g. after refreshing the page)

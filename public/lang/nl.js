@@ -1995,9 +1995,11 @@ window.TB_LANG.nl = {
   "ZFS reported an error: {error}": "ZFS gaf een fout: {error}",
   "zstd (saves more, a bit slower)": "zstd (bespaart meer, iets trager)",
   "Development": "Ontwikkeling",
-  "Development (branch {branch})": "Ontwikkeling (branch {branch})",
   "Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.": "Ontwikkeling: elke nieuwe commit op de branch {branch} is een update. Alleen voor een testserver: deze versies zijn nog niet getest.",
   "Choose stable, beta or development.": "Kies stabiel, bèta of ontwikkeling.",
   "The branches of {repo} can't be read. Is the repository private? Then set UPDATE_TOKEN in /etc/homebaseos/homebaseos.env.": "De branches van {repo} kunnen niet gelezen worden. Is de repository privé? Zet dan UPDATE_TOKEN in /etc/homebaseos/homebaseos.env.",
   "The branch {branch} doesn't exist in {repo}.": "De branch {branch} bestaat niet in {repo}.",
+  "Dev versions (branch {branch})": "Dev-versies (branch {branch})",
+  "Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:": "Nu bijwerken installeert de nieuwste code van {branch}. In een terminal (SSH, of de terminal rechtsboven) kan het ook:",
+  "Back to official versions: the same command with main.": "Terug naar de officiële versies: hetzelfde commando met main.",
 };
