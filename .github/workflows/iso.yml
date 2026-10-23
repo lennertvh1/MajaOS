@@ -1,26 +1,57 @@
-# Bouwt de installatie-ISO van HomeBaseOS en zet ze bij de release op GitHub.
-# - Vanzelf bij elke nieuwe release (tag zoals v0.3.0).
-# - Met de hand: Actions > "ISO bouwen" > Run workflow, en vul de tag in van een bestaande release.
-name: ISO bouwen
+# Maakt de release van HomeBaseOS op GitHub en zet de installatie-ISO erbij.
+# - Vanzelf bij elke gepushte tag (bv. v0.5.0): de release krijgt als titel en tekst het bericht van de tag
+#   (git tag -a v0.5.0 -F notities.md: eerste regel = titel, de rest = tekst in Markdown). Een tag met een - (v0.6.0-beta.1) wordt een testversie.
+# - Een release die je zelf op github.com maakt, krijgt ook een ISO.
+# - Met de hand: Actions > "Release en ISO" > Run workflow, en vul de tag in.
+# Een release die deze workflow zelf maakt, start geen andere workflows; daarom zit de ISO hier mee in.
+name: Release en ISO
 
 on:
+  push:
+    tags: ["v*"]
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag van een bestaande release, bv. v0.3.0 (de ISO komt bij die release)"
+        description: "Tag, bv. v0.5.0 (bestaat de release nog niet, dan wordt ze gemaakt)"
         required: true
 
 permissions:
   contents: write
 
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+
 jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Versie controleren
+        run: |
+          v="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json | head -1)"
+          [ "v$v" = "$TAG" ] || { echo "::error::package.json heeft versie $v, maar de tag is $TAG. Zet ze gelijk."; exit 1; }
+
+      - name: Release maken (als ze nog niet bestaat)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "De release $TAG bestaat al."; exit 0; fi
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          title="$(git tag -l --format='%(contents:subject)' "$TAG")"
+          git tag -l --format='%(contents:body)' "$TAG" > notes.md
+          [ -s notes.md ] || echo "Zie de wijzigingen in de commits." > notes.md
+          pre=""; case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" --verify-tag --title "${title:-$TAG}" --notes-file notes.md $pre
+
   iso:
+    needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,11 +59,6 @@ jobs:
 
       - name: Gereedschap installeren
         run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio
-
-      - name: Versie controleren
-        run: |
-          v="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json | head -1)"
-          [ "v$v" = "$TAG" ] || { echo "::error::package.json heeft versie $v, maar de tag is $TAG. Zet ze gelijk."; exit 1; }
 
       - name: Debian-ISO bewaren tussen runs
         uses: actions/cache@v6

@@ -32,7 +32,7 @@ Bij elke release staat een installatie-ISO: `homebaseos-<versie>-amd64.iso`. Dat
 
 Taal en toetsenbord staan op Nederlands (België) en Belgisch AZERTY; de tijdzone op Europe/Brussels (aan te passen in de wizard). Mislukt de installatie bij de eerste opstart, dan staat dat op het scherm; het logboek is `/var/log/homebaseos-firstboot.log` en `sudo systemctl restart homebaseos-firstboot` probeert opnieuw.
 
-**De ISO zelf bouwen.** Dat doet GitHub Actions bij elke release (`.github/workflows/iso.yml`), of met de hand via *Actions > ISO bouwen > Run workflow*. Op een Linux-pc: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (de ISO komt in `dist/`).
+**De ISO zelf bouwen.** Dat doet GitHub Actions bij elke nieuwe versie: een gepushte tag `vX.Y.Z` maakt de release en zet de ISO erbij (`.github/workflows/iso.yml`), of met de hand via *Actions > Release en ISO > Run workflow*. Op een Linux-pc: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (de ISO komt in `dist/`).
 
 ## Installeren met de hand
 
