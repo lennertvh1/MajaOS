@@ -1,4 +1,5 @@
-# Creates the HomeBaseOS release on GitHub and attaches the installation ISO.
+# Creates the HomeBaseOS release on GitHub and attaches the installation ISO. Only for tags on main (official versions);
+# the dev branch never gets releases (see test.yml for its checks and test ISO).
 # - Automatically for every pushed tag (e.g. v0.5.0): the release gets the tag message as title and text
 #   (git tag -a v0.5.0 -F notes.md: first line = title, the rest = text in Markdown). A tag with a - (v0.6.0-beta.1) becomes a pre-release.
 # - A release you create yourself on github.com also gets an ISO.
@@ -30,6 +31,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Only from main
+        run: |
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main \
+            || { echo "::error::$TAG is not on main. Official releases come from main only; test builds are on the dev branch."; exit 1; }
 
       - name: Check the version
         run: |

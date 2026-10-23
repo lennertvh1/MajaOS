@@ -4658,22 +4658,24 @@
     try { u = await api.get('/api/update'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     if (settingsTab() !== 'update') return;
     S.update = u;
+    // A development build: the version plus the commit it was built from.
+    const cur = u.build ? `${u.current} (${u.build.branch} · ${String(u.build.commit).slice(0, 7)})` : u.current;
     const mark = '<span class="upd-logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg></span>';
     const checked = u.checked ? t('Last checked: {when}', { when: esc(new Date(u.checked).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() })) }) : t('Not checked for updates yet.');
     const notes = (r) => `<article class="notes">
         <div class="notes-head"><h3>${t('Version {version}', { version: esc(r.version) })}${r.name && r.name.replace(/^v/, '') !== r.version ? ' · ' + esc(r.name) : ''}
-          ${r.prerelease ? ` <span class="pill warn">${t('Beta')}</span>` : ''}</h3>
+          ${r.dev ? ` <span class="pill warn">${t('Development')}</span>` : r.prerelease ? ` <span class="pill warn">${t('Beta')}</span>` : ''}</h3>
           <span class="muted small">${esc(longDate(r.published))}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">${t('On GitHub')}</a>` : ''}</span></div>
         <div class="md">${r.notes.trim() ? mdToHtml(r.notes) : `<p class="muted">${t('No release notes for this version.')}</p>`}</div></article>`;
     const card = u.updateAvailable ? `
       <div class="upd-card new">${mark}<div class="upd-text"><b>${t('HomeBaseOS {version} is available', { version: esc(u.latest.version) })}</b>
-        <div class="muted small">${t('You have version {current}.', { current: esc(u.current) })} ${u.newer.length > 1 ? t('There are {n} new versions.', { n: u.newer.length }) : ''}</div>
+        <div class="muted small">${t('You have version {current}.', { current: esc(cur) })} ${u.newer.length > 1 ? t('There are {n} new versions.', { n: u.newer.length }) : ''}</div>
         <div class="muted small">${checked}</div></div>
         <div class="btn-row"><button class="btn" type="button" data-sw="check">${t('Check now')}</button>
           <button class="btn primary" type="button" data-sw="install"${u.install && u.install.ok ? '' : ' disabled'}>${t('Update now')}</button></div></div>
       ${u.install && !u.install.ok ? `<p class="muted small" style="margin-top:-6px">${esc(tr(u.install.reason))}</p>` : ''}` : `
       <div class="upd-card">${mark}<div class="upd-text"><b>${t('HomeBaseOS is up to date')}</b>
-        <div class="muted small">${t('Version {current}', { current: esc(u.current) })}</div><div class="muted small">${checked}</div></div>
+        <div class="muted small">${t('Version {current}', { current: esc(cur) })}</div><div class="muted small">${checked}</div></div>
         <button class="btn" type="button" data-sw="check">${t('Check now')}</button></div>`;
     el.innerHTML = card +
       (u.error ? `<div class="upd-error" role="alert">${esc(tr(u.error))}</div>` : '') +
@@ -4688,8 +4690,9 @@ sudo ./install.sh</pre></div>`}` : '') +
       <h2 class="pane-title">${t('Settings')}</h2>
       <div class="form">
         <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Check for updates automatically (every 12 hours)')}</label>
-        <div class="choice-row" role="radiogroup" aria-label="${t('Kind of versions')}">${[['stable', t('Stable versions only')], ['beta', t('Include beta versions')]].map(([k, name]) => `
+        <div class="choice-row" role="radiogroup" aria-label="${t('Kind of versions')}">${[['stable', t('Stable versions only')], ['beta', t('Include beta versions')], ['dev', t('Development (branch {branch})', { branch: u.branch || 'dev' })]].map(([k, name]) => `
           <label class="choice"><input type="radio" name="updateChannel" value="${k}"${k === u.channel ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
+        ${u.channel === 'dev' ? `<p class="muted small">${t('Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.', { branch: esc(u.branch || 'dev') })}</p>` : ''}
         <p class="muted small">${t('HomeBaseOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
     if (u.running) { updateProgress(el); return; } // an update is already running (e.g. after refreshing the page)
@@ -4710,6 +4713,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       const n = e.target.name; if (n !== 'updateCheck' && n !== 'updateChannel') return;
       try {
         await api.post('/api/settings', n === 'updateCheck' ? { updateCheck: e.target.checked } : { updateChannel: e.target.value });
+        if (n === 'updateChannel') await api.post('/api/update/check').catch(() => {}); // another channel: look right away
         toast(t('Saved.'));
         await loadUpdate(); updatePane(el);
       } catch (ex) { toast(ex.message, true); }

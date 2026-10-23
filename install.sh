@@ -112,6 +112,7 @@ fi
 step "Installing HomeBaseOS in $APP"
 mkdir -p "$APP" "$ETC" /opt/stacks
 rm -rf "$APP/lib" "$APP/public" "$APP/deploy"
+rm -f "$APP/build.json"   # marker of a development build; deploy/install-branch.sh writes it again after this script
 cp -r "$SRC/server.js" "$SRC/package.json" "$SRC/lib" "$SRC/public" "$SRC/deploy" "$APP/"
 # No password: you create an account yourself in the browser the first time (the welcome wizard).
 NEW_INSTALL=0

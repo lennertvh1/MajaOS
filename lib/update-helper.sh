@@ -6,7 +6,7 @@
 # Arguments: <folder with the new version> <app folder> <status file> <port> <new version> <old version> <folder for the backup copy>
 set -u
 NEW="$1"; APP="$2"; STATUS="$3"; PORT="$4"; VERSION="$5"; OLD="$6"; BACKUP="$7"
-PARTS="server.js package.json lib public deploy"
+PARTS="server.js package.json build.json lib public deploy"  # build.json: only for development builds (channel dev)
 
 # Write progress to the status file (JSON). HomeBaseOS reads it and the browser shows it.
 st() { # step percent state message [reason]

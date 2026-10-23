@@ -1994,4 +1994,10 @@ window.TB_LANG.nl = {
   "ZFS keeps about 3% for itself; compression often gives you more back.": "ZFS houdt ongeveer 3% achter voor zichzelf; compressie maakt er vaak weer meer van.",
   "ZFS reported an error: {error}": "ZFS gaf een fout: {error}",
   "zstd (saves more, a bit slower)": "zstd (bespaart meer, iets trager)",
+  "Development": "Ontwikkeling",
+  "Development (branch {branch})": "Ontwikkeling (branch {branch})",
+  "Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.": "Ontwikkeling: elke nieuwe commit op de branch {branch} is een update. Alleen voor een testserver: deze versies zijn nog niet getest.",
+  "Choose stable, beta or development.": "Kies stabiel, bèta of ontwikkeling.",
+  "The branches of {repo} can't be read. Is the repository private? Then set UPDATE_TOKEN in /etc/homebaseos/homebaseos.env.": "De branches van {repo} kunnen niet gelezen worden. Is de repository privé? Zet dan UPDATE_TOKEN in /etc/homebaseos/homebaseos.env.",
+  "The branch {branch} doesn't exist in {repo}.": "De branch {branch} bestaat niet in {repo}.",
 };

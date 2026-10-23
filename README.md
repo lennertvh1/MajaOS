@@ -225,6 +225,23 @@ npm test       # tests for all parsers (virsh, zpool, zfs, lsblk, Docker) and mo
 **Run and Debug** has the same options. You use `npm run dev` on the server itself, with a `.env` (see `.env.example`).
 Updating on the server: copy the folder again and run `sudo ./install.sh`.
 
+### Branches, tests and test versions
+
+- Work happens on the **`dev`** branch. **`main`** only contains official versions, and only tags on `main` become releases (with an ISO).
+- Every push to `dev` (and `main`) runs the tests on GitHub (*Actions > Test*). When the installer changes on `dev`, that run also builds a **test ISO**, which you download from the run (kept 14 days). You can also start it by hand: *Actions > Test > Run workflow*.
+- A **test server** follows `dev` directly, without releases: *Settings > Software update > Development*. Every new commit on `dev` then shows up as an update (`0.6.0+dev.abc1234`, with the commit messages as notes) and *Update now* installs it, with the same backup copy and rollback as a normal update.
+- The first time (a server on 0.5.0 doesn't know that channel yet), on the test server:
+
+  ```bash
+  curl -fsSL -H "Authorization: Bearer $(sudo sed -n 's/^UPDATE_TOKEN=//p' /etc/homebaseos/homebaseos.env)" \
+    -H "Accept: application/vnd.github.raw" -o install-branch.sh \
+    "https://api.github.com/repos/lennertvh1/homebaseos/contents/deploy/install-branch.sh?ref=dev"
+  sudo bash install-branch.sh dev
+  ```
+
+  `sudo bash /opt/homebaseos/deploy/install-branch.sh main` puts the server back on official releases.
+- Releasing: bump the version in `package.json` on `dev`, merge `dev` into `main`, push, and push a tag `vX.Y.Z` on `main` (see *Software update*).
+
 ### Translations
 
 The English text in the code is the key (like gettext): `t('Remove {name}?', { name })` in `public/app.js`. Translations are in `public/lang/<code>.js`; `public/lang/languages.js` lists the languages and loads them.
@@ -324,7 +341,7 @@ In **Settings > Security** you turn the terminal on or off, and choose whether H
 
 ## Software update
 
-**Settings > Software update** shows whether there is a new version of HomeBaseOS, with the release notes of each new version. HomeBaseOS checks every 12 hours (or right away with *Check now*) among the releases on GitHub. If there is an update, you get a notification and a red dot on the gear. With *Include beta versions* you also see pre-releases.
+**Settings > Software update** shows whether there is a new version of HomeBaseOS, with the release notes of each new version. HomeBaseOS checks every 12 hours (or right away with *Check now*) among the releases on GitHub. If there is an update, you get a notification and a red dot on the gear. With *Include beta versions* you also see pre-releases; *Development* follows the `dev` branch (for a test server, see *Branches, tests and test versions*).
 
 The repository is private. So create a **fine-grained token** on GitHub (Settings > Developer settings > Personal access tokens) with access to `homebaseos` only and read access to *Contents*, and put it in `/etc/homebaseos/homebaseos.env`:
 
@@ -336,7 +353,7 @@ Then `sudo systemctl restart homebaseos`.
 
 With **Update now** HomeBaseOS does everything itself, with a progress bar: download, check, a backup copy of the current version, install, restart and test. If the new version doesn't start within 45 seconds, HomeBaseOS puts the previous version back automatically. Your apps and VMs keep running; your settings aren't touched. What happened is in `journalctl -u 'homebaseos-update-*'`.
 
-Making a release: put the new number in `package.json`, commit, and push a tag `v<number>` with the release notes as the tag message (`git tag -a v0.6.0 --cleanup=verbatim -F notes.md`, first line = title). The workflow creates the release and attaches the ISO.
+Making a release: put the new number in `package.json` on `dev`, merge `dev` into `main`, and push a tag `v<number>` on `main` with the release notes as the tag message (`git tag -a v0.6.0 --cleanup=verbatim -F notes.md`, first line = title). The workflow creates the release and attaches the ISO; tags that aren't on `main` are refused.
 
 If you work from a git folder on the server, you update with `git pull` and `sudo ./install.sh`.
 

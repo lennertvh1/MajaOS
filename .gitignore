@@ -16,3 +16,6 @@ public/_*.html
 # Building the ISO (iso/build-iso.sh)
 dist/
 .iso-cache/
+
+# Installed development build (written by the updater, channel dev)
+/build.json

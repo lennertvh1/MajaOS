@@ -85,11 +85,25 @@
     { version: '0.2.0', name: 'v0.2.0', prerelease: false, published: '2026-10-01T12:00:00Z',
       notes: '## New\n\n- App store with the Unraid Community Apps catalogue\n- Disk bays, ZFS pools and shared folders\n- Terminal on the server' },
   ].map((r) => ({ ...r, url: 'https://github.com/lennertvh1/homebaseos/releases/tag/v' + r.version }));
+  // Channel dev, like devSummary() in lib/release.js: the newest commit of the dev branch.
+  const DEV_HEAD = { sha: 'c0ffee15deadbeef0123456789abcdef01234567', version: '0.6.0', date: new Date(Date.now() - 3 * 3600000).toISOString(),
+    commits: [['c0ffee15deadbeef0123456789abcdef01234567', 'Apps: progress bar while installing'], ['b4d5e6f70123456789abcdef0123456789abcdef', 'Translate the whole project to English']] };
+  function updDev() {
+    const cur = upd.current || '0.2.0', short = DEV_HEAD.sha.slice(0, 7);
+    const latest = { version: DEV_HEAD.version + '+dev.' + short, tag: DEV_HEAD.sha, commit: DEV_HEAD.sha, pkgVersion: DEV_HEAD.version, dev: true, prerelease: true,
+      name: DEV_HEAD.commits[0][1], notes: DEV_HEAD.commits.map(([h, m]) => `- ${m} (${h.slice(0, 7)})`).join('\n'),
+      url: 'https://github.com/lennertvh1/homebaseos/commit/' + DEV_HEAD.sha, published: DEV_HEAD.date };
+    const updateAvailable = !upd.build || upd.build.commit !== DEV_HEAD.sha;
+    return { repo: 'lennertvh1/homebaseos', token: true, auto: upd.auto, channel: 'dev', branch: 'dev', checked: upd.checked, error: null, current: cur, build: upd.build || null,
+      latest, updateAvailable, newer: updateAvailable ? [latest] : [], installed: updateAvailable ? null : latest, history: [],
+      install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
+  }
   function updGet() {
+    if (upd.channel === 'dev') return updDev();
     const list = demoReleases.filter((r) => upd.channel === 'beta' || !r.prerelease), cur = upd.current || '0.2.0';
     const i = Math.max(0, list.findIndex((r) => r.version === cur)), newer = list.slice(0, i);
     return { repo: 'lennertvh1/homebaseos', token: true, auto: upd.auto, channel: upd.channel, checked: upd.checked, error: null, current: cur,
-      latest: list[0], updateAvailable: newer.length > 0, newer, installed: list[i] || null, history: list.slice(i),
+      build: upd.build || null, latest: list[0], updateAvailable: newer.length > 0, newer, installed: list[i] || null, history: list.slice(i),
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
   // Update now, simulated: the same steps as lib/updater.js + lib/update-helper.sh, with a restart during which the server is briefly gone.
@@ -105,7 +119,11 @@
     const fill = (m) => m.replace('{from}', j.from).replace('{version}', j.version);
     const out = { state: step === 'done' ? 'done' : 'running', step, percent: pct, version: j.version, from: j.from, message: fill(msg || 'Downloading version {version}…') };
     if (step === 'download') { const total = 1.9 * 1024 * 1024; out.bytes = Math.round(total * Math.min(1, ms / 4000)); out.total = total; out.percent = Math.round(2 + 38 * out.bytes / total); }
-    if (step === 'done' && !j.finished) { j.finished = true; upd.current = j.version; }
+    if (step === 'done' && !j.finished) {
+      j.finished = true;
+      const dev = String(j.version).match(/^(.+)\+dev\.([0-9a-f]+)$/);
+      if (dev) { upd.current = dev[1]; upd.build = { branch: 'dev', commit: DEV_HEAD.sha, date: DEV_HEAD.date }; } else { upd.current = j.version; upd.build = null; }
+    }
     return out;
   }
 
@@ -1703,7 +1721,7 @@
     if (path === '/api/update/check') { await wait(rnd(600, 1200)); upd.checked = new Date().toISOString(); return updGet(); }
     if (path === '/api/settings' && (body.updateCheck != null || body.updateChannel != null)) {
       if (body.updateCheck != null) upd.auto = !!body.updateCheck;
-      if (body.updateChannel != null) { if (!['stable', 'beta'].includes(body.updateChannel)) throw err('Choose stable or beta.'); upd.channel = body.updateChannel; }
+      if (body.updateChannel != null) { if (!['stable', 'beta', 'dev'].includes(body.updateChannel)) throw err('Choose stable, beta or development.'); upd.channel = body.updateChannel; }
       return { language: demoLang(), clock: demoClock(), ...demoSecurity, updateCheck: upd.auto, updateChannel: upd.channel };
     }
     if (path === '/api/settings' && body.clock != null) {

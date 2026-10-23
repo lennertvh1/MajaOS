@@ -79,3 +79,20 @@ test('update now: checks and progress', async () => {
   if (can.ok) await assert.rejects(upd.start('0.3.0'), /already running/);
   else await assert.rejects(upd.start('0.3.0'), (e) => e.status === 409);
 });
+
+test('channel dev: the newest commit of the dev branch', () => {
+  const sha = 'c0ffee15deadbeef0123456789abcdef01234567';
+  const dev = { sha, version: '0.6.0', message: 'Apps: progress bar\n\nDetails', date: '2026-10-23T10:00:00Z', url: 'https://github.com/a/b/commit/' + sha,
+    commits: [{ sha, message: 'Apps: progress bar' }, { sha: 'b'.repeat(40), message: 'English' }] };
+  const s = rel.devSummary(dev, null, '0.5.0');
+  assert.equal(s.updateAvailable, true);
+  assert.equal(s.latest.version, '0.6.0+dev.c0ffee1');
+  assert.equal(s.latest.name, 'Apps: progress bar');
+  assert.equal(s.latest.notes, '- Apps: progress bar (c0ffee1)\n- English (bbbbbbb)');
+  assert.ok(s.latest.dev && s.latest.prerelease);
+  // The same commit installed: up to date.
+  const same = rel.devSummary(dev, { branch: 'dev', commit: sha }, '0.6.0');
+  assert.equal(same.updateAvailable, false); assert.deepEqual(same.newer, []); assert.equal(same.installed.commit, sha);
+  // Nothing fetched yet.
+  assert.equal(rel.devSummary(null, null, '0.5.0').updateAvailable, false);
+});
