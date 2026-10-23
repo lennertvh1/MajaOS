@@ -2014,4 +2014,11 @@ window.TB_LANG.nl = {
   "{ip} is already used by {app}. Choose another address.": "{ip} wordt al gebruikt door {app}. Kies een ander adres.",
   "A fixed IP address doesn't work with the host network or without a network.": "Een vast IP-adres werkt niet met het host-netwerk of zonder netwerk.",
   "This app shares its compose file with {list}. A fixed address on the default network would cut it off from them; give the services a network with its own subnet in the code instead.": "Deze app deelt haar compose-bestand met {list}. Een vast adres op het standaardnetwerk zou haar van die diensten afsnijden; geef de diensten in de code liever een netwerk met een eigen subnet.",
+  "Own address in my home network": "Eigen adres in mijn thuisnetwerk",
+  "Own address in my home network ({name})": "Eigen adres in mijn thuisnetwerk ({name})",
+  "Looking for a free address…": "Vrij adres zoeken…",
+  "Free in {subnet} (through {card}). Reserve this address in your router, so it doesn't give it to another device.": "Vrij in {subnet} (via {card}). Reserveer dit adres in je router, zodat die het niet aan een ander toestel geeft.",
+  "HomeBaseOS can't find your home network. Create a macvlan network in Settings → Docker networks.": "HomeBaseOS vindt je thuisnetwerk niet. Maak een macvlan-netwerk bij Instellingen → Docker-netwerken.",
+  "The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. HomeBaseOS sets up the network the first time. The server itself can't reach the app at that address (a Linux limitation); your other devices can.": "De app krijgt een eigen adres in je thuisnetwerk, zoals een apart toestel, en is daar bereikbaar op haar eigen poorten. HomeBaseOS zet het netwerk de eerste keer zelf op. De server zelf kan de app op dat adres niet bereiken (een beperking van Linux); je andere toestellen wel.",
+  "HomeBaseOS can't find the network card of your home network (there is no default route). Create a macvlan network yourself in Settings → Docker networks.": "HomeBaseOS vindt de netwerkkaart van je thuisnetwerk niet (er is geen standaardroute). Maak zelf een macvlan-netwerk bij Instellingen → Docker-netwerken.",
 };

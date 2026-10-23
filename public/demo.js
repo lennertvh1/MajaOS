@@ -375,6 +375,7 @@
   function setAppNet(a, network, ip) {
     if (ip && (network === 'host' || network === 'none')) throw err('A fixed IP address doesn\'t work with the host network or without a network.');
     if (ip && (!network || network === 'bridge')) network = homebaseNet().name;
+    if (network === '@lan') network = (dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)) || {}).name || 'lan';
     if (ip && Object.entries(appNet).some(([app, x]) => x.ip === ip && app !== a.name)) {
       throw err(ip + ' is already used by ' + Object.entries(appNet).find(([app, x]) => x.ip === ip && app !== a.name)[0] + '. Choose another address.', 409);
     }
@@ -1659,6 +1660,13 @@
     if (path === '/api/about') return demoAbout();
     if (path === '/api/network') { tickNet(); return copy(net); }
     if (path === '/api/docker-networks') return dnetList();
+    if (path === '/api/docker-networks/lan') { // like lanInfo() in lib/dockernet.js
+      await wait(rnd(300, 700));
+      const lan = dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)), used = new Set(Object.values(appNet).map((x) => x.ip));
+      let suggestion = null;
+      for (let i = 194; i < 223 && !suggestion; i++) if (!used.has('192.168.1.' + i)) suggestion = '192.168.1.' + i;
+      return { choice: '@lan', network: lan ? lan.name : null, home: { name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }, ipRange: lan ? lan.ipRange : '192.168.1.224/27', suggestion };
+    }
     if (path === '/api/layout') return copy(layout);
     if (path === '/api/shares') return sharesGet();
     if (path === '/api/overview') return overview();

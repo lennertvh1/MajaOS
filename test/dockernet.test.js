@@ -140,3 +140,9 @@ test('the shared homebase network: a free subnet and a free address', () => {
   assert.throws(() => dn.checkFreeIp('172.30.255.255', n), /can't be used/);
   assert.throws(() => dn.checkFreeIp('10.0.0.5', n), /not in this network's subnet/);
 });
+
+test('own address in the home network: the IP range Docker may hand out', () => {
+  assert.equal(dn.lanRange('10.10.10.0/24'), '10.10.10.224/27');
+  assert.equal(dn.lanRange('192.168.0.0/16'), '192.168.255.224/27');
+  assert.equal(dn.lanRange('10.0.0.0/28'), null); // too small
+});

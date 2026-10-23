@@ -1113,8 +1113,9 @@
     if (f.network === '*') out.unshift({ value: '*', label: t('Custom networks ({list})', { list: f.networks.join(', ') }) });
     const pn = f.projectNetworks || [];
     pn.filter((x) => !x.external).forEach((x) => out.push({ value: x.key, label: t('{name} (from this compose file)', { name: x.key }) }));
+    if (!dockerNets.some(ownNet)) out.push({ value: LAN_CHOICE, label: t('Own address in my home network') });
     dockerNets.filter((n) => !pn.some((x) => !x.external && x.name === n.name)).forEach((n) =>
-      out.push({ value: n.name, label: [n.name, n.driver, n.subnet].filter(Boolean).join(' · ') }));
+      out.push({ value: n.name, label: netLabel(n) }));
     if (f.network && !out.some((o) => o.value === f.network)) out.push({ value: f.network, label: f.network });
     return out;
   }
@@ -1135,7 +1136,7 @@
           ${f.networkOther ? '' : `<p class="muted small" style="margin-top:-6px">${t('Create new networks in Settings → Docker networks.')}</p>`}
           ${f.network === 'host' ? `<p class="lead small">${t('With the host network the app listens directly on its own ports and Docker ignores the ports below. Another port only works through the app\'s own port setting, e.g. a variable like WEBUI_PORT; then set the same port below, so the WebUI follows.')}</p>` : ''}
           ${['host', 'none', '*'].includes(f.network) || f.networkOther ? '' : (() => {
-            const n = dockerNets.find((x) => x.name === f.network), ownIp = n && /^(macvlan|ipvlan)$/.test(n.driver);
+            const n = dockerNets.find((x) => x.name === f.network), ownIp = f.network === LAN_CHOICE || ownNet(n);
             return `<label class="fld"><span>${t('Fixed IP address (optional)')}</span><input class="field" data-cf-top="ip" value="${esc(f.ip || '')}" spellcheck="false" autocomplete="off"
               placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : f.network === '' ? '172.30.0.10' : '')}">
               <small>${ownIp ? t('The app\'s address in your home network. Empty = Docker picks one from the network\'s IP range.')
@@ -1149,6 +1150,9 @@
         <div class="cf-add"><span class="muted small">${t('Add:')}</span>
           ${CF_KINDS.map(([kind, , one]) => `<button class="btn sm" type="button" data-cf-add="${kind}">+ ${t(one)}</button>`).join('')}</div>`;
       if (focus) { const x = $(`[data-cf^="${focus}:"]`, el); if (x) x.focus(); }
+      // Own address in the home network: suggest a free one.
+      const ipIn = $('[data-cf-top="ip"]', el);
+      if (ipIn && (f.network === LAN_CHOICE || ownNet(dockerNets.find((x) => x.name === f.network)))) suggestLanIp(ipIn, ipIn.parentElement.querySelector('small'));
     };
     draw();
     el.addEventListener('input', (e) => {
@@ -2348,11 +2352,29 @@
   // Does the app get ports on the server? Not with host, no network or its own address (macvlan/ipvlan).
   function storeNetPorts(d, value) {
     const n = (d.networks || []).find((x) => x.name === value);
-    return !['host', 'none'].includes(value) && !(n && /^(macvlan|ipvlan)$/.test(n.driver));
+    return !['host', 'none', LAN_CHOICE].includes(value) && !ownNet(n);
   }
+  // Fill in a free address in the home network (once per form) when "own address" is chosen and the field is still empty.
+  async function suggestLanIp(input, small) {
+    if (input.value.trim() || input.dataset.suggested) return;
+    input.dataset.suggested = '1';
+    small.textContent = t('Looking for a free address…');
+    try {
+      const r = await api.get('/api/docker-networks/lan');
+      if (!input.value.trim() && r.suggestion) { input.value = r.suggestion; input.dispatchEvent(new Event('input', { bubbles: true })); }
+      small.textContent = r.home ? t('Free in {subnet} (through {card}). Reserve this address in your router, so it doesn\'t give it to another device.', { subnet: r.home.subnet, card: r.home.name })
+        : t('HomeBaseOS can\'t find your home network. Create a macvlan network in Settings → Docker networks.');
+    } catch (e) { small.textContent = e.message; }
+  }
+  // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (HomeBaseOS creates it on install).
+  const LAN_CHOICE = '@lan';
+  const ownNet = (n) => n && /^(macvlan|ipvlan)$/.test(n.driver);
+  const netLabel = (n) => (ownNet(n) ? t('Own address in my home network ({name})', { name: n.name }) : [n.name, n.driver, n.subnet].filter(Boolean).join(' · '));
   function storeNetHtml(d) {
+    const nets = d.networks || [];
     const opts = [['bridge', t('Default (bridge)')], ['host', t('Host (the server\'s network)')],
-      ...(d.networks || []).map((n) => [n.name, [n.name, n.driver, n.subnet].filter(Boolean).join(' · ')])];
+      ...(nets.some(ownNet) ? [] : [[LAN_CHOICE, t('Own address in my home network')]]),
+      ...nets.map((n) => [n.name, netLabel(n)])];
     return `<h3>${t('Network')}</h3><div class="form">
       <label class="fld"><span>${t('Network')}</span><select class="field" name="__network">${opts.map(([v, label]) =>
         `<option value="${esc(v)}"${v === d.networkDefault ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
@@ -2489,14 +2511,17 @@
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
       // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared homebase network).
-      const ipOk = v === 'bridge' || !!(n && n.subnet);
+      const lan = v === LAN_CHOICE || ownNet(n);
+      const ipOk = v === 'bridge' || lan || !!(n && n.subnet);
       $('[data-store-ip]', form).hidden = !ipOk;
       if (!ipOk) form.elements.__ip.value = '';
       form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : v === 'bridge' ? '172.30.0.10' : '';
       $('[data-store-ip] small', form).textContent = v === 'bridge' ? t('Empty = Docker picks an address. With an address the app joins the HomeBaseOS network homebase (172.30.0.0/16), where apps also find each other by name.')
         : t('Empty = Docker picks an address.');
+      if (lan) suggestLanIp(form.elements.__ip, $('[data-store-ip] small', form));
       $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You added an extra port, so the app now uses the default network (bridge): only there Docker can publish extra ports.')
         : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
+        : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. HomeBaseOS sets up the network the first time. The server itself can\'t reach the app at that address (a Linux limitation); your other devices can.')
         : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one).')
         : n ? t('Apps in the same network find each other by name.') : t('Create new networks in Settings → Docker networks.');
     };
