@@ -950,3 +950,19 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .check-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .user-edit { grid-column: 1 / -1; padding-top: 4px; }
 @media (max-width: 560px) { .rights th:nth-child(3), .rights td:nth-child(3) { display: none; } }
+
+/* ---- apps installeren: geavanceerd */
+.adv-switch { align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); }
+.adv-switch input { margin-top: 2px; }
+.adv-switch > span { display: grid; gap: 2px; }
+.adv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.adv-bar .seg button[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* Voortgang van een installatie */
+.job .job-bar { height: 10px; margin: 4px 0 0; }
+.job .progress-note { font-variant-numeric: tabular-nums; }
+.job-log { margin-top: 10px; }
+.job-log summary { cursor: pointer; font-size: 14px; color: var(--muted); padding: 4px 0; }
+.job-log summary:hover { color: var(--text); }
+.job-log .logs { margin-top: 8px; white-space: pre; }
+.job #jobBtns { margin-top: 14px; }

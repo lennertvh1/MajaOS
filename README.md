@@ -157,6 +157,12 @@ Omdat de templates voor Unraid gemaakt zijn, vertaalt HomeBaseOS ze bij het inst
 | netwerk `br0` of eigen netwerken | een Docker-netwerk met dezelfde naam als dat bestaat, anders het standaardnetwerk (met een waarschuwing). Bij het installeren kies je zelf een netwerk en eventueel een vast IP-adres. |
 | Unraid-mappen zoals `/usr/local/emhttp` en `/boot` | weggelaten (met een waarschuwing) |
 
+### Map voor de gegevens en Geavanceerd
+
+Bij elke app kies je bij **Map voor de gegevens** waar ze haar instellingen en gegevens bewaart (standaard `<appgegevens>/<naam>`, met je bestaande datasets als voorstel). Alle mappen van de app die daarin liggen, verhuizen mee; elke map kan je ook apart aanpassen.
+
+Zet je **Geavanceerd** aan, dan krijg je het volledige containerformulier: image, herstarten, netwerk, privileged, en zelf poorten, mappen, variabelen, apparaten en labels toevoegen. Met de knop **Code** zie en bewerk je het compose-bestand zelf; precies dat bestand wordt geïnstalleerd (Docker Compose controleert het eerst). Velden en code blijven gelijk als je wisselt, en opties die het formulier niet kent (bv. de GPU) blijven staan. Bij een eigen app staan *Velden* en *Code* er altijd.
+
 ### Eigen app
 
 Staat een app niet in de appstore? Kies in de appstore **Eigen app** en plak de naam van het image (bv. `louislam/uptime-kuma`) of een link naar de pagina ervan (Docker Hub, GitHub-pakketten, Quay). HomeBaseOS leest bij de registry welke poorten en mappen de app gebruikt, zonder het image al te downloaden, en vult het formulier in: een vrije poort, mappen in `<appgegevens>/<naam>`, PUID/PGID en de tijdzone. Je past alles aan in hetzelfde formulier als bij de instellingen van een app en installeert. Een eigen app kan je later verwijderen zoals een app uit de appstore.

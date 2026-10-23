@@ -127,3 +127,25 @@ test('namen en images', () => {
   assert.equal(s.imageBase('docker.io/library/nginx:1.27'), 'nginx');
   assert.equal(s.imageBase('ghcr.io/immich-app/immich-server:release'), 'ghcr.io/immich-app/immich-server');
 });
+
+test('docker compose pull: één regel per laag, met voortgang', () => {
+  const job = { lines: [], keys: new Map(), layers: {}, phase: 'pull', done: false };
+  const out = [
+    ' jellyfin Pulling ',
+    ' a2318d6c47ec Pulling fs layer ', ' 3f4ca61aafcd Pulling fs layer ', ' 3f4ca61aafcd Already exists ',
+    ' a2318d6c47ec Downloading [=====>                                             ]  12.4MB/31.2MB',
+    ' a2318d6c47ec Downloading [=========================>                         ]  15.6MB/31.2MB',
+  ];
+  out.forEach((l) => s.jobLog(job, l));
+  assert.deepEqual(job.lines, ['jellyfin Pulling', 'a2318d6c47ec Downloading [=========================>                         ]  15.6MB/31.2MB', '3f4ca61aafcd Already exists']);
+  let p = s.jobProgress(job);
+  assert.equal(p.layers, 2); assert.equal(p.layersDone, 1); assert.equal(p.downloaded, 15.6e6); assert.equal(p.size, 31.2e6);
+  assert.equal(p.percent, 3 + Math.round(82 * (1 + 0.75 * 0.5) / 2));
+  ['a2318d6c47ec Download complete', 'a2318d6c47ec Extracting [==>  ]  1.2MB/31.2MB', 'a2318d6c47ec Pull complete', 'jellyfin Pulled'].forEach((l) => s.jobLog(job, l));
+  assert.deepEqual(job.lines, ['jellyfin Pulled', 'a2318d6c47ec Pull complete', '3f4ca61aafcd Already exists']);
+  p = s.jobProgress(job); assert.equal(p.percent, 85); assert.equal(p.downloaded, 31.2e6);
+  job.phase = 'start';
+  ['Network jellyfin_default  Creating', 'Network jellyfin_default  Created', 'Container jellyfin  Creating', 'Container jellyfin  Started'].forEach((l) => s.jobLog(job, l));
+  assert.deepEqual(job.lines.slice(3), ['Network jellyfin_default  Created', 'Container jellyfin  Started']);
+  assert.equal(s.jobProgress(job).phase, 'start');
+});

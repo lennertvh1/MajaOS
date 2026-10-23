@@ -106,6 +106,16 @@ test('WebUI met een eigen adres in het thuisnetwerk', () => {
   assert.equal(webui({}, [], null, '192.168.1.200'), null);
 });
 
+test('WebUI op bridge en host', () => {
+  // Template voor host (poort 8123) op bridge gezet met één gepubliceerde poort: die poort.
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 8124, private: 80, type: 'TCP' }]), 'http://[IP]:8124');
+  // Meerdere poorten en geen die past: de poort van het sjabloon.
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 1, private: 2, type: 'TCP' }, { public: 3, private: 4, type: 'TCP' }]), 'http://[IP]:8123');
+  // TCP gaat voor UDP met dezelfde poort.
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:53]/' }, [{ public: 5353, private: 53, type: 'UDP' }, { public: 5300, private: 53, type: 'TCP' }]), 'http://[IP]:5300/');
+  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [], null, null, true), 'http://[IP]:8123');
+});
+
 test('appstore: extra poorten, en niet bij host of een eigen adres', () => {
   const app = { id: 'x', name: 'Plex', image: 'plexinc/pms-docker', network: 'host', extraParams: '', postArgs: '' };
   const extraPorts = [{ host: '32400', container: '32400', protocol: 'tcp' }];

@@ -1024,7 +1024,7 @@
           <p class="form-error" id="composeErr" role="alert"></p>
           <div class="btn-row">
             <button class="btn primary" type="button" id="composeSave">${t('Opslaan en opnieuw starten')}</button>
-            ${c.form ? `<button class="btn" type="button" id="cfToggle">${t('Als tekst bewerken')}</button>` : ''}
+            ${c.form ? `<button class="btn" type="button" id="cfToggle">${t('Code')}</button>` : ''}
           </div>`}`;
     const form = $('#appSetForm', body);
     form.addEventListener('submit', async (e) => {
@@ -1048,7 +1048,7 @@
     if (toggle) toggle.addEventListener('click', () => {
       mode = mode === 'form' ? 'text' : 'form';
       $('#cfForm', body).hidden = mode !== 'form'; $('#cfText', body).hidden = mode !== 'text';
-      toggle.textContent = t(mode === 'form' ? 'Als tekst bewerken' : 'Terug naar het formulier');
+      toggle.textContent = t(mode === 'form' ? 'Code' : 'Velden');
       if (mode === 'form') toast(t('Het formulier toont de opgeslagen versie. Wijzigingen in de tekst sla je op in de tekstmodus.'));
     });
     const save = $('#composeSave', body);
@@ -2331,7 +2331,7 @@
     const where = f.type === 'Port' ? t('Poort in de app: {port}', { port: f.target + '/' + (f.mode || 'tcp') })
       : f.type === 'Path' ? t(ro ? 'In de app: {path} (alleen lezen)' : 'In de app: {path}', { path: f.target })
       : f.type === 'Variable' || f.type === 'Label' ? f.target : t('Apparaat op de server');
-    const attrs = `name="${esc(f.key)}"${f.required ? ' required' : ''}${f.auto ? ' data-auto="1"' : ''}${f.type === 'Port' ? ' data-port="1"' : ''}`;
+    const attrs = `name="${esc(f.key)}"${f.required ? ' required' : ''}${f.auto ? ' data-auto="1"' : ''}${f.type === 'Port' ? ' data-port="1"' : ''}${f.type === 'Path' ? ' data-path="1"' : ''}`;
     const input = f.options
       ? `<select class="field" ${attrs}>${f.options.map((o) => `<option${o === f.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
       : `<input class="field" ${attrs} type="${f.type === 'Port' ? 'number' : f.mask ? 'password' : 'text'}" value="${esc(f.value)}" autocomplete="off"
@@ -2361,6 +2361,82 @@
     }).join('');
   }
 
+  /* --- apps installeren: map voor de gegevens, en geavanceerd (alle velden of de code) */
+  // Een pad onder `from` verhuist naar `to` (de rest van het pad blijft): /snel/appdata/x/config → /tank/apps/x/config.
+  const rebasePath = (p, from, to) => (from && to && (p === from || String(p).startsWith(from + '/')) ? to + String(p).slice(from.length) : p);
+  function dataDirHtml(d, name) {
+    return `<label class="fld" data-datadir><span>${t('Map voor de gegevens')}</span>
+      <input class="field" name="__datadir" list="appFolders" value="${esc(d.appdataDir + '/' + name)}" spellcheck="false" autocomplete="off">
+      <datalist id="appFolders">${(d.folders || []).map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
+      <small>${t('Waar de app haar instellingen en gegevens bewaart. Alle mappen hieronder die in deze map liggen, verhuizen mee. Elke map kan je ook apart aanpassen.')}</small></label>`;
+  }
+  const advToggleHtml = () => `<label class="check adv-switch"><input type="checkbox" name="__adv">
+      <span><b>${t('Geavanceerd')}</b> <span class="muted small">${t('Alle opties zelf instellen: image, herstarten, netwerk, en zelf poorten, mappen, variabelen, apparaten en labels toevoegen. Of het compose-bestand als code.')}</span></span></label>`;
+
+  // Het volledige containerformulier (zoals bij de instellingen van een app) of de code. Het concept gaat via de server
+  // heen en weer (/api/apps/draft), zodat velden en code altijd hetzelfde bestand zijn en niets verloren gaat.
+  async function advancedEditor(box, name, start) {
+    box.innerHTML = `<p class="muted">${t('Laden…')}</p>`;
+    const r = await api.post('/api/apps/draft', { name, ...start });
+    let text = r.text, form = r.form, mode = form ? 'fields' : 'code';
+    box.innerHTML = `
+      <div class="adv-bar"><div class="seg" role="radiogroup" aria-label="${t('Weergave')}">
+        <button type="button" role="radio" aria-checked="${mode === 'fields'}" data-advmode="fields"${form ? '' : ' disabled'}>${t('Velden')}</button>
+        <button type="button" role="radio" aria-checked="${mode === 'code'}" data-advmode="code">${t('Code')}</button></div>
+        <span class="muted small" data-adv-note></span></div>
+      <div data-adv-fields></div>
+      <div data-adv-code hidden><textarea class="field code" rows="22" spellcheck="false" aria-label="${t('Compose-bestand')}"></textarea>
+        <small class="muted">${t('Precies dit bestand wordt geïnstalleerd. Docker Compose controleert het eerst.')}</small></div>
+      <p class="form-error" data-adv-err role="alert"></p>`;
+    const area = $('textarea', box), err = $('[data-adv-err]', box);
+    const mountFields = () => {
+      // Een nieuw element: composeFormMount hangt zijn luisteraars aan het element zelf.
+      const old = $('[data-adv-fields]', box), el = old.cloneNode(false);
+      old.replaceWith(el);
+      if (form) composeFormMount(el, form, r.dockerNetworks || []);
+    };
+    const show = () => {
+      $('[data-adv-fields]', box).hidden = mode !== 'fields'; $('[data-adv-code]', box).hidden = mode !== 'code';
+      $$('[data-advmode]', box).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.advmode === mode)));
+      $('[data-adv-note]', box).textContent = form ? '' : t('Dit bestand past niet in het formulier ({error}); je kan het wel als code aanpassen.', { error: tr(r.formError || '') });
+      box.dispatchEvent(new CustomEvent('advmode', { bubbles: true, detail: mode }));
+    };
+    area.value = text; mountFields(); show();
+    box.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-advmode]'); if (!b || b.dataset.advmode === mode || b.disabled) return;
+      err.textContent = '';
+      try {
+        if (b.dataset.advmode === 'code') {
+          const problem = composeFormCheck(form); if (problem) { err.textContent = problem; return; }
+          text = (await api.post('/api/apps/draft', { name, text, form })).text; area.value = text; mode = 'code';
+        } else {
+          const x = await api.post('/api/apps/draft', { name, text: area.value });
+          if (!x.form) { err.textContent = t('Deze code past niet in het formulier ({error}). Blijf in de code, of pas ze aan.', { error: tr(x.formError || '') }); return; }
+          text = x.text; form = x.form; mountFields(); mode = 'fields';
+        }
+        show();
+      } catch (ex) { err.textContent = ex.message; }
+    });
+    return {
+      mode: () => mode,
+      // De gegevensmap verhuizen in de velden (in de code pas je ze zelf aan).
+      rebase(from, to) {
+        if (!form) return;
+        form.volumes.forEach((v, i) => {
+          if (v.locked) return;
+          const h = rebasePath(v.host, from, to);
+          if (h !== v.host) { v.host = h; const inp = $(`[data-cf="volumes:${i}:host"]`, box); if (inp) inp.value = h; }
+        });
+      },
+      // Het bestand om te installeren.
+      async finalText() {
+        if (mode === 'code') return area.value;
+        const problem = composeFormCheck(form); if (problem) throw new Error(problem);
+        return (await api.post('/api/apps/draft', { name, text, form })).text;
+      },
+    };
+  }
+
   async function storeWindow(id) {
     openWindow(t('App'), `<p class="lead">${t('Laden…')}</p>`);
     let d;
@@ -2387,21 +2463,22 @@
         <label class="fld"><span>${t('Naam')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
           <small>${t('Kleine letters, cijfers, - en _. Wordt de naam van de container en van de map {dir}/naam.', { dir: esc(d.stacksDir) })}</small></label>
+        ${dataDirHtml(d, d.suggestedName)}
+        ${advToggleHtml()}
+        <div class="form" data-basic>
         ${storeNetHtml(d)}
         ${storeSections(basic, d)}
         <div class="cf-list" id="storeExtra"></div>
         <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Poort')}</button></div>
-        ${adv.length ? `<details class="adv"><summary>${t('Geavanceerd ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
+        ${adv.length ? `<details class="adv"><summary>${t('Meer instellingen ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
+        </div>
+        <div data-advanced hidden></div>
         <p class="muted small">${t('Image: {image}. HomeBaseOS maakt er een compose-bestand van, dat je later ook in Dockge kan openen.', { image: esc(d.image) })}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Installeren')}</button>
           <button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
       </form>
-      <div id="storeJob" hidden>
-        <p class="lead" id="jobState">${t('Installeren…')}</p>
-        <pre class="logs" id="jobLog"></pre>
-        <div class="btn-row" id="jobBtns" style="margin-top:12px"></div>
-      </div>`;
+      ${jobHtml()}`;
     const form = $('#storeForm', body);
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
@@ -2438,23 +2515,66 @@
     });
     form.addEventListener('input', (e) => { if (!e.target.dataset.xport) return; const [i, k] = e.target.dataset.xport.split(':'); extra[i][k] = e.target.value; });
     form.addEventListener('change', (e) => { if (e.target.dataset.xport) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
-    // Automatisch ingevulde appdata-mappen volgen de naam: /snel/appdata/<naam>.
-    let lastName = d.suggestedName;
+    // De gegevensmap volgt de naam (zolang je ze niet zelf koos), en alle mappen eronder volgen de gegevensmap.
+    let lastName = d.suggestedName, curDir = form.elements.__datadir.value.trim(), editor = null;
+    const moveData = (to) => {
+      if (!to.startsWith('/') || to === curDir) return;
+      $$('[data-path]', form).forEach((el) => { el.value = rebasePath(el.value, curDir, to); });
+      if (editor) editor.rebase(curDir, to);
+      curDir = to;
+    };
     form.elements.__name.addEventListener('input', (e) => {
       const n = e.target.value.trim();
-      $$('[data-auto]', form).forEach((el) => { if (el.value === d.appdataDir + '/' + lastName) el.value = d.appdataDir + '/' + n; });
+      if (form.elements.__datadir.value.trim() === d.appdataDir + '/' + lastName && n) { form.elements.__datadir.value = d.appdataDir + '/' + n; moveData(d.appdataDir + '/' + n); }
       lastName = n;
     });
+    form.elements.__datadir.addEventListener('input', (e) => moveData(e.target.value.trim().replace(/(.)\/+$/, '$1')));
+    // Wat het eenvoudige formulier nu zou installeren (ook het vertrekpunt voor Geavanceerd).
+    const basicBody = () => {
+      const values = {};
+      for (const el of form.elements) if (el.name && !el.name.startsWith('__') && !el.disabled) values[el.name] = el.value;
+      return { name: form.elements.__name.value.trim(), values, network: form.elements.__network.value, ip: form.elements.__ip.value.trim(),
+        extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()) };
+    };
+    // Het eerste verplichte veld dat nog leeg is: openklappen, focus en melding.
+    const missingField = (msg) => {
+      const missing = [...form.elements].find((el) => el.required && !el.disabled && !el.value.trim());
+      if (!missing) return false;
+      const det = missing.closest('details'); if (det) det.open = true;
+      $('.form-error', form).textContent = t(msg, { field: missing.closest('.fld').querySelector('span').textContent.replace('*', '').trim() });
+      missing.focus(); return true;
+    };
+    // Geavanceerd: het volledige containerformulier of de code, vertrekkend van wat je al invulde.
+    form.elements.__adv.addEventListener('change', async (e) => {
+      const err = $('.form-error', form); err.textContent = '';
+      const on = e.target.checked, box = $('[data-advanced]', form);
+      if (on && missingField('Vul eerst {field} in. Daarna kan je alles aanpassen bij Geavanceerd.')) { e.target.checked = false; return; }
+      if (!on) {
+        if (!(await ask(t('Terug naar de eenvoudige velden? Wat je bij Geavanceerd wijzigde, gaat verloren.'), t('Terug')))) { e.target.checked = true; return; }
+        editor = null; box.hidden = true; box.innerHTML = ''; $('[data-basic]', form).hidden = false; form.elements.__name.readOnly = false; $('[data-datadir]', form).hidden = false;
+        return;
+      }
+      try {
+        const b = basicBody();
+        editor = await advancedEditor(box, b.name, { store: d.id, ...b });
+        box.hidden = false; $('[data-basic]', form).hidden = true; form.elements.__name.readOnly = true;
+      } catch (ex) { e.target.checked = false; box.hidden = true; err.textContent = ex.message; }
+    });
+    form.addEventListener('advmode', (e) => { $('[data-datadir]', form).hidden = e.detail === 'code'; });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = $('.form-error', form), btn = $('[type=submit]', form);
       err.textContent = '';
-      const missing = [...form.elements].find((el) => el.required && !el.disabled && !el.value.trim());
-      if (missing) {
-        const det = missing.closest('details'); if (det) det.open = true;
-        err.textContent = t('Vul {field} in.', { field: missing.closest('.fld').querySelector('span').textContent.replace('*', '').trim() });
-        missing.focus(); return;
+      if (editor) {
+        btn.disabled = true;
+        let r;
+        try { r = await api.post('/api/apps/compose', { name: form.elements.__name.value.trim(), text: await editor.finalText() }); }
+        catch (ex) { err.textContent = ex.message; btn.disabled = false; return; }
+        form.hidden = true; $('#storeJob', body).hidden = false;
+        followJob(r.job, prettyName(d.name), body, d.id);
+        return;
       }
+      if (missingField('Vul {field} in.')) return;
       const badX = extra.find((p) => (String(p.host).trim() || String(p.container).trim()) && !(/^\d{1,5}$/.test(String(p.host).trim()) && /^\d{1,5}$/.test(String(p.container).trim())));
       if (badX) { err.textContent = t('Vul bij elke extra poort twee poorten in tussen 1 en 65535.'); return; }
       const values = {};
@@ -2513,29 +2633,62 @@
         </div>
         <label class="fld"><span>${t('Adres van de webinterface (WebUI)')} <em class="muted">${t('(optioneel)')}</em></span><input class="field" name="__webui" value="${esc(d.webui)}" placeholder="http://[IP]:[PORT:8080]/" spellcheck="false" autocomplete="off">
           <small>${t('[IP] wordt het adres van je server, [PORT:80] de poort op de server die aan poort 80 in de app hangt.')}</small></label>
+        ${dataDirHtml(d, d.name)}
+        <div class="adv-bar"><div class="seg" role="radiogroup" aria-label="${t('Weergave')}">
+          <button type="button" role="radio" aria-checked="true" data-cmode="fields">${t('Velden')}</button>
+          <button type="button" role="radio" aria-checked="false" data-cmode="code">${t('Code')}</button></div></div>
         <div id="customCf"></div>
+        <div data-ccode hidden><textarea class="field code" rows="22" spellcheck="false" aria-label="${t('Compose-bestand')}"></textarea>
+          <small class="muted">${t('Precies dit bestand wordt geïnstalleerd. Docker Compose controleert het eerst.')}</small></div>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Installeren')}</button>
           <button class="btn" type="button" data-close>${t('Annuleren')}</button></div>
       </form>
-      <div id="storeJob" hidden>
-        <p class="lead" id="jobState">${t('Installeren…')}</p>
-        <pre class="logs" id="jobLog"></pre>
-        <div class="btn-row" id="jobBtns" style="margin-top:12px"></div>
-      </div>`;
+      ${jobHtml()}`;
     const form = $('#storeForm', body);
-    composeFormMount($('#customCf', form), f, d.networks);
-    // Mappen in de appgegevens volgen de naam: /snel/appdata/<naam>/…
-    let lastName = d.name;
-    form.elements.__name.addEventListener('input', (e) => {
-      const n = e.target.value.trim(), from = d.appdataDir + '/' + lastName;
+    const mountCf = () => { const old = $('#customCf', form), el = old.cloneNode(false); old.replaceWith(el); composeFormMount(el, f, d.networks); };
+    mountCf();
+    // De gegevensmap volgt de naam (zolang je ze niet zelf koos), en alle mappen eronder volgen de gegevensmap.
+    let lastName = d.name, curDir = form.elements.__datadir.value.trim(), mode = 'fields';
+    const moveData = (to) => {
+      if (!to.startsWith('/') || to === curDir) return;
       f.volumes.forEach((v, i) => {
-        if (v.host === from || v.host.startsWith(from + '/')) {
-          v.host = d.appdataDir + '/' + n + v.host.slice(from.length);
-          const inp = $(`[data-cf="volumes:${i}:host"]`, form); if (inp) inp.value = v.host;
-        }
+        const h = rebasePath(v.host, curDir, to);
+        if (h !== v.host) { v.host = h; const inp = $(`[data-cf="volumes:${i}:host"]`, form); if (inp) inp.value = h; }
       });
+      curDir = to;
+    };
+    form.elements.__name.addEventListener('input', (e) => {
+      const n = e.target.value.trim();
+      if (form.elements.__datadir.value.trim() === d.appdataDir + '/' + lastName && n) { form.elements.__datadir.value = d.appdataDir + '/' + n; moveData(d.appdataDir + '/' + n); }
       lastName = n;
+    });
+    form.elements.__datadir.addEventListener('input', (e) => moveData(e.target.value.trim().replace(/(.)\/+$/, '$1')));
+    const customBody = () => ({
+      image: f.image, restart: f.restart, privileged: f.privileged, network: f.network || 'bridge', ip: (f.ip || '').trim(),
+      ports: f.ports, volumes: f.volumes, env: f.env, devices: f.devices, labels: f.labels,
+      webui: form.elements.__webui.value.trim(), icon: form.elements.__icon.value.trim(),
+    });
+    // Velden of code: het concept gaat via de server, zodat ze altijd hetzelfde bestand zijn.
+    const area = $('[data-ccode] textarea', form);
+    form.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-cmode]'); if (!b || b.dataset.cmode === mode) return;
+      const err = $('.form-error', form); err.textContent = '';
+      const name = form.elements.__name.value.trim();
+      try {
+        if (b.dataset.cmode === 'code') {
+          const problem = composeFormCheck(f); if (problem) { err.textContent = problem; return; }
+          area.value = (await api.post('/api/apps/draft', { name, custom: customBody() })).text;
+        } else {
+          const x = await api.post('/api/apps/draft', { name, text: area.value });
+          if (!x.form) { err.textContent = t('Deze code past niet in het formulier ({error}). Blijf in de code, of pas ze aan.', { error: tr(x.formError || '') }); return; }
+          Object.assign(f, x.form, { labels: x.form.labels.filter((l) => !String(l.name).startsWith('homebaseos.')) });
+          mountCf();
+        }
+        mode = b.dataset.cmode;
+        $('#customCf', form).hidden = mode !== 'fields'; $('[data-ccode]', form).hidden = mode !== 'code'; $('[data-datadir]', form).hidden = mode === 'code';
+        $$('[data-cmode]', form).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.cmode === mode)));
+      } catch (ex) { err.textContent = ex.message; }
     });
     body.addEventListener('click', (e) => { const m = e.target.closest('[data-store-match]'); if (m) storeWindow(m.dataset.storeMatch); });
     form.addEventListener('submit', async (e) => {
@@ -2543,15 +2696,11 @@
       const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
       const name = form.elements.__name.value.trim();
       if (!name) { err.textContent = t('Vul {field} in.', { field: t('Naam') }); form.elements.__name.focus(); return; }
-      const problem = composeFormCheck(f); if (problem) { err.textContent = problem; return; }
+      if (mode === 'fields') { const problem = composeFormCheck(f); if (problem) { err.textContent = problem; return; } }
       btn.disabled = true;
       let r;
       try {
-        r = await api.post('/api/apps/custom', {
-          name, image: f.image, restart: f.restart, privileged: f.privileged, network: f.network || 'bridge', ip: (f.ip || '').trim(),
-          ports: f.ports, volumes: f.volumes, env: f.env, devices: f.devices, labels: f.labels,
-          webui: form.elements.__webui.value.trim(), icon: form.elements.__icon.value.trim(),
-        });
+        r = mode === 'code' ? await api.post('/api/apps/compose', { name, text: area.value }) : await api.post('/api/apps/custom', { name, ...customBody() });
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; return; }
       form.hidden = true; $('#storeJob', body).hidden = false;
       $('#customImgForm', body).hidden = true;
@@ -2561,12 +2710,35 @@
   }
   $('#customAppBtn').addEventListener('click', () => customAppWindow());
 
+  // Voortgang van een installatie: balk, wat er nu gebeurt, en de uitvoer van Docker om open te klappen.
+  const jobHtml = () => `
+      <div id="storeJob" class="job" hidden>
+        <p class="lead" id="jobState">${t('Installeren…')}</p>
+        <div class="bar job-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="${t('Voortgang')}"><span id="jobBar"></span></div>
+        <p class="progress-note" id="jobNote"></p>
+        <details class="job-log"><summary>${t('Details')}</summary><pre class="logs" id="jobLog"></pre></details>
+        <div class="btn-row" id="jobBtns"></div>
+      </div>`;
+  function drawJob(body, j) {
+    const bar = $('#jobBar', body), log = $('#jobLog', body);
+    bar.style.width = (j.percent || 0) + '%'; bar.className = j.done && !j.ok ? 'bad' : '';
+    bar.parentElement.setAttribute('aria-valuenow', String(j.percent || 0));
+    if (!j.done) {
+      $('#jobState', body).textContent = j.phase === 'start' ? t('App starten…') : t('Image downloaden…');
+      $('#jobNote', body).textContent = j.phase === 'start' ? ''
+        : j.layers ? t('{done} van {total} lagen', { done: j.layersDone, total: j.layers }) + (j.size ? ' · ' + t('{done} van {total}', { done: bytes(j.downloaded), total: bytes(j.size) }) : '')
+        : t('Verbinden met de registry…');
+    } else $('#jobNote', body).textContent = '';
+    const end = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+    log.textContent = j.lines.map(tr).join('\n');
+    if (end) log.scrollTop = log.scrollHeight;
+  }
   // Volg de installatie. Sluit je het venster, dan loopt ze gewoon door en krijg je op het einde een melding.
   async function followJob(jobId, label, body, storeId) {
     let j;
     try { j = await api.get('/api/store/jobs/' + jobId); } catch (e) { setTimeout(() => followJob(jobId, label, body, storeId), 2000); return; }
     const visible = body.isConnected;
-    if (visible) { const log = $('#jobLog', body); log.textContent = j.lines.map(tr).join('\n'); log.scrollTop = log.scrollHeight; }
+    if (visible) drawJob(body, j);
     if (!j.done) { setTimeout(() => followJob(jobId, label, body, storeId), 1000); return; }
     if (j.ok) {
       toast(t('Geïnstalleerd: {name}', { name: label }));
@@ -2582,6 +2754,7 @@
       toast(t('Installeren van {name} mislukt: {error}', { name: label, error: tr(j.error) }), true);
       if (!visible) return;
       $('#jobState', body).innerHTML = `<span class="temp-bad">${t('Installeren mislukt: {error}', { error: esc(tr(j.error)) })}</span>`;
+      $('.job-log', body).open = true;
       $('#jobBtns', body).innerHTML = `<button class="btn primary" type="button" data-job-back>${t('Terug naar het formulier')}</button><button class="btn" type="button" data-close>${t('Sluiten')}</button>`;
       $('[data-job-back]', body).addEventListener('click', () => {
         $('#storeJob', body).hidden = true; const f = $('#storeForm', body); f.hidden = false; $('[type=submit]', f).disabled = false;

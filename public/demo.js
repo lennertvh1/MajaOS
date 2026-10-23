@@ -902,7 +902,7 @@
     const tpl = a.network || 'bridge';
     const networkDefault = ['bridge', 'host', 'none'].includes(tpl) || networks.some((n) => n.name === tpl) ? tpl : 'bridge';
     return { ...rest, fields, warnings: storeWarnings(a, networkDefault), networks, networkDefault, templateNetwork: tpl, suggestedName: name, appdataDir: AD(), sharesDir: '/tank', stacksDir: '/opt/stacks',
-      installed: storeInstalled(a), appdataMissing: false };
+      installed: storeInstalled(a), appdataMissing: false, folders: bkFolders() };
   }
   function storeInstall(a, body) {
     const name = String(body.name || '').trim();
@@ -942,14 +942,30 @@
   function storeJob(id) {
     const j = storeJobs[id]; if (!j) throw err('Deze installatie is niet (meer) bekend.', 404);
     const t = (Date.now() - j.started) / 1000;
-    const steps = [
-      [0, 'Compose-bestand geschreven: /opt/stacks/' + j.name + '/compose.yaml'], [0, 'Image downloaden: ' + j.a.image],
-      [0.6, j.name + ' Pulling'], [1.2, 'a2318d6c47ec Pulling fs layer'], [1.6, 'a2318d6c47ec Downloading [=====>     ] 12.4MB/31.2MB'],
-      [2.4, 'a2318d6c47ec Download complete'], [2.8, 'a2318d6c47ec Pull complete'], [3.2, j.name + ' Pulled'], [3.4, 'App starten…'],
-      ...(j.own ? [] : [[3.8, 'Network ' + j.name + '_default Created']]), [4.3, 'Container ' + j.name + ' Started'],
-    ];
-    const lines = steps.filter(([at]) => t >= at).map(([, l]) => l);
-    const done = t >= 4.5;
+    // Zoals de server: één regel per laag die ter plaatse bijwerkt, en de voortgang uit de lagen.
+    const layers = [['a2318d6c47ec', 31.2e6, 0.4, 2.6], ['3f4ca61aafcd', 0, 0, 0], ['9b0c51e7d2aa', 84.7e6, 0.6, 4.4], ['e11f0a3c88b2', 2.1e6, 0.8, 1.4]];
+    const mb = (n) => (n / 1e6).toFixed(n < 1e7 ? 2 : 1) + 'MB';
+    const barTxt = (f) => '[' + '='.repeat(Math.max(0, Math.round(f * 50) - 1)) + '>' + ' '.repeat(50 - Math.max(1, Math.round(f * 50))) + ']';
+    const pullEnd = 5.2, end = pullEnd + 1.6, done = t >= end;
+    const state = layers.map(([id, size, from, to]) => {
+      if (!size) return { id, line: id + ' Already exists', done: 1, cur: 0, size: 0 };
+      if (t < from) return { id, line: id + ' Pulling fs layer', done: 0, cur: 0, size };
+      if (t < to) { const f = (t - from) / (to - from); return { id, line: id + ' Downloading ' + barTxt(f) + '  ' + mb(f * size) + '/' + mb(size), done: 0.75 * f, cur: f * size, size }; }
+      const x = Math.min(1, (t - to) / 0.7);
+      if (x < 1) return { id, line: id + ' Extracting ' + barTxt(x) + '  ' + mb(x * size) + '/' + mb(size), done: 0.75 + 0.25 * x, cur: size, size };
+      return { id, line: id + ' Pull complete', done: 1, cur: size, size };
+    });
+    const phase = t < pullEnd ? 'pull' : 'start';
+    const lines = ['Compose-bestand geschreven: /opt/stacks/' + j.name + '/compose.yaml', 'Image downloaden: ' + j.a.image,
+      j.name + (phase === 'pull' ? ' Pulling' : ' Pulled'), ...state.map((x) => x.line)];
+    if (phase === 'start') {
+      lines.push('App starten…');
+      if (!j.own) lines.push('Network ' + j.name + '_default  ' + (t < pullEnd + 0.4 ? 'Creating' : 'Created'));
+      lines.push('Container ' + j.name + '  ' + (t < pullEnd + 0.8 ? 'Creating' : t < pullEnd + 1.3 ? 'Starting' : 'Started'));
+    }
+    const percent = done ? 100 : phase === 'start' ? 90 : 3 + Math.round(82 * state.reduce((acc, x) => acc + x.done, 0) / state.length);
+    const progress = { phase: done ? 'done' : phase, percent, layers: state.length, layersDone: state.filter((x) => x.done >= 1).length,
+      downloaded: state.reduce((acc, x) => acc + x.cur, 0), size: state.reduce((acc, x) => acc + x.size, 0) };
     if (done && !j.added) {
       j.added = true;
       const ownIp = j.own && ownIpNet(j.network);
@@ -963,7 +979,7 @@
         dataDirs: [...new Set(j.fields.filter((f) => f.type === 'Path' && f.value.startsWith(AD() + '/')).map((f) => f.value.split('/').slice(0, 4).join('/')))] });
       apps.sort((x, y) => x.name.localeCompare(y.name));
     }
-    return { done, ok: done, error: null, name: j.name, webui: j.a.webui, lines };
+    return { done, ok: done, error: null, name: j.name, webui: j.a.webui, lines, ...progress };
   }
 
   /* ---- eigen app: een paar bekende images, zoals de registry ze zou melden */
@@ -1006,8 +1022,85 @@
       storeMatch: st ? { id: st.id, name: st.name } : null,
       warnings: ports.length ? [] : ['Het image meldt geen poorten. Heeft de app een webinterface, voeg dan zelf een poort toe.'],
       networks: dnets.filter((x) => !x.builtin).map((x) => ({ name: x.name, driver: x.driver, subnet: x.subnet })), networkDefault: 'bridge',
-      appdataDir: AD(), stacksDir: '/opt/stacks', appdataMissing: false,
+      appdataDir: AD(), stacksDir: '/opt/stacks', appdataMissing: false, folders: bkFolders(),
     };
+  }
+  // Geavanceerd installeren: het concept als formulier en als code. De demo schrijft eenvoudige YAML en onthoudt het
+  // formulier per code; code die je zelf wijzigde, leest ze terug zover het eenvoudig gaat (image, en de rest van het laatste formulier).
+  const drafts = {};
+  const q = (v) => JSON.stringify(String(v));
+  function draftYaml(name, f, labels) {
+    const out = ['# Gemaakt met HomeBaseOS (demo).', 'name: ' + q(name), 'services:', '  ' + name + ':', '    image: ' + q(f.image), '    container_name: ' + q(name)];
+    if (f.restart) out.push('    restart: ' + q(f.restart));
+    if (f.network === 'host' || f.network === 'none') out.push('    network_mode: ' + q(f.network));
+    else if (f.network) out.push('    networks:', '      ' + f.network + ':' + (f.ip ? '\n        ipv4_address: ' + q(f.ip) : ' null'));
+    if (f.privileged) out.push('    privileged: true');
+    const list = (k, arr) => { if (arr.length) out.push('    ' + k + ':', ...arr.map((x) => '      - ' + q(x))); };
+    list('ports', f.ports.filter((p) => p.host || p.container).map((p) => p.host + ':' + p.container + '/' + (p.protocol || 'tcp')));
+    list('volumes', f.volumes.filter((v) => v.host || v.container).map((v) => v.host + ':' + v.container + (v.mode === 'ro' ? ':ro' : '')));
+    list('devices', f.devices.filter((d) => d.host).map((d) => d.host + ':' + (d.container || d.host)));
+    const map = (k, arr) => { const a = arr.filter((x) => x.name); if (a.length) out.push('    ' + k + ':', ...a.map((x) => '      ' + x.name + ': ' + q(x.value))); };
+    map('environment', f.env); map('labels', [...f.labels, ...labels]);
+    if (f.network && !['host', 'none'].includes(f.network)) out.push('networks:', '  ' + f.network + ':', '    external: true');
+    return out.join('\n') + '\n';
+  }
+  function demoDraft(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) throw err('Kies een naam met kleine letters, cijfers, - of _ (maximaal 63 tekens).');
+    const base = { service: name, restart: 'unless-stopped', privileged: false, network: '', ip: '', networkOther: null, networks: [], projectNetworks: [], build: false, otherServices: [] };
+    let form, labels = [];
+    if (b.store) {
+      const a = store.find((x) => x.id === b.store); if (!a) throw err('Deze app staat niet (meer) in de catalogus.', 404);
+      const fields = a.fields().map((f) => (f.key in (b.values || {}) ? { ...f, value: String(b.values[f.key]) } : f));
+      const miss = fields.find((f) => f.required && !String(f.value).trim() && f.type !== 'Device'); if (miss) throw err('Vul ' + miss.name + ' in.');
+      const by = (t) => fields.filter((f) => f.type === t);
+      form = { ...base, image: a.image, privileged: !!a.privileged, network: !b.network || b.network === 'bridge' ? '' : b.network, ip: String(b.ip || ''),
+        ports: by('Port').filter((f) => f.value).map((f) => ({ host: f.value, container: f.target, protocol: /udp/i.test(f.mode) ? 'udp' : 'tcp' })).concat((b.extraPorts || []).map((p) => ({ ...p }))),
+        volumes: by('Path').filter((f) => f.value).map((f) => ({ host: f.value, container: f.target, mode: /^ro\b|^r$/.test(f.mode || '') ? 'ro' : 'rw', kind: 'bind' })),
+        env: by('Variable').map((f) => ({ name: f.target, value: f.value })), devices: by('Device').filter((f) => f.value).map((f) => ({ host: f.value, container: f.value })),
+        labels: by('Label').map((f) => ({ name: f.target, value: f.value })) };
+      labels = [{ name: 'homebaseos.store', value: a.id }];
+    } else if (b.custom) {
+      const c = b.custom;
+      form = { ...base, image: c.image, restart: c.restart || 'unless-stopped', privileged: !!c.privileged, network: c.network === 'bridge' ? '' : c.network || '', ip: c.ip || '',
+        ports: copy(c.ports || []), volumes: copy(c.volumes || []), env: copy(c.env || []), devices: copy(c.devices || []), labels: copy(c.labels || []) };
+      labels = [{ name: 'homebaseos.custom', value: '1' }];
+    } else {
+      const text = String(b.text || '');
+      if (!text.trim()) throw err('Het compose-bestand is leeg.');
+      if (!/^services:/m.test(text)) throw err('Het compose-bestand heeft geen dienst (services).');
+      const prev = drafts[name] || { form: { ...base, image: '', ports: [], volumes: [], env: [], devices: [], labels: [] }, labels: [] };
+      if (b.form) { const f = { ...copy(b.form), service: name }; drafts[name] = { form: f, labels: prev.labels, text: draftYaml(name, f, prev.labels) }; return { text: drafts[name].text, form: copy(f), dockerNetworks: [] }; }
+      if (prev.text === text) return { text, form: copy(prev.form), dockerNetworks: [] };
+      const img = text.match(/^\s*image:\s*"?([^"\n]+)"?/m);
+      const f = { ...copy(prev.form), image: img ? img[1].trim() : prev.form.image };
+      // Poorten en mappen in de korte schrijfwijze ("8080:80/tcp", "/map:/doel:ro") lezen we ook terug.
+      const block = (k) => { const m = text.match(new RegExp('^\\s+' + k + ':\\s*\\n((?:\\s+-\\s.*\\n?)*)', 'm')); return m ? m[1].split('\n').map((l) => l.replace(/^\s*-\s*"?|"?\s*$/g, '')).filter(Boolean) : []; };
+      f.ports = block('ports').map((x) => x.match(/^(\d+):(\d+)(?:\/(tcp|udp))?$/)).filter(Boolean).map((m) => ({ host: m[1], container: m[2], protocol: m[3] || 'tcp', ip: '' }));
+      f.volumes = block('volumes').map((x) => x.split(':')).filter((a) => a.length >= 2).map(([h, c, m]) => ({ host: h, container: c, mode: m === 'ro' ? 'ro' : 'rw', kind: 'bind', locked: false }));
+      drafts[name] = { form: f, labels: prev.labels, text };
+      return { text, form: copy(f), dockerNetworks: [] };
+    }
+    const text = draftYaml(name, form, labels);
+    drafts[name] = { form, labels, text };
+    return { text, form: copy(form), dockerNetworks: dnets.filter((n) => !n.builtin).map((n) => ({ name: n.name, driver: n.driver, subnet: n.subnet })) };
+  }
+  function demoInstallCompose(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) throw err('Kies een naam met kleine letters, cijfers, - of _ (maximaal 63 tekens).');
+    if (apps.some((x) => x.name === name)) throw err('Er bestaat al een app met de naam ' + name + '. Kies een andere naam.', 409);
+    const text = String(b.text || '');
+    if (!/^services:/m.test(text)) throw err('Het compose-bestand heeft geen dienst (services).');
+    const img = text.match(/^\s*image:\s*"?([^"\n]+)"?/m);
+    const sid = (text.match(/homebaseos\.store:\s*"?([\w-]+)/) || [])[1], a = store.find((x) => x.id === sid);
+    // Poorten uit de code ("8080:80/tcp"), zodat de app in de lijst haar poorten en WebUI krijgt.
+    const fields = [...text.matchAll(/^\s*-\s*"?(\d+):(\d+)(?:\/(tcp|udp))?"?\s*$/gm)].map((m) => ({ type: 'Port', value: m[1], target: m[2], mode: m[3] || 'tcp' }))
+      .concat([...text.matchAll(/^\s*-\s*"?(\/[^:"\s]+):\/[^"\s]*"?\s*$/gm)].map((m) => ({ type: 'Path', value: m[1] })));
+    const port = a && a.webui && (a.webui.match(/\[PORT:(\d+)\]/) || [])[1], web = fields.find((f) => f.type === 'Port' && (!port || f.target === port));
+    const id = Math.random().toString(16).slice(2, 14).padEnd(12, '0');
+    storeJobs[id] = { started: Date.now(), name, a: { id: a ? a.id : null, image: img ? img[1].trim() : 'app', webui: a ? a.webui : null, icon: a ? a.icon : ICON(name) }, custom: !a,
+      fields, webPort: web ? web.value : null, network: 'bridge', own: null, extraPorts: [] };
+    return { job: id, name, file: '/opt/stacks/' + name + '/compose.yaml' };
   }
   function demoInstallCustom(b) {
     const name = String(b.name || '').trim();
@@ -1648,6 +1741,8 @@
     if (pwm) { if (String(body.password || '').length < 8) throw err('Kies een wachtwoord van minstens 8 tekens.'); return { ok: true }; }
     if (path === '/api/apps/custom/inspect') { await wait(rnd(500, 900)); return demoInspect(body.image); }
     if (path === '/api/apps/custom') { await wait(rnd(300, 600)); return demoInstallCustom(body); }
+    if (path === '/api/apps/draft') { await wait(rnd(250, 500)); return demoDraft(body); }
+    if (path === '/api/apps/compose') { await wait(rnd(300, 600)); return demoInstallCompose(body); }
     const dt = path.match(/^\/api\/disks\/([^/]+)\/test$/);
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
@@ -1692,7 +1787,7 @@
     mm = path.match(/^\/api\/apps\/([^/]+)\/compose$/);
     if (mm) {
       const a = findApp(mm[1]);
-      if (!/^services:/m.test(body.text || '')) throw err('Het compose-bestand klopt niet: services ontbreekt.');
+      if (!/^services:/m.test(body.text || '')) throw err('Het compose-bestand heeft geen dienst (services).');
       await wait(800);
       composeText[a.compose] = body.text; a.state = 'RUNNING'; a.status = 'Up minder dan een minuut';
       return { ok: true, backup: '/opt/stacks/' + a.compose + '/compose.yaml.bak' };

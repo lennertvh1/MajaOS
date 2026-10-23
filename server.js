@@ -321,6 +321,8 @@ async function handleApi(req, res, url) {
   if (p === '/api/layout' && method === 'POST') return sendJson(res, 200, layout.saveLayout(await readBody(req)));
   if (p === '/api/apps/custom/inspect' && method === 'POST') return sendJson(res, 200, await appstore.inspectImage((await readBody(req)).image));
   if (p === '/api/apps/custom' && method === 'POST') return sendJson(res, 200, await appstore.installCustom(await readBody(req)));
+  if (p === '/api/apps/draft' && method === 'POST') return sendJson(res, 200, await appstore.draft(await readBody(req)));
+  if (p === '/api/apps/compose' && method === 'POST') return sendJson(res, 200, await appstore.installCompose(await readBody(req)));
   if (p === '/api/apps/check-updates' && method === 'POST') return sendJson(res, 200, await docker.checkUpdates(true));
   if ((m = p.match(/^\/api\/apps\/([^/]+)\/logs$/)) && method === 'GET') {
     const tail = Math.min(2000, Math.max(10, Number(url.searchParams.get('tail')) || 200));
