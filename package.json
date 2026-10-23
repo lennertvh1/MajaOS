@@ -1,7 +1,7 @@
 {
   "name": "homebaseos",
   "version": "0.5.0",
-  "description": "Eenvoudig beheersysteem voor je thuisserver op Debian, met ZFS, VM's en Docker",
+  "description": "Simple management system for your home server on Debian, with ZFS, VMs and Docker",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

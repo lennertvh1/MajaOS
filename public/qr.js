@@ -1,17 +1,17 @@
 /*
- * Kleine QR-code-maker (byte-modus, foutcorrectie M, versie 1 tot 10: tot 213 tekens).
- * Genoeg voor een otpauth://-adres voor tweestapsverificatie. window.TBQR.svg(tekst) geeft een SVG terug.
+ * Small QR code maker (byte mode, error correction M, version 1 to 10: up to 213 characters).
+ * Enough for an otpauth:// address for two-step verification. window.TBQR.svg(text) returns an SVG.
  */
 (function () {
   'use strict';
-  // Per versie: [aantal blokken, datawoorden per blok] (groep 1 en eventueel groep 2) en foutcorrectiewoorden per blok, niveau M.
+  // Per version: [number of blocks, data words per block] (group 1 and possibly group 2) and error correction words per block, level M.
   const BLOCKS = [null,
     { ec: 10, g: [[1, 16]] }, { ec: 16, g: [[1, 28]] }, { ec: 26, g: [[1, 44]] }, { ec: 18, g: [[2, 32]] }, { ec: 24, g: [[2, 43]] },
     { ec: 16, g: [[4, 27]] }, { ec: 18, g: [[4, 31]] }, { ec: 22, g: [[2, 38], [2, 39]] }, { ec: 22, g: [[3, 36], [2, 37]] }, { ec: 26, g: [[4, 43], [1, 44]] }];
   const ALIGN = [null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
   const VERSION_INFO = { 7: 0x07c94, 8: 0x085bc, 9: 0x09a99, 10: 0x0a4d3 };
 
-  /* ---- Galoisveld GF(256) met polynoom 0x11D, voor Reed-Solomon */
+  /* ---- Galois field GF(256) with polynomial 0x11D, for Reed-Solomon */
   const EXP = new Array(512), LOG = new Array(256);
   for (let i = 0, x = 1; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
   for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
@@ -34,12 +34,12 @@
     return r.slice(data.length);
   }
 
-  /* ---- gegevens → codewoorden */
+  /* ---- data → codewords */
   function codewords(bytes) {
     let v = 1;
     const dataCap = (ver) => BLOCKS[ver].g.reduce((s, [n, k]) => s + n * k, 0);
     for (; v <= 10; v++) if (4 + (v < 10 ? 8 : 16) + bytes.length * 8 <= dataCap(v) * 8) break;
-    if (v > 10) throw new Error('Te veel tekst voor een QR-code');
+    if (v > 10) throw new Error('Too much text for a QR code');
     const cap = dataCap(v), bits = [];
     const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
     put(4, 4); put(bytes.length, v < 10 ? 8 : 16);
@@ -49,7 +49,7 @@
     const data = [];
     for (let i = 0; i < bits.length; i += 8) data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
     for (let p = 0; data.length < cap; p++) data.push(p % 2 ? 0x11 : 0xec);
-    // In blokken verdelen, foutcorrectie per blok, dan door elkaar (interleaving).
+    // Split into blocks, error correction per block, then interleave.
     const blocks = []; let at = 0;
     BLOCKS[v].g.forEach(([n, k]) => { for (let i = 0; i < n; i++) { blocks.push(data.slice(at, at + k)); at += k; } });
     const ecs = blocks.map((b) => ecWords(b, BLOCKS[v].ec));
@@ -59,10 +59,10 @@
     return { version: v, words: out };
   }
 
-  /* ---- het raster */
+  /* ---- the grid */
   function build(version, words, mask) {
     const size = version * 4 + 17;
-    const m = Array.from({ length: size }, () => new Array(size).fill(null)); // null = nog vrij
+    const m = Array.from({ length: size }, () => new Array(size).fill(null)); // null = still free
     const set = (r, c, val) => { if (r >= 0 && c >= 0 && r < size && c < size) m[r][c] = val; };
     const finder = (r, c) => {
       for (let i = -1; i <= 7; i++) for (let j = -1; j <= 7; j++) {
@@ -71,20 +71,20 @@
       }
     };
     finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
-    for (let i = 8; i < size - 8; i++) { m[6][i] = i % 2 === 0; m[i][6] = i % 2 === 0; } // tijdlijnen
+    for (let i = 8; i < size - 8; i++) { m[6][i] = i % 2 === 0; m[i][6] = i % 2 === 0; } // timing patterns
     const al = ALIGN[version];
     const last = al[al.length - 1];
     for (const r of al) for (const c of al) {
-      if ((r === 6 && c === 6) || (r === 6 && c === last) || (r === last && c === 6)) continue; // overlapt met een finder
+      if ((r === 6 && c === 6) || (r === 6 && c === last) || (r === last && c === 6)) continue; // overlaps with a finder
       for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) m[r + i][c + j] = Math.max(Math.abs(i), Math.abs(j)) !== 1;
     }
-    // Plaats voor formaat- (en versie-)informatie vrijhouden.
+    // Reserve room for format (and version) information.
     for (let i = 0; i < 9; i++) { if (m[8][i] === null) m[8][i] = false; if (m[i][8] === null) m[i][8] = false; }
     for (let i = 0; i < 8; i++) { if (m[8][size - 1 - i] === null) m[8][size - 1 - i] = false; if (m[size - 1 - i][8] === null) m[size - 1 - i][8] = false; }
-    m[size - 8][8] = true; // het donkere module
+    m[size - 8][8] = true; // the dark module
     if (version >= 7) for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) { m[i][size - 11 + j] = false; m[size - 11 + j][i] = false; }
     const reserved = m.map((row) => row.map((x) => x !== null));
-    // Gegevens zigzaggend van rechtsonder naar boven, twee kolommen tegelijk, kolom 6 overslaan.
+    // Data zigzagging from bottom right upwards, two columns at a time, skipping column 6.
     const bits = []; words.forEach((w) => { for (let i = 7; i >= 0; i--) bits.push((w >>> i) & 1); });
     let k = 0, up = true;
     for (let c = size - 1; c > 0; c -= 2) {
@@ -100,7 +100,7 @@
       }
       up = !up;
     }
-    // Formaatinformatie: niveau M (00) + masker, BCH(15,5), XOR 0x5412.
+    // Format information: level M (00) + mask, BCH(15,5), XOR 0x5412.
     let f = (0 << 3) | mask, rem = f << 10;
     for (let i = 14; i >= 10; i--) if ((rem >>> i) & 1) rem ^= 0x537 << (i - 10);
     const fmt = ((f << 10) | rem) ^ 0x5412;
@@ -128,7 +128,7 @@
       default: return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0;
     }
   }
-  // Strafpunten (de vier regels uit de norm): het masker met de minste punten is het best leesbaar.
+  // Penalty points (the four rules from the standard): the mask with the fewest points reads best.
   function penalty(m) {
     const n = m.length; let p = 0, dark = 0;
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
@@ -160,7 +160,7 @@
     for (let mask = 0; mask < 8; mask++) { const m = build(version, words, mask), p = penalty(m); if (p < bestP) { best = m; bestP = p; } }
     return best;
   }
-  // SVG met een witte rand van 4 modules (verplicht om te kunnen scannen).
+  // SVG with a white border of 4 modules (required to be scannable).
   function svg(text, { size = 200 } = {}) {
     const m = matrix(text), n = m.length + 8;
     let d = '';

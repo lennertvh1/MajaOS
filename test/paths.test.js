@@ -1,5 +1,5 @@
 'use strict';
-/* Tests voor de opslaglocaties (appgegevens, VM's, ISO's) en het vervangen van paden bij het verhuizen. */
+/* Tests for the storage locations (app data, VMs, ISOs) and replacing paths when moving. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -10,17 +10,17 @@ delete process.env.APPDATA_DIR; delete process.env.VM_DIR; delete process.env.IS
 const paths = require('../lib/paths');
 const { replacePath, groupContainers } = require('../lib/migrate');
 
-test('opslaglocaties: niets ingesteld, een nieuwe pool, en een eigen keuze', () => {
+test('storage locations: nothing set, a new pool, and an own choice', () => {
   assert.deepEqual(paths.all(), { appdata: null, vms: null, isos: null, shares: null });
   assert.equal(paths.shown('appdata'), '/<pool>/appdata');
   assert.equal(paths.exists('appdata'), false);
-  // Een "pool" met de standaardmappen: alles wat nog geen plek had, komt erop.
+  // A "pool" with the default folders: everything that had no place yet goes on it.
   const pool = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-pool-'));
   for (const f of paths.DEFAULT_FOLDERS) fs.mkdirSync(path.join(pool, f));
   assert.deepEqual(paths.adoptPool(pool).sort(), ['appdata', 'isos', 'shares', 'vms']);
   assert.equal(paths.dir('appdata'), path.join(pool, 'appdata'));
   assert.equal(paths.dir('shares'), pool);
-  // Een tweede pool verandert niets meer.
+  // A second pool changes nothing anymore.
   const pool2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-pool-'));
   for (const f of paths.DEFAULT_FOLDERS) fs.mkdirSync(path.join(pool2, f));
   assert.deepEqual(paths.adoptPool(pool2), []);
@@ -28,51 +28,51 @@ test('opslaglocaties: niets ingesteld, een nieuwe pool, en een eigen keuze', () 
   paths._reset();
   assert.equal(paths.dir('vms'), path.join(pool2, 'vms'));
   assert.equal(paths.dir('appdata'), path.join(pool, 'appdata'));
-  assert.throws(() => paths.save({ appdata: 'relatief/pad' }), /volledig pad/);
+  assert.throws(() => paths.save({ appdata: 'relative/path' }), /full path/);
 });
 
-test('verhuizen: alleen volledige paden vervangen', () => {
+test('moving: only replace full paths', () => {
   const text = [
-    '    volumes:', '      - "/snel/appdata/jellyfin:/config"', '      - /snel/appdata:/all', '      - "/snel/appdata2/x:/y"',
-    '      - type: bind', '        source: /snel/appdata/kuma', '    labels:', '      homebaseos.data: "/snel/appdata/jellyfin,/snel/appdata/kuma"',
+    '    volumes:', '      - "/fast/appdata/jellyfin:/config"', '      - /fast/appdata:/all', '      - "/fast/appdata2/x:/y"',
+    '      - type: bind', '        source: /fast/appdata/kuma', '    labels:', '      homebaseos.data: "/fast/appdata/jellyfin,/fast/appdata/kuma"',
   ].join('\n');
-  const out = replacePath(text, '/snel/appdata', '/tank/appdata');
+  const out = replacePath(text, '/fast/appdata', '/tank/appdata');
   assert.match(out, /"\/tank\/appdata\/jellyfin:\/config"/);
   assert.match(out, /- \/tank\/appdata:\/all/);
-  assert.match(out, /"\/snel\/appdata2\/x:\/y"/); // ander pad, blijft staan
+  assert.match(out, /"\/fast\/appdata2\/x:\/y"/); // another path, stays
   assert.match(out, /source: \/tank\/appdata\/kuma/);
   assert.match(out, /homebaseos\.data: "\/tank\/appdata\/jellyfin,\/tank\/appdata\/kuma"/);
 });
 
-test('verhuizen: welke apps mee kunnen', () => {
+test('moving: which apps can come along', () => {
   const c = (name, source, labels = {}, State = 'running') => ({ Id: name + '0123456789', Names: ['/' + name], State, Labels: labels, Mounts: [{ Type: 'bind', Source: source, Destination: '/config' }] });
   const compose = (project, file) => ({ 'com.docker.compose.project': project, 'com.docker.compose.project.config_files': file, 'com.docker.compose.project.working_dir': path.dirname(file) });
   const onHost = new Set(['/opt/stacks/jellyfin/compose.yaml']);
   const r = groupContainers([
-    c('jellyfin', '/snel/appdata/jellyfin', compose('jellyfin', '/opt/stacks/jellyfin/compose.yaml')),
-    c('kuma', '/snel/appdata/kuma'), // docker run
-    c('pihole', '/snel/appdata/pihole', compose('pihole', '/data/compose/3/docker-compose.yml')), // Portainer: bestand in zijn eigen container
-    c('plex', '/tank/media', compose('plex', '/opt/stacks/plex/compose.yaml')), // gebruikt de appgegevens niet
-  ], '/snel/appdata', (f) => onHost.has(f));
+    c('jellyfin', '/fast/appdata/jellyfin', compose('jellyfin', '/opt/stacks/jellyfin/compose.yaml')),
+    c('kuma', '/fast/appdata/kuma'), // docker run
+    c('pihole', '/fast/appdata/pihole', compose('pihole', '/data/compose/3/docker-compose.yml')), // Portainer: file in its own container
+    c('plex', '/tank/media', compose('plex', '/opt/stacks/plex/compose.yaml')), // doesn't use the app data
+  ], '/fast/appdata', (f) => onHost.has(f));
   assert.deepEqual(r.projects.map((x) => x.project), ['jellyfin']);
   assert.deepEqual(r.manual, ['kuma', 'pihole']);
 });
 
-test('bestaande map voor appgegevens vinden', () => {
-  // waar de containers hun gegevens al hebben, de meest gebruikte eerst
+test('finding an existing folder for app data', () => {
+  // where the containers already have their data, the most used first
   const containers = [
-    { Mounts: [{ Type: 'bind', Source: '/snel/appdata/jellyfin' }, { Type: 'bind', Source: '/tank/media' }] },
-    { Mounts: [{ Type: 'bind', Source: '/snel/appdata/immich/upload' }, { Type: 'volume', Source: '/var/lib/docker/volumes/x/_data' }] },
+    { Mounts: [{ Type: 'bind', Source: '/fast/appdata/jellyfin' }, { Type: 'bind', Source: '/tank/media' }] },
+    { Mounts: [{ Type: 'bind', Source: '/fast/appdata/immich/upload' }, { Type: 'volume', Source: '/var/lib/docker/volumes/x/_data' }] },
     { Mounts: [{ Type: 'bind', Source: '/mnt/user/appdata/oud' }] },
   ];
-  assert.deepEqual(paths.appdataFromMounts(containers), ['/snel/appdata', '/mnt/user/appdata']);
-  const list = [{ name: 'tank', mountpoint: '/tank' }, { name: 'tank/data', mountpoint: '/tank/data' }, { name: 'tank/data/appdata', mountpoint: '/tank/data/appdata' }, { name: '/snel', mountpoint: '/snel' }];
+  assert.deepEqual(paths.appdataFromMounts(containers), ['/fast/appdata', '/mnt/user/appdata']);
+  const list = [{ name: 'tank', mountpoint: '/tank' }, { name: 'tank/data', mountpoint: '/tank/data' }, { name: 'tank/data/appdata', mountpoint: '/tank/data/appdata' }, { name: '/fast', mountpoint: '/fast' }];
   const has = (set) => (p) => set.includes(p);
-  // containers eerst, maar alleen wat bestaat (/mnt/user/appdata van Unraid niet)
-  assert.equal(paths.pickFolder('appdata', { list, mounts: ['/mnt/user/appdata', '/snel/appdata'], existsFn: has(['/snel/appdata', '/tank/data/appdata']) }), '/snel/appdata');
-  // dan een dataset die zo heet, ook dieper
+  // containers first, but only what exists (not Unraid's /mnt/user/appdata)
+  assert.equal(paths.pickFolder('appdata', { list, mounts: ['/mnt/user/appdata', '/fast/appdata'], existsFn: has(['/fast/appdata', '/tank/data/appdata']) }), '/fast/appdata');
+  // then a dataset with that name, also deeper
   assert.equal(paths.pickFolder('appdata', { list, existsFn: has(['/tank/data/appdata', '/tank/appdata']) }), '/tank/data/appdata');
-  // dan een gewone map op een pool
+  // then a plain folder on a pool
   assert.equal(paths.pickFolder('vms', { list, existsFn: has(['/tank/vms']) }), '/tank/vms');
   assert.equal(paths.pickFolder('isos', { list, existsFn: has([]) }), null);
 });

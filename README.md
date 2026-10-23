@@ -1,97 +1,98 @@
 # HomeBaseOS
 
-Een eenvoudig, overzichtelijk beheersysteem voor je thuisserver, in de stijl van ZimaOS en HexOS.
-HomeBaseOS draait op een gewone **Debian 13** en beheert drie dingen voor je: **ZFS** voor opslag, **KVM/libvirt** voor virtuele machines en **Docker** voor apps.
+A simple, clear management system for your home server, in the style of ZimaOS and HexOS.
+HomeBaseOS runs on a plain **Debian 13** and manages three things for you: **ZFS** for storage, **KVM/libvirt** for virtual machines and **Docker** for apps.
 
-**Wat kan het?**
+**What can it do?**
 
-- **Startscherm** met klok, CPU, RAM, VRAM, vrije opslag, AI-status en je VM's met live CPU en RAM
-- **Apps**: al je Docker-containers als pictogrammen. Een oranje pijltje op een app betekent dat er een nieuwe versie is (HomeBaseOS kijkt elke 6 uur, of meteen met *Nu controleren*). **Klik** om de webinterface te openen, **rechtsklik** (of ⋯) voor het menu: starten, stoppen, herstarten, bijwerken, logboek (live), console en instellingen (adres van de webinterface, pictogram, automatisch starten, en de container zelf: image, poorten, mappen, variabelen, apparaten en labels in een formulier zoals in Unraid, of het compose-bestand als tekst)
-- **Appstore**: bijna 4000 apps uit de catalogus van Unraid Community Apps. Zoeken, kiezen, een paar velden invullen en installeren. HomeBaseOS maakt er een compose-bestand van
-- **VM's** (eigen pagina): aanmaken (Linux, Windows 11 of een bestaande schijf zoals Home Assistant OS), bewerken, verwijderen, live CPU en RAM, en automatisch starten **met uitstel** als de server opstart
-- **Startscherm**: apps rangschikken en in mappen zetten zoals op een iPad (*Rangschikken* of lang indrukken; sleep een app op een andere om een map te maken), en de widgets links verbergen of verplaatsen (*Widgets aanpassen*)
-- **Gedeelde mappen** (Samba) met gebruikers en rechten per map (lezen of lezen en schrijven), gasten en Time Machine
-- **Back-ups**: je toestellen (Mac met Time Machine, Windows, Linux, gsm) naar de NAS, en mappen van de NAS naar Google Drive, OneDrive, Dropbox, S3 of een andere NAS (en terug), op vaste tijden, eventueel versleuteld en met oude versies
-- **Opslag**: ZFS-pools met gezondheid en de laatste controle (scrub), alle schijven met temperatuur en SMART, je datasets, een overzicht van je schijfbays en een venster om een pool aan te maken
-- **AI**: Ollama-modellen bekijken, laden, ontladen, downloaden en verwijderen, en snel iets vragen aan je eigen model
-- **Instellingen** (tandwiel rechtsboven): taal (Nederlands of Engels) en thema, de netwerkinstellingen van de server (IP-adres, DHCP of vast, DNS, hostnaam, bridge voor VM's) met automatisch terugzetten als je niet bevestigt, Docker-netwerken (bridge, macvlan, ipvlan) voor je apps, en alle info over de server, de hardware en de versies
-- Licht en donker thema, werkt ook op je gsm
+- **Home screen** with clock, CPU, RAM, VRAM, free storage, AI status and your VMs with live CPU and RAM
+- **Apps**: all your Docker containers as icons. An orange arrow on an app means a new version is available (HomeBaseOS checks every 6 hours, or right away with *Check now*). **Click** to open the web interface, **right-click** (or ⋯) for the menu: start, stop, restart, update, logs (live), console and settings (web interface address, icon, automatic start, and the container itself: image, ports, folders, variables, devices and labels in a form like in Unraid, or the compose file as text)
+- **App store**: almost 4000 apps from the Unraid Community Apps catalogue. Search, choose, fill in a few fields and install. HomeBaseOS turns them into a compose file
+- **VMs** (own page): create (Linux, Windows 11 or an existing disk such as Home Assistant OS), edit, delete, live CPU and RAM, and automatic start **with a delay** when the server boots
+- **Home screen**: arrange apps and put them in folders like on an iPad (*Arrange* or a long press; drag an app onto another one to make a folder), and hide or move the widgets on the left (*Customize widgets*)
+- **Shared folders** (Samba) with users and rights per folder (read, or read and write), guests and Time Machine
+- **Backups**: your devices (Mac with Time Machine, Windows, Linux, phone) to the NAS, and folders from the NAS to Google Drive, OneDrive, Dropbox, S3 or another NAS (and back), on a schedule, optionally encrypted and with old versions
+- **Storage**: ZFS pools with their health and the last check (scrub), all disks with temperature and SMART, your datasets, an overview of your drive bays and a window to create a pool
+- **AI**: view, load, unload, download and delete Ollama models, and quickly ask your own model something
+- **Settings** (gear at the top right): language and theme, the server's network settings (IP address, DHCP or static, DNS, hostname, bridge for VMs) with an automatic rollback if you don't confirm, Docker networks (bridge, macvlan, ipvlan) for your apps, and all info about the server, the hardware and the versions
+- Light and dark theme, also works on your phone
+- **Languages**: English and Dutch (Settings > General). Adding a language is one file (see *Translations* below)
 
-## Installeren met de ISO (aanbevolen)
+## Installing with the ISO (recommended)
 
-Bij elke release staat een installatie-ISO: `homebaseos-<versie>-amd64.iso`. Dat is de officiële Debian 13-netinstaller met HomeBaseOS erbij.
+Every release has an installation ISO: `homebaseos-<version>-amd64.iso`. It is the official Debian 13 net installer with HomeBaseOS added.
 
-1. Zet **Secure Boot uit** in het BIOS (de ZFS- en NVIDIA-modules zijn niet ondertekend). Zet de server op UEFI.
-2. Zet de ISO op een USB-stick met [balenaEtcher](https://etcher.balena.io), of: `sudo dd if=homebaseos-….iso of=/dev/sdX bs=4M status=progress conv=fsync`.
-3. Start de server van de stick en kies **HomeBaseOS installeren** (of *met NVIDIA-driver* voor een NVIDIA-kaart). De server heeft internet nodig.
-4. De installer vraagt maar drie dingen:
-   - **de schijf voor het systeem**: kies de SSD voor Debian, *niet* een van je dataschijven;
-   - de bevestiging dat die schijf gewist mag worden;
-   - een wachtwoord voor de beheerder `homebase` (voor SSH en `sudo`).
-5. Na de herstart installeert HomeBaseOS zichzelf (5 à 15 minuten). Daarna staat het adres op het scherm van de server. Open dat adres in je browser: de welkomstwizard maakt je account aan en doet de rest.
+1. Turn **Secure Boot off** in the BIOS (the ZFS and NVIDIA modules are not signed). Set the server to UEFI.
+2. Put the ISO on a USB stick with [balenaEtcher](https://etcher.balena.io), or: `sudo dd if=homebaseos-….iso of=/dev/sdX bs=4M status=progress conv=fsync`.
+3. Boot the server from the stick and choose **Install HomeBaseOS** (or *with the NVIDIA driver* for an NVIDIA card). The server needs internet.
+4. The installer asks only three things:
+   - **the disk for the system**: choose the SSD for Debian, *not* one of your data disks;
+   - the confirmation that this disk may be erased;
+   - a password for the administrator `homebase` (for SSH and `sudo`).
+5. After the reboot HomeBaseOS installs itself (5 to 15 minutes). Then the address appears on the server's screen. Open that address in your browser: the welcome wizard creates your account and does the rest.
 
-Taal en toetsenbord staan op Nederlands (België) en Belgisch AZERTY; de tijdzone op Europe/Brussels (aan te passen in de wizard). Mislukt de installatie bij de eerste opstart, dan staat dat op het scherm; het logboek is `/var/log/homebaseos-firstboot.log` en `sudo systemctl restart homebaseos-firstboot` probeert opnieuw.
+The installer runs in English; the country, keyboard and time zone are set to Belgium, Belgian AZERTY and Europe/Brussels (change them in `iso/preseed.cfg`, the time zone also in the wizard). If the installation fails at the first boot, the screen says so; the log is `/var/log/homebaseos-firstboot.log` and `sudo systemctl restart homebaseos-firstboot` tries again.
 
-**De ISO zelf bouwen.** Dat doet GitHub Actions bij elke nieuwe versie: een gepushte tag `vX.Y.Z` maakt de release en zet de ISO erbij (`.github/workflows/iso.yml`), of met de hand via *Actions > Release en ISO > Run workflow*. Op een Linux-pc: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (de ISO komt in `dist/`).
+**Building the ISO yourself.** GitHub Actions does this for every new version: a pushed tag `vX.Y.Z` creates the release and attaches the ISO (`.github/workflows/iso.yml`), or by hand via *Actions > Release and ISO > Run workflow*. On a Linux PC: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (the ISO ends up in `dist/`).
 
-## Installeren met de hand
+## Installing by hand
 
-### 1. Debian 13 installeren
+### 1. Install Debian 13
 
-Installeer **Debian 13 (trixie)** vanaf de netinst-ISO op de opstartschijf (bv. een kleine SSD, niet op je dataschijven).
-Kies bij *Software selection* alleen **SSH server** en **standard system utilities**, geen desktop.
+Install **Debian 13 (trixie)** from the netinst ISO on the boot disk (e.g. a small SSD, not on your data disks).
+Under *Software selection* choose only **SSH server** and **standard system utilities**, no desktop.
 
-### 2. HomeBaseOS installeren
+### 2. Install HomeBaseOS
 
-Kopieer de map `homebaseos` naar de server (bv. met `scp -r homebaseos gebruiker@IP-van-je-server:`) en voer uit:
+Copy the `homebaseos` folder to the server (e.g. with `scp -r homebaseos user@IP-of-your-server:`) and run:
 
 ```bash
 cd homebaseos
-sudo ./install.sh            # met een NVIDIA-kaart: sudo ./install.sh --nvidia
+sudo ./install.sh            # with an NVIDIA card: sudo ./install.sh --nvidia
 ```
 
-Het script installeert ZFS, KVM/libvirt, Docker en HomeBaseOS, en zet HomeBaseOS aan als systemd-service.
-Op het einde toont het het adres. Open dat in je browser en maak in de welkomstwizard je **account** aan (gebruikersnaam en wachtwoord).
-Opnieuw uitvoeren werkt HomeBaseOS bij. Je instellingen blijven staan.
+The script installs ZFS, KVM/libvirt, Docker and HomeBaseOS, and turns HomeBaseOS on as a systemd service.
+At the end it shows the address. Open it in your browser and create your **account** (user name and password) in the welcome wizard.
+Running it again updates HomeBaseOS. Your settings stay.
 
-### 3. Een ZFS-pool maken
+### 3. Create a ZFS pool
 
-Het makkelijkst gaat het in HomeBaseOS zelf: in de welkomstwizard (stap *Opslag*) of later bij **Opslag > Pool aanmaken**. Vink de schijven aan, kies de indeling (stripe, mirror, RAID-Z1/2/3 of mirror-paren) en je ziet meteen hoeveel opslag je overhoudt, hoeveel schijven mogen uitvallen en wat er ongebruikt blijft bij schijven van verschillende grootte. Schijven waarop het systeem staat of die al in een pool zitten, kan je niet kiezen. HomeBaseOS gebruikt dezelfde opties als hieronder (ashift=12, lz4, /dev/disk/by-id) en maakt meteen de mappen (datasets) `appdata`, `media`, `backups`, `vms` en `isos` op de pool. Wat nog geen plek had (appgegevens, VM-schijven, ISO's en de gedeelde mappen van Unraid-apps), komt op die eerste pool. Verhuizen naar een andere pool kan later bij **Instellingen > Opslag** (zie *Appgegevens verhuizen*). Wil je het liever met de hand doen:
+The easiest way is in HomeBaseOS itself: in the welcome wizard (step *Storage*) or later under **Storage > Create pool**. Tick the disks, choose the layout (stripe, mirror, RAID-Z1/2/3 or mirror pairs) and you see right away how much storage you keep, how many disks may fail and what stays unused with disks of different sizes. Disks that hold the system or are already in a pool can't be chosen. HomeBaseOS uses the same options as below (ashift=12, lz4, /dev/disk/by-id) and right away creates the folders (datasets) `appdata`, `media`, `backups`, `vms` and `isos` on the pool. Whatever had no place yet (app data, VM disks, ISOs and the shared folders of Unraid apps) goes on that first pool. You can move to another pool later in **Settings > Storage** (see *Moving app data*). Prefer to do it by hand:
 
-> **Let op:** `zpool create` wist de schijven die je opgeeft. Controleer eerst welke schijven het zijn.
+> **Careful:** `zpool create` erases the disks you give it. Check first which disks they are.
 
-Gebruik altijd de namen uit `/dev/disk/by-id/`, want `sda` en `sdb` kunnen na een herstart van plaats wisselen:
+Always use the names from `/dev/disk/by-id/`, because `sda` and `sdb` can swap after a reboot:
 
 ```bash
 ls -l /dev/disk/by-id/ | grep -v part
 
-# 4 HDD's als raidz1: één schijf mag uitvallen, ongeveer 6 TB bruikbaar bij 4× 2 TB
+# 4 HDDs as raidz1: one disk may fail, about 6 TB usable with 4× 2 TB
 sudo zpool create -o ashift=12 -O compression=lz4 -O atime=off -O xattr=sa -O acltype=posixacl \
-  tank raidz1 /dev/disk/by-id/ata-SCHIJF1 /dev/disk/by-id/ata-SCHIJF2 /dev/disk/by-id/ata-SCHIJF3 /dev/disk/by-id/ata-SCHIJF4
+  tank raidz1 /dev/disk/by-id/ata-DISK1 /dev/disk/by-id/ata-DISK2 /dev/disk/by-id/ata-DISK3 /dev/disk/by-id/ata-DISK4
 
-# 2 SSD's als mirror voor apps en VM-schijven
-sudo zpool create -o ashift=12 -O compression=lz4 -O atime=off -O xattr=sa snel mirror /dev/disk/by-id/nvme-SSD1 /dev/disk/by-id/nvme-SSD2
+# 2 SSDs as a mirror for apps and VM disks
+sudo zpool create -o ashift=12 -O compression=lz4 -O atime=off -O xattr=sa fast mirror /dev/disk/by-id/nvme-SSD1 /dev/disk/by-id/nvme-SSD2
 
 # Datasets
-sudo zfs create tank/isos        # ISO's en schijfbestanden
-sudo zfs create snel/vms         # VM-schijven (snel op SSD)
-sudo zfs create snel/appdata     # gegevens van je Docker-apps
+sudo zfs create tank/isos        # ISOs and disk files
+sudo zfs create fast/vms         # VM disks (fast, on SSD)
+sudo zfs create fast/appdata     # data of your Docker apps
 sudo zfs create tank/media
 ```
 
-HomeBaseOS vindt zulke mappen bij de volgende start zelf (een dataset `<pool>/appdata`, `<pool>/vms` of `<pool>/isos`). Kies anders bij **Instellingen > Opslag** welke pool je voor wat gebruikt.
+HomeBaseOS finds such folders by itself at the next start (a dataset `<pool>/appdata`, `<pool>/vms` or `<pool>/isos`). Otherwise choose in **Settings > Storage** which pool you use for what.
 
-#### Appgegevens verhuizen
+#### Moving app data
 
-Bij **Instellingen > Opslag** kies je een andere pool voor de appgegevens en klik je op *Verhuizen*. HomeBaseOS stopt de apps die er een map hebben, kopieert alles met `rsync` naar `/<pool>/appdata`, past de paden in hun compose-bestanden aan (met een `.bak`) en start ze opnieuw. De oude map blijft staan: verwijder ze zelf als alles werkt. Apps zonder compose-bestand op de server (gestart met `docker run`, of beheerd door Portainer, dat het bestand in zijn eigen container bewaart) verhuizen niet mee; HomeBaseOS toont welke. Apps uit de appstore en Dockge-stacks verhuizen wel mee. Voor VM-schijven, ISO's en gedeelde mappen kies je daar ook een pool; bestaande bestanden blijven dan waar ze zijn.
-Debian voert elke maand automatisch een controle (scrub) uit. In HomeBaseOS zie je onder **Opslag** wanneer dat voor het laatst gebeurde.
-Onder **Opslag > Schijfbays** teken je je kast na: kies het aantal bays en hoeveel er op een rij staan, en sleep elke schijf naar de bay waarin ze zit. HomeBaseOS onthoudt de schijf aan haar serienummer. Valt een schijf uit of haal je ze eruit, dan kleurt haar bay rood met het model en serienummer, zodat je meteen weet welke je moet vervangen.
+In **Settings > Storage** you choose another pool for the app data and click *Move*. HomeBaseOS stops the apps that have a folder there, copies everything with `rsync` to `/<pool>/appdata`, changes the paths in their compose files (with a `.bak`) and starts them again. The old folder stays: remove it yourself when everything works. Apps without a compose file on the server (started with `docker run`, or managed by Portainer, which keeps the file in its own container) don't move along; HomeBaseOS shows which ones. Apps from the app store and Dockge stacks do move along. You also choose a pool there for VM disks, ISOs and shared folders; existing files then stay where they are.
+Debian runs a check (scrub) automatically every month. In HomeBaseOS you see under **Storage** when that last happened.
+Under **Storage > Drive bays** you draw your case: choose the number of bays and how many are on a row, and drag each disk to the bay it is in. HomeBaseOS remembers the disk by its serial number. If a disk fails or you take it out, its bay turns red with the model and serial number, so you know right away which one to replace.
 
-### 4. VM's in je thuisnetwerk (bridge)
+### 4. VMs in your home network (bridge)
 
-Standaard komen nieuwe VM's achter de NAT van libvirt: ze kunnen naar buiten, maar je bereikt ze niet vanuit je netwerk.
-Voor **Home Assistant** en de meeste servers wil je ze rechtstreeks in je thuisnetwerk. Maak daarvoor een bridge.
-Zoek de naam van je netwerkkaart met `ip -br link` (bv. `enp5s0`) en pas `/etc/network/interfaces` aan:
+By default new VMs go behind libvirt's NAT: they can reach out, but you can't reach them from your network.
+For **Home Assistant** and most servers you want them directly in your home network. Create a bridge for that.
+Find the name of your network card with `ip -br link` (e.g. `enp5s0`) and change `/etc/network/interfaces`:
 
 ```text
 auto lo
@@ -106,81 +107,82 @@ iface br0 inet dhcp
     bridge_fd 0
 ```
 
-Doe dit liefst met een scherm en toetsenbord aan de server: als er een typfout in staat, ben je de verbinding kwijt.
-Herstart daarna de server, zet `VM_NETWORK=bridge=br0` in `/etc/homebaseos/homebaseos.env` en herstart HomeBaseOS.
-Je kan de bridge ook maken in *Instellingen > Netwerk*. Het netwerk van een VM kies je bij het aanmaken of later bij *Bewerken > Netwerk*.
+Preferably do this with a screen and keyboard on the server: if there is a typo, you lose the connection.
+Then reboot the server, set `VM_NETWORK=bridge=br0` in `/etc/homebaseos/homebaseos.env` and restart HomeBaseOS.
+You can also create the bridge in *Settings > Network*. You choose a VM's network when creating it or later under *Edit > Network*.
 
-## VM's
+## VMs
 
-- **Nieuwe VM**: zet eerst een ISO (of een schijfbestand) in `ISO_DIR`. Kies daarna in HomeBaseOS *Nieuwe VM* en het netwerk. De VM start meteen.
-- **Console**: de knop *Console* opent het scherm van de VM groot in HomeBaseOS, met toetsenbord en muis (noVNC). Daar installeer je het besturingssysteem.
-  Met *Los venster* zet je de console in een eigen browservenster (bv. op een tweede scherm). *Ctrl+Alt+Del* gaat naar de VM en niet naar je Mac.
-  **Plakken** (Cmd+V of Ctrl+V in de console) typt de tekst van je klembord in de VM. Dat werkt altijd, ook in een installer of de console van Home Assistant OS.
-  **Kopiëren uit de VM** vraagt een agent in de VM: zet bij *Bewerken > Scherm* *Klembord delen* aan, installeer in de VM `spice-vdagent` (Linux) of de SPICE guest tools (Windows) en start de VM opnieuw. Wat je dan in de VM kopieert, komt op je pc (bij http via de knop *Kopiëren naar deze pc*).
-  Liever een eigen VNC-programma? Onder *Bewerken > Scherm* staan het adres en het wachtwoord.
-- **Bewerken** heeft tabbladen:
-  - *CPU en geheugen*, met **vaste kernen** (CPU-pinning zoals in Unraid): kies de kernen waarop de VM altijd draait. Neem beide threads van een kern en laat kern 0 voor de server.
-  - *Netwerk*: netwerkkaarten toevoegen of weghalen, het netwerk (bridge `br0` of een VM-netwerk), het soort kaart en het MAC-adres.
-  - *Opslag*: schijven toevoegen, groter maken of loskoppelen (het bestand blijft staan), een ISO in de cd-rom steken en kiezen of de VM eerst van de schijf of de cd-rom opstart.
-  - *Apparaten*: **USB** (bv. een Zigbee-stick voor Home Assistant) en **PCI** (bv. de GPU) doorgeven. PCI vraagt IOMMU: zet *AMD-Vi/IOMMU* aan in het BIOS. Geef alle apparaten uit dezelfde IOMMU-groep samen door (bv. de GPU en zijn geluid). Een doorgegeven GPU kan Ollama niet gebruiken zolang de VM draait.
-- **VM-netwerken** (*Instellingen > VM-netwerken* of de knop *Netwerken* op de VM-pagina): naast de bridge van je thuisnetwerk maak je hier eigen netwerken. *NAT*: de VM's kunnen naar internet, maar je bereikt ze niet vanuit je thuisnetwerk. *Afgeschermd*: alleen de VM's onderling en de server, zonder internet.
-- **Home Assistant OS**: download het KVM-bestand (`haos_ova-….qcow2.xz`) van home-assistant.io, pak het uit met `unxz`, zet het in `ISO_DIR` en kies *Bestaande schijf*. HomeBaseOS maakt er een kopie van.
-- **Automatisch starten met uitstel**: vink *Automatisch starten* aan en kies een uitstel in seconden. Het uitstel telt vanaf het opstarten van de server.
-  Met 60 seconden start de VM dus pas 1 minuut na de server. Zo heeft de server eerst tijd voor ZFS, Docker en je apps.
-  HomeBaseOS regelt dit zelf, dus de autostart van libvirt staat voor die VM uit.
-- Wijzigingen aan CPU, geheugen, netwerk en apparaten gelden pas nadat je de VM **afsluit en opnieuw start** (een herstart vanuit de VM is niet genoeg). Een ISO wisselen en schijven groter maken gaat meteen.
-  De naam wijzig je alleen als de VM uit staat.
-- **Verwijderen** kan alleen als de VM uit staat. Vink *Ook de schijfbestanden wissen* aan om ook de schijven te verwijderen.
-  HomeBaseOS wist alleen bestanden binnen `VM_DIR`. Alles daarbuiten blijft staan, en dat zie je in de melding.
-
+- **New VM**: first put an ISO (or a disk file) in `ISO_DIR`. Then choose *New VM* in HomeBaseOS and the network. The VM starts right away.
+- **Console**: the *Console* button opens the VM's screen large in HomeBaseOS, with keyboard and mouse (noVNC). That is where you install the operating system.
+  With *Pop out* you put the console in a browser window of its own (e.g. on a second screen). *Ctrl+Alt+Del* goes to the VM and not to your Mac.
+  **Pasting** (Cmd+V or Ctrl+V in the console) types the text from your clipboard in the VM. That always works, also in an installer or the Home Assistant OS console.
+  **Copying out of the VM** needs an agent in the VM: turn on clipboard sharing under *Edit > Screen*, install `spice-vdagent` (Linux) or the SPICE guest tools (Windows) in the VM and restart the VM. What you then copy in the VM ends up on your PC (over http through the *Copy to this PC* button).
+  Prefer your own VNC program? The address and the password are under *Edit > Screen*.
+- **Edit** has tabs:
+  - *CPU and memory*, with **pinned cores** (CPU pinning like in Unraid): choose the cores the VM always runs on. Take both threads of a core and leave core 0 for the server.
+  - *Network*: add or remove network cards, the network (bridge `br0` or a VM network), the kind of card and the MAC address.
+  - *Storage*: add disks, make them larger or detach them (the file stays), put an ISO in the cd-rom and choose whether the VM boots from the disk or the cd-rom first.
+  - *Devices*: pass through **USB** (e.g. a Zigbee stick for Home Assistant) and **PCI** (e.g. the GPU). PCI needs IOMMU: turn on *AMD-Vi/IOMMU* in the BIOS. Pass through all devices of the same IOMMU group together (e.g. the GPU and its audio). Ollama can't use a passed-through GPU while the VM runs.
+- **VM networks** (*Settings > VM networks* or the *Networks* button on the VM page): besides the bridge to your home network you create networks of your own here. *NAT*: the VMs can reach the internet, but you can't reach them from your home network. *Isolated*: only the VMs among themselves and the server, without internet.
+- **Home Assistant OS**: download the KVM file (`haos_ova-….qcow2.xz`) from home-assistant.io, unpack it with `unxz`, put it in `ISO_DIR` and choose *Existing disk*. HomeBaseOS makes a copy of it.
+- **Automatic start with a delay**: tick automatic start and choose a delay in seconds. The delay counts from when the server boots.
+  With 60 seconds the VM starts 1 minute after the server. That gives the server time for ZFS, Docker and your apps first.
+  HomeBaseOS handles this itself, so libvirt's autostart is off for that VM.
+- Changes to CPU, memory, network and devices only apply after you **shut the VM down and start it again** (a restart from inside the VM is not enough). Swapping an ISO and making disks larger work right away.
+  You can only change the name while the VM is off.
+- **Delete** only works while the VM is off. Tick *Also delete the disk files* to remove the disks too.
+  HomeBaseOS only erases files inside `VM_DIR`. Everything outside stays, and the notification tells you.
 
 ### Snapshots
 
-In het venster van een VM, tabblad **Snapshots**: leg de VM vast zoals ze nu is (bv. vóór een update) en ga er later naar terug. Draait de VM, dan bewaart de snapshot ook het geheugen; ga je terug, dan loopt de VM verder waar ze was. Een snapshot is geen back-up (hij staat op dezelfde schijf): gebruik daarvoor *Back-ups → Apps en VM's*.
+In a VM's window, tab **Snapshots**: capture the VM as it is now (e.g. before an update) and go back to it later. If the VM is running, the snapshot also keeps the memory; when you go back, the VM continues where it was. A snapshot is not a backup (it is on the same disk): use *Backups → Apps and VMs* for that.
 
-## Appstore
+## App store
 
-De appstore gebruikt de catalogus van **Unraid Community Apps** (de feed `applicationFeed.json`, niet de Unraid-plugin zelf).
-HomeBaseOS haalt hem één keer per dag op. Met *Nu vernieuwen* kan het ook meteen.
-Plugins, verouderde apps en apps op de zwarte lijst van Community Apps laat HomeBaseOS weg.
+The app store uses the catalogue of **Unraid Community Apps** (the `applicationFeed.json` feed, not the Unraid plugin itself).
+HomeBaseOS fetches it once a day. *Refresh now* does it right away.
+HomeBaseOS leaves out plugins, deprecated apps and apps on the Community Apps blacklist.
 
-Omdat de templates voor Unraid gemaakt zijn, vertaalt HomeBaseOS ze bij het installeren:
+Because the templates are made for Unraid, HomeBaseOS translates them when installing:
 
-| In het template | Op je server |
+| In the template | On your server |
 |---|---|
-| `/mnt/user/appdata/...`, `/mnt/cache/appdata/...` | de map voor appgegevens (*Instellingen > Opslag*, standaard `/<eerste pool>/appdata`) |
-| andere `/mnt/user/...`, `/mnt/diskN/...` | de map voor gedeelde mappen (standaard `/<eerste pool>`) |
-| een leeg `/config`-pad | `<appgegevens>/<naam>` (zoals Community Apps dat ook doet) |
-| `PUID=99`, `PGID=100`, `--user 99:100` | `APP_UID`, `APP_GID` (standaard 1000) |
-| `TZ` | de tijdzone van je server |
-| `--runtime=nvidia`, `--gpus all` | GPU-reservering in compose |
-| netwerk `br0` of eigen netwerken | een Docker-netwerk met dezelfde naam als dat bestaat, anders het standaardnetwerk (met een waarschuwing). Bij het installeren kies je zelf een netwerk en eventueel een vast IP-adres. |
-| Unraid-mappen zoals `/usr/local/emhttp` en `/boot` | weggelaten (met een waarschuwing) |
+| `/mnt/user/appdata/...`, `/mnt/cache/appdata/...` | the folder for app data (*Settings > Storage*, default `/<first pool>/appdata`) |
+| other `/mnt/user/...`, `/mnt/diskN/...` | the folder for shared folders (default `/<first pool>`) |
+| an empty `/config` path | `<app data>/<name>` (like Community Apps does too) |
+| `PUID=99`, `PGID=100`, `--user 99:100` | `APP_UID`, `APP_GID` (default 1000) |
+| `TZ` | your server's time zone |
+| `--runtime=nvidia`, `--gpus all` | GPU reservation in compose |
+| network `br0` or custom networks | a Docker network with the same name if it exists, otherwise the default network (with a warning). When installing you choose a network yourself, and optionally a fixed IP address. |
+| Unraid folders like `/usr/local/emhttp` and `/boot` | left out (with a warning) |
 
-### Map voor de gegevens en Geavanceerd
+### Data folder and Advanced
 
-Bij elke app kies je bij **Map voor de gegevens** waar ze haar instellingen en gegevens bewaart (standaard `<appgegevens>/<naam>`, met je bestaande datasets als voorstel). Alle mappen van de app die daarin liggen, verhuizen mee; elke map kan je ook apart aanpassen.
+For every app you choose under **Data folder** where it keeps its settings and data (default `<app data>/<name>`, with your existing datasets as suggestions). All of the app's folders inside it move along; you can also change each folder separately.
 
-Zet je **Geavanceerd** aan, dan krijg je het volledige containerformulier: image, herstarten, netwerk, privileged, en zelf poorten, mappen, variabelen, apparaten en labels toevoegen. Met de knop **Code** zie en bewerk je het compose-bestand zelf; precies dat bestand wordt geïnstalleerd (Docker Compose controleert het eerst). Velden en code blijven gelijk als je wisselt, en opties die het formulier niet kent (bv. de GPU) blijven staan. Bij een eigen app staan *Velden* en *Code* er altijd.
+Turn on **Advanced** and you get the full container form: image, restart, network, privileged, and adding your own ports, folders, variables, devices and labels. With the **Code** button you see and edit the compose file itself; exactly that file is installed (Docker Compose checks it first). Fields and code stay the same when you switch, and options the form doesn't know (e.g. the GPU) are kept. For an own app *Fields* and *Code* are always there.
 
-### Eigen app
+While installing you see a progress bar (layers and megabytes downloaded); *Details* shows Docker's output, one line per layer like `docker pull` in a terminal.
 
-Staat een app niet in de appstore? Kies in de appstore **Eigen app** en plak de naam van het image (bv. `louislam/uptime-kuma`) of een link naar de pagina ervan (Docker Hub, GitHub-pakketten, Quay). HomeBaseOS leest bij de registry welke poorten en mappen de app gebruikt, zonder het image al te downloaden, en vult het formulier in: een vrije poort, mappen in `<appgegevens>/<naam>`, PUID/PGID en de tijdzone. Je past alles aan in hetzelfde formulier als bij de instellingen van een app en installeert. Een eigen app kan je later verwijderen zoals een app uit de appstore.
+### Own app
 
-Per app komt er een `compose.yaml` in `STACKS_DIR/<naam>` (standaard `/opt/stacks`, dezelfde map die Dockge gebruikt). Je kan het bestand dus ook zelf aanpassen.
-Voor privileged apps, apps met toegang tot Docker, apps op het host-netwerk en extra Docker-opties die niet overgenomen worden, toont HomeBaseOS eerst een waarschuwing.
-Poorten kan je altijd aanpassen, en met *+ Poort* voeg je er extra toe. Gebruikt een app het host-netwerk (bv. Plex of Home Assistant), dan luistert ze op haar eigen poorten. Pas je toch een poort aan, dan kiest HomeBaseOS het standaardnetwerk (bridge). Sommige apps zoeken toestellen in je netwerk en werken daarom het best met host.
-Apps uit de appstore kan je ook weer **verwijderen** (in het detailvenster van de app). Vink aan of hun gegevens mee weg moeten.
-HomeBaseOS wist alleen mappen binnen de map voor appgegevens.
+Is an app not in the app store? Choose **Own app** in the app store and paste the image name (e.g. `louislam/uptime-kuma`) or a link to its page (Docker Hub, GitHub packages, Quay). HomeBaseOS reads from the registry which ports and folders the app uses, without downloading the image, and fills in the form: a free port, folders in `<app data>/<name>`, PUID/PGID and the time zone. You change everything in the same form as in an app's settings and install. You can remove an own app later like an app from the app store.
 
-> De templates zijn het werk van hun eigen maintainers. Community Apps (van Squid) verzamelt en controleert ze.
-> Gebruik de catalogus voor je eigen server. Wil je HomeBaseOS publiceren, vraag het dan eerst na bij de makers van Community Apps.
+Each app gets a `compose.yaml` in `STACKS_DIR/<name>` (default `/opt/stacks`, the same folder Dockge uses). So you can also edit the file yourself.
+For privileged apps, apps with access to Docker, apps on the host network and extra Docker options that aren't taken over, HomeBaseOS shows a warning first.
+You can always change ports, and *+ Port* adds extra ones. If an app uses the host network (e.g. Plex or Home Assistant), it listens on its own ports. If you change a port anyway, HomeBaseOS chooses the default network (bridge). Some apps look for devices in your network and therefore work best with host.
+You can also **remove** apps from the app store again (in the app's detail window). Tick whether their data should go too.
+HomeBaseOS only erases folders inside the app data folder.
+
+> The templates are the work of their own maintainers. Community Apps (by Squid) collects and checks them.
+> Use the catalogue for your own server. If you want to publish HomeBaseOS, ask the makers of Community Apps first.
 
 ## Apps
 
-HomeBaseOS toont alle Docker-containers. Je zet apps het best op met **Docker Compose**: dan werkt ook de knop *Bijwerken* (die haalt het nieuwste image op en maakt de container opnieuw).
-Heeft een app geen eigen pictogram, dan zoekt HomeBaseOS er een in de catalogus van Community Apps (zelfde image) of in de open verzameling [dashboard-icons](https://github.com/homarr-labs/dashboard-icons). Lukt dat niet, dan zie je een gekleurde letter.
-Met twee labels kies je zelf het pictogram en het adres:
+HomeBaseOS shows all Docker containers. Preferably set apps up with **Docker Compose**: then the *Update* button works too (it pulls the newest image and recreates the container).
+If an app has no icon of its own, HomeBaseOS looks for one in the Community Apps catalogue (same image) or in the open [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection. If that fails, you see a coloured letter.
+With two labels you choose the icon and the address yourself:
 
 ```yaml
 services:
@@ -188,13 +190,15 @@ services:
     image: jellyfin/jellyfin:latest
     restart: unless-stopped
     ports: ["8096:8096"]
-    volumes: ["/snel/appdata/jellyfin:/config", "/tank/media:/media"]
+    volumes: ["/fast/appdata/jellyfin:/config", "/tank/media:/media"]
     labels:
       homebaseos.icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/jellyfin.png"
       homebaseos.webui: "http://[IP]:[PORT:8096]/"
 ```
 
-**Ollama met je NVIDIA-kaart** (na `install.sh --nvidia` en een herstart). Draait Ollama nog niet, dan zegt de AI-widget dat en brengt het AI-venster je naar Ollama in de appstore:
+`[PORT:8096]` becomes the port on the server that is mapped to port 8096 in the app. On the host network it is the app's own port, and with its own address (macvlan/ipvlan) `[IP]` becomes that address.
+
+**Ollama with your NVIDIA card** (after `install.sh --nvidia` and a reboot). If Ollama isn't running yet, the AI widget says so and the AI window takes you to Ollama in the app store:
 
 ```yaml
 services:
@@ -202,184 +206,190 @@ services:
     image: ollama/ollama:latest
     restart: unless-stopped
     ports: ["11434:11434"]
-    volumes: ["/snel/appdata/ollama:/root/.ollama"]
+    volumes: ["/fast/appdata/ollama:/root/.ollama"]
     deploy:
       resources:
         reservations:
           devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
 ```
 
-## Ontwikkelen in VS Code (op je Mac)
+## Developing in VS Code (on your Mac)
 
-Je hebt alleen **Node.js 18.11 of nieuwer** nodig (geen `npm install`, er zijn geen dependencies).
+You only need **Node.js 18.11 or newer** (no `npm install`, there are no dependencies).
 
 ```bash
-npm run demo   # voorbeelddata, werkt zonder server: http://localhost:8080
-npm test       # tests voor alle parsers (virsh, zpool, zfs, lsblk, Docker)
+npm run demo   # sample data, works without a server: http://localhost:8080
+npm test       # tests for all parsers (virsh, zpool, zfs, lsblk, Docker) and more
 ```
 
-In **Run and Debug** staan dezelfde opties. `npm run dev` gebruik je op de server zelf, met een `.env` (zie `.env.example`).
-Bijwerken op de server: kopieer de map opnieuw en voer `sudo ./install.sh` uit.
+**Run and Debug** has the same options. You use `npm run dev` on the server itself, with a `.env` (see `.env.example`).
+Updating on the server: copy the folder again and run `sudo ./install.sh`.
 
-## Instellingen
+### Translations
 
-In `/etc/homebaseos/homebaseos.env`, daarna `sudo systemctl restart homebaseos`.
+The English text in the code is the key (like gettext): `t('Remove {name}?', { name })` in `public/app.js`. Translations are in `public/lang/<code>.js`; `public/lang/languages.js` lists the languages and loads them.
+To add a language: copy `public/lang/nl.js` to `public/lang/<code>.js`, translate the values (keep the `{placeholders}`) and add a line to `public/lang/languages.js` with its name and locale. The server accepts every language in that list. Server messages are English too; the browser translates them with the same file (templates with `{placeholders}` also match messages with values in them).
 
-| Variabele | Betekenis |
+## Settings
+
+In `/etc/homebaseos/homebaseos.env`, then `sudo systemctl restart homebaseos`.
+
+| Variable | Meaning |
 |---|---|
-| `APP_PASSWORD` | Alleen voor installaties van vroeger: geldt zolang er geen eigen account is. Leeg = bij de eerste keer een account aanmaken |
-| `SESSION_SECRET` | Vaste sleutel voor aanmeldingen (anders moet je na een herstart opnieuw aanmelden) |
-| `PORT` | Poort, standaard `8080` |
-| `OLLAMA_URL` | Adres van Ollama, bv. `http://127.0.0.1:11434` |
-| `VM_DIR`, `ISO_DIR` | Vroeger: map voor VM-schijven en voor ISO's. Nu bij *Instellingen > Opslag*; de variabele geldt alleen als daar niets gekozen is |
-| `VM_NETWORK` | `network=default` (NAT) of `bridge=br0` (thuisnetwerk) |
-| `APPDATA_DIR`, `SHARES_DIR` | Vroeger: appgegevens en de map voor Unraid-shares. Nu bij *Instellingen > Opslag* (zelfde voorrang) |
-| `STACKS_DIR` | Compose-bestanden van de appstore, standaard `/opt/stacks` |
-| `APP_UID`, `APP_GID` | Gebruiker voor apps (in plaats van 99:100 van Unraid), standaard `1000` |
-| `STORE_FEED_URL` | Andere bron voor de catalogus (optioneel) |
-| `DATA_DIR` | Eigen instellingen en de cache van de catalogus, standaard `/var/lib/homebaseos` |
-| `DEMO` | `1` = demo-modus met voorbeelddata |
+| `APP_PASSWORD` | Only for older installs: applies as long as there is no account of your own. Empty = create an account the first time |
+| `SESSION_SECRET` | Fixed key for sign-ins (otherwise you have to sign in again after a restart) |
+| `PORT` | Port, default `8080` |
+| `OLLAMA_URL` | Address of Ollama, e.g. `http://127.0.0.1:11434` |
+| `VM_DIR`, `ISO_DIR` | Older installs: folder for VM disks and for ISOs. Now in *Settings > Storage*; the variable only applies if nothing is chosen there |
+| `VM_NETWORK` | `network=default` (NAT) or `bridge=br0` (home network) |
+| `APPDATA_DIR`, `SHARES_DIR` | Older installs: app data and the folder for Unraid shares. Now in *Settings > Storage* (same precedence) |
+| `STACKS_DIR` | Compose files of the app store, default `/opt/stacks` |
+| `APP_UID`, `APP_GID` | User for apps (instead of Unraid's 99:100), default `1000` |
+| `STORE_FEED_URL` | Another source for the catalogue (optional) |
+| `DATA_DIR` | Own settings and the catalogue cache, default `/var/lib/homebaseos` |
+| `DEMO` | `1` = demo mode with sample data |
 
-## Netwerk aanpassen
+## Changing the network
 
-In *Instellingen > Netwerk* stel je het IP-adres van de server in (DHCP of vast), de gateway, de DNS-servers en de bridge `br0` voor VM's.
-Dat werkt als Debian het netwerk beheert met ifupdown (`/etc/network/interfaces`), de standaard voor een server zonder desktop.
-Na *Toepassen* heb je **2 minuten om te bevestigen**. Bevestig je niet, bijvoorbeeld omdat de server niet meer bereikbaar is, dan zet HomeBaseOS de oude instellingen vanzelf terug.
-Verandert het adres, open dan het nieuwe adres en bevestig daar. De vorige versie van de bestanden staat in `/var/lib/homebaseos/netwerk-vorige`.
+In *Settings > Network* you set the server's IP address (DHCP or static), the gateway, the DNS servers and the bridge `br0` for VMs.
+That works when Debian manages the network with ifupdown (`/etc/network/interfaces`), the default for a server without a desktop.
+After *Apply* you have **2 minutes to confirm**. If you don't confirm, for example because the server is no longer reachable, HomeBaseOS puts the old settings back by itself.
+If the address changes, open the new address and confirm there. The previous version of the files is in `/var/lib/homebaseos/network-previous`.
 
-## Docker-netwerken
+## Docker networks
 
-In *Instellingen > Docker-netwerken* maak je netwerken voor je apps:
+In *Settings > Docker networks* you create networks for your apps:
 
-- **Bridge**: een eigen netwerk tussen apps. Apps in hetzelfde netwerk vinden elkaar op naam (bv. `http://database:5432`). Met *Zonder internet* kunnen ze alleen elkaar bereiken.
-- **macvlan**: elke app krijgt een eigen IP- en MAC-adres in je thuisnetwerk, zoals `br0` in Unraid. Handig voor Pi-hole of AdGuard (poort 53) of apps die je router als apart toestel moet zien. Kies een *IP-bereik* dat je router niet via DHCP uitdeelt.
-- **ipvlan**: zoals macvlan, maar alle apps delen het MAC-adres van de server. Voor routers of switches die moeilijk doen met veel MAC-adressen.
+- **Bridge**: a network of its own between apps. Apps in the same network find each other by name (e.g. `http://database:5432`). With *without internet* they can only reach each other.
+- **macvlan**: each app gets its own IP and MAC address in your home network, like `br0` in Unraid. Handy for Pi-hole or AdGuard (port 53) or apps your router should see as a separate device. Choose an *IP range* your router doesn't hand out through DHCP.
+- **ipvlan**: like macvlan, but all apps share the server's MAC address. For routers or switches that have trouble with many MAC addresses.
 
-Let op: met macvlan en ipvlan kan de server zelf de apps niet bereiken via hun eigen adres (andere toestellen in je netwerk wel). Zo werkt Linux.
+Note: with macvlan and ipvlan the server itself can't reach the apps at their own address (other devices in your network can). That's how Linux works.
 
-Een app in een netwerk zetten doe je bij de instellingen van de app (compose-formulier, veld *Netwerk*, eventueel met een vast IP-adres) of bij het installeren uit de appstore. In het compose-bestand komt dat als een `external`-netwerk.
+You put an app in a network in the app's settings (compose form, field *Network*, optionally with a fixed IP address) or when installing from the app store. In the compose file it becomes an `external` network.
 
-## Gedeelde mappen
+## Shared folders
 
-Met de knop **Gedeelde mappen** bovenaan deel je mappen met je pc's, Macs en telefoons (Samba):
+With the **Shared folders** button at the top you share folders with your PCs, Macs and phones (Samba):
 
-1. Maak eerst **gebruikers** met een wachtwoord (bv. voor elk gezinslid) bij **Instellingen → Gebruikers**. Ze kunnen alleen aan de gedeelde mappen, niet aanmelden op de server of het dashboard.
-2. Maak eventueel **groepen** (bv. *Gezin*, *Ouders*) en zet de gebruikers erin. Een groep geeft al haar leden dezelfde rechten; wie in meerdere groepen zit, krijgt het hoogste recht.
-3. Maak een **gedeelde map**: een nieuwe map op een pool (HomeBaseOS maakt er een eigen dataset van, bv. `tank/media`) of een bestaande map.
-4. Kies per gebruiker en per groep *Geen toegang*, *Lezen* of *Lezen en schrijven*. Optioneel mogen gasten lezen zonder wachtwoord, of gebruik je de map voor **Time Machine**.
+1. First create **users** with a password (e.g. one for each family member) in **Settings → Users**. They can only reach the shared folders, not sign in to the server or the dashboard.
+2. Optionally create **groups** (e.g. *Family*, *Parents*) and put the users in them. A group gives all its members the same rights; whoever is in several groups gets the highest right.
+3. Create a **shared folder**: a new folder on a pool (HomeBaseOS makes it a dataset of its own, e.g. `tank/media`) or an existing folder.
+4. Choose per user and per group *No access*, *Read* or *Read and write*. Optionally guests may read without a password, or you use the folder for **Time Machine**.
 
-Bij **Instellingen → Gebruikers** zie je per gebruiker wat die mag in elke map, en of dat rechtstreeks is of via een groep.
+In **Settings → Users** you see per user what they may do in each folder, and whether that is direct or through a group.
 
-Verbinden: op een Mac via Finder → Ga → Verbind met server (`smb://freddy.local/media`), op Windows met `\\freddy\media` in de Verkenner.
-Bestanden worden geschreven als de app-gebruiker (`APP_UID`), dezelfde als bij je Docker-apps, zodat bv. Jellyfin en je pc dezelfde mappen gebruiken zonder rechtenproblemen.
-Een gedeelde map verwijderen stopt alleen het delen; de bestanden blijven staan.
+Connecting: on a Mac through Finder → Go → Connect to Server (`smb://freddy.local/media`), on Windows with `\\freddy\media` in Explorer.
+Files are written as the app user (`APP_UID`), the same as for your Docker apps, so e.g. Jellyfin and your PC use the same folders without permission problems.
+Deleting a shared folder only stops sharing; the files stay.
 
-## Back-ups
+## Backups
 
-Met de knop **Back-ups** bovenaan. Er zijn drie tabbladen:
+With the **Backups** button at the top. There are three tabs:
 
-**Apps en VM's**: een kopie van de apps en VM's die je aanvinkt, in een map op de NAS (bv. `/tank/backups/systeem`), met de hand of op een schema; de laatste *n* blijven bewaard. Van een app gaan de compose-bestanden, de mappen in de appgegevens en de Docker-volumes mee (je media niet: die bewaar je met Synchroniseren); de app stopt even zodat databases een consistente kopie geven. Een VM wordt gekopieerd terwijl ze draait (libvirt) of even afgesloten. *Terugzetten…* zet een app of VM terug uit een gekozen back-up; wat er stond, gaat eerst opzij (`.voor-terugzetten-<datum>`). Wil je die map ook buiten de deur, maak er dan een taak voor bij Synchroniseren.
+**Apps and VMs**: a copy of the apps and VMs you tick, in a folder on the NAS (e.g. `/tank/backups/system`), by hand or on a schedule; the last *n* are kept. For an app the compose files, the folders in the app data and the Docker volumes go along (not your media: keep those with Sync); the app stops briefly so databases give a consistent copy. A VM is copied while it runs (libvirt) or after a brief shutdown. *Restore…* puts an app or VM back from a chosen backup; what was there moves aside first (`.before-restore-<date>`). Want that folder off-site too? Create a task for it under Sync.
 
-**Toestellen**: back-ups van je pc's, Macs en gsm's op de NAS, op twee manieren.
+**Devices**: backups of your PCs, Macs and phones on the NAS, in two ways.
 
-*Met de back-up-app Kopia* (aanbevolen voor Windows en Linux): zet de back-up-app één keer aan en kies een pool. HomeBaseOS start dan een Kopia-server op de NAS (poort 51515) met een versleuteld archief in `<pool>/backups/kopia`. Het **wachtwoord van het archief** zie je maar één keer: bewaar het goed. Voeg daarna per pc een toestel toe; je krijgt een **koppelcode**. Installeer op de pc de app **HomeBase Back-up** (een versie van KopiaUI in dezelfde stijl als HomeBaseOS, [downloaden](https://github.com/lennertvh1/kopia/releases/latest)), typ het adres van je HomeBaseOS en de code, en kies wat je wil bewaren (Documenten, Bureaublad, Afbeeldingen …). De gewone KopiaUI of de opdrachtregel kan ook: de stappen (adres, vingerafdruk, naam, wachtwoord) staan bij het toestel. Het toestel maakt dan elk uur een back-up zolang KopiaUI draait, en oude versies blijven bewaard (24 per uur, 14 dagen, 8 weken, 12 maanden, 3 jaar). Terugzetten doe je in de app (*Bekijken en terugzetten*). HomeBaseOS toont per toestel wanneer de laatste back-up was.
+*With the Kopia backup app* (recommended for Windows and Linux): turn on the backup app once and choose a pool. HomeBaseOS then starts a Kopia server on the NAS (port 51515) with an encrypted repository in `<pool>/backups/kopia`. You see the **repository password** only once: keep it safe. Then add a device per PC; you get a **pairing code**. Install the **HomeBase Backup** app on the PC (a version of KopiaUI in the same style as HomeBaseOS, [download](https://github.com/lennertvh1/kopia/releases/latest)), type the address of your HomeBaseOS and the code, and choose what you want to keep (Documents, Desktop, Pictures …). The regular KopiaUI or the command line work too: the steps (address, fingerprint, name, password) are listed with the device. The device then makes a backup every hour while KopiaUI runs, and old versions are kept (24 hourly, 14 days, 8 weeks, 12 months, 3 years). You restore in the app. HomeBaseOS shows per device when the last backup was.
 
-*Met een eigen gedeelde map*: elk toestel krijgt een eigen dataset (`<pool>/backups/<naam>`) met een maximale grootte, en een gedeelde map waar alleen de gekozen gebruiker aan kan. Bij een Mac staat Time Machine meteen aan. Onder *Zo stel je het in* staan de stappen per soort toestel (Time Machine, Bestandsgeschiedenis van Windows, Déjà Dup op Linux, PhotoSync of FolderSync op je gsm).
+*With a shared folder of its own*: each device gets a dataset of its own (`<pool>/backups/<name>`) with a maximum size, and a shared folder only the chosen user can reach. For a Mac, Time Machine is on right away. *How to set it up* lists the steps per kind of device (Time Machine, Windows File History, Déjà Dup on Linux, PhotoSync or FolderSync on your phone).
 
-**Verbindingen**: plekken buiten de NAS. Google Drive, OneDrive en Dropbox koppel je door aan te melden in je browser:
+**Connections**: places outside the NAS. You link Google Drive, OneDrive and Dropbox by signing in in your browser:
 
-1. Klik op *Aanmelden bij …*. Er opent een tabblad van Google, Microsoft of Dropbox.
-2. Meld je aan en klik op *Toestaan*. Het tabblad komt daarna uit op `http://127.0.0.1:53682/…` en toont een fout. Dat is normaal.
-3. Kopieer dat adres uit de adresbalk en plak het in HomeBaseOS.
+1. Click sign in. A Google, Microsoft or Dropbox tab opens.
+2. Sign in and click *Allow*. The tab then ends up at `http://127.0.0.1:53682/…` and shows an error. That is normal.
+3. Copy that address from the address bar and paste it in HomeBaseOS.
 
-Lukt dat niet, dan kan je ook `rclone authorize "drive"` (of `onedrive`, `dropbox`) uitvoeren op een pc met rclone en de token plakken.
-Een andere NAS gaat via SFTP (SSH: Synology, QNAP, TrueNAS, een andere HomeBaseOS), SMB (een gedeelde map) of WebDAV (Nextcloud). Daarnaast kan S3-opslag (Backblaze B2, Wasabi, Cloudflare R2, Amazon S3, MinIO).
+If that doesn't work, you can also run `rclone authorize "drive"` (or `onedrive`, `dropbox`) on a PC with rclone and paste the token.
+Another NAS goes through SFTP (SSH: Synology, QNAP, TrueNAS, another HomeBaseOS), SMB (a shared folder) or WebDAV (Nextcloud). S3 storage is possible too (Backblaze B2, Wasabi, Cloudflare R2, Amazon S3, MinIO).
 
-**Synchroniseren**: taken die een map op de NAS naar een verbinding zetten (of omgekeerd), met de hand, elk uur, elke dag of elke week:
+**Sync**: tasks that put a folder on the NAS on a connection (or the other way round), by hand, every hour, every day or every week:
 
-- *Kopiëren* zet nieuwe en gewijzigde bestanden over en wist nooit iets aan de andere kant. *Synchroniseren* maakt er een exacte kopie van: wat je op de NAS wist, verdwijnt daar ook.
-- *Versleutelen* (rclone crypt): bestanden en mapnamen zijn versleuteld vóór ze de NAS verlaten. Zonder het wachtwoord krijgt niemand ze terug, ook jij niet. Met rclone en hetzelfde wachtwoord haal je ze ook zonder HomeBaseOS terug.
-- *Oude versies bewaren*: wat overschreven of gewist wordt, gaat naar een map ernaast (`… (oude versies)/<datum>`) en verdwijnt na het gekozen aantal dagen.
-- *Proef* toont in het logboek wat een taak zou doen, zonder iets te veranderen. *Terugzetten* haalt alles terug naar een (nieuwe) map op de NAS.
+- *Copy* transfers new and changed files and never deletes anything on the other side. *Sync* makes an exact copy: what you delete on the NAS disappears there too.
+- *Encrypt* (rclone crypt): files and folder names are encrypted before they leave the NAS. Without the password nobody gets them back, not even you. With rclone and the same password you can get them back without HomeBaseOS too.
+- *Keep old versions*: what gets overwritten or deleted goes to a folder next to it (`… (old versions)/<date>`) and disappears after the chosen number of days. Tasks created before version 0.6 keep their Dutch folder names on the destination (`(oude versies)`, and `bestanden`/`versies` when encrypted), so they keep finding their files.
+- *Dry run* shows in the log what a task would do, without changing anything. *Restore* brings everything back to a (new) folder on the NAS.
 
-HomeBaseOS gebruikt [rclone](https://rclone.org) (`install.sh` installeert het). Verbindingen staan in `/var/lib/homebaseos/rclone.conf` (alleen leesbaar voor root). Een synchronisatie start niet als de bronmap leeg is of de pool niet gekoppeld is, zodat er aan de andere kant niets per ongeluk gewist wordt.
+HomeBaseOS uses [rclone](https://rclone.org) (`install.sh` installs it). Connections are in `/var/lib/homebaseos/rclone.conf` (readable by root only). A sync doesn't start if the source folder is empty or the pool isn't mounted, so nothing gets deleted on the other side by accident.
 
-## Herstarten en afsluiten
+## Restart and shut down
 
-Met de aan/uit-knop bovenaan (naast Instellingen) herstart je de server of sluit je hem af, altijd na een bevestiging. Bij herstarten komt de pagina vanzelf terug zodra de server weer draait.
+With the power button at the top (next to Settings) you restart or shut down the server, always after a confirmation. After a restart the page comes back by itself once the server runs again.
 
-## Terminal op de server
+## Terminal on the server
 
-Rechtsboven opent het terminal-icoon een **root-shell op de server**, met kleuren, `top`, `nano`, tab-aanvulling, kopiëren en plakken (xterm.js). Met *Los venster* zet je ze in een eigen browservenster.
-In **Instellingen > Beveiliging** zet je de terminal aan of uit, en kies je of HomeBaseOS je wachtwoord opnieuw vraagt bij het openen (standaard wel). De beveiliging minder streng maken vraagt altijd je wachtwoord. Elke keer dat iemand de terminal opent of sluit, staat in `journalctl -u homebaseos`.
+At the top right the terminal icon opens a **root shell on the server**, with colours, `top`, `nano`, tab completion, copy and paste (xterm.js). *Pop out* puts it in a browser window of its own.
+In **Settings > Security** you turn the terminal on or off, and choose whether HomeBaseOS asks for your password again when opening it (on by default). Making security less strict always asks for your password. Every time someone opens or closes the terminal is logged in `journalctl -u homebaseos`.
 
-## Software-update
+## Software update
 
-**Instellingen > Software-update** toont of er een nieuwe versie van HomeBaseOS is, met de release-notes van elke nieuwe versie. HomeBaseOS zoekt elke 12 uur (of meteen met *Nu zoeken*) tussen de releases op GitHub. Is er een update, dan krijg je een melding en een rood bolletje op het tandwiel. Kies je *Ook bètaversies*, dan zie je ook testversies.
+**Settings > Software update** shows whether there is a new version of HomeBaseOS, with the release notes of each new version. HomeBaseOS checks every 12 hours (or right away with *Check now*) among the releases on GitHub. If there is an update, you get a notification and a red dot on the gear. With *Include beta versions* you also see pre-releases.
 
-De repository is privé. Maak daarom op GitHub een **fine-grained token** (Settings > Developer settings > Personal access tokens) met alleen toegang tot `homebaseos` en leesrecht op *Contents*, en zet het in `/etc/homebaseos/homebaseos.env`:
+The repository is private. So create a **fine-grained token** on GitHub (Settings > Developer settings > Personal access tokens) with access to `homebaseos` only and read access to *Contents*, and put it in `/etc/homebaseos/homebaseos.env`:
 
 ```
 UPDATE_TOKEN=github_pat_...
 ```
 
-Daarna `sudo systemctl restart homebaseos`. Een nieuwe release maak je op GitHub met een tag zoals `v0.3.0` (zelfde nummer als in `package.json`); de tekst van de release zijn de release-notes.
+Then `sudo systemctl restart homebaseos`.
 
-Met **Nu bijwerken** doet HomeBaseOS alles zelf, met een voortgangsbalk: downloaden, controleren, een reservekopie van de huidige versie, installeren, herstarten en testen. Start de nieuwe versie niet binnen 45 seconden, dan zet HomeBaseOS de vorige versie automatisch terug. Je apps en VM's blijven draaien; je instellingen worden niet aangeraakt. Wat er gebeurde, staat in `journalctl -u 'homebaseos-update-*'`.
+With **Update now** HomeBaseOS does everything itself, with a progress bar: download, check, a backup copy of the current version, install, restart and test. If the new version doesn't start within 45 seconds, HomeBaseOS puts the previous version back automatically. Your apps and VMs keep running; your settings aren't touched. What happened is in `journalctl -u 'homebaseos-update-*'`.
 
-Een release maken: zet het nieuwe nummer in `package.json`, commit, en maak op GitHub een release met de tag `v<nummer>`.
+Making a release: put the new number in `package.json`, commit, and push a tag `v<number>` with the release notes as the tag message (`git tag -a v0.6.0 --cleanup=verbatim -F notes.md`, first line = title). The workflow creates the release and attaches the ISO.
 
-Werk je vanuit een git-map op de server, dan werk je bij met `git pull` en `sudo ./install.sh`.
+If you work from a git folder on the server, you update with `git pull` and `sudo ./install.sh`.
 
-## Datum en tijd
+## Date and time
 
-In **Instellingen > Algemeen** kies je de **tijdzone** van de server (apps uit de appstore krijgen dezelfde `TZ`), en of de tijd automatisch via internet (NTP) gelijk gezet wordt. Je kan eigen tijdservers opgeven, bv. `be.pool.ntp.org` of je router; leeg = de standaard van Debian. Zet je NTP uit, dan stel je datum en tijd zelf in. Daar kies je ook de **tijdnotatie** (24 of 12 uur) voor iedereen.
+In **Settings > General** you choose the server's **time zone** (apps from the app store get the same `TZ`), and whether the time is set automatically over the internet (NTP). You can enter your own time servers, e.g. `be.pool.ntp.org` or your router; empty = Debian's default. If you turn NTP off, you set the date and time yourself. That is also where you choose the **time format** (24 or 12 hour) for everyone.
 
-## Eerste keer aanmelden
+## Signing in the first time
 
-Open na de installatie het adres van de server. Er is nog geen wachtwoord: de **welkomstwizard** opent meteen (zonder dashboard erachter) en vraagt taal en thema, en daarna een **account** (gebruikersnaam en wachtwoord). Daarna volgen de naam van de server en de tijdzone, opslag (je kan meteen in die stap een pool aanmaken) en tweestapsverificatie. Die stappen mag je overslaan; met *Later instellen* sluit je de wizard. Je opent hem opnieuw bij **Instellingen > Algemeen**.
+After the installation, open the server's address. There is no password yet: the **welcome wizard** opens right away (without the dashboard behind it) and asks for the language and theme, and then an **account** (user name and password). Then come the server's name and time zone, storage (you can create a pool right in that step) and two-step verification. You may skip those steps; *Set up later* closes the wizard. You open it again in **Settings > General**.
 
-> Tot het account bestaat, kan iedereen in je netwerk het aanmaken. Doe het dus meteen na de installatie.
+> Until the account exists, anyone in your network can create it. So do it right after the installation.
 
-Wijzigen kan later bij **Instellingen > Beveiliging**. Een installatie van vroeger met `APP_PASSWORD` blijft werken; daar kies je in de wizard een eigen wachtwoord.
+You can change it later in **Settings > Security**. An older install with `APP_PASSWORD` keeps working; there you choose your own password in the wizard.
 
-**Wachtwoord vergeten?** Voer op de server `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Daarna maak je in de browser opnieuw een account aan (of geldt weer `APP_PASSWORD` als dat in `/etc/homebaseos/homebaseos.env` staat), en staat tweestapsverificatie uit.
+**Forgot your password?** Run `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` on the server. Then you create an account in the browser again (or `APP_PASSWORD` applies again if it is in `/etc/homebaseos/homebaseos.env`), and two-step verification is off.
 
-## Aanmelden en tweestapsverificatie
+## Signing in and two-step verification
 
-HomeBaseOS vraagt je gebruikersnaam en wachtwoord. Met *Aangemeld blijven op dit toestel* blijf je 30 dagen aangemeld; zonder vinkje ben je afgemeld als je de browser sluit.
+HomeBaseOS asks for your user name and password. With *Stay signed in on this device* you stay signed in for 30 days; without the tick you are signed out when you close the browser.
 
-Voor extra zekerheid zet je in **Instellingen > Beveiliging** de **tweestapsverificatie** aan. Na je wachtwoord vraagt HomeBaseOS dan een code van 6 cijfers uit een authenticator-app (Google Authenticator, Microsoft Authenticator, 1Password, Aegis, …):
+For extra safety, turn on **two-step verification** in **Settings > Security**. After your password HomeBaseOS then asks for a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Aegis, …):
 
-1. Klik op *Aanzetten* en typ je wachtwoord.
-2. Scan de QR-code met de app (of typ de sleutel over).
-3. Typ de code die de app toont. Andere browsers worden dan afgemeld.
-4. Bewaar de **10 herstelcodes** (kopiëren of downloaden). Ben je je gsm kwijt, dan meld je je aan met *Gebruik een herstelcode*. Elke code werkt één keer; bij *Nieuwe herstelcodes* maak je een nieuwe reeks.
+1. Click *Turn on* and type your password.
+2. Scan the QR code with the app (or type the key).
+3. Type the code the app shows. Other browsers are then signed out.
+4. Keep the **10 recovery codes** (copy or download). If you lose your phone, you sign in with *Use a recovery code*. Each code works once; *New recovery codes* makes a new set.
 
-Na 10 foute pogingen (wachtwoord of code) binnen 10 minuten blokkeert HomeBaseOS dat adres 5 minuten.
-De code hangt af van de klok: staat de klok van je gsm of je server verkeerd, dan klopt de code niet. Debian houdt de klok gelijk met `systemd-timesyncd`.
+After 10 wrong attempts (password or code) within 10 minutes HomeBaseOS blocks that address for 5 minutes.
+The code depends on the clock: if the clock of your phone or your server is wrong, the code doesn't match. Debian keeps the clock right with `systemd-timesyncd`.
 
-**Alles kwijt (gsm én herstelcodes)?** Meld je aan op de server zelf en voer `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos` uit. Dan staat tweestapsverificatie uit en maak je opnieuw een account aan.
+**Lost everything (phone and recovery codes)?** Sign in on the server itself and run `sudo rm /var/lib/homebaseos/auth.json && sudo systemctl restart homebaseos`. Then two-step verification is off and you create an account again.
 
-## Veiligheid
+## Security
 
-- HomeBaseOS draait als **root**: het kan VM's en schijfbestanden wissen. Daarom kan je niets doen tot er een account is: zonder account geeft de server alleen de welkomstwizard.
-- **Stel HomeBaseOS niet open naar het internet.** Gebruik voor toegang van buitenaf een VPN (WireGuard, Tailscale of de VPN van je router).
-- Het VNC-scherm van een VM is bereikbaar in je netwerk, beveiligd met een wachtwoord van 8 tekens. Ook dat hoort niet op het internet. De console in de browser loopt via HomeBaseOS en vraagt dus ook je aanmelding.
-- Stoppen, afsluiten en verwijderen vragen altijd eerst om bevestiging.
+- HomeBaseOS runs as **root**: it can erase VMs and disk files. That's why you can't do anything until there is an account: without an account the server only offers the welcome wizard.
+- **Don't expose HomeBaseOS to the internet.** Use a VPN for access from outside (WireGuard, Tailscale or your router's VPN).
+- A VM's VNC screen is reachable in your network, protected with an 8-character password. That doesn't belong on the internet either. The console in the browser goes through HomeBaseOS and so also needs your sign-in.
+- Stopping, shutting down and deleting always ask for confirmation first.
 
-## Problemen oplossen
+## Troubleshooting
 
-- **HomeBaseOS start niet**: bekijk `journalctl -u homebaseos -e`.
-- **"virsh is niet geïnstalleerd"** of **"Docker is niet bereikbaar"**: voer `sudo ./install.sh` opnieuw uit.
-- **"De map voor VM-schijven bestaat niet"** of **"Er is nog geen map voor appgegevens"**: maak een pool aan bij *Opslag*, of kies een pool bij *Instellingen > Opslag*.
-- **Geen CPU/RAM bij een VM**: het geheugen komt van de balloon-driver in de VM. Zonder die driver toont HomeBaseOS wat de VM op de server inneemt.
-- **"De appcatalogus kon niet geladen worden"**: de server heeft internet nodig om de feed op te halen. Daarna werkt hij 24 uur uit de cache.
-- **App uit de appstore start niet**: open `STACKS_DIR/<naam>/compose.yaml` en bekijk het logboek van de app. Sommige templates verwachten nog een database of een andere app (zie *Vereist* in de appstore).
-- **Ollama niet bereikbaar**: controleer of de container draait en of `OLLAMA_URL` klopt.
-- **Back-up mislukt**: open het *Logboek* van de taak. Met *Testen* bij Verbindingen zie je of de verbinding nog werkt; bij Google, Microsoft en Dropbox kan het aanmelden verlopen zijn (bv. na een nieuw wachtwoord): klik dan op *Opnieuw aanmelden*.
+- **HomeBaseOS doesn't start**: look at `journalctl -u homebaseos -e`.
+- **"virsh is not installed"** or **"Docker is not reachable"**: run `sudo ./install.sh` again.
+- **"The folder for VM disks does not exist"** or **"There is no folder for app data yet"**: create a pool under *Storage*, or choose a pool in *Settings > Storage*.
+- **No CPU/RAM for a VM**: the memory comes from the balloon driver in the VM. Without that driver HomeBaseOS shows what the VM takes on the server.
+- **"The app catalogue could not be loaded"**: the server needs internet to fetch the feed. After that it works from the cache for 24 hours.
+- **An app from the app store doesn't start**: open `STACKS_DIR/<name>/compose.yaml` and look at the app's log. Some templates expect a database or another app (see *Requires* in the app store).
+- **The WebUI of an app doesn't open**: check the address in the app's settings. On bridge it must use a port that is published on the server (see `[PORT:n]` under *Apps*).
+- **Ollama not reachable**: check that the container runs and that `OLLAMA_URL` is right.
+- **Backup failed**: open the task's *Logs*. *Test* under Connections shows whether the connection still works; with Google, Microsoft and Dropbox the sign-in can have expired (e.g. after a new password): then click *Sign in again*.
 
-## Licenties
+## Licences
 
-De console gebruikt [noVNC](https://github.com/novnc/noVNC) 1.7.0 (MPL-2.0, met pako onder MIT), ongewijzigd in `public/vendor/novnc`.
-De terminal gebruikt [xterm.js](https://xtermjs.org) 6.0.0 met addon-fit (MIT), ongewijzigd in `public/vendor/xterm`.
+The console uses [noVNC](https://github.com/novnc/noVNC) 1.7.0 (MPL-2.0, with pako under MIT), unchanged in `public/vendor/novnc`.
+The terminal uses [xterm.js](https://xtermjs.org) 6.0.0 with addon-fit (MIT), unchanged in `public/vendor/xterm`.

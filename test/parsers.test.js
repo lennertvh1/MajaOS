@@ -1,5 +1,5 @@
 'use strict';
-/* Tests voor de parsers, met voorbeelduitvoer van virsh, zpool, zfs, lsblk en Docker. Starten met: npm test */
+/* Tests for the parsers, with sample output of virsh, zpool, zfs, lsblk and Docker. Run with: npm test */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vms = require('../lib/vms');
@@ -38,15 +38,15 @@ test('domstats: domeinen, toestand en velden', () => {
   assert.equal(d[1]['state.state'], '5');
 });
 
-test('geheugengebruik: eerst balloon available−usable, dan unused, dan rss', () => {
+test('memory use: first balloon available−usable, then unused, then rss', () => {
   const [ha] = vms.parseDomstats(DOMSTATS);
   assert.equal(vms.memUsed(ha, 4194304 * 1024), (4020180 - 2876544) * 1024);
   assert.equal(vms.memUsed({ 'balloon.available': '100', 'balloon.unused': '40' }, null), 60 * 1024);
-  assert.equal(vms.memUsed({ 'balloon.rss': '5000' }, 1024), 1024); // nooit meer dan toegewezen
+  assert.equal(vms.memUsed({ 'balloon.rss': '5000' }, 1024), 1024); // never more than assigned
   assert.equal(vms.memUsed({}, 1024), null);
 });
 
-test('CPU-percentage ten opzichte van de eigen vCPU\'s', () => {
+test('CPU percentage relative to the own vCPUs', () => {
   // 2 vCPU's, 1 s wandtijd, 1 s CPU-tijd → 50%
   assert.equal(vms.cpuPercent({ t: 0, at: 1000 }, 1e9, 2000, 2), 50);
   assert.equal(vms.cpuPercent({ t: 0, at: 1000 }, 9e9, 2000, 2), 100); // afgekapt
@@ -72,13 +72,13 @@ const XML = `<domain type='kvm'>
       <source file='/tank/isos/debian.iso'/>
       <target dev='sda' bus='sata'/>
     </disk>
-    <graphics type='vnc' port='5901' autoport='yes' listen='0.0.0.0' passwd='geheim&amp;1'>
+    <graphics type='vnc' port='5901' autoport='yes' listen='0.0.0.0' passwd='secret&amp;1'>
       <listen type='address' address='0.0.0.0'/>
     </graphics>
   </devices>
 </domain>`;
 
-test('domein-XML lezen', () => {
+test('reading domain XML', () => {
   const d = vms.parseDomainXml(XML);
   assert.equal(d.name, 'Home Assistant OS');
   assert.equal(d.vcpus, 2); // current-attribuut
@@ -86,36 +86,36 @@ test('domein-XML lezen', () => {
   assert.equal(d.firmware, 'uefi');
   assert.deepEqual(d.disks.map((x) => [x.device, x.source, x.target]), [
     ['disk', '/tank/vms/haos/haos.qcow2', 'vda'], ['cdrom', '/tank/isos/debian.iso', 'sda']]);
-  assert.deepEqual(d.vnc, { port: 5901, password: 'geheim&1' });
+  assert.deepEqual(d.vnc, { port: 5901, password: 'secret&1' });
   assert.equal(d.description, '');
 });
 
-test('domein-XML aanpassen: vCPU, geheugen, topologie en beschrijving', () => {
-  const out = vms.editDomainXml(XML, { vcpus: 6, memory: 8 * 1073741824, description: 'Huis & tuin <test>' });
+test('changing domain XML: vCPU, memory, topology and description', () => {
+  const out = vms.editDomainXml(XML, { vcpus: 6, memory: 8 * 1073741824, description: 'House & garden <test>' });
   const d = vms.parseDomainXml(out);
   assert.equal(d.vcpus, 6);
   assert.equal(d.memory, 8 * 1073741824);
-  assert.equal(d.description, 'Huis & tuin <test>');
+  assert.equal(d.description, 'House & garden <test>');
   assert.match(out, /<vcpu placement='static'>6<\/vcpu>/);
   assert.match(out, /<topology sockets='1' dies='1' clusters='1' cores='6' threads='1'\/>/);
-  assert.match(out, /<memoryBacking>/); // niet aangeraakt
-  assert.match(out, /passwd='geheim&amp;1'/); // wachtwoord blijft staan
-  // Beschrijving leegmaken haalt het element weg.
+  assert.match(out, /<memoryBacking>/); // not touched
+  assert.match(out, /passwd='secret&amp;1'/); // password stays
+  // Emptying the description removes the element.
   assert.doesNotMatch(vms.editDomainXml(out, { description: '' }), /<description>/);
 });
 
-test('slug voor mappen en bestanden', () => {
+test('slug for folders and files', () => {
   assert.equal(vms.slugify('Ubuntu Server (test)'), 'ubuntu-server-test');
   assert.equal(vms.slugify('...'), 'vm');
 });
 
-const ZPOOL_STATUS = `  pool: snel
+const ZPOOL_STATUS = `  pool: fast
  state: ONLINE
   scan: scrub repaired 0B in 00:02:11 with 0 errors on Sun Oct 12 00:26:12 2025
 config:
 
 	NAME                STATE     READ WRITE CKSUM
-	snel                ONLINE       0     0     0
+	fast                ONLINE       0     0     0
 	  mirror-0          ONLINE       0     0     0
 	    /dev/nvme0n1p1  ONLINE       0     0     0
 	    /dev/nvme1n1p1  ONLINE       0     0     0
@@ -144,9 +144,9 @@ config:
 errors: No known data errors
 `;
 
-test('zpool status: pools, schijven, rollen en fouten', () => {
+test('zpool status: pools, disks, roles and errors', () => {
   const pools = st.parseZpoolStatus(ZPOOL_STATUS);
-  assert.deepEqual(pools.map((p) => [p.name, p.state]), [['snel', 'ONLINE'], ['tank', 'DEGRADED']]);
+  assert.deepEqual(pools.map((p) => [p.name, p.state]), [['fast', 'ONLINE'], ['tank', 'DEGRADED']]);
   assert.deepEqual(pools[0].devices.map((d) => [d.disk, d.vdev, d.role]), [['nvme0n1', 'mirror', 'data'], ['nvme1n1', 'mirror', 'data']]);
   const tank = pools[1].devices;
   assert.equal(tank.length, 5);
@@ -155,8 +155,8 @@ test('zpool status: pools, schijven, rollen en fouten', () => {
 });
 
 test('scrubstatus: lopend en afgelopen', () => {
-  const [snel, tank] = st.parseZpoolStatus(ZPOOL_STATUS);
-  const done = st.parseScan(snel.scan);
+  const [fast, tank] = st.parseZpoolStatus(ZPOOL_STATUS);
+  const done = st.parseScan(fast.scan);
   assert.equal(done.running, false); assert.equal(done.errors, 0);
   assert.equal(new Date(done.last).getFullYear(), 2025);
   const run = st.parseScan(tank.scan);
@@ -169,11 +169,11 @@ test('zfs list en zpool list', () => {
   assert.equal(ds.length, 3);
   assert.deepEqual(ds[1], { name: 'tank/media', used: 800, free: 5000, mountpoint: '/tank/media', compress: 1.02 });
   assert.equal(ds[2].mountpoint, null);
-  assert.deepEqual(st.parseZpoolList('tank\tONLINE\nsnel\tDEGRADED\n'), [{ name: 'tank', health: 'ONLINE' }, { name: 'snel', health: 'DEGRADED' }]);
+  assert.deepEqual(st.parseZpoolList('tank\tONLINE\nfast\tDEGRADED\n'), [{ name: 'tank', health: 'ONLINE' }, { name: 'fast', health: 'DEGRADED' }]);
   assert.equal(st.worst(['ONLINE', 'DEGRADED', 'ONLINE']), 'DEGRADED');
 });
 
-test('lsblk: alleen echte schijven, rota als boolean of tekst', () => {
+test('lsblk: only real disks, rota as a boolean or text', () => {
   const disks = st.parseLsblk(JSON.stringify({ blockdevices: [
     { name: 'sda', size: 2000398934016, rota: true, tran: 'sata', model: 'WDC WD20EFZX  ', serial: 'X1', type: 'disk' },
     { name: 'nvme0n1', size: 512110190592, rota: '0', tran: 'nvme', model: 'Samsung 980', serial: 'S2', type: 'disk' },
@@ -186,38 +186,38 @@ test('lsblk: alleen echte schijven, rota als boolean of tekst', () => {
 
 test('Docker-logs: gemultiplexte stroom uitpakken', () => {
   const frame = (stream, text) => { const b = Buffer.from(text); const h = Buffer.alloc(8); h[0] = stream; h.writeUInt32BE(b.length, 4); return Buffer.concat([h, b]); };
-  const buf = Buffer.concat([frame(1, '2025-10-21T20:00:00.123Z Gestart\n'), frame(2, '2025-10-21T20:00:01.000Z Waarschuwing\n')]);
+  const buf = Buffer.concat([frame(1, '2025-10-21T20:00:00.123Z Started\n'), frame(2, '2025-10-21T20:00:01.000Z Warning\n')]);
   assert.deepEqual(dk.parseLogLines(dk.demuxLogs(buf)), [
-    { timestamp: '2025-10-21T20:00:00.123Z', message: 'Gestart' }, { timestamp: '2025-10-21T20:00:01.000Z', message: 'Waarschuwing' }]);
-  assert.equal(dk.demuxLogs(Buffer.from('gewone tekst\n')), 'gewone tekst\n'); // container met TTY
+    { timestamp: '2025-10-21T20:00:00.123Z', message: 'Started' }, { timestamp: '2025-10-21T20:00:01.000Z', message: 'Warning' }]);
+  assert.equal(dk.demuxLogs(Buffer.from('plain text\n')), 'plain text\n'); // container with a TTY
 });
 
-test('Docker-poorten en web-adres', () => {
+test('Docker ports and web address', () => {
   const ports = dk.publicPorts([{ PrivatePort: 80, PublicPort: 8096, Type: 'tcp' }, { PrivatePort: 80, PublicPort: 8096, Type: 'tcp' }, { PrivatePort: 53 }]);
   assert.deepEqual(ports, [{ public: 8096, private: 80, type: 'TCP' }]);
   assert.equal(dk.webui({}, ports), 'http://[IP]:8096/');
   assert.equal(dk.webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/web' }, ports), 'http://[IP]:8096/web');
 });
 
-test('/proc: CPU-regel, meminfo en ZFS-cache', () => {
+test('/proc: CPU line, meminfo and ZFS cache', () => {
   assert.deepEqual(sys.parseCpuLine('cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 2 3'), { idle: 850, total: 1000 });
   const mi = sys.parseMeminfo('MemTotal:       32768000 kB\nMemAvailable:   16384000 kB\n');
   assert.equal(mi.MemTotal, 32768000 * 1024);
   assert.equal(sys.arcSize('name type data\nhits 4 123\nsize 4 8589934592\nc 4 1'), 8589934592);
 });
 
-test('console: het sh-script geeft uitvoer, nieuwe map en foutcode terug (echte sh)', async () => {
+test('console: the sh script returns output, new folder and exit code (real sh)', async () => {
   const sys2 = require('../lib/system');
   const ex = (cwd, cmd) => sys2.run('sh', ['-c', dk.EXEC_SCRIPT, 'sh', cwd, cmd], { full: true }).then((r) => dk.parseExec(r, cwd));
   let r = await ex('/', 'cd /usr && echo "hallo wereld"');
   assert.equal(r.output, 'hallo wereld');
   assert.equal(r.cwd, '/usr');
   assert.equal(r.exitCode, 0);
-  r = await ex('/usr', 'ls /bestaat-niet');
-  assert.match(r.output, /bestaat-niet/); // stderr komt mee in de uitvoer
+  r = await ex('/usr', 'ls /does-not-exist');
+  assert.match(r.output, /does-not-exist/); // stderr comes along in the output
   assert.notEqual(r.exitCode, 0);
   assert.equal(r.cwd, '/usr');
-  r = await ex('/map/die/niet/bestaat', 'pwd; printf "a\\nb"');
-  assert.equal(r.output, '/\na\nb'); // onbekende map: terug naar /
-  assert.throws(() => dk.parseExec({ stdout: '', stderr: 'OCI runtime exec failed: exec: "sh": executable file not found in $PATH', code: 127 }, '/'), /geen shell/);
+  r = await ex('/folder/that/does/not/exist', 'pwd; printf "a\\nb"');
+  assert.equal(r.output, '/\na\nb'); // unknown folder: back to /
+  assert.throws(() => dk.parseExec({ stdout: '', stderr: 'OCI runtime exec failed: exec: "sh": executable file not found in $PATH', code: 127 }, '/'), /has no shell/);
 });

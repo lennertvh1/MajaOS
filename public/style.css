@@ -1,4 +1,4 @@
-/* HomeBaseOS — glas op een schemerlandschap. Donker = avond, licht = ochtendnevel. */
+/* HomeBaseOS — glass on a dusk landscape. Dark = evening, light = morning mist. */
 :root {
   color-scheme: light;
   --sky-top: #b9d4e2; --sky-mid: #dbe8e9; --sky-low: #efe9d8;
@@ -6,8 +6,8 @@
   --land-far: #a9c1bd; --land-mid: #7fa39a; --land-near: #5b8077; --star: transparent;
 
   --text: #15222c; --muted: #4f6272; --faint: #7a8a97;
-  --badge-ink: #ffffff; /* tekst op een rode melding */
-  --qr-bg: #ffffff; /* QR-codes blijven zwart op wit, ook in het donkere thema */
+  --badge-ink: #ffffff; /* text on a red badge */
+  --qr-bg: #ffffff; /* QR codes stay black on white, also in the dark theme */
   --glass: rgba(255, 255, 255, .58); --glass-strong: rgba(255, 255, 255, .82);
   --glass-line: rgba(255, 255, 255, .85); --glass-hover: rgba(255, 255, 255, .72);
   --shade: 0 12px 34px -18px rgba(30, 60, 70, .45);
@@ -15,13 +15,13 @@
 
   --ok: #12786b; --warn: #9a5a00; --bad: #b3372b; --accent: #12786b; --accent-ink: #ffffff;
   --body-bg: #dbe8e9;
-  --screen-bg: #000; --screen-ink: #c8c8c8; /* scherm van een VM: in beide thema's zwart */
-  --term-bg: #0d1117; --term-fg: #e6edf3; --term-sel: rgba(111, 211, 195, .35); /* terminal: in beide thema's donker */
-  /* NAS-kast in het opslagvenster: geborsteld aluminium */
+  --screen-bg: #000; --screen-ink: #c8c8c8; /* a VM's screen: black in both themes */
+  --term-bg: #0d1117; --term-fg: #e6edf3; --term-sel: rgba(111, 211, 195, .35); /* terminal: dark in both themes */
+  /* NAS case in the storage window: brushed aluminium */
   --nas-body: #d3d9de; --nas-body-2: #bfc7ce; --nas-edge: #a8b1ba; --nas-slot: #262c33; --nas-tray: #eef1f3; --nas-tray-2: #dde2e6;
   --nas-tray-edge: #b9c2ca; --nas-vent: rgba(22, 32, 42, .22); --nas-ink: #17232c; --nas-ink-2: #51606c; --led-off: #8a949d;
   --pool-1: #12786b; --pool-2: #2f63c8; --pool-3: #7c45c4; --pool-4: #a55a12; --pool-5: #a8306f;
-  --folder-bg: rgba(255, 255, 255, .5); --folder-ring: rgba(255, 255, 255, .55); /* map-pictogram: matglas */
+  --folder-bg: rgba(255, 255, 255, .5); --folder-ring: rgba(255, 255, 255, .55); /* folder icon: frosted glass */
   --m2-pcb: #1d3b34; --m2-pcb-2: #142b26; --m2-chip: #0d1412; --m2-gold: #c9a227; --m2-ink: #e3efe9; --m2-ink-2: #9fb8ae;
 }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -78,7 +78,7 @@ a { color: var(--accent); }
 [hidden] { display: none !important; }
 code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(--track); }
 
-/* ---- achtergrond */
+/* ---- background */
 .wallpaper { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; }
 .sky-top { stop-color: var(--sky-top); } .sky-mid { stop-color: var(--sky-mid); } .sky-low { stop-color: var(--sky-low); }
 .glow-in { stop-color: var(--glow-in); } .glow-out { stop-color: var(--glow-out); }
@@ -86,14 +86,14 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .trees path { fill: var(--land-mid); stroke: var(--land-mid); stroke-width: 2; }
 .stars circle { fill: var(--star); }
 
-/* ---- glas */
+/* ---- glass */
 .widget, .panel, .window, .apps-bar .search, .seg, .toast {
   background: var(--glass); border: 1px solid var(--glass-line);
   backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3);
   box-shadow: var(--shade);
 }
 
-/* ---- opbouw */
+/* ---- layout */
 .shell { min-height: 100vh; display: flex; flex-direction: column; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -179,7 +179,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
   font-size: 26px; font-weight: 700; color: #fff; overflow: visible;
   box-shadow: 0 10px 22px -12px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 255, 255, .18);
 }
-/* Absoluut over de hele tegel: zo blijft elk pictogram vierkant, ook als het logo smal of breed is. */
+/* Absolute over the whole tile: that way every icon stays square, even if the logo is narrow or wide. */
 .app-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; background: #fff; padding: 9px; }
 .app-icon .dot { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; border: 3px solid var(--body-bg); background: var(--faint); }
 .app-icon .dot.on { background: var(--ok); }
@@ -208,7 +208,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 @media (hover: none) { .app-more { opacity: .9; } }
 .empty { grid-column: 1 / -1; padding: 40px 20px; text-align: center; color: var(--muted); border: 1.5px dashed var(--glass-line); border-radius: 20px; }
 
-/* ---- eigen pagina (VM's) */
+/* ---- own page (VMs) */
 .nav-btn[aria-current="page"] { background: var(--glass-strong); }
 .page { flex: 1; width: 100%; min-width: 0; max-width: 1180px; margin: 0 auto; padding: 8px clamp(16px, 3vw, 36px) 48px; }
 .page-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -240,7 +240,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .vm-mini-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vm-mini-bars .bar { height: 4px; margin: 0; }
 
-/* ---- appstore */
+/* ---- app store */
 .store-cat { flex: none; width: auto; min-width: 170px; height: 40px; background: var(--glass); }
 .store-source { margin: -8px 0 16px; }
 .linkish { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
@@ -265,7 +265,7 @@ details.adv summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 details.adv[open] summary { margin-bottom: 4px; }
 #storeForm h3 { margin: 10px 0 2px; }
 
-/* ---- instellingen: venster met zijbalk, zoals Systeeminstellingen op macOS */
+/* ---- settings: window with a sidebar, like System Settings on macOS */
 .window.settings-win { width: min(920px, calc(100vw - 24px)); height: min(680px, 88vh); max-height: none; }
 .window.settings-win[open] { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
 .set-side { display: flex; flex-direction: column; gap: 2px; padding: 18px 10px; border-right: 1px solid var(--glass-line); background: var(--glass); overflow: auto; }
@@ -292,7 +292,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 .about-kv { grid-template-columns: minmax(130px, max-content) 1fr; }
 .nav-btn[data-nav] { text-decoration: none; color: inherit; }
 
-/* ---- formulieren */
+/* ---- forms */
 .form { display: grid; gap: 14px; }
 .fld { display: grid; gap: 6px; min-width: 0; border: 0; padding: 0; margin: 0; }
 .fld > span { font-size: 14px; font-weight: 500; }
@@ -310,7 +310,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 .kind-seg button { flex: 1; }
 .win-body h3 .pill { margin-left: 6px; vertical-align: 2px; }
 
-/* ---- menu bij een app */
+/* ---- menu of an app */
 .menu {
   position: fixed; z-index: 60; min-width: 220px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 16px;
   background: var(--glass-strong); border: 1px solid var(--glass-line); box-shadow: var(--shade), 0 2px 10px rgba(0, 0, 0, .12);
@@ -333,7 +333,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 .app.busy .app-icon { animation: busy 1.2s ease-in-out infinite; }
 @keyframes busy { 50% { opacity: .45; } }
 
-/* ---- logboek, console en editor */
+/* ---- log, console and editor */
 .log-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
 .log-tools .check { margin-right: auto; }
 .log-tools .field { flex: none; width: auto; min-width: 0; height: 32px; font-size: 13px; }
@@ -395,7 +395,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 }
 textarea.field.code { width: 100%; height: auto; padding: 10px 12px; resize: vertical; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; }
 
-/* ---- knoppen */
+/* ---- buttons */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 15px;
   border-radius: 11px; border: 1px solid var(--glass-line); background: var(--glass-strong); font-weight: 500; font-size: 14px;
@@ -408,12 +408,12 @@ textarea.field.code { width: 100%; height: auto; padding: 10px 12px; resize: ver
 .btn.sm { height: 32px; padding: 0 11px; font-size: 13px; border-radius: 9px; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
-/* ---- venster */
+/* ---- window */
 .window {
   width: min(780px, calc(100vw - 24px)); max-height: min(86vh, 900px); padding: 0; border-radius: 26px;
   color: var(--text); background: var(--glass-strong); overflow: hidden;
 }
-/* Opslagvenster: breed genoeg voor een kast met 12 bays naast elkaar (12 × 70 px). */
+/* Storage window: wide enough for a case with 12 bays side by side (12 × 70 px). */
 .window.win-wide { width: min(1060px, calc(100vw - 24px)); }
 .window[open] { display: flex; flex-direction: column; animation: pop .18s ease-out; }
 .window::backdrop { background: rgba(5, 10, 20, .35); backdrop-filter: blur(3px); }
@@ -474,12 +474,12 @@ select.field { padding-right: 8px; }
 .ask-row { justify-content: flex-end; }
 @media (max-width: 560px) { .ask { margin: auto; border-radius: 22px; } }
 
-/* ---- schermen in het midden */
+/* ---- centred screens */
 .center-screen { flex: 1; display: grid; place-items: center; padding: 24px 16px 60px; }
 .panel { border-radius: 26px; padding: 28px; width: min(560px, 100%); }
 .panel h1 { font-size: 24px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 10px; }
 .panel p { color: var(--muted); margin-bottom: 16px; }
-/* ---- aanmelden */
+/* ---- sign-in */
 .login-card { width: min(400px, 100%); padding: 32px 28px 26px; animation: pop .25s ease-out; }
 .login-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 22px; }
 .login-mark { width: 56px; height: 56px; border-radius: 17px; display: grid; place-items: center; background: var(--accent); margin-bottom: 14px; box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -506,9 +506,9 @@ select.field { padding-right: 8px; }
 @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 @media (prefers-reduced-motion: reduce) { .login-card, .login-shake { animation: none; } }
 
-/* ---- welkomstwizard */
+/* ---- welcome wizard */
 .window.onboard { width: min(720px, calc(100vw - 24px)); height: min(700px, 92vh); max-height: none; }
-/* De wizard staat alleen op de achtergrond, zonder het dashboard erachter. */
+/* The wizard stands alone on the background, without the dashboard behind it. */
 body.onb-open .shell { visibility: hidden; }
 .window.onboard::backdrop { background: transparent; backdrop-filter: none; }
 .onb-pool { margin-top: 6px; }
@@ -548,7 +548,7 @@ body.onb-open .shell { visibility: hidden; }
 @media (max-width: 560px) { .onb-body { padding: 8px 18px; } .onb-foot { padding: 12px 16px 16px; gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { .onb-step, .onb-dots li { animation: none; transition: none; } }
 
-/* ---- software-update */
+/* ---- software update */
 .has-dot { position: relative; }
 .nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--glass-strong); pointer-events: none; }
 .tab-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--bad); color: var(--badge-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
@@ -574,7 +574,7 @@ body.onb-open .shell { visibility: hidden; }
 .md hr { border: 0; border-top: 1px solid var(--glass-line); margin: 10px 0; }
 .upd-how { font-size: 14px; }
 .upd-how pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; background: var(--glass-strong); padding: 10px 12px; border-radius: 10px; overflow-x: auto; margin: 6px 0; }
-/* voortgang van Nu bijwerken */
+/* progress of Update now */
 .upd-run { padding: 20px; border-radius: 18px; background: var(--glass); border: 1px solid var(--glass-line); display: grid; gap: 12px; }
 .upd-run.ok { border-color: var(--ok); } .upd-run.bad { border-color: var(--bad); }
 .upd-run-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
@@ -593,14 +593,14 @@ body.onb-open .shell { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .upd-bar span { transition: none; animation: none !important; } }
 details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4px; }
 
-/* ---- datum en tijd */
+/* ---- date and time */
 .dt-now { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-line); margin: 12px 0; }
 .dt-clock { font-size: 28px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .dt-form { max-width: 460px; }
 .dt-form [data-dt] { display: grid; gap: 6px; }
 .dt-form [data-dt][hidden] { display: none; }
 
-/* ---- tweestapsverificatie instellen */
+/* ---- setting up two-step verification */
 .mfa-state { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-line); margin: 12px 0; }
 .mfa-state .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .mfa-state.on .dot { background: var(--ok); }
@@ -615,14 +615,14 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 @media (max-width: 560px) { .mfa-setup { grid-template-columns: 1fr; justify-items: center; } .recovery-list { grid-template-columns: 1fr; } }
 .form-error { color: var(--bad) !important; min-height: 1.3em; margin: 0 !important; font-size: 14px; }
 
-/* ---- meldingen */
+/* ---- notifications */
 .toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
 .toast { padding: 11px 16px; border-radius: 14px; background: var(--glass-strong); font-size: 14px; animation: pop .2s ease-out; }
 .toast.bad { border-color: var(--bad); }
 
-/* ---- smal scherm */
+/* ---- narrow screen */
 @media (max-width: 880px) {
-  /* klok bovenaan, dan apps, dan de rest */
+  /* clock at the top, then apps, then the rest */
   .desk { display: flex; flex-direction: column; }
   .widgets { display: contents; }
   .widget-slot[data-widget="clock"] { order: 0; } .apps-area { order: 1; } .widget-slot:not([data-widget="clock"]) { order: 2; } .widgets-edit { order: 3; }
@@ -649,7 +649,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* ---- console: scherm van een VM (console.html) */
+/* ---- console: a VM's screen (console.html) */
 .console-page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--body-bg); }
 .console-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--glass-strong); border-bottom: 1px solid var(--glass-line); flex-wrap: wrap; }
 .console-bar .back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -660,13 +660,13 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .console-typebar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--glass); border-bottom: 1px solid var(--glass-line); }
 .console-typebar .field { flex: 1; min-width: 0; }
 .console-screen { flex: 1; min-height: 0; position: relative; background: var(--screen-bg); overflow: hidden; display: grid; place-items: center; }
-.console-screen > div { width: 100%; height: 100%; } /* noVNC schaalt en schuift zelf binnen dit vlak */
-.console-screen > canvas { max-width: 100%; max-height: 100%; outline: none; } /* nagebootst scherm in de demo */
+.console-screen > div { width: 100%; height: 100%; } /* noVNC scales and scrolls within this area itself */
+.console-screen > canvas { max-width: 100%; max-height: 100%; outline: none; } /* simulated screen in the demo */
 .console-status { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 32px)); padding: 20px; border-radius: 18px;
   background: var(--glass-strong); box-shadow: var(--shade); text-align: center; display: grid; gap: 14px; justify-items: center; }
 @media (max-width: 560px) { .console-tools { width: 100%; } .console-typebar { flex-wrap: wrap; } }
 
-/* ---- schijfbays in het opslagvenster */
+/* ---- disk bays in the storage window */
 .bays-sec { margin-top: 6px; }
 .bays-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 10px; }
 .bays-head h3 { margin: 0 !important; }
@@ -678,12 +678,12 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .nas-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 10px; }
 .nas-name { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--nas-ink-2); }
 .nas-power .led { background: var(--ok); box-shadow: 0 0 7px var(--ok); }
-/* Lades hebben een vaste maat, zoals echte lades: past de kast niet, dan scrol je erdoor in plaats van dat ze krimpen. */
+/* Drawers have a fixed size, like real drawers: if the case doesn't fit, you scroll through it instead of them shrinking. */
 .bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), 70px); gap: 5px; width: max-content; }
 .bay { display: block; padding: 0; border: 0; border-radius: 4px; background: var(--nas-slot); color: inherit; font: inherit; text-align: left;
   height: 218px; cursor: default; box-shadow: inset 0 2px 6px rgba(0, 0, 0, .55); }
 .bay[draggable="true"], .bay-chip { cursor: grab; }
-/* de lade zelf */
+/* the drawer itself */
 .tray { position: relative; display: flex; flex-direction: column; gap: 5px; height: 100%; padding: 6px 5px 26px; border-radius: 3px;
   background: linear-gradient(180deg, var(--nas-tray), var(--nas-tray-2)); border: 1px solid var(--nas-tray-edge); color: var(--nas-ink);
   box-shadow: 0 1px 0 rgba(255, 255, 255, .12) inset, 0 2px 4px rgba(0, 0, 0, .25); }
@@ -702,7 +702,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .tray-handle { position: absolute; left: 14%; right: 14%; bottom: 7px; height: 9px; border-radius: 2px;
   background: var(--nas-slot); opacity: .55; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6); }
 .missing .tray { border-color: var(--bad); }
-/* lege bay: verzonken opening */
+/* empty bay: recessed opening */
 .slot-hole { display: flex; flex-direction: column; height: 100%; padding: 6px 5px; border-radius: 4px;
   background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 9px); }
 .slot-hole .bay-no { color: var(--led-off); }
@@ -723,7 +723,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .bay-chip { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px 10px; border-radius: 10px; background: var(--glass); border: 1px solid var(--glass-line); font-size: 13px; color: inherit; }
 @media (max-width: 560px) { .nas { padding: 10px; } }
 
-/* ---- pool aanmaken */
+/* ---- creating a pool */
 .layout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .layout { position: relative; display: grid; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); cursor: pointer; }
 .layout input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -742,8 +742,8 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .pool-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .pool-legend i { width: 10px; height: 10px; border-radius: 3px; }
 
-/* ---- infopaneel van een schijf naast de kast */
-.bays-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; justify-content: center; } /* de kast in het midden van het venster */
+/* ---- info panel of a disk next to the case */
+.bays-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; justify-content: center; } /* the case in the middle of the window */
 #bayHint { text-align: center; }
 .bays-wrap .nas { flex: none; }
 .disk-panel { flex: 1 1 260px; min-width: 0; margin-top: 10px; padding: 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); }
@@ -762,10 +762,10 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .bay[aria-pressed] { cursor: pointer; }
 .link-btn { border: 0; padding: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
 
-/* ---- M.2-sleuven onder de bays */
-/* Vaste breedte (zoals een M.2 2280): meer bays per rij maakt de kast breder, niet de NVMe langer. */
+/* ---- M.2 slots under the bays */
+/* Fixed width (like an M.2 2280): more bays per row makes the case wider, not the NVMe longer. */
 .m2-row { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--nas-edge);
-  contain: inline-size; } /* de bays bepalen de breedte van de kast; de sleuven lopen door op de volgende regel */
+  contain: inline-size; } /* the bays determine the width of the case; the slots continue on the next line */
 .nas:has(.m2-row) { min-width: min(100%, 330px); }
 .m2 { flex: none; width: 290px; max-width: 100%; display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; min-width: 0; cursor: default; }
 .m2[aria-pressed] { cursor: pointer; }
@@ -789,7 +789,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .m2.warn .led { background: var(--warn); box-shadow: 0 0 7px var(--warn); }
 .m2.bad .led, .m2.missing .led { background: var(--bad); box-shadow: 0 0 7px var(--bad); }
 
-/* ---- 2,5"-sleuven: liggende, smalle lades voor SATA-SSD's */
+/* ---- 2.5" slots: horizontal, narrow drawers for SATA SSDs */
 .sff-row { display: flex; flex-wrap: wrap; gap: 5px 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--nas-edge); contain: inline-size; }
 .sff { flex: none; width: 214px; max-width: 100%; height: 46px; padding: 0; border: 0; border-radius: 4px; background: var(--nas-slot); color: inherit; font: inherit;
   text-align: left; cursor: default; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .55); }
@@ -815,17 +815,17 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .sff[aria-pressed="true"], .sff.picked, .sff.over { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sff.dragging { opacity: .45; }
 
-/* ---- console: klembord en venster */
+/* ---- console: clipboard and window */
 .paste-sink { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
 .console-clip { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--glass); border-bottom: 1px solid var(--glass-line); font-size: 14px; }
 .console-clip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .console-bar .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-/* console in een venster van HomeBaseOS */
+/* console in a HomeBaseOS window */
 .window.console-win { width: min(1240px, calc(100vw - 24px)); height: min(860px, 90vh); max-height: none; }
 .window.console-win[open] { display: flex; }
 .console-win iframe { flex: 1; width: 100%; border: 0; background: var(--screen-bg); }
 
-/* ---- startscherm rangschikken en mappen (zoals op een iPad) */
+/* ---- arranging the home screen and folders (like on an iPad) */
 .app-grid.arranging .app { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .app-grid img { -webkit-user-drag: none; user-select: none; }
 .app-grid.arranging .app-open { cursor: grab; }
@@ -840,10 +840,10 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .app.dragging .app-icon { animation: none !important; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; transform-origin: top left; opacity: .95;
   box-shadow: 0 22px 34px -12px rgba(0, 0, 0, .6); }
-/* boven een app houden: ze wordt groter en krijgt een matglazen rand, als teken dat er een map komt */
+/* holding above an app: it grows and gets a frosted-glass border, as a sign that a folder is coming */
 .app-grid .app-icon { transition: scale .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s; }
 .app.merge .app-icon { scale: 1.16; box-shadow: 0 0 0 8px var(--folder-ring), 0 14px 26px -12px rgba(0, 0, 0, .55); animation-play-state: paused; }
-/* map-tegel: matglas met een raster van 3 × 3 kleine pictogrammen, zoals op een iPad */
+/* folder tile: frosted glass with a 3 × 3 grid of small icons, like on an iPad */
 .folder-icon { place-items: stretch; align-content: stretch; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
   gap: 4px; padding: 8px; background: var(--folder-bg); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); }
 .folder-icon .mini { position: relative; display: grid; place-items: center; min-width: 0; border-radius: 4px; overflow: hidden;
@@ -861,7 +861,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   from { opacity: 0; transform: translate(calc(-50% + var(--from-x, 0px)), calc(-50% + var(--from-y, 0px))) scale(.2); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
-/* het paneel van een geopende map */
+/* the panel of an open folder */
 .folder-overlay { position: fixed; inset: 0; z-index: 40; background: rgba(5, 10, 20, .35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .folder-overlay.drop-out { background: rgba(5, 10, 20, .2); outline: 3px dashed var(--accent); outline-offset: -12px; }
 .folder-panel { position: fixed; z-index: 41; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100vw - 24px));
@@ -873,14 +873,14 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .folder-name:hover, .folder-name:focus { background: var(--track); outline: none; }
 .folder-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }
 
-/* ---- terminal op de server (terminal.html) */
+/* ---- terminal on the server (terminal.html) */
 .term-screen { display: block; padding: 8px 10px; background: var(--term-bg); }
 .term-screen .xterm { height: 100%; }
 .terminal-page .console-status .inline-form { width: 100%; }
 .terminal-page .console-status .field { flex: 1; min-width: 0; }
 .sec-confirm { margin-top: 12px; }
 
-/* ---- gedeelde mappen */
+/* ---- shared folders */
 .share-access { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .share-addr { font-size: 12px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
 .access-table { display: grid; gap: 6px; }
@@ -889,7 +889,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 @media (max-width: 560px) { .access-row { grid-template-columns: 1fr; } }
 .win-body > .bays-head:first-child, .win-body > .pane-title:first-child { margin-top: 4px; }
 
-/* ---- widgets aanpassen: volgorde en verbergen */
+/* ---- customising widgets: order and hiding */
 .widget-slot { position: relative; }
 .widgets-edit { align-self: center; font-size: 13px; }
 .widgets.editing .widget { pointer-events: none; }
@@ -905,17 +905,17 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .widget-ctl button[disabled] { opacity: .35; cursor: default; }
 .widget-ctl svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .widget-ctl .eye[aria-pressed="false"] { color: var(--muted); }
-/* gedeelde mappen in een widget */
+/* shared folders in a widget */
 .share-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .share-mini li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; }
 .share-mini .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* IP-adressen bij VM's */
+/* IP addresses of VMs */
 .vm-ip { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .vm-ip b { color: var(--text); font-weight: 600; }
-.widgets.editing .widget-head > :not(h2) { visibility: hidden; } /* plaats voor de knopjes */
+.widgets.editing .widget-head > :not(h2) { visibility: hidden; } /* room for the little buttons */
 .field.sm { height: 32px; min-width: 150px; font-size: 13px; border-radius: 9px; flex: 0 1 auto; }
 
-/* ---- back-ups */
+/* ---- backups */
 .bk-providers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 10px; }
 .bk-providers .store-card { width: 100%; border: 1px solid var(--glass-line); }
 .bk-providers .store-card > span { display: grid; gap: 3px; }
@@ -932,7 +932,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .bk-secret-val { font-size: 17px; justify-self: start; padding: 6px 10px; user-select: all; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .bk-rows > li { grid-template-columns: 1fr; } .bk-rows .row-side { justify-content: flex-start; } }
 
-/* ---- aan/uit */
+/* ---- power */
 .power-win { width: min(440px, calc(100vw - 32px)); }
 .power-body { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 28px 24px; }
 .power-body h2 { font-size: 19px; font-weight: 600; }
@@ -940,7 +940,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 @keyframes power-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .power-spin { animation-duration: 3s; } }
 
-/* ---- gebruikers en groepen */
+/* ---- users and groups */
 .rights { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0 10px; }
 .rights th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--glass-line); }
 .rights td { padding: 6px 8px; border-bottom: 1px solid var(--glass-line); vertical-align: middle; }
@@ -951,14 +951,14 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .user-edit { grid-column: 1 / -1; padding-top: 4px; }
 @media (max-width: 560px) { .rights th:nth-child(3), .rights td:nth-child(3) { display: none; } }
 
-/* ---- apps installeren: geavanceerd */
+/* ---- installing apps: advanced */
 .adv-switch { align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); }
 .adv-switch input { margin-top: 2px; }
 .adv-switch > span { display: grid; gap: 2px; }
 .adv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
 .adv-bar .seg button[disabled] { opacity: .45; cursor: not-allowed; }
 
-/* Voortgang van een installatie */
+/* Progress of an installation */
 .job .job-bar { height: 10px; margin: 4px 0 0; }
 .job .progress-note { font-variant-numeric: tabular-nums; }
 .job-log { margin-top: 10px; }

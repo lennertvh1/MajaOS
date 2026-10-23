@@ -1,22 +1,22 @@
 'use strict';
 /*
- * HomeBaseOS — een eenvoudig beheersysteem voor je thuisserver (in de stijl van ZimaOS/HexOS).
- * Draait als root op Debian 13 met ZFS, KVM/libvirt en Docker. Geen externe dependencies: Node 18.11+.
+ * HomeBaseOS — a simple management system for your home server (in the style of ZimaOS/HexOS).
+ * Runs as root on Debian 13 with ZFS, KVM/libvirt and Docker. No external dependencies: Node 18.11+.
  *
- * Omgevingsvariabelen (op de server in /etc/homebaseos/homebaseos.env):
- *   APP_PASSWORD     wachtwoord van vroeger (optioneel). Zonder wachtwoord maak je bij de eerste keer een account aan.
- *   SESSION_SECRET   vaste sleutel voor aanmeldingen; anders willekeurig per opstart
- *   PORT             standaard 8080
- *   OLLAMA_URL       bv. http://127.0.0.1:11434  (optioneel)
- *   VM_DIR           map voor VM-schijven (vroeger; nu bij Instellingen → Opslag)
- *   ISO_DIR          map met ISO's en schijfbestanden (vroeger; nu bij Instellingen → Opslag)
- *   VM_NETWORK       netwerk voor nieuwe VM's: network=default (NAT) of bridge=br0
- *   APPDATA_DIR      gegevens van apps (vroeger; nu bij Instellingen → Opslag, standaard /<eerste pool>/appdata)
- *   SHARES_DIR       waar Unraid-shares (/mnt/user/...) naartoe gaan (vroeger; standaard de eerste pool)
- *   STACKS_DIR       compose-bestanden van de appstore, standaard /opt/stacks (zoals Dockge)
- *   APP_UID/APP_GID  gebruiker voor apps in plaats van Unraid's 99:100, standaard 1000:1000
- *   DATA_DIR         eigen instellingen, standaard /var/lib/homebaseos
- *   DEMO             1 = demo-modus met voorbeelddata (geen server nodig)
+ * Environment variables (on the server in /etc/homebaseos/homebaseos.env):
+ *   APP_PASSWORD     password from older installs (optional). Without a password you create an account the first time.
+ *   SESSION_SECRET   fixed key for sign-ins; otherwise random per start
+ *   PORT             default 8080
+ *   OLLAMA_URL       e.g. http://127.0.0.1:11434  (optional)
+ *   VM_DIR           folder for VM disks (older installs; now in Settings → Storage)
+ *   ISO_DIR          folder with ISOs and disk files (older installs; now in Settings → Storage)
+ *   VM_NETWORK       network for new VMs: network=default (NAT) or bridge=br0
+ *   APPDATA_DIR      app data (older installs; now in Settings → Storage, default /<first pool>/appdata)
+ *   SHARES_DIR       where Unraid shares (/mnt/user/...) go (older installs; default the first pool)
+ *   STACKS_DIR       compose files of the app store, default /opt/stacks (like Dockge)
+ *   APP_UID/APP_GID  user for apps instead of Unraid's 99:100, default 1000:1000
+ *   DATA_DIR         own settings, default /var/lib/homebaseos
+ *   DEMO             1 = demo mode with sample data (no server needed)
  */
 const http = require('node:http');
 const https = require('node:https');
@@ -26,7 +26,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 
-// Lees een .env-bestand naast server.js (handig tijdens het ontwikkelen).
+// Read a .env file next to server.js (handy during development).
 (function loadDotEnv() {
   const file = path.join(__dirname, '.env');
   if (!fs.existsSync(file)) return;
@@ -39,7 +39,7 @@ const zlib = require('node:zlib');
 })();
 if (process.argv.includes('--demo')) process.env.DEMO = '1';
 
-// Pas na het lezen van .env laden: de modules lezen hun instellingen bij het inladen.
+// Only load after reading .env: the modules read their settings when they are loaded.
 const sys = require('./lib/system');
 const docker = require('./lib/docker');
 const vms = require('./lib/vms');
@@ -91,7 +91,7 @@ function rawRequest(urlStr, { method = 'GET', headers = {}, body, timeout = 1500
     const url = new URL(urlStr);
     const lib = url.protocol === 'https:' ? https : http;
     const req = lib.request(url, { method, headers, timeout }, (res) => resolve(res));
-    req.on('timeout', () => req.destroy(new Error('Time-out bij verbinden met ' + url.host)));
+    req.on('timeout', () => req.destroy(new Error('Time-out connecting to ' + url.host)));
     req.on('error', reject);
     if (body) req.write(body);
     req.end();
@@ -104,7 +104,7 @@ async function requestJson(urlStr, opts = {}) {
   for await (const c of res) chunks.push(c);
   const text = Buffer.concat(chunks).toString('utf8');
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { /* niet-JSON */ }
+  try { data = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (res.statusCode >= 400) {
     const msg = (data && (data.error || data.message)) || text.slice(0, 200) || ('HTTP ' + res.statusCode);
     const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -117,7 +117,7 @@ async function requestJson(urlStr, opts = {}) {
 function sendJson(res, status, obj) {
   let body = JSON.stringify(obj);
   const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
-  // Grote antwoorden (de appcatalogus is ~2 MB) gecomprimeerd versturen.
+  // Send large responses (the app catalogue is ~2 MB) compressed.
   if (body.length > 64 * 1024 && /\bgzip\b/.test((res.req && res.req.headers['accept-encoding']) || '')) {
     body = zlib.gzipSync(body); headers['Content-Encoding'] = 'gzip';
   }
@@ -127,10 +127,10 @@ function sendJson(res, status, obj) {
 
 async function readBody(req, limit = 1e6) {
   const chunks = []; let size = 0;
-  for await (const c of req) { size += c.length; if (size > limit) throw new Error('Body te groot'); chunks.push(c); }
+  for await (const c of req) { size += c.length; if (size > limit) throw new Error('Request too large'); chunks.push(c); }
   const text = Buffer.concat(chunks).toString('utf8');
   if (!text) return {};
-  try { return JSON.parse(text); } catch { const e = new Error('Ongeldige JSON'); e.status = 400; throw e; }
+  try { return JSON.parse(text); } catch { const e = new Error('Invalid JSON'); e.status = 400; throw e; }
 }
 
 /* ---------------------------------------------------------------- auth */
@@ -145,7 +145,7 @@ function validToken(tok) {
   const expected = sign(v);
   if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return false;
   const issued = Number(v.split('.')[1]);
-  // 30 dagen geldig, en niet van vóór het aanzetten van tweestapsverificatie.
+  // Valid for 30 days, and not from before two-step verification was turned on.
   return Date.now() - issued < 30 * 24 * 3600 * 1000 && issued >= auth.sessionsAfter();
 }
 function cookies(req) {
@@ -155,26 +155,26 @@ function cookies(req) {
   });
   return out;
 }
-// Een account (eigen wachtwoord) of APP_PASSWORD van vroeger. Zonder allebei: eerst een account aanmaken (needsSetup).
+// An account (own password) or APP_PASSWORD from older installs. Without both: create an account first (needsSetup).
 const passwordEnabled = () => !!CFG.password || auth.hasPassword();
 const needsSetup = () => !CFG.demo && !passwordEnabled();
 function isAuthed(req) { return passwordEnabled() ? validToken(cookies(req).tb_session) : CFG.demo; }
-// Wachtwoord opnieuw controleren (aanmelden, terminal, beveiliging minder streng maken).
-// Een eigen wachtwoord (het account, of gekozen bij Beveiliging) vervangt APP_PASSWORD.
+// Check the password again (sign in, terminal, making security less strict).
+// An own password (the account, or chosen in Security) replaces APP_PASSWORD.
 function checkPassword(pw) {
   if (auth.hasPassword()) return auth.verifyPassword(pw);
   if (!CFG.password) return false;
   const a = Buffer.from(String(pw || '')), b = Buffer.from(CFG.password);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
-// Zonder "Aangemeld blijven" verdwijnt het koekje als de browser sluit.
+// Without "Stay signed in" the cookie disappears when the browser closes.
 function setSession(res, remember) {
   res.setHeader('Set-Cookie', `tb_session=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/` + (remember === false ? '' : '; Max-Age=2592000'));
 }
-const slow = () => new Promise((r) => setTimeout(r, 800)); // vertraag gokpogingen
+const slow = () => new Promise((r) => setTimeout(r, 800)); // slow down guessing
 const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
 
-/* ---------------------------------------------------------------- systeem */
+/* ---------------------------------------------------------------- system */
 
 async function apiOverview() {
   const [cpu, gpu, store] = await Promise.all([sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null)]);
@@ -187,13 +187,13 @@ async function apiOverview() {
 /* ------------------------------------------------------------------ Ollama */
 
 function needOllama() {
-  if (!CFG.ollamaUrl) { const e = new Error('Ollama is niet ingesteld (OLLAMA_URL ontbreekt).'); e.status = 503; throw e; }
+  if (!CFG.ollamaUrl) { const e = new Error('Ollama is not set up (OLLAMA_URL is missing).'); e.status = 503; throw e; }
 }
 
-// Geen verbinding (Ollama is niet geïnstalleerd of staat uit): een duidelijke melding in plaats van ECONNREFUSED.
+// No connection (Ollama isn't installed or is off): a clear message instead of ECONNREFUSED.
 function ollamaDown(e) {
   if (e.status || !/ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ECONNRESET|Time-out/i.test(String(e.code || '') + ' ' + e.message)) throw e;
-  const err = new Error('Ollama draait niet. Installeer Ollama uit de appstore, of start de app als ze al geïnstalleerd is.');
+  const err = new Error('Ollama is not running. Install Ollama from the app store, or start the app if it is already installed.');
   err.status = 503; err.data = { notRunning: true }; throw err;
 }
 
@@ -220,7 +220,7 @@ async function apiAi() {
   };
 }
 
-// Stuur de NDJSON-stream van Ollama ongewijzigd door naar de browser.
+// Pass Ollama's NDJSON stream on to the browser unchanged.
 async function proxyStream(res, urlPath, payload) {
   needOllama();
   const up = await rawRequest(CFG.ollamaUrl + urlPath, {
@@ -242,38 +242,38 @@ async function handleApi(req, res, url) {
   if (p === '/api/config' && method === 'GET') {
     return sendJson(res, 200, {
       demo: CFG.demo, passwordEnabled: passwordEnabled(), needsLogin: passwordEnabled() && !isAuthed(req), ollama: !!CFG.ollamaUrl,
-      setup: needsSetup(), // nog geen account: de welkomstwizard maakt er een
-      loginUser: !!auth.userName(), // aanmelden met gebruikersnaam (accounts van vroeger hebben er geen)
+      setup: needsSetup(), // no account yet: the welcome wizard creates one
+      loginUser: !!auth.userName(), // sign in with a user name (older accounts don't have one)
       language: settings.getSettings().language, clock: settings.getSettings().clock,
       terminal: settings.getSettings().terminal, terminalPassword: settings.getSettings().terminalPassword && passwordEnabled(),
-      onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // welkomstwizard tonen
+      onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // show the welcome wizard
     });
   }
-  // Eerste keer: een account aanmaken (gebruikersnaam + wachtwoord). Kan alleen zolang er nog geen is.
+  // First time: create an account (user name + password). Only possible while there is none yet.
   if (p === '/api/setup' && method === 'POST') {
-    if (!needsSetup()) return sendJson(res, 409, { error: 'Er is al een account. Meld je aan.' });
-    if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Andere oorsprong geweigerd' });
+    if (!needsSetup()) return sendJson(res, 409, { error: 'There is already an account. Sign in.' });
+    if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Other origin refused' });
     const body = await readBody(req);
-    if (body.password !== body.repeat) return sendJson(res, 400, { error: 'De twee wachtwoorden zijn niet gelijk.' });
+    if (body.password !== body.repeat) return sendJson(res, 400, { error: 'The two passwords do not match.' });
     const r = auth.createAccount(body.user, body.password);
     if (body.language) settings.saveSettings({ language: body.language });
     removePasswordIssue();
     setSession(res, true);
-    console.log(`Account ${r.user} aangemaakt vanaf ${clientIp(req)}.`);
+    console.log(`Account ${r.user} created from ${clientIp(req)}.`);
     return sendJson(res, 200, r);
   }
-  // Aanmelden: eerst het wachtwoord, daarna (als tweestapsverificatie aan staat) een code uit de app of een herstelcode.
+  // Sign in: first the password, then (if two-step verification is on) a code from the app or a recovery code.
   if ((p === '/api/login' || p === '/api/login/mfa') && method === 'POST') {
     const ip = clientIp(req), body = await readBody(req);
-    if (auth.lockedFor(ip)) return sendJson(res, 429, { error: 'Te veel foute pogingen. Wacht 5 minuten en probeer opnieuw.' });
+    if (auth.lockedFor(ip)) return sendJson(res, 429, { error: 'Too many wrong attempts. Wait 5 minutes and try again.' });
     if (p === '/api/login') {
-      if (needsSetup()) return sendJson(res, 409, { error: 'Er is nog geen account. Maak er eerst een aan.', setup: true });
-      if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: auth.userName() ? 'Verkeerde gebruikersnaam of wachtwoord' : 'Verkeerd wachtwoord' }); }
+      if (needsSetup()) return sendJson(res, 409, { error: 'There is no account yet. Create one first.', setup: true });
+      if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: auth.userName() ? 'Wrong user name or password' : 'Wrong password' }); }
       if (auth.mfaEnabled()) return sendJson(res, 200, { mfa: true, pending: auth.newPending() });
     } else {
       const r = auth.usePending(body.pending, body.code);
-      if (r.result === 'expired') return sendJson(res, 401, { error: 'Je aanmelding is verlopen. Typ je wachtwoord opnieuw.', expired: true });
-      if (r.result !== 'ok') { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Die code klopt niet.' }); }
+      if (r.result === 'expired') return sendJson(res, 401, { error: 'Your sign-in expired. Type your password again.', expired: true });
+      if (r.result !== 'ok') { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
       auth.succeeded(ip); setSession(res, body.remember);
       return sendJson(res, 200, { ok: true, recovery: !!r.recovery, recoveryLeft: r.recoveryLeft });
     }
@@ -284,32 +284,32 @@ async function handleApi(req, res, url) {
     res.setHeader('Set-Cookie', 'tb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return sendJson(res, 200, { ok: true });
   }
-  // Koppelen van de app HomeBase Back-up op een pc: zonder aanmelding, met een eenmalige code van 15 minuten (lib/kopia.js).
+  // Pairing the HomeBase Backup app on a PC: without sign-in, with a one-time code valid for 15 minutes (lib/kopia.js).
   const pair = p.match(/^\/api\/backup\/pair\/([A-Za-z0-9-]{1,20})$/);
   if (pair && method === 'GET' && !CFG.demo) {
-    res.setHeader('Access-Control-Allow-Origin', '*'); // de app vraagt het op vanaf een ander adres
+    res.setHeader('Access-Control-Allow-Origin', '*'); // the app requests it from another address
     const r = kopia.usePairing(pair[1], clientIp(req));
     if (r.status !== 200) await slow();
-    return sendJson(res, r.status, r.data || { error: r.status === 429 ? 'Te veel foute codes. Wacht 5 minuten en probeer opnieuw.' : 'Die koppelcode klopt niet of is verlopen.' });
+    return sendJson(res, r.status, r.data || { error: r.status === 429 ? 'Too many wrong codes. Wait 5 minutes and try again.' : 'That pairing code is wrong or has expired.' });
   }
-  if (!isAuthed(req)) return sendJson(res, 401, { error: 'Niet aangemeld' });
-  if (CFG.demo) return sendJson(res, 409, { error: 'Demo-modus: de browser gebruikt voorbeelddata.' });
+  if (!isAuthed(req)) return sendJson(res, 401, { error: 'Not signed in' });
+  if (CFG.demo) return sendJson(res, 409, { error: 'Demo mode: the browser uses sample data.' });
 
-  // Bescherming tegen CSRF: wijzigende verzoeken moeten van dezelfde oorsprong komen.
+  // Protection against CSRF: requests that change things must come from the same origin.
   if (method !== 'GET') {
     const origin = req.headers.origin;
-    if (origin && new URL(origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Andere oorsprong geweigerd' });
+    if (origin && new URL(origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Other origin refused' });
   }
 
   let m;
   if (p === '/api/overview' && method === 'GET') return sendJson(res, 200, await apiOverview());
-  // Server herstarten of afsluiten. Eerst antwoorden, dan pas het commando (anders komt het antwoord nooit aan).
+  // Restart or shut down the server. Answer first, only then the command (otherwise the answer never arrives).
   if (p === '/api/system/power' && method === 'POST') {
     const action = (await readBody(req)).action;
-    if (action !== 'reboot' && action !== 'shutdown') return sendJson(res, 400, { error: 'Kies herstarten of afsluiten.' });
-    console.log(`Server ${action === 'reboot' ? 'herstart' : 'afgesloten'} vanaf ${clientIp(req)}.`);
+    if (action !== 'reboot' && action !== 'shutdown') return sendJson(res, 400, { error: 'Choose restart or shut down.' });
+    console.log(`Server ${action === 'reboot' ? 'restarted' : 'shut down'} from ${clientIp(req)}.`);
     sendJson(res, 200, { ok: true, action });
-    setTimeout(() => sys.run('systemctl', [action === 'reboot' ? 'reboot' : 'poweroff'], { timeout: 30000 }).catch((e) => console.error('Aan/uit mislukt: ' + e.message)), 1000);
+    setTimeout(() => sys.run('systemctl', [action === 'reboot' ? 'reboot' : 'poweroff'], { timeout: 30000 }).catch((e) => console.error('Power action failed: ' + e.message)), 1000);
     return;
   }
 
@@ -365,7 +365,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/vm-networks' && method === 'POST') return sendJson(res, 200, await vmnet.createVmNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/vm-networks\/([^/]+)\/start$/)) && method === 'POST') return sendJson(res, 200, await vmnet.startVmNetwork(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/vm-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await vmnet.deleteVmNetwork(decodeURIComponent(m[1])));
-  // Snapshots van een VM (lib/vmsnap.js).
+  // Snapshots of a VM (lib/vmsnap.js).
   if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots$/)) && method === 'GET') return sendJson(res, 200, await vmsnap.listSnapshots(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots$/)) && method === 'POST') return sendJson(res, 200, await vmsnap.createSnapshot(decodeURIComponent(m[1]), await readBody(req)));
   if ((m = p.match(/^\/api\/vms\/([^/]+)\/snapshots\/([^/]+)\/revert$/)) && method === 'POST') return sendJson(res, 200, await vmsnap.revertSnapshot(decodeURIComponent(m[1]), decodeURIComponent(m[2])));
@@ -386,33 +386,33 @@ async function handleApi(req, res, url) {
   if (p === '/api/settings' && method === 'POST') {
     const body = await readBody(req);
     try { return sendJson(res, 200, settings.saveSettings(body, { checkPassword })); }
-    catch (e) { if (e.status === 403) await new Promise((r) => setTimeout(r, 800)); throw e; } // vertraag gokpogingen
+    catch (e) { if (e.status === 403) await new Promise((r) => setTimeout(r, 800)); throw e; } // slow down guessing
   }
-  // Terminal: eerst een eenmalig ticket (met het wachtwoord als Beveiliging dat vraagt), daarna de WebSocket.
+  // Terminal: first a one-time ticket (with the password if Security asks for it), then the WebSocket.
   if (p === '/api/terminal/ticket' && method === 'POST') {
     const s0 = settings.getSettings();
-    if (!s0.terminal) return sendJson(res, 403, { error: 'De terminal staat uit. Zet hem aan bij Instellingen → Beveiliging.' });
+    if (!s0.terminal) return sendJson(res, 403, { error: 'The terminal is turned off. Turn it on in Settings → Security.' });
     const body = await readBody(req);
     if (s0.terminalPassword && !checkPassword(body.password)) {
-      await new Promise((r) => setTimeout(r, 800)); // vertraag gokpogingen
-      return sendJson(res, 401, { error: 'Verkeerd wachtwoord' });
+      await new Promise((r) => setTimeout(r, 800)); // slow down guessing
+      return sendJson(res, 401, { error: 'Wrong password' });
     }
     return sendJson(res, 200, { ticket: terminal.newTicket() });
   }
-  // Tweestapsverificatie beheren (Instellingen → Beveiliging). Wachtwoord nodig om te beginnen, wachtwoord + code om uit te zetten.
+  // Manage two-step verification (Settings → Security). Password needed to start, password + code to turn it off.
   if (p === '/api/mfa' && method === 'GET') return sendJson(res, 200, { ...auth.status(), available: passwordEnabled(), passwordChanged: auth.passwordChanged() });
   if (p.startsWith('/api/mfa/') && method === 'POST') {
-    if (!passwordEnabled()) return sendJson(res, 409, { error: 'Zet eerst een wachtwoord (APP_PASSWORD) om tweestapsverificatie te gebruiken.' });
+    if (!passwordEnabled()) return sendJson(res, 409, { error: 'Set a password (APP_PASSWORD) first to use two-step verification.' });
     const body = await readBody(req), action = p.slice('/api/mfa/'.length);
     if (action === 'enable') {
       const out = auth.finishSetup(body.code);
-      setSession(res, true); // andere sessies zijn nu afgemeld, deze blijft aangemeld
+      setSession(res, true); // other sessions are now signed out, this one stays signed in
       return sendJson(res, 200, out);
     }
-    if (!['setup', 'disable', 'recovery'].includes(action)) return sendJson(res, 404, { error: 'Niet gevonden' });
-    if (!checkPassword(body.password)) { await slow(); return sendJson(res, 401, { error: 'Verkeerd wachtwoord' }); }
+    if (!['setup', 'disable', 'recovery'].includes(action)) return sendJson(res, 404, { error: 'Not found' });
+    if (!checkPassword(body.password)) { await slow(); return sendJson(res, 401, { error: 'Wrong password' }); }
     if (action === 'setup') return sendJson(res, 200, auth.beginSetup(auth.userName() ? auth.userName() + '@' + os.hostname() : os.hostname()));
-    if (!auth.checkCode(body.code).ok) { await slow(); return sendJson(res, 401, { error: 'Die code klopt niet.' }); }
+    if (!auth.checkCode(body.code).ok) { await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
     return sendJson(res, 200, action === 'disable' ? auth.disable() : auth.newRecovery());
   }
   if (p === '/api/datetime' && method === 'GET') return sendJson(res, 200, await datetime.getDateTime());
@@ -421,17 +421,17 @@ async function handleApi(req, res, url) {
   if (p === '/api/update/progress' && method === 'GET') return sendJson(res, 200, updater.progress());
   if (p === '/api/update/install' && method === 'POST') return sendJson(res, 200, await updater.start((await readBody(req)).version));
   if (p === '/api/update/check' && method === 'POST') return sendJson(res, 200, await release.check());
-  // Wachtwoord wijzigen (welkomstwizard en Beveiliging). Andere sessies worden afgemeld, deze blijft aangemeld.
+  // Change password (welcome wizard and Security). Other sessions are signed out, this one stays signed in.
   if (p === '/api/password' && method === 'POST') {
     const body = await readBody(req);
-    if (!passwordEnabled()) return sendJson(res, 409, { error: 'HomeBaseOS draait zonder wachtwoord.' });
-    if (!checkPassword(body.current)) { await slow(); return sendJson(res, 401, { error: 'Je huidige wachtwoord klopt niet.' }); }
+    if (!passwordEnabled()) return sendJson(res, 409, { error: 'HomeBaseOS runs without a password.' });
+    if (!checkPassword(body.current)) { await slow(); return sendJson(res, 401, { error: 'Your current password is not correct.' }); }
     auth.setPassword(body.password);
     removePasswordIssue();
     setSession(res, true);
     return sendJson(res, 200, { ok: true, changed: auth.passwordChanged() });
   }
-  // Welkomstwizard: wat er al ingesteld is, en afronden of opnieuw starten.
+  // Welcome wizard: what is already set up, and finish or start over.
   if (p === '/api/onboarding' && method === 'GET') {
     const [pools, opts] = await Promise.all([storage.poolSizes().catch(() => null), zpool.poolOptions().catch(() => null)]);
     return sendJson(res, 200, {
@@ -465,9 +465,9 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveGroup(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteGroup(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteUser(decodeURIComponent(m[1])));
-  // Back-ups: toestellen naar de NAS, en de NAS naar de cloud of een andere NAS (rclone).
+  // Backups: devices to the NAS, and the NAS to the cloud or another NAS (rclone).
   if (p === '/api/backup' && method === 'GET') return sendJson(res, 200, await backup.overview({ brief: url.searchParams.get('brief') === '1' }));
-  // Back-ups van apps en VM's naar een map op de NAS (lib/sysbackup.js).
+  // Backups of apps and VMs to a folder on the NAS (lib/sysbackup.js).
   if (p === '/api/sysbackups' && method === 'GET') return sendJson(res, 200, await sysbackup.overview());
   if (p === '/api/sysbackups' && method === 'POST') return sendJson(res, 200, await sysbackup.saveJob(await readBody(req)));
   if ((m = p.match(/^\/api\/sysbackups\/([0-9a-f]{8})$/)) && method === 'POST') return sendJson(res, 200, await sysbackup.saveJob(await readBody(req), m[1]));
@@ -508,11 +508,11 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
   if (p === '/api/pools/options' && method === 'GET') return sendJson(res, 200, await zpool.poolOptions());
   if (p === '/api/pools' && method === 'POST') return sendJson(res, 200, await zpool.createPool(await readBody(req)));
-  // Opslaglocaties (Instellingen → Opslag): appgegevens verhuizen naar een andere pool, of een pool kiezen voor VM's, ISO's en gedeelde mappen.
+  // Storage locations (Settings → Storage): move app data to another pool, or choose a pool for VMs, ISOs and shared folders.
   if (p === '/api/storage-paths' && method === 'GET') return sendJson(res, 200, await migrate.overview());
   if (p === '/api/storage-paths' && method === 'POST') {
     const body = await readBody(req);
-    if (body.path) return sendJson(res, 200, await migrate.usePath(body.kind, body.path)); // bestaande map aanwijzen, niets verhuist
+    if (body.path) return sendJson(res, 200, await migrate.usePath(body.kind, body.path)); // point to an existing folder, nothing moves
     if (body.kind === 'appdata') return sendJson(res, 200, await migrate.migrateAppdata(body.pool));
     return sendJson(res, 200, await migrate.setLocation(body.kind, body.pool));
   }
@@ -522,12 +522,12 @@ async function handleApi(req, res, url) {
   if (p === '/api/ai' && method === 'GET') return sendJson(res, 200, await apiAi());
   if (p === '/api/ai/pull' && method === 'POST') {
     const body = await readBody(req);
-    if (!MODEL_NAME.test(body.name || '')) return sendJson(res, 400, { error: 'Ongeldige modelnaam' });
+    if (!MODEL_NAME.test(body.name || '')) return sendJson(res, 400, { error: 'Invalid model name' });
     return proxyStream(res, '/api/pull', { name: body.name, stream: true });
   }
   if (p === '/api/ai/chat' && method === 'POST') {
     const body = await readBody(req, 5e6);
-    if (!MODEL_NAME.test(body.model || '')) return sendJson(res, 400, { error: 'Ongeldig model' });
+    if (!MODEL_NAME.test(body.model || '')) return sendJson(res, 400, { error: 'Invalid model' });
     const messages = (Array.isArray(body.messages) ? body.messages : []).slice(-40)
       .map((x) => ({ role: x.role === 'assistant' ? 'assistant' : 'user', content: String(x.content || '').slice(0, 20000) }));
     return proxyStream(res, '/api/chat', { model: body.model, messages, stream: true });
@@ -535,7 +535,7 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/ai\/models\/(.+)$/)) && method === 'DELETE') {
     needOllama();
     const name = decodeURIComponent(m[1]);
-    if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Ongeldige modelnaam' });
+    if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Invalid model name' });
     await requestJson(CFG.ollamaUrl + '/api/delete', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
     });
@@ -544,14 +544,14 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/ai\/models\/(.+)\/(load|unload)$/)) && method === 'POST') {
     needOllama();
     const name = decodeURIComponent(m[1]);
-    if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Ongeldige modelnaam' });
+    if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Invalid model name' });
     await requestJson(CFG.ollamaUrl + '/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 120000,
       body: JSON.stringify({ model: name, keep_alive: m[2] === 'load' ? '24h' : 0 }),
     });
     return sendJson(res, 200, { ok: true });
   }
-  return sendJson(res, 404, { error: 'Onbekend endpoint' });
+  return sendJson(res, 404, { error: 'Unknown endpoint' });
 }
 
 function serveStatic(req, res, url) {
@@ -560,21 +560,21 @@ function serveStatic(req, res, url) {
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
   fs.stat(file, (serr, st) => {
-    if (serr || !st.isFile()) { res.writeHead(404); return res.end('Niet gevonden'); }
-    // De browser vraagt elke keer na of het bestand veranderd is (304 als het hetzelfde is),
-    // zodat een nieuwe versie van HomeBaseOS meteen zichtbaar is na een gewone verversing.
+    if (serr || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
+    // The browser checks each time whether the file changed (304 if it is the same),
+    // so a new version of HomeBaseOS shows up right after a normal refresh.
     const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
     const headers = { 'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
     fs.readFile(file, (err, buf) => {
-      if (err) { res.writeHead(404); return res.end('Niet gevonden'); }
+      if (err) { res.writeHead(404); return res.end('Not found'); }
       res.writeHead(200, { ...headers, 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
       res.end(buf);
     });
   });
 }
 
-// Na een installatie van vroeger stond het eerste wachtwoord op het scherm van de server: weg ermee zodra er een eigen is.
+// Older installs showed the first password on the server's screen: remove it as soon as there is an own one.
 function removePasswordIssue() {
   const pwIssue = '/etc/issue.d/homebaseos-wachtwoord.issue';
   if (fs.existsSync(pwIssue)) { fs.rmSync(pwIssue, { force: true }); sys.run('agetty', ['--reload']).catch(() => {}); }
@@ -587,12 +587,12 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(req, res, url);
   } catch (e) {
     const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 502;
-    if (!res.headersSent) sendJson(res, status, { ...(e.data || {}), error: e.message || 'Onbekende fout' });
+    if (!res.headersSent) sendJson(res, status, { ...(e.data || {}), error: e.message || 'Unknown error' });
     else res.end();
   }
 });
 
-// Console: de browser (noVNC) maakt een WebSocket naar /api/vms/<naam>/vnc, wij geven die door aan het VNC-scherm van QEMU.
+// Console: the browser (noVNC) opens a WebSocket to /api/vms/<name>/vnc, we pass it on to QEMU's VNC screen.
 server.on('upgrade', async (req, socket, head) => {
   const deny = (status, text) => socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
   socket.on('error', () => {});
@@ -605,7 +605,7 @@ server.on('upgrade', async (req, socket, head) => {
   try { sameOrigin = !req.headers.origin || new URL(req.headers.origin).host === req.headers.host; } catch { sameOrigin = false; }
   if (!sameOrigin) return deny(403, 'Forbidden');
   if (!m) {
-    // Terminal op de server: alleen als hij aan staat en met een geldig, eenmalig ticket.
+    // Terminal on the server: only when it is turned on and with a valid one-time ticket.
     if (!settings.getSettings().terminal) return deny(403, 'Forbidden');
     if (!terminal.useTicket(url.searchParams.get('ticket'))) return deny(401, 'Unauthorized');
     const conn = ws.acceptWebSocket(req, socket, head);
@@ -617,18 +617,18 @@ server.on('upgrade', async (req, socket, head) => {
 });
 
 server.listen(CFG.port, () => {
-  console.log(`HomeBaseOS draait op poort ${CFG.port}` + (CFG.demo ? ' (demo-modus)' : ''));
-  // HomeBaseOS draait als root: tot er een account is, kan je alleen dat account aanmaken (alle andere endpoints geven 401).
-  if (needsSetup()) console.log(`Nog geen account. Open http://<adres>:${CFG.port} om er een aan te maken.`);
+  console.log(`HomeBaseOS is running on port ${CFG.port}` + (CFG.demo ? ' (demo mode)' : ''));
+  // HomeBaseOS runs as root: until there is an account, you can only create that account (all other endpoints return 401).
+  if (needsSetup()) console.log(`No account yet. Open http://<address>:${CFG.port} to create one.`);
   if (!CFG.demo) {
-    paths.detect().catch(() => {}); // pools die al een map appdata/vms/isos hebben
+    paths.detect().catch(() => {}); // pools that already have an appdata/vms/isos folder
     vms.bootAutostart();
-    // Updates: 2 minuten na het opstarten en daarna elke 6 uur (alleen wat 6 uur niet meer gecontroleerd is).
-    const check = () => docker.checkUpdates(false).then((r) => r.updates && console.log(r.updates + ' app(s) met een update.')).catch(() => {});
+    // Updates: 2 minutes after start and then every 6 hours (only what hasn't been checked for 6 hours).
+    const check = () => docker.checkUpdates(false).then((r) => r.updates && console.log(r.updates + ' app(s) with an update.')).catch(() => {});
     setTimeout(check, 2 * 60000);
     setInterval(check, 6 * 3600000);
-    release.startSchedule((msg) => console.log(msg)); // nieuwe versies van HomeBaseOS zelf
-    backup.startSchedule(); // geplande back-uptaken
-    sysbackup.startSchedule(); // geplande back-ups van apps en VM's
+    release.startSchedule((msg) => console.log(msg)); // new versions of HomeBaseOS itself
+    backup.startSchedule(); // scheduled backup tasks
+    sysbackup.startSchedule(); // scheduled backups of apps and VMs
   }
 });

@@ -1,10 +1,10 @@
 'use strict';
-/* Tests voor de details van een schijf uit `smartctl -a -j`. */
+/* Tests for the details of a disk from `smartctl -a -j`. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseSmart } = require('../lib/disks');
 
-// Ingekort, zoals smartctl 7.4 het geeft voor een WD Red.
+// Shortened, as smartctl 7.4 gives it for a WD Red.
 const HDD = {
   smartctl: { exit_status: 0 }, model_family: 'Western Digital Red', model_name: 'WDC WD20EFZX-68AWUN0', serial_number: 'WD-WX12A3456789',
   firmware_version: '81.00B81', user_capacity: { bytes: 2000398934016 }, rotation_rate: 5400, form_factor: { name: '3.5 inches' },
@@ -24,7 +24,7 @@ const HDD = {
   ] } },
 };
 
-test('HDD: uren, temperatuur, waarschuwingen en zelftesten', () => {
+test('HDD: hours, temperature, warnings and self-tests', () => {
   const d = parseSmart(HDD);
   assert.equal(d.sleeping, false);
   assert.deepEqual([d.model, d.serial, d.firmware, d.rpm, d.link, d.smartOk, d.temp, d.powerOnHours, d.powerCycles],
@@ -37,7 +37,7 @@ test('HDD: uren, temperatuur, waarschuwingen en zelftesten', () => {
   assert.equal(d.nvme, null);
 });
 
-test('NVMe: slijtage, reserve en geschreven data', () => {
+test('NVMe: wear, spare and data written', () => {
   const d = parseSmart({
     model_name: 'Samsung SSD 980 500GB', serial_number: 'S64DNX0R123456', nvme_total_capacity: 500107862016, smart_status: { passed: true }, temperature: { current: 41 },
     nvme_smart_health_information_log: { critical_warning: 0, percentage_used: 3, available_spare: 100, available_spare_threshold: 10, data_units_written: 20000000,
@@ -48,6 +48,6 @@ test('NVMe: slijtage, reserve en geschreven data', () => {
   assert.deepEqual(d.watch, { mediaErrors: 0, criticalWarning: 0 });
 });
 
-test('slapende schijf niet wekken', () => {
+test('a sleeping disk is not woken up', () => {
   assert.deepEqual(parseSmart({ smartctl: { exit_status: 2, messages: [{ string: 'Device is in STANDBY mode, exit(2)', severity: 'information' }] } }), { sleeping: true });
 });

@@ -1,15 +1,15 @@
-/* Console: het scherm van een VM in de browser met noVNC. Opent in een eigen tabblad via console.html#<naam van de VM>. */
+/* Console: the screen of a VM in the browser with noVNC. Opens in its own tab via console.html#<name of the VM>. */
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
 
-  /* ---- taal en thema, zoals in app.js */
-  const DICTS = { en: window.TB_LANG_EN || {} };
-  let LANG = 'nl';
-  try { LANG = localStorage.getItem('tb-lang') || 'nl'; } catch (e) { /* privévenster */ }
+  /* ---- language and theme, like in app.js */
+  const DICTS = window.TB_LANG || {};
+  let LANG = 'en';
+  try { LANG = localStorage.getItem('tb-lang') || 'en'; } catch (e) { /* private window */ }
   const fill = (s, vars) => (vars ? String(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)) : String(s));
   function t(s, vars) { const d = DICTS[LANG]; return fill(d && d[s] != null ? d[s] : s, vars); }
-  // Meldingen van de server zijn Nederlands: zoek een sjabloon dat past.
+  // Server messages are in English: find a template that fits.
   function tr(msg) {
     const m = String(msg || ''), d = DICTS[LANG];
     if (!d || d[m] != null) return d ? d[m] : m;
@@ -26,16 +26,16 @@
     document.querySelectorAll('[data-t]').forEach((el) => { el.dataset.key = el.dataset.key || el.textContent.trim(); el.textContent = t(el.dataset.key); });
     document.querySelectorAll('[data-t-ph]').forEach((el) => { el.dataset.key = el.dataset.key || el.placeholder; el.placeholder = t(el.dataset.key); });
     document.querySelectorAll('[data-t-label]').forEach((el) => { const k = el.dataset.key || el.getAttribute('aria-label'); el.dataset.key = k; el.setAttribute('aria-label', t(k)); el.title = t(k); });
-    $('#screen').setAttribute('aria-label', t('Scherm van de VM'));
+    $('#screen').setAttribute('aria-label', t('VM screen'));
   }
-  try { const th = localStorage.getItem('tb-theme'); if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th; } catch (e) { /* standaard */ }
+  try { const th = localStorage.getItem('tb-theme'); if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th; } catch (e) { /* default */ }
 
   function toast(msg, bad) {
     const el = document.createElement('div'); el.className = 'toast' + (bad ? ' bad' : ''); el.textContent = msg;
     $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4000);
   }
 
-  /* ---- API: de echte server of de demo-adapter */
+  /* ---- API: the real server or the demo adapter */
   async function call(method, path) {
     const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' });
     const data = await r.json().catch(() => ({}));
@@ -46,7 +46,7 @@
   let demo = false;
 
   const name = decodeURIComponent(location.hash.slice(1));
-  // In een venster van HomeBaseOS (iframe) of los (eigen browservenster)?
+  // In a HomeBaseOS window (iframe) or on its own (separate browser window)?
   const embedded = window.self !== window.top;
   const consoleUrl = () => location.pathname + location.hash;
   const vmPath = '/api/vms/' + encodeURIComponent(name);
@@ -61,8 +61,8 @@
       b.addEventListener('click', fn); box.appendChild(b);
     });
   }
-  const STATE = { RUNNING: ['Draait', 'ok'], IDLE: ['Inactief', 'ok'], PAUSED: ['Gepauzeerd', 'warn'], SHUTDOWN: ['Sluit af', 'warn'], SHUTOFF: ['Uit', ''],
-    CRASHED: ['Gecrasht', 'bad'], PMSUSPENDED: ['Slaapstand', 'warn'] };
+  const STATE = { RUNNING: ['Running', 'ok'], IDLE: ['Idle', 'ok'], PAUSED: ['Paused', 'warn'], SHUTDOWN: ['Shutting down', 'warn'], SHUTOFF: ['Off', ''],
+    CRASHED: ['Crashed', 'bad'], PMSUSPENDED: ['Suspended', 'warn'] };
   function showState() {
     const [label, cls] = STATE[vm.state] || [vm.state, ''];
     $('#cState').textContent = t(label); $('#cState').className = 'pill ' + cls;
@@ -72,26 +72,26 @@
   const setTools = (on) => { $('#cKeys').disabled = !on; $('#cType').disabled = !on; };
 
   async function startVm() {
-    try { await api.post(vmPath + '/start'); toast(t('{name} start…', { name })); setTimeout(refresh, 1500); }
-    catch (e) { toast(t('Starten lukte niet: {error}', { error: tr(e.message) }), true); }
+    try { await api.post(vmPath + '/start'); toast(t('{name} is starting…', { name })); setTimeout(refresh, 1500); }
+    catch (e) { toast(t('Starting failed: {error}', { error: tr(e.message) }), true); }
   }
 
   async function refresh() {
     try { vm = await api.get(vmPath); }
-    catch (e) { status(e.status === 404 ? t('Deze VM bestaat niet (meer).') : tr(e.message), [[t('Opnieuw proberen'), refresh]]); return; }
+    catch (e) { status(e.status === 404 ? t('This VM does not exist (anymore).') : tr(e.message), [[t('Try again'), refresh]]); return; }
     showState();
-    if (vm.state === 'SHUTOFF') { disconnect(); status(t('De VM staat uit.'), [[t('Starten'), startVm, true]]); return; }
-    if (!vm.vnc) { status(t('Deze VM heeft geen VNC-scherm.')); return; }
+    if (vm.state === 'SHUTOFF') { disconnect(); status(t('The VM is off.'), [[t('Start'), startVm, true]]); return; }
+    if (!vm.vnc) { status(t('This VM has no VNC screen.')); return; }
     if (!rfb && !connecting && Date.now() >= retryAt) connect();
   }
 
   async function connect() {
     if (demo) { demoScreen(); return; }
     connecting = true;
-    status(t('Verbinden met het scherm…'));
+    status(t('Connecting to the screen…'));
     let RFB;
     try { ({ default: RFB } = await import('./vendor/novnc/core/rfb.js')); }
-    catch (e) { connecting = false; status(t('noVNC kon niet geladen worden: {error}', { error: e.message })); return; }
+    catch (e) { connecting = false; status(t('noVNC could not be loaded: {error}', { error: e.message })); return; }
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + vmPath + '/vnc';
     rfb = new RFB($('#screen'), url, { credentials: { password: (vm.vnc && vm.vnc.password) || '' }, wsProtocols: ['binary'] });
     rfb.scaleViewport = scale;
@@ -100,31 +100,31 @@
     rfb.addEventListener('connect', () => { connecting = false; status(''); setTools(true); rfb.focus(); });
     rfb.addEventListener('clipboard', (e) => onVmClipboard(e.detail.text));
     rfb.addEventListener('credentialsrequired', () => rfb.sendCredentials({ password: (vm.vnc && vm.vnc.password) || '' }));
-    rfb.addEventListener('securityfailure', () => status(t('Het wachtwoord van het scherm klopt niet. Open de console opnieuw vanuit HomeBaseOS.')));
+    rfb.addEventListener('securityfailure', () => status(t('The screen password is wrong. Open the console again from HomeBaseOS.')));
     rfb.addEventListener('disconnect', () => {
       connecting = false; rfb = null; setTools(false);
-      retryAt = Date.now() + 5000; // vanzelf opnieuw proberen, maar niet meteen
-      status(t('De verbinding met het scherm is verbroken.'), [[t('Opnieuw verbinden'), () => { retryAt = 0; refresh(); }, true]]);
-      setTimeout(refresh, 1500); // misschien is de VM net uitgeschakeld
+      retryAt = Date.now() + 5000; // try again by itself, but not right away
+      status(t('The connection to the screen was lost.'), [[t('Reconnect'), () => { retryAt = 0; refresh(); }, true]]);
+      setTimeout(refresh, 1500); // maybe the VM was just turned off
     });
   }
-  function disconnect() { if (rfb) { const r = rfb; rfb = null; try { r.disconnect(); } catch (e) { /* al weg */ } } setTools(false); }
+  function disconnect() { if (rfb) { const r = rfb; rfb = null; try { r.disconnect(); } catch (e) { /* already gone */ } } setTools(false); }
 
-  /* ---- knoppen */
-  $('#cKeys').addEventListener('click', () => { if (rfb) { rfb.sendCtrlAltDel(); rfb.focus(); } else if (demo) toast(t('Ctrl+Alt+Del verstuurd.')); });
+  /* ---- buttons */
+  $('#cKeys').addEventListener('click', () => { if (rfb) { rfb.sendCtrlAltDel(); rfb.focus(); } else if (demo) toast(t('Ctrl+Alt+Del sent.')); });
   $('#cScale').addEventListener('click', () => {
     scale = !scale; $('#cScale').setAttribute('aria-pressed', String(scale));
-    $('#cScale').textContent = t(scale ? 'Passend maken' : 'Ware grootte');
+    $('#cScale').textContent = t(scale ? 'Fit to window' : 'Actual size');
     if (rfb) rfb.scaleViewport = scale;
   });
   $('#cFull').addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => toast(t('Volledig scherm lukt niet in deze browser.'), true));
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => toast(t('Full screen does not work in this browser.'), true));
   });
   $('#cType').addEventListener('click', () => {
     const bar = $('#cTypeBar'); bar.hidden = !bar.hidden; $('#cType').setAttribute('aria-expanded', String(!bar.hidden));
     if (!bar.hidden) $('#cText').focus();
   });
-  // Tekst letter per letter als toetsen doorsturen (handig voor wachtwoorden, plakken werkt niet in een VM zonder agent).
+  // Send text letter by letter as keys (handy for passwords; pasting doesn't work in a VM without an agent).
   $('#cTypeBar').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = $('#cText').value + ($('#cEnter').checked ? '\n' : '');
@@ -140,26 +140,26 @@
     $('#cTypeBar').hidden = true; $('#cType').setAttribute('aria-expanded', 'false');
   });
 
-  /* ---- los venster: de console uit HomeBaseOS halen */
+  /* ---- separate window: take the console out of HomeBaseOS */
   if (embedded) {
     $('#cPop').hidden = false; $('#cClose').hidden = false;
     document.querySelector('.console-bar .back').hidden = true;
   }
   $('#cPop').addEventListener('click', () => {
     const w = window.open(consoleUrl(), 'tb-console-' + name.replace(/[^\w-]/g, ''), 'popup=yes,width=1180,height=800');
-    if (!w) { toast(t('Je browser blokkeerde het nieuwe venster. Sta pop-ups toe voor HomeBaseOS.'), true); return; }
+    if (!w) { toast(t('Your browser blocked the new window. Allow pop-ups for HomeBaseOS.'), true); return; }
     disconnect();
     if (window.parent && window.parent.TB_closeConsole) window.parent.TB_closeConsole();
   });
   $('#cClose').addEventListener('click', () => { disconnect(); if (window.parent && window.parent.TB_closeConsole) window.parent.TB_closeConsole(); });
 
-  /* ---- plakken: Cmd/Ctrl+V gaat niet als toets naar de VM; de tekst van je klembord wordt in de VM getypt */
+  /* ---- paste: Cmd/Ctrl+V doesn't go to the VM as a key; the text from your clipboard is typed in the VM */
   const isField = (el) => el && (el.tagName === 'INPUT' || (el.tagName === 'TEXTAREA' && el.id !== 'cPasteSink'));
   let backFocus = null;
   window.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'v' || isField(e.target) || !(rfb || demo)) return;
-    e.stopImmediatePropagation(); // noVNC krijgt deze toets niet
-    // De browser plakt in het gefocuste element: even een onzichtbaar tekstvak, zodat het paste-event overal komt (ook in Safari).
+    e.stopImmediatePropagation(); // noVNC doesn't get this key
+    // The browser pastes into the focused element: briefly an invisible text box, so the paste event arrives everywhere (also in Safari).
     backFocus = document.activeElement;
     const sink = $('#cPasteSink'); sink.value = ''; sink.focus();
   }, true);
@@ -171,13 +171,13 @@
     backFocus = null;
     if (text) pasteText(text);
   });
-  // Letter per letter als toetsen (werkt overal, ook zonder agent in de VM). Lange tekst in stukjes, zodat er niets verloren gaat.
+  // Letter by letter as keys (works everywhere, also without an agent in the VM). Long text in chunks, so nothing gets lost.
   async function pasteText(raw) {
     const text = raw.replace(/\r\n?/g, '\n').slice(0, 20000);
-    if (raw.length > 20000) toast(t('Alleen de eerste 20.000 tekens worden geplakt.'), true);
-    if (demo) { demoType(text); toast(t('Geplakt: {n} tekens.', { n: text.length })); return; }
+    if (raw.length > 20000) toast(t('Only the first 20,000 characters are pasted.'), true);
+    if (demo) { demoType(text); toast(t('Pasted: {n} characters.', { n: text.length })); return; }
     if (!rfb) return;
-    try { rfb.clipboardPasteFrom(text); } catch (e) { /* oude server zonder klembord */ }
+    try { rfb.clipboardPasteFrom(text); } catch (e) { /* old server without clipboard */ }
     const chars = [...text];
     for (let i = 0; i < chars.length; i++) {
       if (!rfb) return;
@@ -185,14 +185,14 @@
       rfb.sendKey(ch === '\n' ? 0xff0d : ch === '\t' ? 0xff09 : code < 256 ? code : 0x01000000 + code, null);
       if (i % 40 === 39) await new Promise((r) => setTimeout(r, 15));
     }
-    toast(t('Geplakt: {n} tekens.', { n: chars.length }));
+    toast(t('Pasted: {n} characters.', { n: chars.length }));
   }
 
-  /* ---- kopiëren: wat de VM op haar klembord zet (met spice-vdagent), op deze pc zetten */
+  /* ---- copy: what the VM puts on its clipboard (with spice-vdagent), put on this PC */
   let vmClip = '';
   function copyToPc(text) {
     if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
-    // Zonder https: de oude manier, die werkt bij een klik.
+    // Without https: the old way, which works on a click.
     const ta = document.createElement('textarea'); ta.value = text; ta.className = 'paste-sink'; document.body.appendChild(ta); ta.select();
     const ok = document.execCommand('copy'); ta.remove();
     return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
@@ -201,26 +201,26 @@
     vmClip = text;
     if (!text) return;
     const show = () => {
-      $('#cClipText').textContent = t('De VM kopieerde: "{text}"', { text: text.length > 60 ? text.slice(0, 60) + '…' : text });
+      $('#cClipText').textContent = t('The VM copied: "{text}"', { text: text.length > 60 ? text.slice(0, 60) + '…' : text });
       $('#cClip').hidden = false;
     };
     if (navigator.clipboard && window.isSecureContext && document.hasFocus()) {
-      navigator.clipboard.writeText(text).then(() => toast(t('Gekopieerd uit de VM: staat nu ook op het klembord van deze pc.')), show);
+      navigator.clipboard.writeText(text).then(() => toast(t('Copied from the VM: it is now also on this PC\'s clipboard.')), show);
     } else show();
   }
   $('#cClipCopy').addEventListener('click', () => {
-    copyToPc(vmClip).then(() => { $('#cClip').hidden = true; toast(t('Gekopieerd naar het klembord van deze pc.')); if (rfb) rfb.focus(); },
-      () => toast(t('Kopiëren lukte niet in deze browser.'), true));
+    copyToPc(vmClip).then(() => { $('#cClip').hidden = true; toast(t('Copied to this PC\'s clipboard.')); if (rfb) rfb.focus(); },
+      () => toast(t('Copying did not work in this browser.'), true));
   });
   $('#cClipHide').addEventListener('click', () => { $('#cClip').hidden = true; if (rfb) rfb.focus(); });
 
-  /* ---- demo: een nagebootst scherm waarin je kan typen */
+  /* ---- demo: a simulated screen you can type in */
   let demoLines = null, demoCanvas = null;
   function demoScreen() {
     status(''); setTools(true);
     if (demoCanvas) return;
     demoCanvas = document.createElement('canvas'); demoCanvas.width = 1024; demoCanvas.height = 640; demoCanvas.tabIndex = 0;
-    demoCanvas.setAttribute('aria-label', t('Nagebootst scherm (demo)'));
+    demoCanvas.setAttribute('aria-label', t('Simulated screen (demo)'));
     $('#screen').appendChild(demoCanvas);
     const ha = /home assistant/i.test(vm.name);
     demoLines = ha
@@ -237,14 +237,14 @@
     });
     demoCanvas.addEventListener('click', () => demoCanvas.focus());
     demoDraw(); demoCanvas.focus();
-    setInterval(demoDraw, 530); // knipperende cursor
+    setInterval(demoDraw, 530); // blinking cursor
   }
   function demoType(text) {
     for (const ch of text) {
       if (ch !== '\n') { demoLines[demoLines.length - 1] += ch; continue; }
       const cmd = demoLines[demoLines.length - 1].replace(/^.*?(> |: )/, '').trim();
-      if (cmd) demoLines.push(t('(demo) Op je eigen server voert de VM hier "{cmd}" uit.', { cmd }));
-      if (cmd) onVmClipboard(cmd); // in de demo doet de VM alsof ze het commando kopieerde
+      if (cmd) demoLines.push(t('(demo) On your own server, the VM runs "{cmd}" here.', { cmd }));
+      if (cmd) onVmClipboard(cmd); // in the demo the VM pretends it copied the command
       demoLines.push(/login: /.test(demoLines[demoLines.length - 2] || '') ? 'Password: ' : (demoLines.find((l) => /^ha > /.test(l)) ? 'ha > ' : '$ '));
     }
     demoLines = demoLines.slice(-30); demoDraw();
@@ -258,15 +258,15 @@
     if (Math.floor(Date.now() / 530) % 2) { const w = g.measureText(lines[lines.length - 1]).width; g.fillRect(12 + w, 22 + (lines.length - 1) * 18.5 - 13, 9, 16); }
   }
 
-  /* ---- starten */
+  /* ---- start */
   (async function init() {
-    if (!name) { status(t('Geen VM gekozen. Open de console vanuit de VM-pagina van HomeBaseOS.')); translateStatic(); return; }
+    if (!name) { status(t('No VM chosen. Open the console from the VM page in HomeBaseOS.')); translateStatic(); return; }
     let cfg = null;
-    try { cfg = await call('GET', '/api/config'); } catch (e) { /* hieronder */ }
+    try { cfg = await call('GET', '/api/config'); } catch (e) { /* below */ }
     if (cfg && !cfg.demo && cfg.language) LANG = cfg.language;
     translateStatic();
-    if (!cfg) { status(t('HomeBaseOS is niet bereikbaar.'), [[t('Opnieuw proberen'), () => location.reload()]]); return; }
-    if (cfg.needsLogin) { status(t('Meld je eerst aan in HomeBaseOS.'), [[t('Aanmelden'), () => { location.href = '/'; }, true]]); return; }
+    if (!cfg) { status(t('HomeBaseOS cannot be reached.'), [[t('Try again'), () => location.reload()]]); return; }
+    if (cfg.needsLogin) { status(t('Sign in to HomeBaseOS first.'), [[t('Sign in'), () => { location.href = '/'; }, true]]); return; }
     if (cfg.demo && window.HomeBaseOSDemo) { demo = true; api = window.HomeBaseOSDemo; }
     await refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 5000);

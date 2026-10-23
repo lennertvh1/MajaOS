@@ -1,17 +1,17 @@
 'use strict';
-/* Tests voor eigen apps (image of link), de indeling van het startscherm en het kiezen van een manifest. */
+/* Tests for own apps (image or link), the home screen layout and choosing a manifest. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-test-'));
-process.env.APPDATA_DIR = process.env.APPDATA_DIR || '/snel/appdata';
+process.env.APPDATA_DIR = process.env.APPDATA_DIR || '/fast/appdata';
 const store = require('../lib/appstore');
 const { validateLayout } = require('../lib/layout');
 const { pickManifest } = require('../lib/registry');
 
-test('link of naam → image', () => {
+test('link or name → image', () => {
   const n = store.normalizeImage;
   assert.equal(n('nginx'), 'nginx:latest');
   assert.equal(n('  Nginx:1.27-alpine '), 'nginx:1.27-alpine');
@@ -24,59 +24,59 @@ test('link of naam → image', () => {
   assert.equal(n('https://github.com/orgs/immich-app/packages/container/package/immich-server'), 'ghcr.io/immich-app/immich-server:latest');
   assert.equal(n('https://quay.io/repository/minio/minio'), 'quay.io/minio/minio:latest');
   assert.equal(n('ghcr.io/home-assistant/home-assistant:stable'), 'ghcr.io/home-assistant/home-assistant:stable');
-  assert.equal(n('localhost:5000/eigen/app:v2'), 'localhost:5000/eigen/app:v2');
+  assert.equal(n('localhost:5000/own/app:v2'), 'localhost:5000/own/app:v2');
   for (const bad of ['', 'https://example.com', 'rm -rf /', 'https://hub.docker.com/search?q=x', 'a b', 'docker run -p 80:80 nginx']) assert.equal(n(bad), null, bad);
 });
 
-test('compose-bestand van een eigen app', () => {
+test('compose file of an own app', () => {
   const body = { name: 'kuma', image: 'louislam/uptime-kuma:1', restart: 'always',
     ports: [{ host: '3001', container: '3001', protocol: 'tcp' }, { host: '', container: '' }],
-    volumes: [{ host: '/snel/appdata/kuma', container: '/app/data', mode: 'rw' }], env: [{ name: 'TZ', value: 'Europe/Brussels' }],
+    volumes: [{ host: '/fast/appdata/kuma', container: '/app/data', mode: 'rw' }], env: [{ name: 'TZ', value: 'Europe/Brussels' }],
     webui: 'http://[IP]:[PORT:3001]/', icon: 'https://x/kuma.png' };
   const c = store.buildCustomCompose(body, { network: { mode: 'bridge' }, takenPorts: [] });
   assert.match(c.text, /image: "louislam\/uptime-kuma:1"/);
   assert.match(c.text, /restart: "always"/);
   assert.match(c.text, /ports:\n {6}- "3001:3001\/tcp"/);
-  assert.match(c.text, /volumes:\n {6}- "\/snel\/appdata\/kuma:\/app\/data"/);
+  assert.match(c.text, /volumes:\n {6}- "\/fast\/appdata\/kuma:\/app\/data"/);
   assert.match(c.text, /homebaseos.custom: "1"/);
-  assert.match(c.text, /homebaseos.data: "\/snel\/appdata\/kuma"/);
-  assert.deepEqual(c.data, ['/snel/appdata/kuma']);
-  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'eigen', value: 'ja' }, { name: 'homebaseos.store', value: 'x' }] },
+  assert.match(c.text, /homebaseos.data: "\/fast\/appdata\/kuma"/);
+  assert.deepEqual(c.data, ['/fast/appdata/kuma']);
+  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'mine', value: 'yes' }, { name: 'homebaseos.store', value: 'x' }] },
     { network: { mode: 'bridge' }, takenPorts: [] });
   assert.match(extra.text, /devices:\n {6}- "\/dev\/dri:\/dev\/dri"/);
   assert.match(extra.text, /privileged: true/);
-  assert.match(extra.text, /eigen: "ja"/);
+  assert.match(extra.text, /mine: "yes"/);
   assert.doesNotMatch(extra.text, /homebaseos.store/);
   const host = store.buildCustomCompose(body, { network: { mode: 'host' }, takenPorts: [] });
   assert.match(host.text, /network_mode: "host"/); assert.doesNotMatch(host.text, /ports:/);
   const bad = (b, re, taken = []) => assert.throws(() => store.buildCustomCompose({ ...body, ...b }, { network: { mode: 'bridge' }, takenPorts: taken }), re);
-  bad({ image: 'https://example.com' }, /Plak de naam van een image/);
-  bad({ ports: [{ host: '99999', container: '80' }] }, /geen geldige poort/);
-  bad({ ports: [{ host: '3001', container: '80' }] }, /al in gebruik door uptime/, [{ port: 3001, type: 'TCP', app: 'uptime' }]);
-  bad({ volumes: [{ host: 'data', container: '/data' }] }, /volledig pad/);
-  bad({ volumes: [{ host: '/a', container: 'data' }] }, /met \/ beginnen/);
-  bad({ env: [{ name: '1X', value: '' }] }, /geen geldige naam/);
-  bad({ webui: 'ftp://x' }, /webinterface/);
+  bad({ image: 'https://example.com' }, /Paste the name of an image/);
+  bad({ ports: [{ host: '99999', container: '80' }] }, /not a valid port/);
+  bad({ ports: [{ host: '3001', container: '80' }] }, /already used by uptime/, [{ port: 3001, type: 'TCP', app: 'uptime' }]);
+  bad({ volumes: [{ host: 'data', container: '/data' }] }, /full path/);
+  bad({ volumes: [{ host: '/a', container: 'data' }] }, /must start with \//);
+  bad({ env: [{ name: '1X', value: '' }] }, /not a valid name/);
+  bad({ webui: 'ftp://x' }, /web interface/);
 });
 
-test('indeling van het startscherm controleren', () => {
+test('checking the home screen layout', () => {
   const out = validateLayout({ items: ['plex', { folder: 'f1', name: ' Media  ', apps: ['jellyfin', 'plex', 'sonarr'] }, { folder: 'f2', name: '', apps: ['radarr'] },
-    { folder: 'f3', name: 'Leeg', apps: [] }, 'jellyfin', 'pihole'] });
-  // plex staat er al (eerste plaats telt), een map met één app wordt een gewone app, een lege map verdwijnt.
+    { folder: 'f3', name: 'Empty', apps: [] }, 'jellyfin', 'pihole'] });
+  // plex is already there (the first place counts), a folder with one app becomes a plain app, an empty folder disappears.
   assert.deepEqual(out.items, ['plex', { folder: 'f1', name: 'Media', apps: ['jellyfin', 'sonarr'] }, 'radarr', 'pihole']);
-  assert.throws(() => validateLayout({ items: ['../etc'] }), /geen geldige naam/);
-  assert.throws(() => validateLayout({ items: [{ folder: 'x', apps: [] }] }), /map/);
-  assert.throws(() => validateLayout({}), /klopt niet/);
+  assert.throws(() => validateLayout({ items: ['../etc'] }), /not a valid app name/);
+  assert.throws(() => validateLayout({ items: [{ folder: 'x', apps: [] }] }), /folder/);
+  assert.throws(() => validateLayout({}), /not valid/);
 });
 
-test('manifest kiezen voor de architectuur van de server', () => {
+test('choosing a manifest for the architecture of the server', () => {
   const idx = { manifests: [{ digest: 'a', platform: { os: 'linux', architecture: 'arm64' } }, { digest: 'b', platform: { os: 'linux', architecture: 'amd64' } },
     { digest: 'c', platform: { os: 'unknown', architecture: 'unknown' } }] };
   assert.equal(pickManifest(idx, 'amd64').digest, 'b');
   assert.equal(pickManifest(idx, 'riscv64'), null);
 });
 
-test('widgets: volgorde en verborgen', () => {
+test('widgets: order and hidden', () => {
   const out = validateLayout({ items: [], widgets: { order: ['sys', 'shares', 'sys', 'Bad!', 'vms'], hidden: ['ai', 7] } });
   assert.deepEqual(out.widgets, { order: ['sys', 'shares', 'vms'], hidden: ['ai'] });
   assert.deepEqual(validateLayout({ items: [] }).widgets, { order: [], hidden: [] });

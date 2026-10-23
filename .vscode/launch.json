@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Demo (voorbeelddata)",
+      "name": "Demo (sample data)",
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/server.js",
@@ -15,12 +15,12 @@
       "console": "integratedTerminal",
       "serverReadyAction": {
         "action": "openExternally",
-        "pattern": "poort (\\d+)",
+        "pattern": "port (\\d+)",
         "uriFormat": "http://localhost:%s"
       }
     },
     {
-      "name": "Op de server (.env)",
+      "name": "On the server (.env)",
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/server.js",
@@ -30,7 +30,7 @@
       "console": "integratedTerminal",
       "serverReadyAction": {
         "action": "openExternally",
-        "pattern": "poort (\\d+)",
+        "pattern": "port (\\d+)",
         "uriFormat": "http://localhost:%s"
       }
     },

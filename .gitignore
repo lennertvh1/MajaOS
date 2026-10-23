@@ -1,18 +1,18 @@
-# Geheimen en lokale instellingen
+# Secrets and local settings
 .env
 *.local
 
-# Afhankelijkheden en build (er zijn er geen, maar voor de zekerheid)
+# Dependencies and build (there are none, but just in case)
 node_modules/
 
-# Systeem- en logbestanden
+# System and log files
 .DS_Store
 *.log
 npm-debug.log*
 
-# Tijdelijke bestanden van tests en screenshots
+# Temporary files from tests and screenshots
 public/_*.html
 
-# ISO bouwen (iso/build-iso.sh)
+# Building the ISO (iso/build-iso.sh)
 dist/
 .iso-cache/

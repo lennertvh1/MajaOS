@@ -1,5 +1,5 @@
 'use strict';
-/* Tests voor software-update: versies vergelijken en de releases van GitHub omzetten. */
+/* Tests for software update: comparing versions and converting GitHub's releases. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -8,7 +8,7 @@ const path = require('node:path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-test-'));
 const rel = require('../lib/release');
 
-test('versies vergelijken', () => {
+test('comparing versions', () => {
   const c = rel.compareVersions;
   assert.equal(c('0.3.0', '0.2.0'), 1);
   assert.equal(c('v0.2.0', '0.2.0'), 0);
@@ -21,27 +21,27 @@ test('versies vergelijken', () => {
   assert.equal(rel.parseVersion('nightly'), null);
 });
 
-// Zoals GET /repos/:repo/releases antwoordt (ingekort).
+// As GET /repos/:repo/releases answers (shortened).
 const GH = [
   { tag_name: 'v0.4.0-beta.1', name: 'v0.4.0-beta.1', body: 'test', html_url: 'https://github.com/a/b/releases/tag/v0.4.0-beta.1', published_at: '2026-10-21T09:00:00Z', draft: false, prerelease: true },
-  { tag_name: 'v0.3.0', name: 'Datum en tijd', body: '## Nieuw\r\n- iets', html_url: 'https://github.com/a/b/releases/tag/v0.3.0', published_at: '2026-10-20T18:00:00Z', draft: false, prerelease: false },
-  { tag_name: 'v0.5.0', name: 'concept', body: '', html_url: 'https://github.com/a/b/releases/tag/v0.5.0', draft: true, prerelease: false },
+  { tag_name: 'v0.3.0', name: 'Date and time', body: '## New\r\n- something', html_url: 'https://github.com/a/b/releases/tag/v0.3.0', published_at: '2026-10-20T18:00:00Z', draft: false, prerelease: false },
+  { tag_name: 'v0.5.0', name: 'draft', body: '', html_url: 'https://github.com/a/b/releases/tag/v0.5.0', draft: true, prerelease: false },
   { tag_name: 'nightly', name: 'nightly', body: '', html_url: 'https://github.com/a/b', draft: false, prerelease: false },
   { tag_name: 'v0.2.0', name: 'v0.2.0', body: null, html_url: 'javascript:alert(1)', published_at: '2026-10-01T12:00:00Z', draft: false, prerelease: false },
-  { tag_name: 'v0.1.0', name: 'v0.1.0', body: 'eerste', html_url: 'https://github.com/a/b/releases/tag/v0.1.0', published_at: '2026-09-01T12:00:00Z', draft: false, prerelease: false },
+  { tag_name: 'v0.1.0', name: 'v0.1.0', body: 'first', html_url: 'https://github.com/a/b/releases/tag/v0.1.0', published_at: '2026-09-01T12:00:00Z', draft: false, prerelease: false },
 ];
 
-test('releases omzetten: geen concepten, bèta alleen op vraag, nieuwste eerst', () => {
+test('converting releases: no drafts, beta only on request, newest first', () => {
   const stable = rel.normalizeReleases(GH);
   assert.deepEqual(stable.map((r) => r.version), ['0.3.0', '0.2.0', '0.1.0']);
-  assert.equal(stable[0].name, 'Datum en tijd');
+  assert.equal(stable[0].name, 'Date and time');
   assert.equal(stable[1].notes, '');
-  assert.equal(stable[1].url, null); // alleen links naar github.com
+  assert.equal(stable[1].url, null); // only links to github.com
   assert.deepEqual(rel.normalizeReleases(GH, { beta: true }).map((r) => r.version), ['0.4.0-beta.1', '0.3.0', '0.2.0', '0.1.0']);
   assert.deepEqual(rel.normalizeReleases(null), []);
 });
 
-test('samenvatting tegenover de geïnstalleerde versie', () => {
+test('summary against the installed version', () => {
   const s = rel.summarize(rel.normalizeReleases(GH), '0.2.0');
   assert.equal(s.updateAvailable, true);
   assert.equal(s.latest.version, '0.3.0');
@@ -50,11 +50,11 @@ test('samenvatting tegenover de geïnstalleerde versie', () => {
   assert.deepEqual(s.history.map((r) => r.version), ['0.2.0', '0.1.0']);
   const up = rel.summarize(rel.normalizeReleases(GH), '0.3.0');
   assert.equal(up.updateAvailable, false);
-  // Een ontwikkelversie die nieuwer is dan de laatste release: geen update.
+  // A development version that is newer than the latest release: no update.
   assert.equal(rel.summarize(rel.normalizeReleases(GH), '0.3.1').updateAvailable, false);
 });
 
-test('status zonder gezocht te hebben', () => {
+test('status without having checked', () => {
   const s = rel.status();
   assert.equal(s.checked, null);
   assert.equal(s.updateAvailable, false);
@@ -63,12 +63,12 @@ test('status zonder gezocht te hebben', () => {
   assert.equal(s.channel, 'stable');
 });
 
-test('nu bijwerken: controles en voortgang', async () => {
+test('update now: checks and progress', async () => {
   const upd = require('../lib/updater');
   const can = upd.canUpdate();
-  if (process.platform !== 'linux') assert.equal(can.ok, false); // op de Mac nooit
+  if (process.platform !== 'linux') assert.equal(can.ok, false); // never on the Mac
   assert.equal(upd.progress().state, 'idle');
-  // Een update die al lang niets meldt, telt als vastgelopen.
+  // An update that has reported nothing for a long time counts as stuck.
   const dir = path.join(process.env.DATA_DIR, 'update');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ state: 'running', step: 'install', updated: new Date(Date.now() - 20 * 60000).toISOString() }));
@@ -76,6 +76,6 @@ test('nu bijwerken: controles en voortgang', async () => {
   assert.equal(upd.progress().state, 'failed');
   fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ state: 'running', step: 'install', updated: new Date().toISOString() }));
   assert.equal(upd.isRunning(), true);
-  if (can.ok) await assert.rejects(upd.start('0.3.0'), /loopt al/);
+  if (can.ok) await assert.rejects(upd.start('0.3.0'), /already running/);
   else await assert.rejects(upd.start('0.3.0'), (e) => e.status === 409);
 });

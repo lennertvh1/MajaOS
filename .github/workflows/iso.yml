@@ -1,10 +1,10 @@
-# Maakt de release van HomeBaseOS op GitHub en zet de installatie-ISO erbij.
-# - Vanzelf bij elke gepushte tag (bv. v0.5.0): de release krijgt als titel en tekst het bericht van de tag
-#   (git tag -a v0.5.0 -F notities.md: eerste regel = titel, de rest = tekst in Markdown). Een tag met een - (v0.6.0-beta.1) wordt een testversie.
-# - Een release die je zelf op github.com maakt, krijgt ook een ISO.
-# - Met de hand: Actions > "Release en ISO" > Run workflow, en vul de tag in.
-# Een release die deze workflow zelf maakt, start geen andere workflows; daarom zit de ISO hier mee in.
-name: Release en ISO
+# Creates the HomeBaseOS release on GitHub and attaches the installation ISO.
+# - Automatically for every pushed tag (e.g. v0.5.0): the release gets the tag message as title and text
+#   (git tag -a v0.5.0 -F notes.md: first line = title, the rest = text in Markdown). A tag with a - (v0.6.0-beta.1) becomes a pre-release.
+# - A release you create yourself on github.com also gets an ISO.
+# - By hand: Actions > "Release and ISO" > Run workflow, and fill in the tag.
+# A release this workflow creates itself doesn't start other workflows; that's why the ISO is built here too.
+name: Release and ISO
 
 on:
   push:
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag, bv. v0.5.0 (bestaat de release nog niet, dan wordt ze gemaakt)"
+        description: "Tag, e.g. v0.5.0 (if the release doesn't exist yet, it is created)"
         required: true
 
 permissions:
@@ -31,20 +31,20 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
-      - name: Versie controleren
+      - name: Check the version
         run: |
           v="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json | head -1)"
-          [ "v$v" = "$TAG" ] || { echo "::error::package.json heeft versie $v, maar de tag is $TAG. Zet ze gelijk."; exit 1; }
+          [ "v$v" = "$TAG" ] || { echo "::error::package.json has version $v, but the tag is $TAG. Make them the same."; exit 1; }
 
-      - name: Release maken (als ze nog niet bestaat)
+      - name: Create the release (if it doesn't exist yet)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then echo "De release $TAG bestaat al."; exit 0; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "The release $TAG already exists."; exit 0; fi
           git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
           title="$(git tag -l --format='%(contents:subject)' "$TAG")"
           git tag -l --format='%(contents:body)' "$TAG" > notes.md
-          [ -s notes.md ] || echo "Zie de wijzigingen in de commits." > notes.md
+          [ -s notes.md ] || echo "See the changes in the commits." > notes.md
           pre=""; case "$TAG" in *-*) pre="--prerelease" ;; esac
           gh release create "$TAG" --verify-tag --title "${title:-$TAG}" --notes-file notes.md $pre
 
@@ -57,20 +57,20 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
-      - name: Gereedschap installeren
+      - name: Install tools
         run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio
 
-      - name: Debian-ISO bewaren tussen runs
+      - name: Keep the Debian ISO between runs
         uses: actions/cache@v6
         with:
           path: .iso-cache
           key: debian-netinst-${{ github.run_id }}
           restore-keys: debian-netinst-
 
-      - name: ISO bouwen
+      - name: Build the ISO
         run: ./iso/build-iso.sh --out dist
 
-      - name: Bij de release zetten
+      - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/*.iso dist/*.sha256 --clobber

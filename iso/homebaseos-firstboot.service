@@ -1,8 +1,8 @@
 [Unit]
-Description=HomeBaseOS installeren (eerste opstart na de ISO)
+Description=Installing HomeBaseOS (first boot after the ISO)
 After=network-online.target
 Wants=network-online.target
-# Alleen zolang de installatiebestanden er nog zijn: na een geslaagde installatie verdwijnen ze.
+# Only while the installation files are still there: they disappear after a successful installation.
 ConditionPathExists=/opt/homebaseos-setup/install.sh
 
 [Service]

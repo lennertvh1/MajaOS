@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,28 +12,28 @@
 </head>
 <body class="console-page terminal-page">
   <header class="console-bar">
-    <a class="btn sm back" href="/" aria-label="Terug naar HomeBaseOS" data-t-label title="Terug naar HomeBaseOS">
+    <a class="btn sm back" href="/" aria-label="Back to HomeBaseOS" data-t-label title="Back to HomeBaseOS">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></a>
-    <div class="console-title"><b data-t>Terminal op de server</b> <span class="pill" id="tState"></span></div>
+    <div class="console-title"><b data-t>Terminal on the server</b> <span class="pill" id="tState"></span></div>
     <div class="btn-row console-tools">
-      <button class="btn sm" type="button" id="tReconnect" hidden data-t>Opnieuw verbinden</button>
-      <button class="btn sm" type="button" id="tPop" hidden data-t>Los venster</button>
-      <button class="btn sm" type="button" id="tClose" hidden aria-label="Sluiten" data-t-label title="Sluiten">
+      <button class="btn sm" type="button" id="tReconnect" hidden data-t>Reconnect</button>
+      <button class="btn sm" type="button" id="tPop" hidden data-t>Pop out</button>
+      <button class="btn sm" type="button" id="tClose" hidden aria-label="Close" data-t-label title="Close">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
   </header>
   <main class="console-screen term-screen" id="term" aria-label="Terminal"></main>
   <div class="console-status" id="tStatus" role="status">
-    <p id="tStatusText" data-t>Laden…</p>
+    <p id="tStatusText" data-t>Loading…</p>
     <form class="inline-form" id="tLogin" hidden>
-      <input class="field" type="password" id="tPw" autocomplete="current-password" placeholder="Wachtwoord van HomeBaseOS" data-t-ph aria-label="Wachtwoord van HomeBaseOS">
-      <button class="btn primary" type="submit" data-t>Openen</button>
+      <input class="field" type="password" id="tPw" autocomplete="current-password" placeholder="HomeBaseOS password" data-t-ph aria-label="HomeBaseOS password">
+      <button class="btn primary" type="submit" data-t>Open</button>
     </form>
     <p class="form-error" id="tError" role="alert"></p>
     <div class="btn-row" id="tStatusBtns"></div>
   </div>
   <div class="toasts" id="toasts" aria-live="polite"></div>
-  <script src="lang/en.js"></script>
+  <script src="lang/languages.js"></script>
   <script src="demo.js"></script>
   <script src="vendor/xterm/xterm.js"></script>
   <script src="vendor/xterm/addon-fit.js"></script>
