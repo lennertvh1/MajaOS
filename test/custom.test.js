@@ -81,3 +81,21 @@ test('widgets: order and hidden', () => {
   assert.deepEqual(out.widgets, { order: ['sys', 'shares', 'vms'], hidden: ['ai'] });
   assert.deepEqual(validateLayout({ items: [] }).widgets, { order: [], hidden: [] });
 });
+
+test('home screen layout with widgets and VMs between the apps', () => {
+  const r = validateLayout({ items: ['plex', { widget: 'sys' }, { vm: 'Home Assistant OS' }, { widget: 'sys' }, { vm: 'Home Assistant OS' }, 'jellyfin'] });
+  assert.deepEqual(r.items, ['plex', { widget: 'sys', w: 2, h: 2 }, { vm: 'Home Assistant OS' }, 'jellyfin']); // each only once; default size
+  assert.throws(() => validateLayout({ items: [{ widget: '../x' }] }), /not a valid widget/);
+  assert.throws(() => validateLayout({ items: [{ vm: 'a/b' }] }), /not a valid VM name/);
+});
+
+test('widget size on the home screen', () => {
+  const keep = validateLayout({ items: [{ widget: 'clock', w: 4, h: 2 }, { widget: 'sys', w: 2, h: 4 }] });
+  assert.deepEqual(keep.items, [{ widget: 'clock', w: 4, h: 2 }, { widget: 'sys', w: 2, h: 4 }]);
+  const wide = validateLayout({ items: [{ widget: 'clock', w: 8, h: 2 }, { widget: 'shares', w: 6, h: 4 }] });
+  assert.deepEqual(wide.items, [{ widget: 'clock', w: 8, h: 2 }, { widget: 'shares', w: 6, h: 4 }]);
+  const clamp = validateLayout({ items: [{ widget: 'ai', w: 9, h: 0 }, { widget: 'vms', w: 'x', h: 2 }] });
+  assert.deepEqual(clamp.items, [{ widget: 'ai', w: 2, h: 2 }, { widget: 'vms', w: 2, h: 2 }]);
+  const odd = validateLayout({ items: [{ widget: 'sys', w: 3, h: 3 }, { widget: 'clock', w: 1, h: 2 }] });
+  assert.deepEqual(odd.items, [{ widget: 'sys', w: 3, h: 3 }, { widget: 'clock', w: 1, h: 2 }]);
+});

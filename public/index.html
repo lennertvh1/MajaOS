@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>HomeBaseOS</title>
   <meta name="theme-color" content="#101a33">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,35 +43,48 @@
         <span class="host" id="host"></span>
         <span class="demo-badge" id="demoBadge" hidden>Demo</span>
       </div>
+      <div class="spot" id="spot" hidden>
+        <label class="spot-bar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="spotQ" type="search" placeholder="Search HomeBaseOS" aria-label="Search HomeBaseOS" autocomplete="off" spellcheck="false"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="spotList" aria-haspopup="listbox">
+          <kbd class="spot-kbd" id="spotKbd" aria-hidden="true"></kbd>
+        </label>
+        <div class="spot-panel" id="spotPanel" hidden>
+          <div class="spot-list" id="spotList" role="listbox" aria-label="Search results"></div>
+        </div>
+      </div>
       <nav class="topnav" aria-label="Management">
-        <button class="nav-btn" data-open="home" type="button">
+        <button class="nav-btn" data-open="home" type="button" title="Overview">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg>
           <span>Overview</span>
         </button>
-        <button class="nav-btn" data-open="store" type="button">
+        <button class="nav-btn" data-open="store" type="button" title="App store">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
           <span>App store</span>
         </button>
-        <button class="nav-btn" data-open="storage" type="button">
+        <button class="nav-btn" data-open="storage" type="button" title="Storage">
           <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
           <span>Storage</span>
         </button>
-        <button class="nav-btn" data-open="shares" type="button">
+        <button class="nav-btn" data-open="shares" type="button" title="Shared folders">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg>
           <span>Shared folders</span>
         </button>
-        <button class="nav-btn" data-open="backup" type="button">
+        <button class="nav-btn" data-open="backup" type="button" title="Backups">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/></svg>
           <span>Backups</span>
         </button>
-        <button class="nav-btn" data-open="vms" type="button">
+        <button class="nav-btn" data-open="vms" type="button" title="VMs">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           <span>VMs</span>
         </button>
-        <button class="nav-btn" data-open="ai" type="button">
+        <button class="nav-btn" data-open="ai" type="button" title="AI">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2.1 2.2.9-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.9z"/></svg>
           <span>AI</span>
         </button>
+      </nav>
+      <div class="top-actions" id="topActions">
         <button class="nav-btn icon-only" type="button" id="termBtn" hidden aria-label="Terminal on the server" title="Terminal on the server">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/></svg>
         </button>
@@ -85,12 +98,12 @@
         <button class="nav-btn icon-only" id="logoutBtn" type="button" hidden aria-label="Sign out">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>
         </button>
-      </nav>
+      </div>
     </header>
 
     <main class="desk" id="desk">
       <aside class="widgets" aria-label="Overview" id="widgets">
-        <div class="widget-slot" data-widget="clock">
+        <div class="widget-slot" data-widget="clock" data-item="w:clock">
           <section class="widget clock-widget">
             <p class="greeting" id="greeting">Hello</p>
             <p class="clock" id="clock">--:--</p>
@@ -98,7 +111,7 @@
           </section>
         </div>
 
-        <div class="widget-slot" data-widget="sys">
+        <div class="widget-slot" data-widget="sys" data-item="w:sys">
           <section class="widget" id="sysWidget" aria-labelledby="sysTitle">
             <header class="widget-head"><h2 id="sysTitle">System</h2><span class="muted small" id="uptime"></span></header>
             <div class="sys-grid">
@@ -125,45 +138,45 @@
           </section>
         </div>
 
-        <div class="widget-slot" data-widget="storage">
+        <div class="widget-slot" data-widget="storage" data-item="w:storage">
           <button class="widget widget-btn" data-open="storage" type="button" aria-label="Open storage">
             <header class="widget-head"><h2>Storage</h2><span class="pill" id="arrayState"></span></header>
             <p class="big-stat"><strong id="storeFree">–</strong> <span id="storeFreeLabel">free</span></p>
             <div class="bar" aria-hidden="true"><span id="storeBar"></span></div>
             <p class="muted small" id="storeLine"></p>
+            <dl class="facts widget-more" id="storeFacts"></dl>
           </button>
         </div>
 
-        <div class="widget-slot" data-widget="shares">
+        <div class="widget-slot" data-widget="shares" data-item="w:shares">
           <button class="widget widget-btn" data-open="shares" type="button" aria-label="Open shared folders">
             <header class="widget-head"><h2>Shared folders</h2><span class="pill" id="shareConn"></span></header>
             <ul class="share-mini" id="shareMini"></ul>
           </button>
         </div>
 
-        <div class="widget-slot" data-widget="backup">
+        <div class="widget-slot" data-widget="backup" data-item="w:backup">
           <button class="widget widget-btn" data-open="backup" type="button" aria-label="Open backups">
             <header class="widget-head"><h2>Backups</h2><span class="pill" id="bkState"></span></header>
             <ul class="share-mini" id="bkMini"></ul>
           </button>
         </div>
 
-        <div class="widget-slot" data-widget="ai">
+        <div class="widget-slot" data-widget="ai" data-item="w:ai">
           <button class="widget widget-btn" data-open="ai" type="button" aria-label="Open AI">
             <header class="widget-head"><h2>AI</h2><span class="pill" id="aiState"></span></header>
             <p class="ai-line" id="aiLine">–</p>
             <p class="muted small" id="aiSub"></p>
+            <ul class="share-mini widget-more" id="aiMini"></ul>
           </button>
         </div>
 
-        <div class="widget-slot" data-widget="vms">
+        <div class="widget-slot" data-widget="vms" data-item="w:vms">
           <button class="widget widget-btn" data-open="vms" type="button" aria-label="Open virtual machines">
             <header class="widget-head"><h2>Virtual machines</h2><span class="muted small" id="vmWidgetCount"></span></header>
             <ul class="vm-mini" id="vmMini"></ul>
           </button>
         </div>
-
-        <button class="linkish widgets-edit" type="button" id="widgetsEdit">Customize widgets</button>
       </aside>
 
       <section class="apps-area" aria-labelledby="appsTitle">
@@ -188,8 +201,13 @@
               <button type="button" role="radio" aria-checked="false" data-view="list" title="List" aria-label="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.8" cy="6" r="1.3"/><circle cx="4.8" cy="12" r="1.3"/><circle cx="4.8" cy="18" r="1.3"/></svg></button>
             </div>
             <button class="btn" type="button" id="arrangeBtn" aria-pressed="false">Arrange</button>
+            <button class="btn" type="button" id="widgetsEdit">Widgets</button>
             <a class="btn primary" href="#store">Add app</a>
           </div>
+        </div>
+        <div class="widget-tray" id="widgetTray" hidden>
+          <p class="muted small" id="widgetTrayHint">Hidden widgets. Tap one to put it back on the home screen.</p>
+          <div class="widget-tray-list" id="widgetTrayList"></div>
         </div>
         <div class="app-grid" id="appGrid" aria-live="polite"></div>
       </section>
@@ -388,6 +406,7 @@
 
   <script src="lang/languages.js"></script>
   <script src="qr.js"></script>
+  <script src="search.js"></script>
   <script src="demo.js"></script>
   <script src="app.js"></script>
 </body>

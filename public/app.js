@@ -168,6 +168,15 @@
   }
 
   /* ------------------------------------------------------------ widgets */
+  function widgetListCap(slot) {
+    if (!slot || !slot.classList.contains('home-widget')) return 5;
+    const h = Number((slot && slot.dataset.h) || 2), w = Number((slot && slot.dataset.w) || 2);
+    if (w >= 6 && h >= 2) return 16;
+    if (h >= 4 || (w >= 4 && h >= 2)) return 12;
+    if (w >= 4 || h >= 3) return 8;
+    if (h >= 2) return 4;
+    return 2;
+  }
   function setRing(id, pct) {
     const el = $(id); const c = 113.1;
     el.style.strokeDashoffset = pct == null ? c : String(c * (1 - Math.min(100, pct) / 100));
@@ -207,6 +216,12 @@
     $('#storeLine').textContent = t(s.pools > 1 ? '{used} of {total} used in {n} pools' : '{used} of {total} used', { used: bytes(s.used), total: bytes(s.total), n: s.pools });
     const [label, cls] = poolHealth(s.health);
     st.textContent = label; st.className = 'pill ' + cls;
+    const extra = [];
+    if (s.used != null) extra.push([t('Used'), bytes(s.used)]);
+    if (s.total != null) extra.push([t('Capacity'), bytes(s.total)]);
+    if (s.pools) extra.push([t('Pools'), String(s.pools)]);
+    const factsEl = $('#storeFacts');
+    if (factsEl) factsEl.innerHTML = extra.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
   }
   function poolHealth(h) {
     if (h === 'ONLINE') return [t('Healthy'), 'ok'];
@@ -228,6 +243,11 @@
     $('#aiSub').textContent = t(ai.models.length === 1 ? '{n} model installed' : '{n} models installed', { n: ai.models.length }) +
       (g ? ' · ' + t('{used} of {total} VRAM', { used: bytes(g.memUsed), total: bytes(g.memTotal) }) : '');
     st.textContent = t(loaded.length ? 'Ready' : 'Idle'); st.className = 'pill ' + (loaded.length ? 'ok' : '');
+    const mini = $('#aiMini');
+    if (mini) {
+      mini.innerHTML = ai.models.map((m) => `<li><span class="name">${esc(m.name)}</span><span class="muted small">${esc(m.loaded ? t('Ready') : t('Idle'))}</span></li>`).join('')
+        || `<li class="muted small">${t('No model loaded')}</li>`;
+    }
   }
 
   function vmStateText(s) {
@@ -243,7 +263,9 @@
       ul.innerHTML = `<li class="muted small">${S.vmError ? t('VMs not available: {error}', { error: esc(S.vmError) }) : t('No virtual machines yet')}</li>`;
       return;
     }
-    ul.innerHTML = S.vms.map((v) => {
+    const slot = $('#appGrid [data-widget="vms"], #widgets [data-widget="vms"]');
+    const cap = widgetListCap(slot);
+    ul.innerHTML = S.vms.slice(0, cap).map((v) => {
       const kind = vmKind(v.state);
       const live = kind === 'on' || kind === 'paused';
       const sub = live ? 'CPU ' + vmCpuText(v) + ' · RAM ' + vmRamText(v) : vmPendingText(v);
@@ -254,7 +276,7 @@
         ${sub ? `<div class="muted small">${esc(sub)}</div>` : ''}
         ${live && v.ips && v.ips.length ? `<div class="vm-ip">${esc(v.ips[0])}${v.ips.length > 1 ? ' <span class="muted">+' + (v.ips.length - 1) + '</span>' : ''}</div>` : ''}
       </li>`;
-    }).join('');
+    }).join('') + (S.vms.length > cap ? `<li class="muted small">${t('and {n} more', { n: S.vms.length - cap })}</li>` : '');
   }
 
   /* ------------------------------------------------------------ apps */
@@ -289,25 +311,28 @@
     $('#appCount').textContent = S.apps.length ? t('{n} of {total} running', { n: running, total: S.apps.length }) : '';
     renderUpdateInfo();
     const grid = $('#appGrid');
-    if (!list.length) {
-      grid.innerHTML = `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
-      return;
-    }
-    // Searching or filtering: a plain list. Otherwise the own layout with folders.
+    // Searching or filtering: a plain list. Otherwise the own layout with folders and widgets.
     const flat = !!q || S.filter !== 'all', listView = S.view === 'list';
     $('#arrangeBtn').disabled = flat || listView;
     $('#arrangeBtn').title = listView ? t('Arranging works in the grid view.') : flat ? t('Clear the search and choose All to arrange.') : '';
+    $('#widgetsEdit').disabled = flat || listView;
     if ((flat || listView) && S.arrange) setArrange(false);
     grid.classList.toggle('arranging', S.arrange);
     grid.classList.toggle('app-list', listView);
+    const mixed = !flat && !listView && (S.arrange || homeItems().some((it) => it && it.widget));
+    grid.classList.toggle('home-mix', mixed);
     $$('#viewSeg [data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === S.view)));
+    stashHomeWidgets();
     if (listView) {
-      // List view: the home order (apps in folders right after each other, with the folder's name), or the search result.
-      const order = flat ? list : homeItems().flatMap((it) => (typeof it === 'string' ? [appByName(it)] : it.apps.map(appByName))).filter(Boolean);
-      grid.innerHTML = order.map(appRow).join('');
+      const order = flat ? list : homeItems().flatMap((it) => (typeof it === 'string' ? [appByName(it)] : (it.apps || []).map(appByName))).filter(Boolean);
+      grid.innerHTML = order.length ? order.map(appRow).join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
       return;
     }
-    grid.innerHTML = flat ? list.map(appTile).join('') : homeItems().map((it) => (typeof it === 'string' ? appTile(appByName(it)) : folderTile(it))).join('');
+    if (flat) {
+      grid.innerHTML = list.length ? list.map(appTile).join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
+      return;
+    }
+    syncHomeGrid(homeItems());
     if (S.folder) renderFolder();
   }
   // A row in the list view: icon, name and image, status, address and ports, folder, and quick buttons.
@@ -360,81 +385,226 @@
         </button>
       </div>`;
   }
+  function vmHomeTile(name) {
+    const v = (S.vms || []).find((x) => x.name === name);
+    if (!v) return '';
+    const kind = vmKind(v.state);
+    return `<div class="app vm-tile" data-item="vm:${esc(v.name)}">
+        <button class="app-open" type="button" data-open="vms" title="${esc(v.name)} – ${esc(vmStateText(v.state))}">
+          <span class="app-icon vm-home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span class="dot ${kind === 'on' ? 'on' : ''}"></span></span>
+          <span class="app-name">${esc(v.name)}</span>
+        </button>
+      </div>`;
+  }
 
-  /* --- widgets on the dashboard: order and hiding (stored on the server, like the apps) */
+  /* --- widgets on the home screen (mixed with apps, like on an iPad) */
   const WIDGET_NAMES = { clock: 'Clock', sys: 'System', storage: 'Storage', shares: 'Shared folders', backup: 'Backups', ai: 'AI', vms: 'Virtual machines' };
+  const WIDGET_IDS = Object.keys(WIDGET_NAMES);
+  const WIDGET_MAX = 8;
+  const WIDGET_DEFAULT = { clock: [2, 2], sys: [2, 2], storage: [2, 2], shares: [2, 2], backup: [2, 2], ai: [2, 2], vms: [2, 2] };
   const WIDGET_ICONS = {
-    up: '<path d="M6 15l6-6 6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
     eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     eyeOff: '<path d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   };
-  let widgetEdit = false, wdrag = null;
   const widgetBox = $('#widgets');
-  const slots = () => [...widgetBox.querySelectorAll(':scope > .widget-slot')];
+  function itemKey(it) {
+    if (typeof it === 'string') return it;
+    if (it.folder) return 'f:' + it.folder;
+    if (it.widget) return 'w:' + it.widget;
+    if (it.vm) return 'vm:' + it.vm;
+    return '';
+  }
+  function homeCols() {
+    const w = $('#appGrid').clientWidth || innerWidth;
+    if (w < 520) return 4;
+    if (w < 820) return 6;
+    if (w < 1180) return 8;
+    return 10;
+  }
+  function clampWidgetSize(id, w, h) {
+    const def = WIDGET_DEFAULT[id] || [2, 2], cols = homeCols();
+    let cw = Number.isInteger(w) && w >= 1 && w <= WIDGET_MAX ? w : def[0];
+    let ch = Number.isInteger(h) && h >= 1 && h <= WIDGET_MAX ? h : def[1];
+    if (cw > cols) cw = cols;
+    return [Math.max(1, cw), Math.max(1, ch)];
+  }
+  function snapWidgetSize(id, w, h) {
+    return clampWidgetSize(id, Math.round(w), Math.round(h));
+  }
+  function applyWidgetChrome(slot, w, h) {
+    const id = slot.dataset.widget, name = t(WIDGET_NAMES[id] || id);
+    const [cw, ch] = clampWidgetSize(id, w, h);
+    slot.dataset.item = 'w:' + id;
+    slot.dataset.w = String(cw); slot.dataset.h = String(ch);
+    slot.style.setProperty('--w', String(cw)); slot.style.setProperty('--h', String(ch));
+    slot.classList.add('home-widget');
+    slot.classList.toggle('wide', cw >= 3);
+    slot.classList.toggle('xl', cw >= 6);
+    slot.classList.toggle('tall', ch >= 3);
+    slot.classList.toggle('short', ch === 1);
+    slot.hidden = false;
+    slot.querySelectorAll(':scope > .widget-resize').forEach((el) => el.remove());
+    const RESIZE = [
+      ['ne', 'Resize {name} from the top right'], ['se', 'Resize {name} from the bottom right'],
+      ['sw', 'Resize {name} from the bottom left'], ['nw', 'Resize {name} from the top left'],
+    ];
+    let frame = slot.querySelector(':scope > .widget-frame');
+    if (!frame) {
+      frame = document.createElement('div');
+      frame.className = 'widget-frame';
+      slot.appendChild(frame);
+    }
+    frame.title = t('Drag a corner to resize.');
+    if (frame.childElementCount !== RESIZE.length) {
+      frame.innerHTML = RESIZE.map(([d]) => `<button type="button" class="widget-handle" data-resize="${d}"></button>`).join('');
+    }
+    $$('.widget-handle', frame).forEach((btn) => {
+      const key = (RESIZE.find(([d]) => d === btn.dataset.resize) || [])[1] || 'Resize {name}';
+      btn.setAttribute('aria-label', t(key, { name }));
+    });
+    let ctl = slot.querySelector(':scope > .widget-ctl');
+    if (!S.arrange) { if (ctl) ctl.remove(); return; }
+    if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; slot.appendChild(ctl); }
+    ctl.innerHTML = `<button type="button" data-wact="hide" aria-label="${esc(t('Hide {name}', { name }))}" title="${esc(t('Hide {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS.eyeOff}</svg></button>`;
+  }
+  function stripWidgetChrome(slot) {
+    slot.classList.remove('home-widget', 'wide', 'xl', 'tall', 'short', 'resizing');
+    slot.style.removeProperty('--w'); slot.style.removeProperty('--h');
+    delete slot.dataset.w; delete slot.dataset.h;
+    const frame = slot.querySelector(':scope > .widget-frame'); if (frame) frame.remove();
+  }
+  function stashHomeWidgets() {
+    $$('#appGrid > .widget-slot').forEach((el) => { stripWidgetChrome(el); widgetBox.appendChild(el); });
+  }
+  function htmlNode(html) {
+    const t2 = document.createElement('template'); t2.innerHTML = html.trim();
+    return t2.content.firstElementChild;
+  }
+  function syncHomeGrid(items) {
+    const grid = $('#appGrid');
+    grid.style.setProperty('--home-cols', String(homeCols()));
+    const want = items.map(itemKey);
+    for (const el of [...grid.children]) {
+      if (el.classList.contains('home-pad') || el.id === 'widgetSizePreview') continue;
+      const k = el.dataset.item;
+      if (el.classList.contains('widget-slot')) {
+        if (!want.includes(k)) { stripWidgetChrome(el); widgetBox.appendChild(el); }
+        continue;
+      }
+      if (!want.includes(k)) el.remove();
+    }
+    items.forEach((it, i) => {
+      const key = itemKey(it);
+      let el = grid.querySelector(`:scope > [data-item="${CSS.escape(key)}"]`);
+      if (it.widget) {
+        el = el || widgetBox.querySelector(`[data-widget="${it.widget}"]`) || $(`#appGrid [data-widget="${it.widget}"]`);
+        if (!el) return;
+        applyWidgetChrome(el, it.w, it.h);
+      } else if (!el) {
+        const a = typeof it === 'string' ? appByName(it) : null;
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : '';
+        if (!html) return;
+        el = htmlNode(html);
+      } else if (!(drag && drag.el === el)) {
+        const a = typeof it === 'string' ? appByName(it) : null;
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : '';
+        if (html) { const next = htmlNode(html); el.replaceWith(next); el = next; }
+      }
+      const ref = [...grid.children].filter((x) => x.dataset.item)[i];
+      if (el && el !== ref) grid.insertBefore(el, ref || null);
+    });
+    for (const extra of [...grid.children].slice(items.length)) {
+      if (extra.classList.contains('home-pad') || extra.id === 'widgetSizePreview') continue;
+      if (extra.classList.contains('widget-slot')) { stripWidgetChrome(extra); widgetBox.appendChild(extra); }
+      else extra.remove();
+    }
+    fillHomePads();
+    applyWidgets();
+    renderSharesWidget(); renderBackupWidget(); renderVmWidget(); renderAiWidget();
+  }
+  // Empty cells after the last apps, so you can drop a widget where the list stops.
+  function fillHomePads() {
+    const grid = $('#appGrid');
+    $$('#appGrid > .home-pad').forEach((el) => el.remove());
+    if (!grid.classList.contains('home-mix') || !S.arrange) return;
+    const n = homeCols() * 3;
+    for (let i = 0; i < n; i++) {
+      const pad = document.createElement('div');
+      pad.className = 'home-pad';
+      pad.setAttribute('aria-hidden', 'true');
+      grid.appendChild(pad);
+    }
+  }
   function applyWidgets() {
-    const cfg = (S.layout && S.layout.widgets) || { order: [], hidden: [] };
-    const ids = slots().map((x) => x.dataset.widget);
-    const order = [...cfg.order.filter((id) => ids.includes(id)), ...ids.filter((id) => !cfg.order.includes(id))];
-    const edit = $('#widgetsEdit');
-    order.forEach((id) => widgetBox.insertBefore(widgetBox.querySelector(`:scope > [data-widget="${id}"]`), edit));
-    widgetBox.classList.toggle('editing', widgetEdit);
-    edit.textContent = t(widgetEdit ? 'Ready' : 'Customize widgets');
-    edit.classList.toggle('btn', widgetEdit); edit.classList.toggle('primary', widgetEdit); edit.classList.toggle('linkish', !widgetEdit);
-    const list = slots();
-    list.forEach((x, i) => {
-      const id = x.dataset.widget, hid = cfg.hidden.includes(id), name = t(WIDGET_NAMES[id] || id);
-      x.hidden = hid && !widgetEdit;
-      x.classList.toggle('is-hidden', hid);
-      let ctl = x.querySelector(':scope > .widget-ctl');
-      if (!widgetEdit) { if (ctl) ctl.remove(); return; }
-      if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; x.appendChild(ctl); }
-      const b = (act, icon, label, extra = '') => `<button type="button" data-wact="${act}" aria-label="${esc(label)}" title="${esc(label)}"${extra}><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS[icon]}</svg></button>`;
-      ctl.innerHTML = b('up', 'up', t('Move {name} up', { name }), i === 0 ? ' disabled' : '') + b('down', 'down', t('Move {name} down', { name }), i === list.length - 1 ? ' disabled' : '')
-        + b('toggle', hid ? 'eyeOff' : 'eye', t(hid ? 'Show {name}' : 'Hide {name}', { name }), ` class="eye" aria-pressed="${!hid}"`);
+    const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
+    const placed = new Set(homeItems().filter((it) => it && it.widget).map((it) => it.widget));
+    const edit = $('#widgetsEdit'), tray = $('#widgetTray'), list = $('#widgetTrayList');
+    const arranging = !!S.arrange;
+    edit.textContent = t('Widgets');
+    edit.classList.toggle('primary', arranging && hidden.size > 0);
+    const order = ((S.layout && S.layout.widgets) || {}).order || [];
+    const col = WIDGET_IDS.filter((id) => !placed.has(id) && !hidden.has(id));
+    const sorted = [...order.filter((id) => col.includes(id)), ...col.filter((id) => !order.includes(id))];
+    sorted.forEach((id) => {
+      const el = widgetBox.querySelector(`[data-widget="${id}"]`) || $(`#appGrid [data-widget="${id}"]`);
+      if (!el || (drag && drag.el === el)) return;
+      stripWidgetChrome(el);
+      widgetBox.appendChild(el);
+      el.hidden = false;
+      el.classList.remove('is-hidden');
+      el.classList.toggle('arranging', arranging);
+      let ctl = el.querySelector(':scope > .widget-ctl');
+      if (!arranging) { if (ctl) ctl.remove(); }
+      else {
+        const name = t(WIDGET_NAMES[id] || id);
+        if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; el.appendChild(ctl); }
+        ctl.innerHTML = `<button type="button" data-wact="hide" aria-label="${esc(t('Hide {name}', { name }))}" title="${esc(t('Hide {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS.eyeOff}</svg></button>`;
+      }
     });
-  }
-  function saveWidgets() {
-    const list = slots();
-    S.layout = { ...S.layout, widgets: { order: list.map((x) => x.dataset.widget), hidden: list.filter((x) => x.classList.contains('is-hidden')).map((x) => x.dataset.widget) } };
-    applyWidgets(); postLayout();
-  }
-  $('#widgetsEdit').addEventListener('click', () => { widgetEdit = !widgetEdit; applyWidgets(); });
-  widgetBox.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-wact]'); if (!b || !widgetEdit) return;
-    e.stopPropagation();
-    const slot = b.closest('.widget-slot');
-    if (b.dataset.wact === 'toggle') slot.classList.toggle('is-hidden');
-    else flip(widgetBox, () => {
-      if (b.dataset.wact === 'up' && slot.previousElementSibling) widgetBox.insertBefore(slot, slot.previousElementSibling);
-      if (b.dataset.wact === 'down' && slot.nextElementSibling && slot.nextElementSibling.classList.contains('widget-slot')) widgetBox.insertBefore(slot.nextElementSibling, slot);
+    WIDGET_IDS.filter((id) => hidden.has(id)).forEach((id) => {
+      const el = widgetBox.querySelector(`[data-widget="${id}"]`) || $(`#appGrid [data-widget="${id}"]`);
+      if (!el || (drag && drag.el === el)) return;
+      stripWidgetChrome(el);
+      widgetBox.appendChild(el);
+      el.classList.add('is-hidden');
+      el.hidden = true;
+      const ctl = el.querySelector(':scope > .widget-ctl'); if (ctl) ctl.remove();
     });
-    saveWidgets();
-    const again = $(`[data-widget="${slot.dataset.widget}"] [data-wact="${b.dataset.wact}"]`); if (again && !again.disabled) again.focus();
+    widgetBox.hidden = sorted.length === 0;
+    widgetBox.classList.toggle('arranging', arranging);
+    $('#desk').classList.toggle('no-widgets', sorted.length === 0);
+    $('#desk').classList.toggle('arranging', arranging);
+    const hid = WIDGET_IDS.filter((id) => hidden.has(id));
+    tray.hidden = !arranging || !hid.length;
+    list.innerHTML = hid.map((id) => `<button type="button" class="btn sm" data-add-widget="${esc(id)}">${esc(t(WIDGET_NAMES[id] || id))}</button>`).join('');
+    $('#widgetTrayHint').textContent = t('Hidden widgets. Tap one to put it back on the home screen.');
+  }
+  function setWidgetHidden(id, hide) {
+    const cur = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
+    if (hide) cur.add(id); else cur.delete(id);
+    const items = homeItems().filter((it) => !(it.widget === id));
+    const prev = ((S.layout && S.layout.widgets) || {}).order || [];
+    S.layout = { ...S.layout, items: tidy(items), widgets: { order: prev.length ? prev : WIDGET_IDS, hidden: [...cur] } };
+    renderApps(); postLayout();
+  }
+  $('#widgetsEdit').addEventListener('click', () => {
+    if ($('#widgetsEdit').disabled) return;
+    setArrange(true);
   });
-  // Dragging: the widget moves along, the others make room.
-  widgetBox.addEventListener('pointerdown', (e) => {
-    if (!widgetEdit || e.button > 0 || e.target.closest('[data-wact]')) return;
-    const slot = e.target.closest('.widget-slot'); if (!slot) return;
-    e.preventDefault();
-    wdrag = { slot, y0: e.clientY, started: false };
-    const move = (ev) => {
-      if (!wdrag.started && Math.abs(ev.clientY - wdrag.y0) < 6) return;
-      wdrag.started = true; slot.classList.add('lifting');
-      const over = document.elementFromPoint(ev.clientX, ev.clientY);
-      const target = over && over.closest('#widgets > .widget-slot');
-      if (!target || target === slot) return;
-      const r = target.getBoundingClientRect(), after = ev.clientY > r.top + r.height / 2;
-      const ref = after ? target.nextElementSibling : target; // insert before ref
-      if (ref === slot || slot.nextElementSibling === ref) return; // already there
-      flip(widgetBox, () => widgetBox.insertBefore(slot, ref));
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
-      slot.classList.remove('lifting');
-      if (wdrag && wdrag.started) saveWidgets();
-      wdrag = null;
-    };
-    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+  $('#widgetTrayList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add-widget]'); if (!b) return;
+    setWidgetHidden(b.dataset.addWidget, false);
+  });
+  widgetBox.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-wact="hide"]'); if (!b) return;
+    e.stopPropagation();
+    setWidgetHidden(b.closest('.widget-slot').dataset.widget, true);
+  });
+  $('#appGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-wact="hide"]'); if (!b) return;
+    e.stopPropagation();
+    setWidgetHidden(b.closest('.widget-slot').dataset.widget, true);
   });
 
   /* --- widget: shared folders */
@@ -449,14 +619,15 @@
     const c = d.connections || { total: 0, perShare: {} };
     pill.textContent = c.total ? t('{n} connected', { n: c.total }) : (d.running ? t('Active') : t('Off'));
     pill.className = 'pill ' + (c.total || d.running ? 'ok' : 'warn');
-    ul.innerHTML = d.shares.slice(0, 5).map((sh) => {
+    const cap = widgetListCap($('#appGrid [data-widget="shares"], #widgets [data-widget="shares"]'));
+    ul.innerHTML = d.shares.slice(0, cap).map((sh) => {
       // also those who have access through a group
       const members = new Set(Object.keys(sh.users));
       Object.keys(sh.groups || {}).forEach((g) => { const gr = (d.groups || []).find((x) => x.name === g); (gr ? gr.members : []).forEach((m) => members.add(m)); });
       const users = members.size, n = c.perShare[sh.name] || 0;
       const side = n ? t('{n} connected', { n }) : [users ? t(users === 1 ? '{n} user' : '{n} users', { n: users }) : null, sh.guest ? t('guests') : null].filter(Boolean).join(' · ');
       return `<li><span class="name">${esc(sh.name)}</span><span class="muted small">${esc(side)}</span></li>`;
-    }).join('') + (d.shares.length > 5 ? `<li class="muted small">${t('and {n} more', { n: d.shares.length - 5 })}</li>` : '')
+    }).join('') + (d.shares.length > cap ? `<li class="muted small">${t('and {n} more', { n: d.shares.length - cap })}</li>` : '')
       || `<li class="muted small">${t('No shared folders yet. Click to create one.')}</li>`;
   }
 
@@ -476,8 +647,9 @@
       if (!j.lastRun) return t('not done yet');
       return (j.lastRun.state === 'ok' ? '' : t(j.lastRun.state === 'failed' ? 'failed' : 'stopped') + ' · ') + ago(j.lastRun.ended);
     };
-    ul.innerHTML = d.jobs.slice(0, 5).map((j) => `<li><span class="name">${esc(j.name)}</span><span class="muted small${!j.running && j.lastRun && j.lastRun.state === 'failed' ? ' temp-bad' : ''}">${esc(side(j))}</span></li>`).join('')
-      + (d.jobs.length > 5 ? `<li class="muted small">${t('and {n} more', { n: d.jobs.length - 5 })}</li>` : '')
+    const cap = widgetListCap($('#appGrid [data-widget="backup"], #widgets [data-widget="backup"]'));
+    ul.innerHTML = d.jobs.slice(0, cap).map((j) => `<li><span class="name">${esc(j.name)}</span><span class="muted small${!j.running && j.lastRun && j.lastRun.state === 'failed' ? ' temp-bad' : ''}">${esc(side(j))}</span></li>`).join('')
+      + (d.jobs.length > cap ? `<li class="muted small">${t('and {n} more', { n: d.jobs.length - cap })}</li>` : '')
       + (d.devices ? `<li><span class="name">${t('Devices', null, 'backup')}</span><span class="muted small">${esc(t(d.devices === 1 ? '{n} device' : '{n} devices', { n: d.devices }))}</span></li>` : '')
       || `<li class="muted small">${t('No backups yet. Click to create one.')}</li>`;
   }
@@ -485,10 +657,25 @@
   /* --- home screen: order and folders (like on an iPad) */
   const appByName = (n) => S.apps.find((a) => a.name === n);
   // The saved layout, without apps that are gone and with new apps at the end.
+  // Widgets in items sit between the apps; the rest stay in the left column.
   function homeItems() {
-    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), out = [];
-    for (const it of S.layout.items) {
+    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), out = [];
+    const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
+    const vmNames = new Set((S.vms || []).map((v) => v.name));
+    for (const it of (S.layout && S.layout.items) || []) {
       if (typeof it === 'string') { if (names.has(it) && !placed.has(it)) { out.push(it); placed.add(it); } continue; }
+      if (it && it.widget) {
+        if (!WIDGET_IDS.includes(it.widget) || placedW.has(it.widget) || hidden.has(it.widget)) continue;
+        placedW.add(it.widget);
+        const [w, h] = clampWidgetSize(it.widget, it.w, it.h);
+        out.push({ widget: it.widget, w, h });
+        continue;
+      }
+      if (it && it.vm) {
+        if (vmNames.has(it.vm) && !placedVm.has(it.vm)) { placedVm.add(it.vm); out.push({ vm: it.vm }); }
+        continue;
+      }
+      if (!it || !it.apps) continue;
       const apps = it.apps.filter((n) => names.has(n) && !placed.has(n));
       apps.forEach((n) => placed.add(n));
       if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
@@ -496,11 +683,27 @@
     S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
     return out;
   }
-  // Folders with one app become a plain app again; empty folders disappear.
-  const tidy = (items) => items.flatMap((it) => (typeof it === 'string' ? [it] : it.apps.length > 1 ? [it] : it.apps));
+  // Folders with one app become a plain app again; empty folders disappear. Widgets and VMs stay.
+  const tidy = (items) => items.flatMap((it) => {
+    if (typeof it === 'string') return [it];
+    if (it && it.widget) { const [w, h] = clampWidgetSize(it.widget, it.w, it.h); return [{ widget: it.widget, w, h }]; }
+    if (it && it.vm) return [{ vm: it.vm }];
+    if (it && it.apps && it.apps.length > 1) return [it];
+    return (it && it.apps) || [];
+  });
   let layoutTimer = null;
-  function setLayout(items) {
-    S.layout = { ...S.layout, items: tidy(items) };
+  function columnIds() {
+    return [...widgetBox.children]
+      .filter((el) => el.classList.contains('widget-slot') && !el.hidden && !el.classList.contains('is-hidden'))
+      .map((el) => el.dataset.widget).filter(Boolean);
+  }
+  function mergedColumnOrder() {
+    const col = columnIds(), prev = ((S.layout && S.layout.widgets) || {}).order || [];
+    return [...col, ...prev.filter((id) => !col.includes(id))];
+  }
+  function setLayout(items, order) {
+    const w = (S.layout && S.layout.widgets) || { order: [], hidden: [] };
+    S.layout = { ...S.layout, items: tidy(items), widgets: { order: order || w.order, hidden: w.hidden } };
     if (S.folder && !S.layout.items.some((it) => it.folder === S.folder)) closeFolder();
     renderApps();
     postLayout();
@@ -514,10 +717,10 @@
     renderApps(); applyWidgets();
   }
   const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
-  const folderOf = (name) => S.layout.items.find((it) => typeof it !== 'string' && it.apps.includes(name)) || null;
+  const folderOf = (name) => ((S.layout && S.layout.items) || []).find((it) => it && it.apps && it.apps.includes(name)) || null;
   // Take an app out of the layout (home or out of a folder). Returns the new list.
   function without(items, name) {
-    return items.filter((it) => it !== name).map((it) => (typeof it === 'string' ? it : { ...it, apps: it.apps.filter((n) => n !== name) }));
+    return items.filter((it) => it !== name).map((it) => (typeof it === 'string' || it.widget || it.vm || !it.apps ? it : { ...it, apps: it.apps.filter((n) => n !== name) }));
   }
   function moveToFolder(name, folderId, folderName) {
     let items = without(homeItems(), name);
@@ -539,8 +742,13 @@
     $('#arrangeBtn').setAttribute('aria-pressed', String(S.arrange));
     $('#arrangeBtn').textContent = t(S.arrange ? 'Ready' : 'Arrange');
     $('#arrangeBtn').classList.toggle('primary', S.arrange);
-    $('#appGrid').classList.toggle('arranging', S.arrange);
+    const grid = $('#appGrid');
+    grid.classList.toggle('arranging', S.arrange);
+    grid.classList.toggle('home-mix', !!(S.arrange || homeItems().some((it) => it && it.widget)));
     $('#folderGrid').classList.toggle('arranging', S.arrange);
+    applyWidgets();
+    $$('#appGrid > .widget-slot').forEach((el) => applyWidgetChrome(el, Number(el.dataset.w), Number(el.dataset.h)));
+    fillHomePads();
     renderFolderHint();
   }
   $('#arrangeBtn').addEventListener('click', () => setArrange(!S.arrange));
@@ -611,13 +819,31 @@
     const el = document.elementFromPoint(x, y);
     if (!el) return null;
     if (S.folder && drag.ctx === 'folder' && !folderPanel.contains(el)) return { out: true };
+    if (drag.item.startsWith('w:') && (el.id === 'widgets' || el.closest('#widgets'))) {
+      const col = el.closest('#widgets > .widget-slot');
+      if (col && col !== drag.el) return { tile: col, mode: 'col' };
+      return drag.el.closest('#appGrid') ? { mode: 'dock' } : null;
+    }
     const tile = el.closest('#appGrid [data-item], #folderGrid [data-item]');
-    if (!tile || tile === drag.el) return null;
-    if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
-    const r = tile.querySelector('.app-icon').getBoundingClientRect();
-    const inner = x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2 && y > r.top + r.height * 0.2 && y < r.bottom - r.height * 0.2;
-    if (inner && drag.ctx === 'home' && !drag.item.startsWith('f:')) return { tile, mode: 'merge' };
-    return { tile, mode: 'move' };
+    if (tile && tile !== drag.el) {
+      if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
+      const dragApp = !drag.item.startsWith('f:') && !drag.item.startsWith('w:') && !drag.item.startsWith('vm:');
+      const targetApp = !tile.dataset.item.startsWith('f:') && !tile.dataset.item.startsWith('w:') && !tile.dataset.item.startsWith('vm:');
+      const icon = tile.querySelector('.app-icon');
+      const r = (icon || tile).getBoundingClientRect();
+      const inner = icon && x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2 && y > r.top + r.height * 0.2 && y < r.bottom - r.height * 0.2;
+      if (inner && drag.ctx === 'home' && dragApp && (targetApp || tile.dataset.item.startsWith('f:'))) return { tile, mode: 'merge' };
+      return { tile, mode: 'move' };
+    }
+    if (drag.ctx !== 'home') return null;
+    const grid = $('#appGrid');
+    const gr = grid.getBoundingClientRect();
+    if (x < gr.left || x > gr.right || y < gr.top || y > gr.bottom) return null;
+    const pad = el.closest('#appGrid .home-pad');
+    if (pad) return { tile: pad, mode: 'move' };
+    const order = [...grid.children].filter((k) => k !== drag.el && (k.dataset.item || k.classList.contains('home-pad')));
+    const last = order[order.length - 1];
+    return last ? { tile: last, mode: 'move' } : null;
   }
   function setMerge(tile) {
     if (drag.merge) drag.merge.classList.remove('merge');
@@ -626,30 +852,64 @@
   }
   // The place of the app you are dragging (half transparent) moves to the app you hover over; the rest moves along.
   function movePlaceholder(tile) {
-    const grid = drag.el.parentNode, kids = [...grid.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
+    if (tile && tile.parentNode === widgetBox) {
+      if (drag.el.parentNode !== widgetBox) stripWidgetChrome(drag.el);
+      const kids = [...widgetBox.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
+      if (from < 0 || to < 0) return;
+      flip(widgetBox, () => widgetBox.insertBefore(drag.el, to > from ? tile.nextSibling : tile));
+      drag.moved = true; drag.hoverKey = ''; drag.restX = null;
+      return;
+    }
+    const grid = $('#appGrid');
+    if (drag.el.parentNode !== grid) {
+      const id = drag.el.dataset.widget;
+      const [w, h] = WIDGET_DEFAULT[id] || [2, 2];
+      applyWidgetChrome(drag.el, w, h);
+      flip(grid, () => grid.insertBefore(drag.el, tile));
+      drag.moved = true; drag.hoverKey = ''; drag.restX = null;
+      return;
+    }
+    const kids = [...grid.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
     if (from < 0 || to < 0) return;
-    flip(grid, () => grid.insertBefore(drag.el, to > from ? tile.nextSibling : tile));
+    const after = to > from && !tile.classList.contains('home-pad');
+    flip(grid, () => grid.insertBefore(drag.el, after ? tile.nextSibling : tile));
     drag.moved = true; drag.hoverKey = ''; drag.restX = null;
   }
   // Only react when you hold still: whoever just slides over it (on the way to the middle of an app) moves nothing.
   function hover(tg, x, y) {
-    const key = !tg ? '' : tg.out ? 'out' : tg.tile.dataset.item + ':' + tg.mode;
+    const key = !tg ? '' : tg.out ? 'out' : tg.mode === 'dock' ? 'dock' : (tg.tile.dataset.item || ('pad:' + [...tg.tile.parentNode.children].indexOf(tg.tile))) + ':' + tg.mode;
     const still = drag.restX != null && Math.hypot(x - drag.restX, y - drag.restY) < 6;
     if (key === drag.hoverKey && still) return;
     drag.restX = x; drag.restY = y;
     if (key !== drag.hoverKey && drag.merge) setMerge(null);
     drag.hoverKey = key; drag.out = key === 'out';
+    drag.dock = key === 'dock' || (tg && tg.mode === 'col');
     clearTimeout(drag.timer);
     folderOverlay.classList.toggle('drop-out', drag.out);
     if (!tg || tg.out) return;
+    if (tg.mode === 'dock') {
+      setMerge(null);
+      drag.timer = setTimeout(() => {
+        if (!drag || drag.el.parentNode !== $('#appGrid')) return;
+        stripWidgetChrome(drag.el);
+        widgetBox.appendChild(drag.el);
+        drag.moved = true;
+      }, 160);
+      return;
+    }
+    if (tg.mode === 'col') {
+      setMerge(null);
+      drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160);
+      return;
+    }
     // Wait a moment, so nothing jumps when you just slide over it.
     if (tg.mode === 'merge') { if (drag.merge !== tg.tile) drag.timer = setTimeout(() => setMerge(tg.tile), 280); }
     else { setMerge(null); drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160); }
   }
   function onDragStart(e) {
     if (e.button > 0 || drag || S.view === 'list') return;
-    const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item]');
-    if (!tile || e.target.closest('.app-more')) return;
+    const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item], #widgets [data-item]');
+    if (!tile || e.target.closest('.app-more, .widget-frame, .widget-handle, [data-wact]')) return;
     const ctx = tile.closest('#folderGrid') ? 'folder' : 'home';
     if (!S.arrange) {
       // A long press (like on an iPad) turns on Arrange.
@@ -664,6 +924,7 @@
     }
     e.preventDefault(); // no text selection or focus jumps while dragging
     drag = { item: tile.dataset.item, ctx, el: tile, x0: e.clientX, y0: e.clientY, started: false, hoverKey: '', moved: false };
+    try { tile.setPointerCapture(e.pointerId); } catch (err) { /* capture is best-effort */ }
     document.addEventListener('pointermove', onDragMove);
     document.addEventListener('pointerup', onDragEnd);
     document.addEventListener('pointercancel', onDragEnd);
@@ -673,9 +934,18 @@
     if (!drag.started) {
       if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
       drag.started = true;
-      const icon = drag.el.querySelector('.app-icon'), r = icon.getBoundingClientRect();
+      const grab = drag.el.classList.contains('widget-slot')
+        ? (drag.el.querySelector('.widget') || drag.el)
+        : drag.el.querySelector('.app-icon') || drag.el;
+      const r = grab.getBoundingClientRect();
       drag.dx = drag.x0 - r.left; drag.dy = drag.y0 - r.top; // where you grabbed the icon
-      drag.ghost = icon.cloneNode(true); drag.ghost.classList.add('drag-ghost');
+      drag.ghost = grab.cloneNode(true); drag.ghost.classList.add('drag-ghost');
+      if (drag.el.classList.contains('widget-slot')) {
+        drag.ghost.classList.add('home-widget');
+        drag.ghost.dataset.w = drag.el.dataset.w;
+        drag.ghost.dataset.h = drag.el.dataset.h;
+      }
+      drag.ghost.style.width = r.width + 'px'; drag.ghost.style.height = r.height + 'px';
       document.body.appendChild(drag.ghost);
       drag.el.classList.add('dragging');
     }
@@ -718,16 +988,104 @@
       return;
     }
     if (d.out) { land(null, false, () => takeOutOfFolder(d.item)); return; }
-    land(d.el.querySelector('.app-icon').getBoundingClientRect(), false, () => {
+    if (d.item.startsWith('w:') && (d.dock || d.el.closest('#widgets'))) {
+      land(d.el.getBoundingClientRect(), false, () => {
+        if (!d.moved) return;
+        const items = homeItems().filter((it) => itemKey(it) !== d.item);
+        setLayout(items, mergedColumnOrder());
+      });
+      return;
+    }
+    const landEl = d.el.querySelector('.app-icon') || d.el;
+    land(landEl.getBoundingClientRect(), false, () => {
       if (!d.moved) return;
       // The order as it is in the grid now.
       const order = [...d.el.parentNode.children].map((x) => x.dataset.item).filter(Boolean);
       if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order } : it)));
-      else { const by = new Map(homeItems().map((it) => [typeof it === 'string' ? it : 'f:' + it.folder, it])); setLayout(order.map((k) => by.get(k)).filter(Boolean)); }
+      else {
+        const by = new Map(homeItems().map((it) => [itemKey(it), it]));
+        if (d.item.startsWith('w:') && !by.has(d.item)) {
+          const id = d.item.slice(2);
+          const [w, h] = clampWidgetSize(id, Number(d.el.dataset.w), Number(d.el.dataset.h));
+          by.set(d.item, { widget: id, w, h });
+        }
+        setLayout(order.map((k) => by.get(k)).filter(Boolean), mergedColumnOrder());
+      }
     });
   }
-  $('#appGrid').addEventListener('pointerdown', onDragStart);
-  $('#folderGrid').addEventListener('pointerdown', onDragStart);
+  $('#appGrid').addEventListener('pointerdown', onDragStart, { passive: false });
+  $('#folderGrid').addEventListener('pointerdown', onDragStart, { passive: false });
+  widgetBox.addEventListener('pointerdown', onDragStart, { passive: false });
+  widgetBox.addEventListener('dragstart', (e) => e.preventDefault());
+  function gridMetrics() {
+    const grid = $('#appGrid');
+    const cols = homeCols();
+    const cs = getComputedStyle(grid);
+    const gapX = parseFloat(cs.columnGap) || 10;
+    const gapY = parseFloat(cs.rowGap) || 12;
+    const cellW = (grid.clientWidth - gapX * (cols - 1)) / cols;
+    const cellH = parseFloat(cs.getPropertyValue('--home-row')) || 60;
+    return { grid, cols, gapX, gapY, cellW, cellH };
+  }
+  function showSizePreview(slot, w, h) {
+    const { grid, gapX, gapY, cellW, cellH } = gridMetrics();
+    let el = $('#widgetSizePreview');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'widgetSizePreview';
+      el.className = 'widget-size-preview';
+      el.setAttribute('aria-hidden', 'true');
+      grid.appendChild(el);
+    }
+    const r = slot.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+    el.style.left = (r.left - gr.left + grid.scrollLeft) + 'px';
+    el.style.top = (r.top - gr.top + grid.scrollTop) + 'px';
+    el.style.width = Math.max(0, w * cellW + (w - 1) * gapX) + 'px';
+    el.style.height = Math.max(0, h * cellH + (h - 1) * gapY) + 'px';
+    el.hidden = false;
+  }
+  function hideSizePreview() {
+    const el = $('#widgetSizePreview'); if (el) el.hidden = true;
+  }
+  // Resize a widget by dragging a corner. A light box shows the size it will snap to.
+  let wresize = null;
+  $('#appGrid').addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest('.widget-handle'); if (!grip || e.button > 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const slot = grip.closest('.widget-slot');
+    const { cellW, cellH } = gridMetrics();
+    const dir = grip.dataset.resize || 'se';
+    wresize = { slot, id: slot.dataset.widget, dir, x0: e.clientX, y0: e.clientY, w0: Number(slot.dataset.w) || 2, h0: Number(slot.dataset.h) || 2, cellW, cellH, moved: false };
+    slot.classList.add('resizing');
+    showSizePreview(slot, wresize.w0, wresize.h0);
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* capture is best-effort */ }
+    const move = (ev) => {
+      if (!wresize) return;
+      if (Math.hypot(ev.clientX - wresize.x0, ev.clientY - wresize.y0) > 6) wresize.moved = true;
+      const dx = (ev.clientX - wresize.x0) / wresize.cellW;
+      const dy = (ev.clientY - wresize.y0) / wresize.cellH;
+      const d = wresize.dir;
+      let dw = 0, dh = 0;
+      if (d.includes('e')) dw = dx;
+      if (d.includes('w')) dw = -dx;
+      if (d.includes('s')) dh = dy;
+      if (d.includes('n')) dh = -dy;
+      const [w, h] = snapWidgetSize(wresize.id, wresize.w0 + Math.round(dw), wresize.h0 + Math.round(dh));
+      showSizePreview(wresize.slot, w, h);
+      wresize.next = [w, h];
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+      slot.classList.remove('resizing');
+      hideSizePreview();
+      const moved = wresize.moved, next = wresize.next, id = slot.dataset.widget;
+      wresize = null;
+      if (!moved || !next) return;
+      ignoreNextClick();
+      setLayout(homeItems().map((it) => (it.widget === id ? { ...it, w: next[0], h: next[1] } : it)));
+    };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+  }, true);
   // The browser's own dragging (image or link) breaks our dragging with pointercancel: always prevent it.
   ['#appGrid', '#folderGrid'].forEach((sel) => $(sel).addEventListener('dragstart', (e) => e.preventDefault()));
   // After dragging or a long press: ignore the click that follows.
@@ -741,7 +1099,7 @@
 
   // To folder…: choose an existing folder or make a new one.
   function folderPickWindow(a) {
-    const folders = homeItems().filter((it) => typeof it !== 'string');
+    const folders = homeItems().filter((it) => it && it.folder);
     const cur = folderOf(a.name);
     openWindow(t('Move {name} to a folder', { name: prettyName(a.name) }), `
       <ul class="rows">${folders.map((f) => `<li><div><div class="row-title">${esc(f.name)}</div><div class="row-sub">${esc(t('{n} apps', { n: f.apps.length }))}</div></div>
@@ -971,7 +1329,17 @@
     else if (e.key === 'Tab') closeMenu(false);
   });
   document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(false); }, true);
-  window.addEventListener('resize', () => closeMenu(false));
+  window.addEventListener('resize', () => {
+    closeMenu(false);
+    const grid = $('#appGrid');
+    if (grid && grid.classList.contains('home-mix')) {
+      const cols = String(homeCols());
+      if (grid.style.getPropertyValue('--home-cols') !== cols) {
+        grid.style.setProperty('--home-cols', cols);
+        $$('#appGrid > .widget-slot').forEach((el) => applyWidgetChrome(el, Number(el.dataset.w), Number(el.dataset.h)));
+      }
+    }
+  });
   window.addEventListener('scroll', () => closeMenu(false), true);
 
   async function appCommand(a, act) {
@@ -2350,25 +2718,32 @@
   /* --- app store (own page at #store) */
   const STORE_PAGE = 48;
   let storeLoading = null;
+  function applyStore(c) {
+    S.store = c;
+    const sel = $('#storeCat'), cur = sel.value;
+    sel.innerHTML = `<option value="featured">${t('Recommended')}</option><option value="all">${t('All apps')}</option>` +
+      c.categories.map((k) => `<option value="${esc(k.id)}">${esc(t(k.name))}</option>`).join('');
+    sel.value = cur;
+    renderStore();
+  }
   function loadStore(refresh) {
-    if (S.store && !refresh) { renderStore(); return Promise.resolve(); }
+    if (S.store && !refresh) { applyStore(S.store); return Promise.resolve(); }
     if (storeLoading) return storeLoading;
     $('#storeMore').hidden = true;
     $('#storeGrid').innerHTML = `<p class="empty">${t(refresh ? 'Refreshing the catalogue…' : 'Loading the catalogue…')}</p>`;
     storeLoading = api.get('/api/store' + (refresh ? '?refresh=1' : ''))
-      .then((c) => {
-        S.store = c;
-        const sel = $('#storeCat'), cur = sel.value;
-        sel.innerHTML = `<option value="featured">${t('Recommended')}</option><option value="all">${t('All apps')}</option>` +
-          c.categories.map((k) => `<option value="${esc(k.id)}">${esc(t(k.name))}</option>`).join('');
-        sel.value = cur;
-        renderStore();
-      })
+      .then((c) => { applyStore(c); })
       .catch((e) => {
         $('#storeGrid').innerHTML = `<div class="empty"><p>${esc(e.message)}</p>
           <button class="btn sm" type="button" data-store-retry style="margin-top:12px">${t('Try again')}</button></div>`;
       })
       .finally(() => { storeLoading = null; });
+    return storeLoading;
+  }
+  function ensureStoreCatalog() {
+    if (S.store) return Promise.resolve();
+    if (storeLoading) return storeLoading;
+    storeLoading = api.get('/api/store').then((c) => { S.store = c; }).catch(() => {}).finally(() => { storeLoading = null; });
     return storeLoading;
   }
 
@@ -5118,15 +5493,21 @@ sudo ./install.sh</pre></div>`}` : '') +
   setWin.addEventListener('cancel', (e) => { e.preventDefault(); closeSettings(); }); // Escape
   window.addEventListener('hashchange', () => { if (!$('.topnav').hidden) route(); });
 
+  function setChrome(on) {
+    $('.topnav').hidden = !on;
+    $('#topActions').hidden = !on;
+    $('#spot').hidden = !on;
+    if (!on && typeof closeSpot === 'function') closeSpot(true);
+  }
   function showDesk() {
-    $('#loginScreen').hidden = true; $('.topnav').hidden = false; route();
+    $('#loginScreen').hidden = true; setChrome(true); route();
   }
   function showLogin() {
     if (setWin.open) closeSettings();
     if (win.open) win.close();
     timers.forEach(clearInterval); timers = []; // stop refreshing (and don't empty the form) while signing in
     const wasHidden = $('#loginScreen').hidden;
-    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; $('.topnav').hidden = true;
+    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; setChrome(false);
     const demoInfo = S.config && S.config.demo;
     $('#loginDemo').hidden = !demoInfo;
     if (demoInfo) $('#loginDemo').innerHTML = t('Demo: sign in as {user} with the password {pw}.', { user: '<b>' + esc(window.HomeBaseOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
@@ -5221,6 +5602,176 @@ sudo ./install.sh</pre></div>`}` : '') +
     closeFolder();
     if (location.hash && location.hash !== '#') location.hash = ''; else window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  /* ------------------------------------------------------------ header search (Spotlight-style) */
+  const spotEl = $('#spot'), spotQ = $('#spotQ'), spotPanel = $('#spotPanel'), spotList = $('#spotList');
+  const macKbd = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+  $('#spotKbd').textContent = macKbd ? '⌘K' : 'Ctrl+K';
+  const SPOT_ICO = {
+    home: '<path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/>',
+    store: '<path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+    storage: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/>',
+    shares: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    backup: '<path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/>',
+    vms: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    ai: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+    term: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  };
+  const spotIco = (k) => `<span class="spot-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SPOT_ICO[k] || SPOT_ICO.settings}</svg></span>`;
+  const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI' };
+  let spotHits = [], spotSel = 0;
+
+  function spotMark(text, q) {
+    const toks = (window.TB_search.tokens(q) || []).slice().sort((a, b) => b.length - a.length);
+    let s = esc(text);
+    toks.forEach((tok) => {
+      if (!tok) return;
+      const re = new RegExp('(' + tok.replace(/[.*+?^$()|[\]\\]/g, '\\$&') + ')', 'ig');
+      s = s.replace(re, '<mark>$1</mark>');
+    });
+    return s;
+  }
+  function goSettings(hash) {
+    if (win.open) win.close();
+    if (conWin.open) window.TB_closeConsole();
+    closeFolder();
+    location.hash = hash.replace(/^#/, '');
+  }
+  function buildSpotItems() {
+    const item = (x) => ({ keys: [], order: 0, ...x, keys: (x.keys || []).filter(Boolean) });
+    const pages = [
+      { id: 'p:home', group: 'pages', title: t('Overview'), keys: ['home', 'dashboard', 'overview', t('Overview')], ico: spotIco('home'), run: goHome },
+      { id: 'p:store', group: 'pages', title: t('App store'), keys: ['store', 'catalogue', 'install', t('App store')], ico: spotIco('store'), run: () => { goSettings('store'); } },
+      { id: 'p:storage', group: 'pages', title: t('Storage'), keys: ['storage', 'disks', 'zfs', 'pool', 'bays', t('Storage')], ico: spotIco('storage'), run: () => storageWindow() },
+      { id: 'p:shares', group: 'pages', title: t('Shared folders'), keys: ['shares', 'samba', 'smb', t('Shared folders')], ico: spotIco('shares'), run: () => sharesWindow() },
+      { id: 'p:backup', group: 'pages', title: t('Backups'), keys: ['backup', 'rclone', 'kopia', t('Backups')], ico: spotIco('backup'), run: () => backupWindow() },
+      { id: 'p:vms', group: 'pages', title: t('Virtual machines'), keys: ['vms', 'kvm', 'libvirt', t('VMs'), t('Virtual machines')], ico: spotIco('vms'), run: () => { goSettings('vms'); } },
+      { id: 'p:ai', group: 'pages', title: t('AI'), keys: ['ai', 'ollama', 'llm'], ico: spotIco('ai'), run: () => aiWindow() },
+      { id: 'p:settings', group: 'pages', title: t('Settings'), keys: ['settings', 'preferences', t('Settings')], ico: spotIco('settings'), run: () => goSettings('settings') },
+    ];
+    if (S.config.terminal) pages.push({ id: 'p:term', group: 'pages', title: t('Terminal on the server'), keys: ['terminal', 'shell', 'bash', t('Terminal')], ico: spotIco('term'), run: openTerminal });
+    pages.forEach((p, i) => { p.order = i; });
+    const settings = [
+      ['settings', 'General', ['language', 'theme', 'clock', 'timezone', 'ntp', 'wizard', t('Language'), t('Theme')]],
+      ['settings/storage', 'Storage', ['appdata', 'paths', 'migrate', t('Storage')]],
+      ['settings/network', 'Network', ['hostname', 'dhcp', 'dns', 'bridge', 'ip', t('Network')]],
+      ['settings/docker', 'Docker networks', ['macvlan', 'ipvlan', 'bridge', t('Docker networks')]],
+      ['settings/vmnet', 'VM networks', ['nat', 'isolated', t('VM networks')]],
+      ['settings/security', 'Security', ['password', 'mfa', 'totp', '2fa', 'terminal', t('Security')]],
+      ['settings/users', 'Users', ['samba', 'groups', t('Users')]],
+      ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
+      ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
+    ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));
+    const apps = S.apps.map((a) => {
+      const open = appUrl(a);
+      return item({
+        id: 'app:' + a.id, group: 'apps', title: prettyName(a.name),
+        keys: [a.name, a.image, a.webui], hint: open ? t('Open') : (a.status || a.state || ''),
+        ico: iconHtml(a),
+        run: () => { if (open) openAppUrl(a); else { goHome(); appSettingsWindow(a); } },
+      });
+    });
+    const vms = S.vms.map((v) => item({
+      id: 'vm:' + v.id, group: 'vms', title: v.name,
+      keys: [v.description].concat(v.ips || []), hint: vmStateText(v.state), ico: spotIco('vms'),
+      run: () => { goSettings('vms'); vmEditWindow(v.id); },
+    }));
+    const folders = homeItems().filter((it) => it && it.folder).map((it) => item({
+      id: 'folder:' + it.folder, group: 'folders', title: it.name, keys: it.apps, hint: t('Folder'), ico: spotIco('folder'),
+      run: () => { goHome(); openFolder(it.folder); },
+    }));
+    const shares = ((S.shares && S.shares.shares) || []).map((sh) => item({
+      id: 'share:' + sh.name, group: 'shares', title: sh.name, keys: [sh.comment, sh.path], hint: t('Shared folders'), ico: spotIco('shares'),
+      run: () => sharesWindow(),
+    }));
+    const backups = ((S.backup && S.backup.jobs) || []).map((j) => item({
+      id: 'bk:' + (j.id || j.name), group: 'backups', title: j.name, keys: [], hint: t('Backups'), ico: spotIco('backup'),
+      run: () => backupWindow(),
+    }));
+    const installed = new Set(S.apps.map((a) => a.storeId).filter(Boolean));
+    const store = ((S.store && S.store.apps) || []).filter((a) => !a.installed && !installed.has(a.id)).map((a) => item({
+      id: 'store:' + a.id, group: 'store', title: prettyName(a.name),
+      keys: [a.name, a.image, a.summary, a.maintainer], hint: t('App store'), ico: storeIconHtml(a),
+      run: () => { goSettings('store'); storeWindow(a.id); },
+    }));
+    const models = ((S.ai && S.ai.models) || []).map((m) => item({
+      id: 'ai:' + m.name, group: 'ai', title: m.name, keys: [m.params, m.quant], hint: t('AI'), ico: spotIco('ai'),
+      run: () => aiWindow(),
+    }));
+    return pages.map(item).concat(settings, apps, vms, folders, shares, backups, store, models);
+  }
+  function hitsForQuery(q) {
+    const items = buildSpotItems();
+    if (!q.trim()) return items.filter((x) => x.group === 'pages');
+    return window.TB_search.rankHits(items, q);
+  }
+  function renderSpot() {
+    const q = spotQ.value;
+    spotHits = hitsForQuery(q);
+    if (!spotHits.length) {
+      spotSel = 0;
+      spotList.innerHTML = `<p class="spot-empty">${q.trim() ? t('No results for "{q}".', { q: esc(q.trim()) }) : t('Jump to a page, app, VM or setting.')}</p>`;
+      return;
+    }
+    if (spotSel >= spotHits.length) spotSel = 0;
+    let html = '', last = '';
+    spotHits.forEach((hit, i) => {
+      if (hit.group !== last) { last = hit.group; html += `<div class="spot-group">${esc(t(SPOT_GROUPS[hit.group] || hit.group))}</div>`; }
+      html += `<button type="button" class="spot-hit" role="option" id="spotOpt${i}" data-i="${i}" aria-selected="${i === spotSel}">
+        ${hit.ico || ''}<span class="spot-text"><b>${spotMark(hit.title, q)}</b>${hit.hint ? `<span>${esc(tr(hit.hint))}</span>` : ''}</span></button>`;
+    });
+    spotList.innerHTML = html;
+    const cur = $('#spotOpt' + spotSel, spotList); if (cur) cur.scrollIntoView({ block: 'nearest' });
+    spotQ.setAttribute('aria-activedescendant', 'spotOpt' + spotSel);
+  }
+  function closeSpot(clear) {
+    spotPanel.hidden = true; spotEl.classList.remove('open');
+    spotQ.setAttribute('aria-expanded', 'false');
+    spotQ.removeAttribute('aria-activedescendant');
+    if (clear) spotQ.value = '';
+  }
+  function openSpot() {
+    if (spotEl.hidden) return;
+    spotPanel.hidden = false; spotEl.classList.add('open');
+    spotQ.setAttribute('aria-expanded', 'true');
+    spotQ.focus();
+    renderSpot();
+    ensureStoreCatalog().then(() => { if (!spotPanel.hidden) renderSpot(); });
+  }
+  function runSpot(i) {
+    const hit = spotHits[i]; if (!hit) return;
+    closeSpot(true);
+    if (setWin.open && hit.group !== 'settings') closeSettings();
+    hit.run();
+  }
+  spotEl.addEventListener('pointerdown', (e) => { if (!e.target.closest('.spot-hit')) openSpot(); });
+  spotQ.addEventListener('focus', () => openSpot());
+  spotQ.addEventListener('input', () => { spotSel = 0; if (spotPanel.hidden) openSpot(); else renderSpot(); });
+  spotQ.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (spotHits.length) { spotSel = (spotSel + 1) % spotHits.length; renderSpot(); } }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (spotHits.length) { spotSel = (spotSel - 1 + spotHits.length) % spotHits.length; renderSpot(); } }
+    else if (e.key === 'Enter') { e.preventDefault(); runSpot(spotSel); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeSpot(false); spotQ.blur(); }
+  });
+  spotList.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('[data-i]'); if (!b) return;
+    e.preventDefault();
+    runSpot(Number(b.dataset.i));
+  });
+  document.addEventListener('pointerdown', (e) => { if (!spotPanel.hidden && !spotEl.contains(e.target)) closeSpot(false); }, true);
+  document.addEventListener('keydown', (e) => {
+    if (spotEl.hidden || document.body.classList.contains('onb-open')) return;
+    if (e.key === 'Escape' && !spotPanel.hidden) { e.preventDefault(); e.stopPropagation(); closeSpot(false); spotQ.blur(); return; }
+    const k = e.key.toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && k === 'k') {
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') return;
+      e.preventDefault();
+      openSpot();
+    }
+  }, true);
+
   /* ------------------------------------------------------------ choosing a password (wizard and Security) */
   function passwordFields(currentLabel) {
     return `<label class="fld"><span>${esc(currentLabel || t('Current password'))}</span>
@@ -5560,6 +6111,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const open = e.target.closest('[data-open]');
     if (open) {
+      if (S.arrange && open.closest('#appGrid')) return;
       ({ home: goHome, storage: storageWindow, shares: sharesWindow, backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
       return;
     }
@@ -5691,7 +6243,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     S.config = cfg;
     if (cfg.demo) return useDemo(); // in the demo the browser keeps the language itself
     // No account yet: only the welcome wizard (you choose the language there; the server's applies only afterwards).
-    if (cfg.setup) { $('.topnav').hidden = true; return openOnboarding(0); }
+    if (cfg.setup) { setChrome(false); return openOnboarding(0); }
     if (cfg.language && cfg.language !== LANG) setLang(cfg.language); // the server's language applies to everyone
     if (cfg.needsLogin) return showLogin();
     startDesk();
