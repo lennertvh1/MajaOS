@@ -2848,7 +2848,6 @@
       if (n === q || p === q) return 0;
       if (n.startsWith(q) || p.startsWith(q)) return 1;
       if (n.includes(q) || p.includes(q)) return 2;
-      if ((a.summary + ' ' + a.maintainer + ' ' + a.image).toLowerCase().includes(q)) return 3;
       return 9;
     };
     return list.map((a) => [score(a), a]).filter(([s]) => s < 9)
