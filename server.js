@@ -470,7 +470,12 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/shares\/([^/]+)\/files$/))) {
     const name = decodeURIComponent(m[1]);
     const rel = url.searchParams.get('path') || '';
-    if (method === 'GET' && url.searchParams.get('dl') === '1') { files.sendFile(res, name, rel); return; }
+    if (method === 'GET' && url.searchParams.get('text') === '1') return sendJson(res, 200, files.readText(name, rel));
+    if (method === 'GET' && url.searchParams.get('zip') === '1') { await files.sendZip(res, name, rel); return; }
+    if (method === 'GET' && (url.searchParams.get('dl') === '1' || url.searchParams.get('inline') === '1')) {
+      files.sendFile(res, name, rel, { inline: url.searchParams.get('inline') === '1', range: req.headers.range });
+      return;
+    }
     if (method === 'GET') return sendJson(res, 200, files.list(name, rel));
     if (method === 'PUT') return sendJson(res, 200, await files.upload(req, name, rel, { overwrite: url.searchParams.get('overwrite') === '1' }));
     if (method === 'DELETE') return sendJson(res, 200, files.remove(name, rel, { recursive: url.searchParams.get('recursive') === '1' }));

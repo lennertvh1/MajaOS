@@ -473,7 +473,32 @@
   }
   const shareEmpty = (groups = shareGroups) => shareList.filter((x) => !x.guest && !Object.keys(shareEffective(x, groups)).length).map((x) => x.name);
   function filesDir(kids) { return { type: 'dir', mtime: Date.now(), kids }; }
-  function filesFile(size, days, body) { return { type: 'file', size, mtime: Date.now() - days * 86400000, body: body || '' }; }
+  function filesFile(size, days, body, bytes) { return { type: 'file', size, mtime: Date.now() - days * 86400000, body: body || '', bytes: bytes || null }; }
+  function demoJpeg() {
+    const raw = atob('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGf/9k=');
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
+  function miniPdf(text) {
+    const stream = 'BT /F1 18 Tf 36 80 Td (' + text + ') Tj ET';
+    const objects = [
+      '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n',
+      '2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n',
+      '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n',
+      '4 0 obj<</Length ' + stream.length + '>>stream\n' + stream + '\nendstream\nendobj\n',
+      '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n',
+    ];
+    let body = '%PDF-1.4\n';
+    const offs = [0];
+    for (const o of objects) { offs.push(body.length); body += o; }
+    const xrefAt = body.length;
+    let xref = 'xref\n0 ' + offs.length + '\n0000000000 65535 f \n';
+    for (let i = 1; i < offs.length; i++) xref += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+    return body + xref + 'trailer<</Size ' + offs.length + '/Root 1 0 R>>\nstartxref\n' + xrefAt + '\n%%EOF';
+  }
+  const holidayJpeg = demoJpeg();
+  const taxPdf = miniPdf('HomeBaseOS');
   const shareTrees = {
     media: filesDir({
       Movies: filesDir({ 'Dune (2021).mkv': filesFile(4.2e9, 40), 'The Holdovers.mkv': filesFile(3.1e9, 12) }),
@@ -483,11 +508,11 @@
     }),
     photos: filesDir({
       2026: filesDir({ 'IMG_4101.HEIC': filesFile(3.2e6, 5), 'IMG_4102.HEIC': filesFile(2.8e6, 5) }),
-      2025: filesDir({ 'holiday.jpg': filesFile(4.1e6, 300) }),
+      2025: filesDir({ 'holiday.jpg': filesFile(holidayJpeg.length, 300, '', holidayJpeg) }),
     }),
     documents: filesDir({
-      Taxes: filesDir({ '2025.pdf': filesFile(220e3, 90) }),
-      House: filesDir({ 'insurance.pdf': filesFile(180e3, 20) }),
+      Taxes: filesDir({ '2025.pdf': filesFile(taxPdf.length, 90, taxPdf) }),
+      House: filesDir({ 'insurance.pdf': filesFile(180e3, 20, miniPdf('Insurance')) }),
       'todo.txt': filesFile(80, 1, 'Call the notary.\n'),
     }),
     TimeMachine: filesDir({}),
@@ -499,7 +524,8 @@
     return {
       name: decodeURIComponent(m[1]), rel: u.searchParams.get('path') || '',
       dl: u.searchParams.get('dl') === '1', overwrite: u.searchParams.get('overwrite') === '1',
-      recursive: u.searchParams.get('recursive') === '1',
+      recursive: u.searchParams.get('recursive') === '1', text: u.searchParams.get('text') === '1',
+      zip: u.searchParams.get('zip') === '1', inline: u.searchParams.get('inline') === '1',
     };
   }
   function filesParts(rel) {
@@ -543,6 +569,18 @@
       w.parent.kids[w.key] = filesDir({});
       return { name: w.key, path: w.parts.join('/') };
     }
+    if ((body || {}).action === 'copy') {
+      const w = filesWalk(q.name, body.path);
+      if (!w.parts.length) throw err('You cannot copy the shared folder itself here.', 400);
+      const dot = w.key.lastIndexOf('.');
+      const ext = dot > 0 ? w.key.slice(dot) : '';
+      const stem = ext ? w.key.slice(0, -ext.length) : w.key;
+      let name = stem + ' copy' + ext, n = 2;
+      while (w.parent.kids[name]) { name = stem + ' copy ' + n + ext; n++; }
+      w.parent.kids[name] = filesClone(w.node);
+      const parts = w.parts.slice(); parts[parts.length - 1] = name;
+      return { name, path: parts.join('/') };
+    }
     if ((body || {}).action === 'rename') {
       const n = String(body.name || '').trim();
       if (!n || n.includes('/') || n === '.' || n === '..') throw err('That name is not allowed.', 400);
@@ -562,6 +600,72 @@
     delete w.parent.kids[w.key];
     return { removed: w.key };
   }
+  function filesClone(node) {
+    if (node.type === 'file') return filesFile(node.size, 0, node.body, node.bytes);
+    const kids = {};
+    for (const [k, v] of Object.entries(node.kids)) kids[k] = filesClone(v);
+    return filesDir(kids);
+  }
+  const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'js', 'mjs', 'cjs', 'css', 'html', 'htm', 'xml', 'yaml', 'yml', 'sh', 'conf', 'log', 'py', 'ini', 'toml', 'env', 'cfg', 'service', 'ts', 'tsx', 'jsx', 'vue', 'php', 'rb', 'go', 'rs', 'sql', 'gitignore', 'properties']);
+  function filesText(q) {
+    const w = filesWalk(q.name, q.rel);
+    if (!w.node || w.node.type !== 'file') throw err('Choose a file to edit.', 400);
+    const ext = w.key.includes('.') ? w.key.slice(w.key.lastIndexOf('.') + 1).toLowerCase() : '';
+    if (!TEXT_EXT.has(ext)) throw err('This file is not a text file.', 400);
+    const text = String(w.node.body || '');
+    if (w.node.size > 1048576) throw err('This file is too big to edit here. Download it instead.', 400);
+    return { name: w.key, path: w.parts.join('/'), text };
+  }
+  function demoCrc(bytes) {
+    let c = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) {
+      c ^= bytes[i];
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    return (c ^ 0xffffffff) >>> 0;
+  }
+  function storeZip(entries) {
+    const enc = new TextEncoder();
+    const b16 = (n) => [n & 255, (n >> 8) & 255];
+    const b32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+    const now = new Date();
+    const time = ((now.getHours() & 31) << 11) | ((now.getMinutes() & 63) << 5) | ((now.getSeconds() >> 1) & 31);
+    const year = Math.min(2107, Math.max(1980, now.getFullYear()));
+    const day = ((year - 1980) << 9) | (((now.getMonth() + 1) & 15) << 5) | (now.getDate() & 31);
+    const parts = [], central = [];
+    let offset = 0;
+    for (const ent of entries) {
+      const name = ent.dir ? (ent.name.endsWith('/') ? ent.name : ent.name + '/') : ent.name;
+      const nb = enc.encode(name);
+      const data = ent.dir ? new Uint8Array(0) : (ent.data instanceof Uint8Array ? ent.data : enc.encode(String(ent.data || '')));
+      const crc = demoCrc(data);
+      const head = [...b32(0x04034b50), ...b16(20), ...b16(0x0808), ...b16(0), ...b16(time), ...b16(day), ...b32(0), ...b32(0), ...b32(0), ...b16(nb.length), ...b16(0)];
+      const desc = [...b32(0x08074b50), ...b32(crc), ...b32(data.length), ...b32(data.length)];
+      const local = new Uint8Array(head.length + nb.length + data.length + desc.length);
+      local.set(head, 0); local.set(nb, head.length); local.set(data, head.length + nb.length); local.set(desc, head.length + nb.length + data.length);
+      parts.push(local);
+      const cen = [...b32(0x02014b50), ...b16(20), ...b16(20), ...b16(0x0808), ...b16(0), ...b16(time), ...b16(day), ...b32(crc), ...b32(data.length), ...b32(data.length), ...b16(nb.length), ...b16(0), ...b16(0), ...b16(0), ...b16(0), ...b32(0), ...b32(offset)];
+      const ch = new Uint8Array(cen.length + nb.length);
+      ch.set(cen, 0); ch.set(nb, cen.length);
+      central.push(ch);
+      offset += local.length;
+    }
+    const cdLen = central.reduce((n, c) => n + c.length, 0);
+    const eocd = new Uint8Array([...b32(0x06054b50), ...b16(0), ...b16(0), ...b16(entries.length), ...b16(entries.length), ...b32(cdLen), ...b32(offset), ...b16(0)]);
+    const out = new Uint8Array(offset + cdLen + eocd.length);
+    let p = 0;
+    parts.concat(central).forEach((part) => { out.set(part, p); p += part.length; });
+    out.set(eocd, p);
+    return out;
+  }
+  function zipTree(node, prefix, out) {
+    if (node.type === 'dir') {
+      if (prefix) out.push({ name: prefix + '/', dir: true });
+      Object.keys(node.kids).forEach((k) => zipTree(node.kids[k], prefix ? prefix + '/' + k : k, out));
+      return;
+    }
+    out.push({ name: prefix, dir: false, data: node.bytes || node.body || ('Demo file: ' + prefix.split('/').pop()) });
+  }
   async function filesPut(q, body) {
     const w = filesWalk(q.name, q.rel, true);
     if (!w.parts.length) throw err('Choose a name.', 400);
@@ -576,8 +680,14 @@
   }
   async function filesDownload(q) {
     const w = filesWalk(q.name, q.rel);
+    if (q.zip && w.node && w.node.type === 'dir') {
+      const entries = [];
+      zipTree(w.node, w.key, entries);
+      return { blob: new Blob([storeZip(entries)], { type: 'application/zip' }), name: w.key + '.zip' };
+    }
     if (!w.node || w.node.type !== 'file') throw err('Choose a file to download.', 400);
-    return { blob: new Blob([w.node.body || 'Demo file: ' + w.key]), name: w.key };
+    const data = w.node.bytes || w.node.body || ('Demo file: ' + w.key);
+    return { blob: new Blob([data]), name: w.key };
   }
   const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'fast', mountpoint: '/fast' }]
     .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
@@ -1863,7 +1973,7 @@
     }
     if (path === '/api/layout') return copy(layout);
     if (path === '/api/shares') return sharesGet();
-    { const q = parseFilesApi(path); if (q) { if (q.dl) throw err('Choose a file to download.', 400); return filesList(q); } }
+    { const q = parseFilesApi(path); if (q) { if (q.text) return filesText(q); if (q.dl || q.zip) throw err('Choose a file to download.', 400); return filesList(q); } }
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {
       const upd = updStates();

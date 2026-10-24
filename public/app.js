@@ -1249,7 +1249,7 @@
   const win = $('#win');
   let onWinClose = null;
   function openWindow(title, html, after) {
-    win.classList.remove('win-wide'); // only the storage window is wide (for the case with bays)
+    win.classList.remove('win-wide', 'file-win'); // only the storage window is wide; the editor is a bit wider
     if (onWinClose) { try { onWinClose(); } catch (e) { /* ignore */ } onWinClose = null; }
     $('#winTitle').textContent = title;
     // New element, so listeners of a previous window don't hang around.
@@ -1307,6 +1307,11 @@
     logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', updlog: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
+    rename: '<path d="M4 20h4l10-10-4-4L4 16zM13 7l4 4"/>',
+    download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
+    rename: '<path d="M4 20h4l10-10-4-4L4 16zM13 7l4 4"/>',
     tofolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
     outfolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9.5 13.5h5"/>',
   };
@@ -4042,14 +4047,155 @@
     $('#filesStatus').textContent = q && shown !== all ? t('{n} of {total}', { n: shown, total: all }) : t(shown === 1 ? '{n} item' : '{n} items', { n: shown });
     paintChrome();
   }
+  const TEXT_EXT = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'js', 'mjs', 'cjs', 'css', 'html', 'htm', 'xml', 'yaml', 'yml', 'sh', 'conf', 'log', 'py', 'ini', 'toml', 'env', 'cfg', 'service', 'ts', 'tsx', 'jsx', 'vue', 'php', 'rb', 'go', 'rs', 'sql', 'gitignore', 'properties']);
+  const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic']);
+  const VIDEO_EXT = new Set(['mp4', 'webm', 'ogv', 'mov', 'mkv']);
+  function fileExt(name) {
+    const i = String(name || '').lastIndexOf('.');
+    return i > 0 ? name.slice(i + 1).toLowerCase() : '';
+  }
+  function fileKindOf(name, type) {
+    if (type === 'dir') return 'dir';
+    const ext = fileExt(name);
+    if (TEXT_EXT.has(ext)) return 'text';
+    if (IMAGE_EXT.has(ext)) return 'image';
+    if (VIDEO_EXT.has(ext)) return 'video';
+    if (ext === 'pdf') return 'pdf';
+    return 'file';
+  }
+  function fileSize(rel) {
+    const it = ((fx.data && fx.data.items) || []).find((x) => filesJoin(fx.data.path, x.name) === rel);
+    return it ? it.size : null;
+  }
+  function previewType(name, kind) {
+    const ext = fileExt(name);
+    if (kind === 'video') return ext === 'webm' ? 'video/webm' : ext === 'ogv' ? 'video/ogg' : 'video/mp4';
+    if (ext === 'png') return 'image/png';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'svg') return 'image/svg+xml';
+    return 'image/jpeg';
+  }
   function openFileItem(item) {
     if (!item) return;
-    if (item.dataset.filesKind === 'dir') filesOpen(fx.share, item.dataset.filesItem);
-    else filesDownload(item.dataset.filesItem);
+    const rel = item.dataset.filesItem, name = item.dataset.filesName, kind = item.dataset.filesKind;
+    if (kind === 'dir') return filesOpen(fx.share, rel);
+    const view = fileKindOf(name, kind);
+    if (view === 'text') return filesEdit(rel, name);
+    if (view === 'image' || view === 'video') return filesPreview(rel, name, view);
+    if (view === 'pdf') return filesOpenPdf(rel);
+    return filesDownload(rel);
   }
-  async function filesDownload(rel) {
-    try { const f = await api.download(filesApi(fx.share, rel, { dl: true })); saveBlob(f.blob, f.name); }
-    catch (e) { toast(e.message, true); }
+  async function filesEdit(rel, name) {
+    const size = fileSize(rel);
+    if (size != null && size > 1048576) { toast(t('This file is too big to edit here. Download it instead.'), true); return; }
+    let data;
+    try { data = await api.get(filesApi(fx.share, rel, { text: true })); }
+    catch (e) { toast(e.message, true); return; }
+    openWindow(t('Edit {name}', { name }), `<textarea class="file-edit" id="fileEdit" spellcheck="false" aria-label="${esc(name)}"></textarea>
+      <div class="btn-row" style="margin-top:12px"><button type="button" class="btn primary" id="fileSave">${t('Save')}</button></div>`, (body) => {
+      const area = body.querySelector('#fileEdit');
+      area.value = data.text || '';
+      const save = async () => {
+        try {
+          await api.put(filesApi(fx.share, rel, { overwrite: true }), area.value);
+          toast(t('Saved.'));
+          renderFiles();
+        } catch (e) { toast(e.message, true); }
+      };
+      body.querySelector('#fileSave').onclick = save;
+      area.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); save(); }
+      });
+    });
+    win.classList.add('file-win');
+  }
+  function filesPreview(rel, name, kind) {
+    const tag = kind === 'video' ? 'video' : 'img';
+    openWindow(name, `<p class="lead" id="fileViewNote" hidden></p><${tag} class="file-view" id="fileView"${kind === 'video' ? ' controls playsinline' : ' alt=""'}>`, (body) => {
+      const el = body.querySelector('#fileView');
+      const note = body.querySelector('#fileViewNote');
+      let url = '';
+      onWinClose = () => {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+        win.classList.remove('file-win');
+      };
+      const show = (next) => {
+        if (!win.open) {
+          if (String(next).startsWith('blob:')) URL.revokeObjectURL(next);
+          return;
+        }
+        url = next;
+        el.src = url;
+      };
+      el.onerror = () => {
+        note.hidden = false;
+        note.textContent = t(kind === 'video'
+          ? 'This video cannot be played in the browser. Download it instead.'
+          : 'This photo cannot be shown in the browser. Download it instead.');
+      };
+      if (api === realApi) { show(filesApi(fx.share, rel, { inline: true })); return; }
+      api.download(filesApi(fx.share, rel, { dl: true })).then(async (f) => {
+        show(URL.createObjectURL(new Blob([await f.blob.arrayBuffer()], { type: previewType(name, kind) })));
+      }).catch((e) => { toast(e.message, true); if (win.open) win.close(); });
+    });
+    win.classList.add('file-win');
+  }
+  function filesOpenPdf(rel) {
+    const pop = window.open('', '_blank');
+    const go = (url) => {
+      if (pop) { pop.location = url; pop.opener = null; }
+      else window.open(url, '_blank');
+    };
+    if (api === realApi) { go(filesApi(fx.share, rel, { inline: true })); return; }
+    api.download(filesApi(fx.share, rel, { dl: true })).then(async (f) => {
+      const url = URL.createObjectURL(new Blob([await f.blob.arrayBuffer()], { type: 'application/pdf' }));
+      go(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }).catch((e) => { if (pop) pop.close(); toast(e.message, true); });
+  }
+  async function filesDownload(rel, opts) {
+    try {
+      const f = await api.download(filesApi(fx.share, rel, opts && opts.zip ? { zip: true } : { dl: true }));
+      saveBlob(f.blob, f.name);
+    } catch (e) { toast(e.message, true); }
+  }
+  async function filesCopy(rel) {
+    try {
+      const d = await api.post(filesApi(fx.share), { action: 'copy', path: rel });
+      toast(t('Copied as {name}.', { name: d.name }));
+      renderFiles();
+    } catch (e) { toast(e.message, true); }
+  }
+  async function filesRemoveOne(rel, name, kind) {
+    const r = await ask(t('Remove {name}?', { name }), t('Remove'), kind === 'dir' ? t('Also delete everything in this folder') : null);
+    if (!r) return;
+    try {
+      await api.del(filesApi(fx.share, rel, kind === 'dir' && r.checked ? { recursive: true } : null));
+      toast(t('Removed: {name}', { name }));
+      fx.picked.delete(rel);
+      renderFiles();
+    } catch (e) { toast(e.message, true); }
+  }
+  function closeFileMenu() { const m = $('#fileMenu'); if (m) m.hidden = true; }
+  function openFileMenu(item, x, y) {
+    closeMenu(false);
+    const m = $('#fileMenu');
+    const name = item.dataset.filesName;
+    m.innerHTML = `<div class="menu-head"><b>${esc(name)}</b></div>` + [
+      ['open', t('Open'), MENU_ICONS.open],
+      ['download', t('Download'), MENU_ICONS.update],
+      ['copy', t('Copy'), MENU_ICONS.copy],
+      ['rename', t('Rename'), MENU_ICONS.rename],
+      ['remove', t('Remove'), MENU_ICONS.remove, 'danger'],
+    ].map(([id, label, icon, cls]) => `<button type="button" role="menuitem" class="menu-item ${cls || ''}" data-file-act="${id}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>${esc(label)}</button>`).join('');
+    m.dataset.path = item.dataset.filesItem;
+    m.dataset.kind = item.dataset.filesKind;
+    m.dataset.name = name;
+    m.hidden = false;
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+    m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
   }
   async function uploadFiles(list) {
     const arr = [...list].filter((f) => f && f.name);
@@ -4085,6 +4231,7 @@
     const page = $('#filesPage'), stage = $('#filesStage');
     page.addEventListener('pointerdown', (e) => { fx.ptr = e.pointerType || 'mouse'; });
     page.addEventListener('click', (e) => {
+      if (fx.menuAt && Date.now() - fx.menuAt < 500) return;
       const shareBtn = e.target.closest('[data-files-share]');
       if (shareBtn) return filesOpen(shareBtn.dataset.filesShare, '');
       const go = e.target.closest('[data-files-go]');
@@ -4151,6 +4298,29 @@
         renderFiles();
       } catch (e) { toast(e.message, true); renderFiles(); }
     });
+    stage.addEventListener('contextmenu', (e) => {
+      const item = e.target.closest('[data-files-item]');
+      if (!item) return;
+      e.preventDefault();
+      fx.menuAt = Date.now();
+      openFileMenu(item, e.clientX, e.clientY);
+    });
+    $('#fileMenu').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-file-act]'); if (!b) return;
+      const m = $('#fileMenu');
+      const rel = m.dataset.path, kind = m.dataset.kind, name = m.dataset.name;
+      closeFileMenu();
+      if (b.dataset.fileAct === 'open') return openFileItem({ dataset: { filesItem: rel, filesKind: kind, filesName: name } });
+      if (b.dataset.fileAct === 'download') return filesDownload(rel, { zip: kind === 'dir' });
+      if (b.dataset.fileAct === 'copy') return filesCopy(rel);
+      if (b.dataset.fileAct === 'rename') return showNameRow('rename', { path: rel, name });
+      if (b.dataset.fileAct === 'remove') return filesRemoveOne(rel, name, kind);
+    });
+    document.addEventListener('pointerdown', (e) => {
+      const m = $('#fileMenu');
+      if (m && !m.hidden && !m.contains(e.target)) closeFileMenu();
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFileMenu(); });
     stage.addEventListener('dragover', (e) => { e.preventDefault(); stage.classList.add('is-over'); });
     stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('is-over'); });
     stage.addEventListener('drop', (e) => { e.preventDefault(); stage.classList.remove('is-over'); uploadFiles(e.dataTransfer.files); });
