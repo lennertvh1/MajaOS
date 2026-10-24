@@ -344,6 +344,9 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 }
 .widget-tray-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .vm-home-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.page-home-icon { color: #fff; }
+.page-home-icon svg { width: 52%; height: 52%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.app-row.page-tile { grid-template-columns: 1fr; }
 .app { position: relative; container-type: inline-size; display: flex; flex-direction: column; align-items: center; gap: 0.55rem; padding: 0.7rem 0.3rem 0.55rem; border-radius: 1.2rem; }
 .app:hover { background: var(--glass-hover); }
 .app-open { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 9px; width: 100%; border-radius: 16px; }

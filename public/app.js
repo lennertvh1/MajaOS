@@ -344,12 +344,15 @@
     $$('#viewSeg [data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === S.view)));
     stashHomeWidgets();
     if (listView) {
-      const order = flat ? list : homeItems().flatMap((it) => (typeof it === 'string' ? [appByName(it)] : (it.apps || []).map(appByName))).filter(Boolean);
-      grid.innerHTML = order.length ? order.map(appRow).join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
+      const html = flat
+        ? visiblePages().map(pageRow).join('') + list.map(appRow).join('')
+        : homeListRows();
+      grid.innerHTML = html || `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
       return;
     }
     if (flat) {
-      grid.innerHTML = list.length ? list.map(appTile).join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
+      const tiles = visiblePages().map(pageTile).concat(list.map(appTile));
+      grid.innerHTML = tiles.length ? tiles.join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
       return;
     }
     syncHomeGrid(homeItems());
@@ -377,6 +380,44 @@
           <button class="app-more" type="button" data-app="${esc(a.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: label }))}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button></span>
       </div>`;
+  }
+  const PAGE_IDS = ['store', 'files', 'backup'];
+  const PAGE_META = {
+    store: { name: 'App store', open: 'store', color: '#3e8e7e', svg: '<path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>' },
+    files: { name: 'Files', open: 'files', color: '#2f6f9f', svg: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/>' },
+    backup: { name: 'Backups', open: 'backup', color: '#4f5fb3', svg: '<path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/>' },
+  };
+  function visiblePages() {
+    if (S.filter !== 'all') return [];
+    const q = S.search.trim().toLowerCase();
+    return PAGE_IDS.filter((id) => !q || t(PAGE_META[id].name).toLowerCase().includes(q) || id.includes(q));
+  }
+  function pageIcon(id) {
+    const p = PAGE_META[id];
+    return `<span class="app-icon page-home-icon" style="background:${p.color}" aria-hidden="true"><svg viewBox="0 0 24 24">${p.svg}</svg></span>`;
+  }
+  function pageTile(id) {
+    const label = t(PAGE_META[id].name);
+    return `<div class="app page-tile" data-item="p:${esc(id)}">
+        <button class="app-open" type="button" data-open="${PAGE_META[id].open}" title="${esc(label)}">
+          ${pageIcon(id)}<span class="app-name">${esc(label)}</span>
+        </button>
+      </div>`;
+  }
+  function pageRow(id) {
+    const label = t(PAGE_META[id].name);
+    return `<div class="app-row page-tile" data-item="p:${esc(id)}">
+        <button class="app-open row-open" type="button" data-open="${PAGE_META[id].open}" title="${esc(label)}">
+          ${pageIcon(id)}<span class="row-name"><b>${esc(label)}</b></span></button>
+      </div>`;
+  }
+  function homeListRows() {
+    return homeItems().flatMap((it) => {
+      if (typeof it === 'string') { const a = appByName(it); return a ? [appRow(a)] : []; }
+      if (it && it.page) return [pageRow(it.page)];
+      if (it && it.apps) return it.apps.map(appByName).filter(Boolean).map(appRow);
+      return [];
+    }).join('');
   }
   function appTile(a) {
     const label = prettyName(a.name);
@@ -433,6 +474,7 @@
     if (it.folder) return 'f:' + it.folder;
     if (it.widget) return 'w:' + it.widget;
     if (it.vm) return 'vm:' + it.vm;
+    if (it.page) return 'p:' + it.page;
     return '';
   }
   function homeCols() {
@@ -521,12 +563,12 @@
         applyWidgetChrome(el, it.w, it.h);
       } else if (!el) {
         const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : '';
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : '';
         if (!html) return;
         el = htmlNode(html);
       } else if (!(drag && drag.el === el)) {
         const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : '';
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : '';
         if (html) { const next = htmlNode(html); el.replaceWith(next); el = next; }
       }
       const ref = [...grid.children].filter((x) => x.dataset.item)[i];
@@ -677,7 +719,7 @@
   // The saved layout, without apps that are gone and with new apps at the end.
   // Widgets in items sit between the apps; the rest stay in the left column.
   function homeItems() {
-    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), out = [];
+    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), placedP = new Set(), out = [];
     const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
     const vmNames = new Set((S.vms || []).map((v) => v.name));
     for (const it of (S.layout && S.layout.items) || []) {
@@ -693,19 +735,25 @@
         if (vmNames.has(it.vm) && !placedVm.has(it.vm)) { placedVm.add(it.vm); out.push({ vm: it.vm }); }
         continue;
       }
+      if (it && it.page) {
+        if (PAGE_IDS.includes(it.page) && !placedP.has(it.page)) { placedP.add(it.page); out.push({ page: it.page }); }
+        continue;
+      }
       if (!it || !it.apps) continue;
       const apps = it.apps.filter((n) => names.has(n) && !placed.has(n));
       apps.forEach((n) => placed.add(n));
       if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
     }
     S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
-    return out;
+    const missing = PAGE_IDS.filter((id) => !placedP.has(id)).map((page) => ({ page }));
+    return missing.concat(out);
   }
   // Folders with one app become a plain app again; empty folders disappear. Widgets and VMs stay.
   const tidy = (items) => items.flatMap((it) => {
     if (typeof it === 'string') return [it];
     if (it && it.widget) { const [w, h] = clampWidgetSize(it.widget, it.w, it.h); return [{ widget: it.widget, w, h }]; }
     if (it && it.vm) return [{ vm: it.vm }];
+    if (it && it.page && PAGE_IDS.includes(it.page)) return [{ page: it.page }];
     if (it && it.apps && it.apps.length > 1) return [it];
     return (it && it.apps) || [];
   });
@@ -847,8 +895,9 @@
     if (tile === drag.el) return { mode: 'hold' };
     if (tile) {
       if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
-      const dragApp = !drag.item.startsWith('f:') && !drag.item.startsWith('w:') && !drag.item.startsWith('vm:');
-      const targetApp = !tile.dataset.item.startsWith('f:') && !tile.dataset.item.startsWith('w:') && !tile.dataset.item.startsWith('vm:');
+      const pinned = (k) => /^(f:|w:|vm:|p:)/.test(k);
+      const dragApp = !pinned(drag.item);
+      const targetApp = !pinned(tile.dataset.item);
       const icon = tile.querySelector('.app-icon');
       const r = (icon || tile).getBoundingClientRect();
       const inner = icon && x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2 && y > r.top + r.height * 0.2 && y < r.bottom - r.height * 0.2;

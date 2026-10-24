@@ -87,6 +87,9 @@ test('home screen layout with widgets and VMs between the apps', () => {
   assert.deepEqual(r.items, ['plex', { widget: 'sys', w: 2, h: 2 }, { vm: 'Home Assistant OS' }, 'jellyfin']); // each only once; default size
   assert.throws(() => validateLayout({ items: [{ widget: '../x' }] }), /not a valid widget/);
   assert.throws(() => validateLayout({ items: [{ vm: 'a/b' }] }), /not a valid VM name/);
+  const pages = validateLayout({ items: [{ page: 'files' }, 'plex', { page: 'files' }, { page: 'store' }, { page: 'backup' }] });
+  assert.deepEqual(pages.items, [{ page: 'files' }, 'plex', { page: 'store' }, { page: 'backup' }]);
+  assert.throws(() => validateLayout({ items: [{ page: 'settings' }] }), /not a valid page/);
 });
 
 test('widget size on the home screen', () => {

@@ -430,7 +430,7 @@
     { folder: 'fai', name: 'AI', apps: ['ollama', 'open-webui'] }] };
   function saveLayout(b) {
     if (!b || !Array.isArray(b.items)) throw err('The layout is not valid.');
-    const seen = new Set(), widgets = new Set(), vms = new Set();
+    const seen = new Set(), widgets = new Set(), vms = new Set(), pages = new Set();
     const cell = (n, d) => (Number.isInteger(n) && n >= 1 && n <= 8 ? n : d);
     const items = b.items.map((it) => {
       if (typeof it === 'string') { if (seen.has(it)) return null; seen.add(it); return it; }
@@ -439,6 +439,12 @@
         if (!/^[a-z]{2,16}$/.test(id) || widgets.has(id)) return null;
         widgets.add(id);
         return { widget: id, w: cell(it.w, 2), h: cell(it.h, 2) };
+      }
+      if (it && it.page) {
+        const id = String(it.page);
+        if (!['store', 'files', 'backup'].includes(id) || pages.has(id)) return null;
+        pages.add(id);
+        return { page: id };
       }
       if (it && it.vm) {
         const name = String(it.vm);
