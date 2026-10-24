@@ -2799,15 +2799,16 @@
     });
   }
 
-  /* --- app store (own page at #store) */
+  /* --- app store (popup at #store): a Discover page like a phone app store, or a list when you search or pick a category */
   const STORE_PAGE = 48;
   let storeLoading = null;
   function applyStore(c) {
     S.store = c;
-    const sel = $('#storeCat'), cur = sel.value;
-    sel.innerHTML = `<option value="featured">${t('Recommended')}</option><option value="all">${t('All apps')}</option>` +
-      c.categories.map((k) => `<option value="${esc(k.id)}">${esc(t(k.name))}</option>`).join('');
-    sel.value = cur;
+    const cats = [{ id: 'featured', name: t('Discover') }, { id: 'all', name: t('All apps') }]
+      .concat(c.categories.map((k) => ({ id: k.id, name: t(k.name) })));
+    if (!cats.some((k) => k.id === S.storeCat)) S.storeCat = 'featured';
+    $('#storeCats').innerHTML = cats.map((k) =>
+      `<button type="button" role="tab" aria-selected="${k.id === S.storeCat ? 'true' : 'false'}" data-store-cat="${esc(k.id)}">${esc(k.name)}</button>`).join('');
     renderStore();
   }
   function loadStore(refresh) {
@@ -2839,7 +2840,8 @@
 
   function storeResults() {
     const c = S.store; const q = S.storeQuery.trim().toLowerCase(); const cat = S.storeCat;
-    let list = c.apps.filter((a) => (cat === 'featured' ? (q ? true : a.featured) : cat === 'all' ? true : a.categories.includes(cat)));
+    // A search looks through the whole catalogue. A category only narrows the list when the search box is empty.
+    let list = c.apps.filter((a) => (q || cat === 'all' ? true : cat === 'featured' ? a.featured : a.categories.includes(cat)));
     if (!q) return list.sort((a, b) => (b.featured - a.featured) || (b.popularity - a.popularity) || a.name.localeCompare(b.name));
     const score = (a) => {
       const n = a.name.toLowerCase(), p = prettyName(a.name).toLowerCase();
@@ -2853,6 +2855,57 @@
       .sort((x, y) => (x[0] - y[0]) || (y[1].featured - x[1].featured) || (y[1].popularity - x[1].popularity)).map(([, a]) => a);
   }
 
+  const storeRank = (a, b) => (b.featured - a.featured) || (b.popularity - a.popularity) || a.name.localeCompare(b.name);
+  function storeGet(a) {
+    return `<span class="store-get${a.installed ? ' is-in' : ''}">${esc(a.installed ? t('Installed') : t('Get'))}</span>`;
+  }
+  function storeTile(a) {
+    return `<button class="store-tile" type="button" data-store="${esc(a.id)}"${a.installed ? ' data-installed="1"' : ''}>
+      ${storeIconHtml(a)}<span class="store-tile-name">${esc(prettyName(a.name))}</span></button>`;
+  }
+  function storeRow(a) {
+    const by = [a.maintainer, a.official ? t('official') : null, a.beta ? 'Beta' : null].filter(Boolean).join(' · ');
+    return `<button class="store-row" type="button" data-store="${esc(a.id)}">
+      ${storeIconHtml(a)}
+      <span class="store-row-text">
+        <span class="store-name">${esc(prettyName(a.name))}</span>
+        <span class="store-by">${esc(by)}</span>
+        <span class="store-sum">${esc(tr(a.summary))}</span>
+      </span>
+      ${storeGet(a)}</button>`;
+  }
+  function storeShelf(title, apps, catId) {
+    return `<section class="store-shelf"><header><h3>${esc(title)}</h3>
+      <button class="linkish" type="button" data-store-cat="${esc(catId)}">${t('See all')}</button></header>
+      <div class="store-rail">${apps.map(storeTile).join('')}</div></section>`;
+  }
+  function storeHero(a) {
+    return `<button class="store-hero" type="button" data-store="${esc(a.id)}" style="--hero:${colorFor(a.name)}">
+      <span class="store-hero-top"><span class="store-kicker">${t('Featured')}</span>${storeIconHtml(a)}</span>
+      <span class="store-hero-name">${esc(prettyName(a.name))}</span>
+      <span class="store-hero-sum">${esc(tr(a.summary))}</span>
+      ${storeGet(a)}</button>`;
+  }
+  function storeHome(c) {
+    const featured = c.apps.filter((a) => a.featured).sort(storeRank);
+    const top = c.apps.slice().sort((a, b) => (b.popularity - a.popularity) || a.name.localeCompare(b.name)).slice(0, 8);
+    const shelves = c.categories.map((cat) => {
+      const apps = c.apps.filter((a) => a.categories.includes(cat.id)).sort(storeRank).slice(0, 18);
+      return apps.length ? storeShelf(t(cat.name), apps, cat.id) : '';
+    }).join('');
+    return (featured.length ? `<div class="store-heroes">${featured.slice(0, 6).map(storeHero).join('')}</div>` : '')
+      + (top.length ? `<section class="store-shelf"><header><h3>${t('Top charts')}</h3>
+          <button class="linkish" type="button" data-store-cat="all">${t('See all')}</button></header>
+          <div class="store-list">${top.map(storeRow).join('')}</div></section>` : '')
+      + shelves;
+  }
+  function syncStoreCats() {
+    const bar = $('#storeCats');
+    $$('[data-store-cat]', bar).forEach((b) => b.setAttribute('aria-selected', b.dataset.storeCat === S.storeCat ? 'true' : 'false'));
+    const on = $('[aria-selected="true"]', bar);
+    if (on && (on.offsetLeft < bar.scrollLeft || on.offsetLeft + on.offsetWidth > bar.scrollLeft + bar.clientWidth))
+      bar.scrollLeft = Math.max(0, on.offsetLeft - 12);
+  }
   function renderStore() {
     const c = S.store; if (!c || $('#storePage').hidden) return;
     const when = new Date(c.updated).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -2860,29 +2913,27 @@
     $('#storeSource').innerHTML = `${t('Catalogue from {source}, updated on {when}. The templates come from their own maintainers.', { source: esc(tr(c.source)), when: esc(when) })}
       ${c.error ? `<span class="temp-warn">${t('Refreshing failed ({error}); this is the previous version.', { error: esc(tr(c.error)) })}</span>` : ''}
       <button class="linkish" type="button" data-store-refresh>${t('Refresh now')}</button>`;
+    syncStoreCats();
+    const q = S.storeQuery.trim();
+    const more = $('#storeMore');
+    if (!q && S.storeCat === 'featured') { $('#storeGrid').innerHTML = storeHome(c); more.hidden = true; return; }
     const list = storeResults();
     const shown = list.slice(0, S.storeShown);
-    $('#storeGrid').innerHTML = shown.length ? shown.map((a) => `
-      <button class="widget store-card" type="button" data-store="${esc(a.id)}">
-        ${storeIconHtml(a)}
-        <span class="store-body">
-          <span class="store-name">${esc(prettyName(a.name))}${a.installed ? ` <span class="pill ok">${t('Installed')}</span>` : ''}${a.beta ? ' <span class="pill warn">Beta</span>' : ''}</span>
-          <span class="store-by">${esc([a.maintainer, a.official ? t('official') : null].filter(Boolean).join(' · '))}</span>
-          <span class="store-sum">${esc(tr(a.summary))}</span>
-        </span>
-      </button>`).join('')
-      : `<p class="empty">${S.storeQuery ? t('No apps found for "{q}".', { q: esc(S.storeQuery) }) : t('No apps in this category.')}</p>`;
-    const more = $('#storeMore');
+    $('#storeGrid').innerHTML = shown.length ? `<div class="store-list">${shown.map(storeRow).join('')}</div>`
+      : `<p class="empty">${q ? t('No apps found for "{q}".', { q: esc(S.storeQuery) }) : t('No apps in this category.')}</p>`;
     more.hidden = list.length <= shown.length;
     more.textContent = t('Show more ({n} left)', { n: nf0.format(list.length - shown.length) });
   }
 
   $('#storeSearch').addEventListener('input', (e) => { S.storeQuery = e.target.value; S.storeShown = STORE_PAGE; renderStore(); });
-  $('#storeCat').addEventListener('change', (e) => { S.storeCat = e.target.value; S.storeShown = STORE_PAGE; renderStore(); });
   $('#storeMore').addEventListener('click', () => { S.storeShown += STORE_PAGE; renderStore(); });
   $('#storePage').addEventListener('click', (e) => {
     if (e.target.closest('[data-store-retry]')) return loadStore();
     if (e.target.closest('[data-store-refresh]')) return loadStore(true);
+    const cat = e.target.closest('[data-store-cat]');
+    if (cat && !e.target.closest('[data-store]')) {
+      S.storeCat = cat.dataset.storeCat; S.storeShown = STORE_PAGE; renderStore(); $('#storePage').scrollTop = 0; return;
+    }
     const card = e.target.closest('[data-store]');
     if (card) storeWindow(card.dataset.store);
   });

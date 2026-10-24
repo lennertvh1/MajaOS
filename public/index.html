@@ -239,23 +239,18 @@
         </button>
       </header>
       <div class="pop-body">
-    <main class="page" id="storePage" hidden aria-labelledby="popTitle">
-      <div class="apps-bar">
-        <div class="apps-tools">
-          <label class="search">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input id="storeSearch" type="search" placeholder="Search all apps" autocomplete="off">
-          </label>
-          <select class="field store-cat" id="storeCat" aria-label="Category">
-            <option value="featured">Recommended</option>
-            <option value="all">All apps</option>
-          </select>
-          <button class="btn" type="button" id="customAppBtn">Own app</button>
-        </div>
+    <main class="page store-page" id="storePage" hidden aria-labelledby="popTitle">
+      <div class="store-top">
+        <label class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="storeSearch" type="search" placeholder="Search all apps" autocomplete="off">
+        </label>
+        <button class="btn sm" type="button" id="customAppBtn">Own app</button>
       </div>
-      <p class="store-source muted small" id="storeSource"></p>
-      <div class="store-grid" id="storeGrid" aria-live="polite"></div>
+      <div class="store-chips" id="storeCats" role="tablist" aria-label="Category"></div>
+      <div id="storeGrid" aria-live="polite"></div>
       <div class="store-more"><button class="btn" type="button" id="storeMore" hidden>Show more</button></div>
+      <p class="store-source muted small" id="storeSource"></p>
     </main>
 
     <main class="page files-page" id="filesPage" hidden>
