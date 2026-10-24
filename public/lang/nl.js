@@ -2070,4 +2070,7 @@ window.TB_LANG.nl = {
   "This update is no longer known (the log is kept for an hour).": "Deze update is niet meer gekend (het logboek blijft een uur bewaard).",
   "Restarting the app with the new version…": "De app herstarten met de nieuwe versie…",
   "{name} is already being updated.": "{name} wordt al bijgewerkt.",
+  "Grid": "Raster",
+  "List": "Lijst",
+  "Arranging works in the grid view.": "Rangschikken kan in de rasterweergave.",
 };

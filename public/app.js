@@ -143,6 +143,7 @@
   const S = { overview: null, apps: [], vms: [], ai: null, aiError: null, filter: 'all', search: '', config: {},
     vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
     store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
+    view: (() => { try { return localStorage.getItem('tb-app-view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })(), // per device
     layout: { items: [] }, arrange: false, folder: null };
 
   /* ------------------------------------------------------------ notifications */
@@ -293,13 +294,44 @@
       return;
     }
     // Searching or filtering: a plain list. Otherwise the own layout with folders.
-    const flat = !!q || S.filter !== 'all';
-    $('#arrangeBtn').disabled = flat;
-    $('#arrangeBtn').title = flat ? t('Clear the search and choose All to arrange.') : '';
-    if (flat && S.arrange) setArrange(false);
+    const flat = !!q || S.filter !== 'all', listView = S.view === 'list';
+    $('#arrangeBtn').disabled = flat || listView;
+    $('#arrangeBtn').title = listView ? t('Arranging works in the grid view.') : flat ? t('Clear the search and choose All to arrange.') : '';
+    if ((flat || listView) && S.arrange) setArrange(false);
     grid.classList.toggle('arranging', S.arrange);
+    grid.classList.toggle('app-list', listView);
+    $$('#viewSeg [data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === S.view)));
+    if (listView) {
+      // List view: the home order (apps in folders right after each other, with the folder's name), or the search result.
+      const order = flat ? list : homeItems().flatMap((it) => (typeof it === 'string' ? [appByName(it)] : it.apps.map(appByName))).filter(Boolean);
+      grid.innerHTML = order.map(appRow).join('');
+      return;
+    }
     grid.innerHTML = flat ? list.map(appTile).join('') : homeItems().map((it) => (typeof it === 'string' ? appTile(appByName(it)) : folderTile(it))).join('');
     if (S.folder) renderFolder();
+  }
+  // A row in the list view: icon, name and image, status, address and ports, folder, and quick buttons.
+  function appRow(a) {
+    const label = prettyName(a.name), run = isRunning(a);
+    const busy = S.appBusy[a.id], job = updating(a), url = appUrl(a), f = folderOf(a.name);
+    const pill = job ? `<span class="pill warn">${t('updating… {n}%', { n: job.percent || 0 })}</span>`
+      : busy ? `<span class="pill">${esc(t(APP_ACTS[busy].noun))}…</span>`
+      : `<span class="pill ${run ? 'ok' : ''}">${t(run ? 'running' : 'stopped')}</span>`;
+    const where = url ? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
+    // The other ports (the one in the address is already shown).
+    const ports = (a.ports || []).filter((p) => !where.endsWith(':' + p.public) && !where.includes(':' + p.public + '/'))
+      .map((p) => `${p.public}${p.private !== p.public ? '→' + p.private : ''}${p.type === 'UDP' ? '/udp' : ''}`).join(', ');
+    const quick = (act, txt, cls = '') => `<button class="btn sm ${cls}" type="button" data-app="${esc(a.id)}" data-action="${act}"${busy || job ? ' disabled' : ''}>${txt}</button>`;
+    return `<div class="app-row${run ? '' : ' stopped'}${busy ? ' busy' : ''}${job ? ' updating' : ''}" data-item="${esc(a.name)}">
+        <button class="app-open row-open" type="button" data-app="${esc(a.id)}" data-action="open" title="${esc(label)} – ${t(job ? 'click to follow the update' : url ? 'click to open' : 'click for the menu')}">
+          ${iconHtml(a)}<span class="row-name"><b>${esc(label)}</b><span class="muted small">${esc(a.image || '')}</span></span></button>
+        <span class="row-status">${pill}${a.update && !job ? ` <span class="pill warn">${t('update available')}</span>` : ''}</span>
+        <span class="row-where small">${where ? `<span>${esc(where)}</span>` : ''}${ports ? `<span class="muted">${esc(ports)}</span>` : ''}</span>
+        <span class="row-folder muted small">${f ? esc(f.name) : ''}</span>
+        <span class="row-actions">${url && run ? quick('open', t('Open'), 'primary') : ''}${run ? quick('restart', t('Restart')) : quick('start', t('Start'))}
+          <button class="app-more" type="button" data-app="${esc(a.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: label }))}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button></span>
+      </div>`;
   }
   function appTile(a) {
     const label = prettyName(a.name);
@@ -615,7 +647,7 @@
     else { setMerge(null); drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160); }
   }
   function onDragStart(e) {
-    if (e.button > 0 || drag) return;
+    if (e.button > 0 || drag || S.view === 'list') return;
     const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item]');
     if (!tile || e.target.closest('.app-more')) return;
     const ctx = tile.closest('#folderGrid') ? 'folder' : 'home';
@@ -779,10 +811,12 @@
       await Promise.all(list.map(async (a) => {
         let j; try { j = await api.get('/api/store/jobs/' + a.updateJob.job); } catch (e) { return; }
         Object.assign(a.updateJob, { done: j.done, ok: j.ok, error: j.error, percent: j.percent, phase: j.phase });
-        const tile = $(`.app[data-item="${CSS.escape(a.name)}"]`);
+        const tile = $(`#appGrid [data-item="${CSS.escape(a.name)}"], #folderGrid [data-item="${CSS.escape(a.name)}"]`);
         const bar = tile && $('.app-prog', tile);
         if (bar) { bar.firstElementChild.style.width = (j.percent || 0) + '%'; bar.setAttribute('aria-valuenow', String(j.percent || 0)); }
         const open = tile && $('.app-open', tile);
+        const pill = tile && $('.row-status .pill', tile);
+        if (pill && !j.done) pill.textContent = t('updating… {n}%', { n: j.percent || 0 });
         if (open && !j.done) open.title = `${prettyName(a.name)} – ${t('updating… {n}%', { n: j.percent || 0 })}, ${t('click to follow the update')}`;
         if (j.done) {
           finished = true;
@@ -5536,6 +5570,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const app = e.target.closest('[data-app]');
     if (app && !menu.contains(app)) {
       const a = S.apps.find((x) => x.id === app.dataset.app); if (!a) return;
+      if (['start', 'restart'].includes(app.dataset.action)) return appCommand(a, app.dataset.action); // quick buttons in the list view
       if (app.dataset.action === 'open' && updating(a)) return updateLogWindow(a);
       if (app.dataset.action === 'open' && appUrl(a)) return openAppUrl(a);
       const r = app.getBoundingClientRect();
@@ -5555,6 +5590,13 @@ sudo ./install.sh</pre></div>`}` : '') +
     openAppMenu(a, e.clientX, e.clientY, t);
   });
   $('#search').addEventListener('input', (e) => { S.search = e.target.value; renderApps(); });
+  // Grid or list, remembered per device.
+  $('#viewSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-view]'); if (!b || b.dataset.view === S.view) return;
+    S.view = b.dataset.view;
+    try { localStorage.setItem('tb-app-view', S.view); } catch (err) { /* private window */ }
+    renderApps();
+  });
   $('#filters').addEventListener('click', (e) => {
     const b = e.target.closest('[data-filter]'); if (!b) return;
     S.filter = b.dataset.filter;

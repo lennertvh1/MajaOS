@@ -980,3 +980,37 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .app.updating .app-icon img { opacity: .55; }
 .app-prog { position: absolute; left: 7px; right: 7px; bottom: 8px; height: 8px; border-radius: 99px; background: rgba(0, 0, 0, .55); overflow: hidden; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 2px 6px rgba(0, 0, 0, .35); }
 .app-prog > span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .6s ease; }
+
+/* ---- apps as a list (Grid / List next to the filters) */
+.view-seg button { display: grid; place-items: center; padding: 6px 10px; }
+.view-seg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.view-seg [data-view="list"] circle { fill: currentColor; stroke: none; }
+.app-grid.app-list { display: flex; flex-direction: column; gap: 6px; }
+.app-row {
+  display: grid; grid-template-columns: minmax(200px, 2.2fr) minmax(110px, 1fr) minmax(140px, 1.6fr) minmax(70px, .8fr) auto;
+  align-items: center; gap: 14px; padding: 8px 12px 8px 8px; border-radius: 16px;
+  background: var(--glass); border: 1px solid var(--glass-line);
+}
+.app-row:hover { border-color: var(--accent); }
+.app-row .row-open { all: unset; cursor: pointer; display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: 12px; }
+.app-row .row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app-row .app-icon { width: 42px; height: 42px; border-radius: 12px; font-size: 18px; flex: none; }
+.app-row .app-icon img { padding: 6px; }
+.app-row .app-icon .dot { width: 12px; height: 12px; border-width: 2px; right: -3px; bottom: -3px; }
+.app-row .app-icon .upd-badge { display: none; }
+.app-row .app-prog { left: 4px; right: 4px; bottom: 4px; height: 5px; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+.app-row .row-name { display: grid; min-width: 0; }
+.app-row .row-name b, .app-row .row-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-row .row-status { display: flex; gap: 6px; flex-wrap: wrap; }
+.app-row .row-where { display: grid; min-width: 0; }
+.app-row .row-where span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-row .row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.app-row .app-more { position: static; opacity: 1; }
+.app-row.stopped .app-icon { filter: grayscale(.85); opacity: .6; }
+.app-row.busy .app-icon { animation: busy 1.2s ease-in-out infinite; }
+@media (max-width: 760px) {
+  .app-row { grid-template-columns: 1fr auto; }
+  .app-row .row-where, .app-row .row-folder { display: none; }
+  .app-row .row-status { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+  .app-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
