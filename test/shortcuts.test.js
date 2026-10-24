@@ -22,6 +22,8 @@ function res(status, buf, headers) {
 test('a shortcut address is http or https, without a password in it', () => {
   assert.equal(sc.normalizeUrl('https://example.com/a#x'), 'https://example.com/a');
   assert.equal(sc.normalizeUrl('http://192.168.1.1/admin'), 'http://192.168.1.1/admin');
+  assert.equal(sc.normalizeUrl('www.google.com'), 'https://www.google.com/');
+  assert.equal(sc.normalizeUrl('google.com/search'), 'https://google.com/search');
   assert.throws(() => sc.normalizeUrl('javascript:alert(1)'), /http:\/\/ or https:\/\//);
   assert.throws(() => sc.normalizeUrl('ftp://files.example/a'), /http:\/\/ or https:\/\//);
   assert.throws(() => sc.normalizeUrl('https://user:secret@example.com/'), /user name and password/);
@@ -39,6 +41,13 @@ test('icon links in a page, best first, and no SVG', () => {
     'https://nas.home/apps/icon.png',
     'https://nas.home/favicon.ico',
   ]);
+  assert.deepEqual(sc.linkIcons('<link href="//www.gstatic.com/images/branding/searchlogo/ico/favicon.ico" rel="icon">', 'https://www.google.com/'), [
+    'https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico',
+  ]);
+  assert.deepEqual(sc.linkIcons('<meta itemprop="image" content="/images/branding/logo.png"><link rel="icon" href="/favicon.ico">', 'https://www.google.com/'), [
+    'https://www.google.com/images/branding/logo.png',
+    'https://www.google.com/favicon.ico',
+  ]);
 });
 
 test('an uploaded icon is a real image, not SVG', () => {
@@ -47,6 +56,21 @@ test('an uploaded icon is a real image, not SVG', () => {
   const got = sc.decodeIcon('data:image/png;base64,' + PNG.toString('base64'));
   assert.equal(got.type, 'image/png');
   assert.throws(() => sc.decodeIcon('data:image/svg+xml;base64,' + Buffer.from('<svg></svg>').toString('base64')), /PNG, JPEG/);
+});
+
+test('Google gets the larger logo instead of the tiny favicon', async () => {
+  const real = global.fetch;
+  const seen = [];
+  global.fetch = async (url) => {
+    seen.push(String(url));
+    if (String(url).includes('128dp.png')) return res(200, PNG, {});
+    return res(200, Buffer.from('<html><link rel="icon" href="/favicon.ico"></html>'), {});
+  };
+  try {
+    const got = await sc.fetchFavicon('https://google.com/');
+    assert.equal(got.type, 'image/png');
+    assert.ok(seen.some((u) => u.includes('128dp.png')));
+  } finally { global.fetch = real; }
 });
 
 test('the site icon is fetched, and a shortcut keeps it', async () => {

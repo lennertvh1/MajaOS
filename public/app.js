@@ -860,8 +860,31 @@
       </form>`);
     const form = $('#cutForm');
     const err = $('.form-error', form);
-    let previewUrl = '';
-    onWinClose = () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+    let previewUrl = '', lookedUp = '', lookedIcon = '', lookToken = 0;
+    onWinClose = () => { lookToken++; if (previewUrl) URL.revokeObjectURL(previewUrl); };
+    async function lookUp() {
+      if (form.elements.file.files[0] || !form.elements.fetchIcon.checked) return;
+      const url = form.elements.url.value.trim();
+      if (!url) return;
+      const token = ++lookToken;
+      err.textContent = t('Looking up the site\'s icon…');
+      try {
+        const res = await fetch('/api/shortcuts/fetch-icon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+        const data = await res.json().catch(() => ({}));
+        if (token !== lookToken) return;
+        if (data.icon) {
+          lookedUp = url; lookedIcon = data.icon;
+          const head = $('.store-head', form);
+          if (head) head.innerHTML = `<span class="app-icon"><img src="${esc(data.icon)}" alt=""></span>`;
+          err.textContent = '';
+        } else {
+          lookedUp = ''; lookedIcon = '';
+          err.textContent = t('The site has no icon HomeBaseOS can use. Upload one instead.');
+        }
+      } catch (e) { if (token === lookToken) err.textContent = ''; }
+    }
+    form.elements.url.addEventListener('change', lookUp);
+    form.elements.fetchIcon.addEventListener('change', () => { if (form.elements.fetchIcon.checked) lookUp(); });
     form.elements.file.addEventListener('change', () => {
       if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = ''; }
       const file = form.elements.file.files[0];
@@ -891,7 +914,9 @@
       if (file && file.size > 512 * 1024) { err.textContent = t('The icon is too big. Use an image under 512 KB.'); return; }
       const body = { name: form.elements.name.value, url: form.elements.url.value };
       try { if (file) body.icon = await readDataUrl(file); } catch (ex) { err.textContent = ex.message; return; }
+      if (!body.icon && lookedIcon && lookedUp === body.url.trim()) body.icon = lookedIcon;
       if (!body.icon) body.fetchIcon = form.elements.fetchIcon.checked;
+      if (body.fetchIcon) err.textContent = t('Looking up the site\'s icon…');
       const btn = form.querySelector('[type=submit]');
       btn.disabled = true;
       try {

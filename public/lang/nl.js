@@ -972,6 +972,7 @@ window.TB_LANG.nl = {
   "Long test": "Lange test",
   "Long test started on {disk}.": "Lange test gestart op {disk}.",
   "Looking for disks…": "Schijven zoeken…",
+  "Looking up the site's icon…": "Het pictogram van de site opzoeken…",
   "Lowercase letters, digits and -. This is how you find it on your network, e.g. {name}.local.": "Kleine letters, cijfers en -. Zo vind je hem in je netwerk, bv. {name}.local.",
   "Lowercase letters, digits, - and _.": "Kleine letters, cijfers, - en _.",
   "Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.": "Kleine letters, cijfers, - en _. Wordt de naam van de container en van de map {dir}/naam.",

@@ -295,6 +295,14 @@ async function handleApi(req, res, url) {
     if (r.status !== 200) await slow();
     return sendJson(res, r.status, r.data || { error: r.status === 429 ? 'Too many wrong codes. Wait 5 minutes and try again.' : 'That pairing code is wrong or has expired.' });
   }
+  // The demo adapter fetches a real site icon through here. On a normal server this stays behind sign-in.
+  if (p === '/api/shortcuts/fetch-icon' && method === 'POST') {
+    if (!CFG.demo && !isAuthed(req)) return sendJson(res, 401, { error: 'Not signed in' });
+    const origin = req.headers.origin;
+    if (origin && new URL(origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Other origin refused' });
+    const got = await shortcuts.fetchFavicon(shortcuts.normalizeUrl((await readBody(req)).url));
+    return sendJson(res, 200, { icon: got ? 'data:' + got.type + ';base64,' + got.buf.toString('base64') : null });
+  }
   if (!isAuthed(req)) return sendJson(res, 401, { error: 'Not signed in' });
   if (CFG.demo) return sendJson(res, 409, { error: 'Demo mode: the browser uses sample data.' });
 

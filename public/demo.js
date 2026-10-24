@@ -468,43 +468,54 @@
 
   /* ---- shortcuts on the home screen (external addresses) */
   let shortcuts = [];
-  function cutIcon(name) {
-    const letter = String(name || '?').trim().charAt(0).toUpperCase().replace(/[<>&]/g, '') || '?';
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="14" fill="#3e8e7e"/><text x="32" y="42" text-anchor="middle" font-size="32" font-family="sans-serif" fill="#fff">' + letter + '</text></svg>';
-    return 'data:image/svg+xml,' + encodeURIComponent(svg);
-  }
   function cutPublic(s) { return { id: s.id, name: s.name, url: s.url, icon: s.icon || null }; }
-  function cutCheck(body, prev) {
-    const name = String(body.name == null ? '' : body.name).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
-    if (!name) throw err('Choose a name.');
+  function cutUrl(raw) {
+    let text = String(raw == null ? '' : raw).trim();
+    if (text && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = 'https://' + text;
     let u;
-    try { u = new URL(String(body.url == null ? '' : body.url).trim()); }
+    try { u = new URL(text); }
     catch (e) { throw err('That is not a valid address. Start it with http:// or https://.'); }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') throw err('The address must start with http:// or https://.');
     if (u.username || u.password) throw err('Leave the user name and password out of the address.');
     u.hash = '';
     if (u.href.length > 2000) throw err('That address is too long.');
+    return u.href;
+  }
+  async function cutFetchIcon(url) {
+    try {
+      const res = await fetch('/api/shortcuts/fetch-icon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.icon || !/^data:image\/(png|jpeg|gif|webp|x-icon|vnd\.microsoft\.icon);base64,/i.test(data.icon) || data.icon.length > 800000) return null;
+      return data.icon;
+    } catch (e) { return null; }
+  }
+  async function cutCheck(body, prev) {
+    const name = String(body.name == null ? '' : body.name).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
+    if (!name) throw err('Choose a name.');
+    const url = cutUrl(body.url);
     let icon = prev ? prev.icon : null, iconFetched;
     if (body.icon) {
       if (!/^data:image\/(png|jpeg|gif|webp|x-icon|vnd\.microsoft\.icon);base64,/i.test(body.icon) || String(body.icon).length > 800000) throw err('The icon has to be a PNG, JPEG, GIF, WebP or ICO image.');
       icon = body.icon;
     } else if (body.fetchIcon) {
-      if (u.hostname === 'no-icon.invalid') iconFetched = false;
-      else { icon = cutIcon(name); iconFetched = true; }
+      iconFetched = false;
+      const got = await cutFetchIcon(url);
+      if (got) { icon = got; iconFetched = true; }
     }
-    return { name, url: u.href, icon, iconFetched };
+    return { name, url, icon, iconFetched };
   }
-  function cutCreate(body) {
+  async function cutCreate(body) {
     if (shortcuts.length >= 200) throw err('There are already 200 shortcuts. Remove one first.');
-    const c = cutCheck(body, null);
+    const c = await cutCheck(body, null);
     const item = { id: 's' + Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0'), name: c.name, url: c.url, icon: c.icon };
     shortcuts.push(item);
     return { ...cutPublic(item), iconFetched: c.iconFetched };
   }
-  function cutUpdate(id, body) {
+  async function cutUpdate(id, body) {
     const item = shortcuts.find((x) => x.id === id);
     if (!item) throw err('Unknown shortcut.', 404);
-    const c = cutCheck(body, item);
+    const c = await cutCheck(body, item);
     item.name = c.name; item.url = c.url; item.icon = c.icon;
     return { ...cutPublic(item), iconFetched: c.iconFetched };
   }

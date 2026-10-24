@@ -106,6 +106,7 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 | POST | `/api/apps/:id/update` | update as a job → {job, name}; follow it with `/api/store/jobs/:id` (409 if it is already being updated) |
 | POST | `/api/apps/check-updates` | check all images now → {checked, updates, errors} |
 | GET/POST | `/api/layout` | home screen layout {items, widgets {order, hidden}}; a shortcut is `{shortcut: "<id>"}` |
+| POST | `/api/shortcuts/fetch-icon` | {url} → {icon: data URL or null}; also works in the demo, so the browser can show the real site icon |
 | GET | `/api/shortcuts` | shortcuts [{id, name, url, icon}] (`icon` is `/api/shortcuts/:id/icon` or null) |
 | POST | `/api/shortcuts`, `/api/shortcuts/:id` | create or edit {name, url, icon (data URL), fetchIcon} → {id, name, url, icon, iconFetched} |
 | DELETE | `/api/shortcuts/:id` | remove the shortcut (the layout item is dropped by the browser) |
