@@ -437,10 +437,8 @@
   }
   function homeCols() {
     const w = $('#appGrid').clientWidth || innerWidth;
-    if (w < 520) return 4;
-    if (w < 820) return 6;
-    if (w < 1180) return 8;
-    return 10;
+    const cell = w < 640 ? 86 : 112;
+    return Math.max(3, Math.min(12, Math.floor(w / cell)));
   }
   function clampWidgetSize(id, w, h) {
     const def = WIDGET_DEFAULT[id] || [2, 2], cols = homeCols();
