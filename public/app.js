@@ -2799,7 +2799,7 @@
     });
   }
 
-  /* --- app store (popup at #store): a Discover page like a phone app store, or a list when you search or pick a category */
+  /* --- app store (popup at #store): Discover is laid out like the Mac App Store */
   const STORE_PAGE = 48;
   let storeLoading = null;
   function applyStore(c) {
@@ -2858,17 +2858,21 @@
   function storeGet(a) {
     return `<span class="store-get${a.installed ? ' is-in' : ''}">${esc(a.installed ? t('Installed') : t('Get'))}</span>`;
   }
+  function storeSub(a) {
+    return [a.maintainer, a.official ? t('official') : null, a.beta ? 'Beta' : null].filter(Boolean).join(' · ');
+  }
   function storeTile(a) {
     return `<button class="store-tile" type="button" data-store="${esc(a.id)}"${a.installed ? ' data-installed="1"' : ''}>
-      ${storeIconHtml(a)}<span class="store-tile-name">${esc(prettyName(a.name))}</span></button>`;
+      ${storeIconHtml(a)}<span class="store-tile-text"><span class="store-tile-name">${esc(prettyName(a.name))}</span>
+      <span class="store-by">${esc(storeSub(a))}</span></span></button>`;
   }
-  function storeRow(a) {
-    const by = [a.maintainer, a.official ? t('official') : null, a.beta ? 'Beta' : null].filter(Boolean).join(' · ');
-    return `<button class="store-row" type="button" data-store="${esc(a.id)}">
+  function storeRow(a, rank) {
+    return `<button class="store-row${rank ? ' has-rank' : ''}" type="button" data-store="${esc(a.id)}">
+      ${rank ? `<span class="store-rank">${rank}</span>` : ''}
       ${storeIconHtml(a)}
       <span class="store-row-text">
         <span class="store-name">${esc(prettyName(a.name))}</span>
-        <span class="store-by">${esc(by)}</span>
+        <span class="store-by">${esc(storeSub(a))}</span>
         <span class="store-sum">${esc(tr(a.summary))}</span>
       </span>
       ${storeGet(a)}</button>`;
@@ -2880,30 +2884,45 @@
   }
   function storeHero(a) {
     return `<button class="store-hero" type="button" data-store="${esc(a.id)}" style="--hero:${colorFor(a.name)}">
-      <span class="store-hero-top"><span class="store-kicker">${t('Featured')}</span>${storeIconHtml(a)}</span>
+      <span class="store-kicker">${t('Featured')}</span>
+      ${storeIconHtml(a)}
       <span class="store-hero-name">${esc(prettyName(a.name))}</span>
       <span class="store-hero-sum">${esc(tr(a.summary))}</span>
       ${storeGet(a)}</button>`;
   }
+  function storeCharts(apps) {
+    const mid = Math.ceil(apps.length / 2);
+    const col = (list, start) => `<div class="store-list">${list.map((a, i) => storeRow(a, start + i)).join('')}</div>`;
+    return `<div class="store-charts">${col(apps.slice(0, mid), 1)}${mid < apps.length ? col(apps.slice(mid), mid + 1) : ''}</div>`;
+  }
   function storeHome(c) {
     const featured = c.apps.filter((a) => a.featured).sort(storeRank);
+    const lead = featured[0];
+    const pair = featured.slice(1, 3);
     const top = c.apps.slice().sort((a, b) => (b.popularity - a.popularity) || a.name.localeCompare(b.name)).slice(0, 8);
     const shelves = c.categories.map((cat) => {
       const apps = c.apps.filter((a) => a.categories.includes(cat.id)).sort(storeRank).slice(0, 18);
       return apps.length ? storeShelf(t(cat.name), apps, cat.id) : '';
     }).join('');
-    return (featured.length ? `<div class="store-heroes">${featured.slice(0, 6).map(storeHero).join('')}</div>` : '')
+    return (lead ? `<div class="store-feature">${storeHero(lead)}${pair.length ? `<div class="store-feature-pair">${pair.map(storeHero).join('')}</div>` : ''}</div>` : '')
       + (top.length ? `<section class="store-shelf"><header><h3>${t('Top charts')}</h3>
           <button class="linkish" type="button" data-store-cat="all">${t('See all')}</button></header>
-          <div class="store-list">${top.map(storeRow).join('')}</div></section>` : '')
+          ${storeCharts(top)}</section>` : '')
       + shelves;
   }
   function syncStoreCats() {
     const bar = $('#storeCats');
+    const side = bar.closest('.store-side') || bar;
     $$('[data-store-cat]', bar).forEach((b) => b.setAttribute('aria-selected', b.dataset.storeCat === S.storeCat ? 'true' : 'false'));
     const on = $('[aria-selected="true"]', bar);
-    if (on && (on.offsetLeft < bar.scrollLeft || on.offsetLeft + on.offsetWidth > bar.scrollLeft + bar.clientWidth))
-      bar.scrollLeft = Math.max(0, on.offsetLeft - 12);
+    if (!on) return;
+    const horizontal = getComputedStyle(bar).flexDirection === 'row';
+    if (horizontal) {
+      if (on.offsetLeft < side.scrollLeft || on.offsetLeft + on.offsetWidth > side.scrollLeft + side.clientWidth)
+        side.scrollLeft = Math.max(0, on.offsetLeft - 12);
+    } else if (on.offsetTop < side.scrollTop || on.offsetTop + on.offsetHeight > side.scrollTop + side.clientHeight) {
+      side.scrollTop = Math.max(0, on.offsetTop - 12);
+    }
   }
   function renderStore() {
     const c = S.store; if (!c || $('#storePage').hidden) return;
@@ -2918,7 +2937,8 @@
     if (!q && S.storeCat === 'featured') { $('#storeGrid').innerHTML = storeHome(c); more.hidden = true; return; }
     const list = storeResults();
     const shown = list.slice(0, S.storeShown);
-    $('#storeGrid').innerHTML = shown.length ? `<div class="store-list">${shown.map(storeRow).join('')}</div>`
+    $('#storeGrid').innerHTML = shown.length
+      ? (q ? `<div class="store-list">${shown.map((a) => storeRow(a)).join('')}</div>` : `<div class="store-mosaic">${shown.map(storeTile).join('')}</div>`)
       : `<p class="empty">${q ? t('No apps found for "{q}".', { q: esc(S.storeQuery) }) : t('No apps in this category.')}</p>`;
     more.hidden = list.length <= shown.length;
     more.textContent = t('Show more ({n} left)', { n: nf0.format(list.length - shown.length) });
@@ -2931,7 +2951,8 @@
     if (e.target.closest('[data-store-refresh]')) return loadStore(true);
     const cat = e.target.closest('[data-store-cat]');
     if (cat && !e.target.closest('[data-store]')) {
-      S.storeCat = cat.dataset.storeCat; S.storeShown = STORE_PAGE; renderStore(); $('#storePage').scrollTop = 0; return;
+      S.storeCat = cat.dataset.storeCat; S.storeShown = STORE_PAGE; renderStore();
+      const main = $('.store-main'); if (main) main.scrollTop = 0; return;
     }
     const card = e.target.closest('[data-store]');
     if (card) storeWindow(card.dataset.store);
