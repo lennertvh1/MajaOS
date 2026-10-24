@@ -4018,12 +4018,13 @@
     return { share: parts[1] || '', path: parts.slice(2).join('/') };
   }
   function filesOpen(share, rel, opt) {
-    if (win.open) win.close();
+    if (win.open && !$('#filesPage').contains(document.activeElement)) win.close();
     opt = opt || {};
     const hash = filesHash(share, rel || '');
     fx.nav = opt.nav || (opt.replace ? 'replace' : 'push');
-    if (location.hash.replace(/^#/, '') === hash) { renderFiles(); return; }
-    if (opt.replace && currentView() === 'files') { history.replaceState(null, '', '#' + hash); pageHash = '#' + hash; renderFiles(); return; }
+    const onFiles = location.hash === '#files' || location.hash.startsWith('#files/');
+    if (location.hash.replace(/^#/, '') === hash) { showPop('files'); renderFiles(); return; }
+    if (opt.replace && onFiles) { history.replaceState(null, '', '#' + hash); pageHash = '#' + hash; showPop('files'); renderFiles(); return; }
     location.hash = hash;
   }
   function rememberLoc(loc) {
@@ -5997,9 +5998,28 @@ sudo ./install.sh</pre></div>`}` : '') +
   function currentView() {
     const h = (settingsHash() ? pageHash : location.hash) || '';
     if (h === '#vms') return 'vms';
+    return 'home';
+  }
+  function popKindOf(h) {
+    h = h || '';
     if (h === '#store') return 'store';
     if (h === '#files' || h.startsWith('#files/')) return 'files';
-    return 'home';
+    return '';
+  }
+  const pop = $('#pop');
+  let popKindNow = '';
+  function showPop(kind) {
+    $('#storePage').hidden = kind !== 'store';
+    $('#filesPage').hidden = kind !== 'files';
+    $('#popTitleText').textContent = t(kind === 'store' ? 'App store' : 'Files');
+    $('#storeCount').hidden = kind !== 'store';
+    if (!pop.open) pop.showModal();
+  }
+  function closePop() {
+    $('#storePage').hidden = true;
+    $('#filesPage').hidden = true;
+    popKindNow = '';
+    if (pop.open) pop.close();
   }
   let pageLoaded = false;
   function route() {
@@ -6007,22 +6027,29 @@ sudo ./install.sh</pre></div>`}` : '') +
     const view = currentView();
     $('#desk').hidden = view !== 'home';
     $('#vmPage').hidden = view !== 'vms';
-    $('#storePage').hidden = view !== 'store';
-    $('#filesPage').hidden = view !== 'files';
     $$('.nav-btn[data-open]').forEach((b) => {
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     if (inSettings) { if (!setWin.open) setWin.showModal(); showSettings(); return; }
-    // Always load the first time (also when the page opens right on #store or #vms).
+    // Always load the first time (also when the page opens right on #vms).
     const pageChanged = location.hash !== pageHash || !pageLoaded;
     pageHash = location.hash; pageLoaded = true;
     if (setWin.open) closeSettings();
-    if (!pageChanged && view !== 'home') return; // window closed: the page below just stays
-    if (view === 'vms') { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); }
-    if (view === 'store') { window.scrollTo(0, 0); loadStore(); }
-    if (view === 'files') { window.scrollTo(0, 0); renderFiles(); }
+    const kind = popKindOf(location.hash);
+    if (kind !== popKindNow && win.open) win.close();
+    if (view === 'vms') { closePop(); if (pageChanged) { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); } return; }
+    if (kind === 'store') { showPop('store'); popKindNow = kind; loadStore(); return; }
+    if (kind === 'files') { showPop('files'); popKindNow = kind; if (pageChanged) renderFiles(); return; }
+    closePop();
+    if (!pageChanged && view !== 'home') return;
   }
+  $('#popClose').addEventListener('click', () => { location.hash = ''; });
+  pop.addEventListener('click', (e) => { if (e.target === pop) location.hash = ''; });
+  pop.addEventListener('close', () => {
+    const h = location.hash;
+    if (h === '#store' || h.startsWith('#files')) location.hash = '';
+  });
   const setWin = $('#setWin');
   // Close: straight back to the address of the page below, without rebuilding it.
   // (Not in the close event: that comes asynchronously and can lag behind a next click.)
@@ -6052,6 +6079,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     timers.forEach(clearInterval); timers = []; // stop refreshing (and don't empty the form) while signing in
     const wasHidden = $('#loginScreen').hidden;
     $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#filesPage').hidden = true; $('#loginScreen').hidden = false; setChrome(false);
+    if (pop.open) pop.close();
     const demoInfo = S.config && S.config.demo;
     $('#loginDemo').hidden = !demoInfo;
     if (demoInfo) $('#loginDemo').innerHTML = t('Demo: sign in as {user} with the password {pw}.', { user: '<b>' + esc(window.HomeBaseOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
@@ -6658,7 +6686,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const open = e.target.closest('[data-open]');
     if (open) {
       if (S.arrange && open.closest('#appGrid')) return;
-      ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => { if (currentView() !== 'files') filesOpen('', ''); else if (win.open) win.close(); }, backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
+      ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
       return;
     }
     const fo = e.target.closest('[data-folder-open]');
