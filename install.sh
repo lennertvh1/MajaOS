@@ -109,6 +109,12 @@ if [ "$NVIDIA" = 1 ]; then
   systemctl restart docker
 fi
 
+step "Automatic security updates (unattended-upgrades, no automatic reboot)"
+# Only the first time: whoever turned it off in Settings > Software update keeps it off.
+if [ ! -f /etc/apt/apt.conf.d/52homebaseos ]; then
+  bash "$SRC/lib/apt-helper.sh" auto-on "$(mktemp)" /dev/stdout /etc/apt/apt.conf.d/20auto-upgrades || echo "Turning on automatic updates failed; do it later in Settings > Software update."
+fi
+
 step "Installing HomeBaseOS in $APP"
 mkdir -p "$APP" "$ETC" /opt/stacks
 rm -rf "$APP/lib" "$APP/public" "$APP/deploy"

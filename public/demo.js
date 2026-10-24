@@ -98,6 +98,44 @@
       latest, updateAvailable, newer: updateAvailable ? [latest] : [], installed: updateAvailable ? null : latest, history: [],
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
+  // Debian itself, like lib/debian.js: four updates waiting (two security), automatic updates on, apt simulated (~8 s).
+  const deb = { auto: true, kernel: '6.12.48+deb13-amd64', newKernel: null, job: null,
+    updates: [['openssl', 'stable-security', '3.5.4-1~deb13u1', '3.5.1-1'], ['libssl3t64', 'stable-security', '3.5.4-1~deb13u1', '3.5.1-1'],
+      ['tzdata', 'stable-updates', '2026b-0+deb13u1', '2026a-0+deb13u1'], ['linux-image-amd64', 'stable', '6.12.52-1', '6.12.48-1']] };
+  const DEB_STEPS = { check: [[0, 'Fetching the package lists…'], [2500, null]],
+    upgrade: [[0, 'Fetching the package lists…'], [2000, 'Installing the updates…'], [7000, 'Cleaning up…'], [8000, null]],
+    'auto-on': [[0, 'Installing unattended-upgrades and needrestart…'], [3000, null]], 'auto-off': [[0, null]] };
+  function debProgress() {
+    const j = deb.job; if (!j) return { state: 'idle', running: false, lines: [] };
+    const el = Date.now() - j.start, steps = DEB_STEPS[j.action];
+    let msg = steps[0][1];
+    for (const [at, m] of steps) if (el >= at) msg = m;
+    if (msg === null && !j.finished) {
+      j.finished = true;
+      if (j.action === 'upgrade') { deb.updates = []; deb.newKernel = '6.12.52+deb13-amd64'; }
+      if (j.action === 'auto-on') deb.auto = true;
+      if (j.action === 'auto-off') deb.auto = false;
+    }
+    const lines = ['Hit:1 http://deb.debian.org/debian trixie InRelease', 'Get:2 http://security.debian.org/debian-security trixie-security InRelease [43.4 kB]', 'Reading package lists...'];
+    if (j.action === 'upgrade' && el > 2000) lines.push(...deb.lastUpdates.map(([n, , v]) => `Setting up ${n} (${v}) ...`));
+    return { action: j.action, state: msg === null ? 'done' : 'running', running: msg !== null, message: msg || 'Done.', started: new Date(j.start).toISOString(), lines };
+  }
+  function debStatus() {
+    debProgress();
+    const list = deb.updates.map(([name, suite, version, from]) => ({ name, suite, version, arch: 'amd64', from, security: /-security/.test(suite) }));
+    const kernel = deb.newKernel || deb.kernel;
+    return { os: 'Debian GNU/Linux 13 (trixie)', version: '13.7', kernel: deb.kernel, newestKernel: kernel, updates: list, security: list.filter((x) => x.security).length,
+      listsAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+      auto: { installed: true, enabled: deb.auto, last: { at: new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 19), packages: ['libc6', 'libc-bin'], ok: true, nothing: false } }, needrestart: true,
+      reboot: { required: !!deb.newKernel, packages: deb.newKernel ? ['linux-image-6.12.52+deb13-amd64'] : [], zfsReady: true },
+      job: deb.job ? { ...debProgress() } : null };
+  }
+  function debStart(action) {
+    if (!DEB_STEPS[action]) throw err('Unknown action.');
+    if (deb.job && debProgress().running) throw err('apt is already running. Wait until it is done.', 409);
+    deb.lastUpdates = deb.updates; deb.job = { action, start: Date.now() };
+    return { started: true, action };
+  }
   function updGet() {
     if (upd.channel === 'dev') return updDev();
     const list = demoReleases.filter((r) => upd.channel === 'beta' || !r.prerelease), cur = upd.current || '0.2.0';
@@ -1656,6 +1694,8 @@
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
     if (path === '/api/update/progress') return updProgress();
+    if (path === '/api/system-updates') { await wait(rnd(300, 700)); return debStatus(); }
+    if (path === '/api/system-updates/progress') return debProgress();
     if (path === '/api/mfa') return { enabled: mfa.enabled, since: mfa.since, recoveryLeft: mfa.recovery.length, available: true, demoPassword: DEMO_PW, passwordChanged: onb.passwordChanged };
     if (path === '/api/about') return demoAbout();
     if (path === '/api/network') { tickNet(); return copy(net); }
@@ -1737,6 +1777,7 @@
       upd.job = { start: Date.now(), version: body.version, from: g.current };
       return { started: true, version: body.version };
     }
+    if (/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off)$/.test(path)) { await wait(rnd(200, 400)); return debStart(path.split('/').pop()); }
     if (path === '/api/update/check') { await wait(rnd(600, 1200)); upd.checked = new Date().toISOString(); return updGet(); }
     if (path === '/api/settings' && (body.updateCheck != null || body.updateChannel != null)) {
       if (body.updateCheck != null) upd.auto = !!body.updateCheck;

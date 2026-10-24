@@ -4717,6 +4717,7 @@
 git pull
 sudo ./install.sh</pre></div>`}` : '') +
       (u.history.length ? `<details class="upd-older"${u.updateAvailable ? '' : ' open'}><summary>${u.updateAvailable ? t('Earlier versions') : t('Release notes')}</summary>${u.history.map(notes).join('')}</details>` : '') + `
+      <section id="debianBox" class="debian-box"><h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted">${t('Loading…')}</p></section>
       <h2 class="pane-title">${t('Settings')}</h2>
       <div class="form">
         <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Check for updates automatically (every 12 hours)')}</label>
@@ -4728,6 +4729,7 @@ sudo ./install.sh</pre></div>`}` : '') +
           <p class="muted small">${t('Back to official versions: the same command with main.')}</p></div>` : ''}
         <p class="muted small">${t('HomeBaseOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
+    debianSection($('#debianBox', el));
     if (u.running) { updateProgress(el); return; } // an update is already running (e.g. after refreshing the page)
     el.onclick = async (e) => {
       if (e.target.closest('[data-sw="install"]')) {
@@ -4750,6 +4752,69 @@ sudo ./install.sh</pre></div>`}` : '') +
         toast(t('Saved.'));
         await loadUpdate(); updatePane(el);
       } catch (ex) { toast(ex.message, true); }
+    };
+  }
+
+  /* --- Software update > Debian: what is waiting, automatic security updates, restart needed (lib/debian.js) */
+  async function debianSection(box) {
+    let d;
+    try { d = await api.get('/api/system-updates'); }
+    catch (e) { box.innerHTML = `<h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted small">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const busy = d.job && d.job.running;
+    const sec = d.security, n = d.updates.length;
+    const title = n ? t(n === 1 ? '{n} update for Debian' : '{n} updates for Debian', { n }) + (sec ? ' · ' + t(sec === 1 ? '{n} security update' : '{n} security updates', { n: sec }) : '')
+      : t('Debian is up to date');
+    const when = (iso) => esc(new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() }));
+    const last = d.auto.last;
+    const lastText = !d.auto.installed ? t('Automatic updates are not installed yet.')
+      : last ? t('Last automatic run: {when}', { when: when(last.at) }) + ' · ' + (last.nothing ? t('nothing to install') : last.packages.length ? t('{n} packages updated', { n: last.packages.length }) : t('done')) + (last.ok ? '' : ' · ' + t('with errors'))
+      : t('Automatic updates haven\'t run yet.');
+    const reboot = d.reboot.required ? `<div class="upd-error deb-reboot" role="status">
+        <b>${t('A restart is needed to finish the updates.')}</b>
+        <div class="muted small">${d.newestKernel && d.newestKernel !== d.kernel ? t('New kernel {new} (now {old}).', { new: esc(d.newestKernel), old: esc(d.kernel) }) + ' ' : ''}${d.reboot.packages.length ? t('Updated: {list}.', { list: esc(d.reboot.packages.join(', ')) }) : ''}</div>
+        ${d.reboot.zfsReady === false ? `<p class="small temp-bad">${t('Don\'t restart yet: the ZFS module isn\'t built for the new kernel, so your pools wouldn\'t come online. Run Update Debian now again, or check dkms status in the terminal.')}</p>`
+          : `<div class="btn-row"><button class="btn" type="button" data-deb="reboot">${t('Restart now')}</button></div>`}</div>` : '';
+    box.innerHTML = `<h2 class="pane-title">${t('Debian (the system)')}</h2>
+      <div class="upd-card${n ? ' new' : ''}"><div class="upd-text"><b>${title}</b>
+        <div class="muted small">${esc([d.os, d.kernel && t('kernel {k}', { k: d.kernel })].filter(Boolean).join(' · '))}</div>
+        <div class="muted small">${d.listsAt ? t('Package lists: {when}', { when: when(d.listsAt) }) : ''}</div></div>
+        <div class="btn-row"><button class="btn" type="button" data-deb="check"${busy ? ' disabled' : ''}>${t('Check now')}</button>
+          ${n ? `<button class="btn primary" type="button" data-deb="upgrade"${busy ? ' disabled' : ''}>${t('Update Debian now')}</button>` : ''}</div></div>
+      ${reboot}
+      <label class="check"><input type="checkbox" data-deb-auto${d.auto.enabled ? ' checked' : ''}${busy ? ' disabled' : ''}> ${t('Install security updates automatically (every day, without restarting by itself)')}</label>
+      <p class="muted small">${lastText}</p>
+      ${n ? `<details class="upd-older"><summary>${t('Waiting updates ({n})', { n })}</summary><ul class="deb-list">${d.updates.map((x) =>
+        `<li><b>${esc(x.name)}</b> <span class="muted small">${esc(x.from)} → ${esc(x.version)}</span>${x.security ? ` <span class="pill warn">${t('Security')}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
+      <div data-deb-job></div>`;
+    const jobBox = $('[data-deb-job]', box);
+    const follow = async () => {
+      let p;
+      try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // HomeBaseOS restarting (needrestart)
+      if (!box.isConnected) return;
+      const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates') }[p.action] || '';
+      jobBox.innerHTML = p.state === 'idle' ? '' : `<div class="deb-job">
+        <p class="small"><b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}</p>
+        <details${p.state === 'failed' ? ' open' : ''}><summary>${t('Details')}</summary><pre class="logs">${esc(p.lines.join('\n'))}</pre></details></div>`;
+      const pre = $('pre', jobBox); if (pre) pre.scrollTop = pre.scrollHeight;
+      if (p.running) setTimeout(follow, 1500);
+      else if (busy || jobBox.dataset.waiting) { delete jobBox.dataset.waiting; debianSection(box); }
+    };
+    if (busy || (d.job && d.job.state !== 'done')) follow();
+    const startJob = async (action) => {
+      try { await api.post('/api/system-updates/' + action); jobBox.dataset.waiting = '1'; $$('[data-deb]', box).forEach((b) => { b.disabled = true; }); follow(); }
+      catch (ex) { toast(ex.message, true); }
+    };
+    box.onclick = async (e) => {
+      const b = e.target.closest('[data-deb]'); if (!b) return;
+      if (b.dataset.deb === 'reboot') return powerAction('reboot');
+      if (b.dataset.deb === 'upgrade' && !(await ask(t('Install {n} updates for Debian now? Apps and VMs keep running; some services restart briefly.', { n }), t('Update Debian now')))) return;
+      startJob(b.dataset.deb);
+    };
+    box.onchange = async (e) => {
+      if (!e.target.matches('[data-deb-auto]')) return;
+      if (!e.target.checked && !(await ask(t('Turn off automatic security updates? Then you have to install them yourself.'), t('Turn off')))) { e.target.checked = true; return; }
+      startJob(e.target.checked ? 'auto-on' : 'auto-off');
     };
   }
 

@@ -361,6 +361,15 @@ Making a release: put the new number in `package.json` on `dev`, merge `dev` int
 
 If you work from a git folder on the server, you update with `git pull` and `sudo ./install.sh`.
 
+## Updates of Debian
+
+**Settings > Software update** also has a section **Debian (the system)**:
+
+- **Security updates are installed automatically** every day (unattended-upgrades; on by default since 0.6). The server never restarts by itself: a new kernel needs the ZFS module built first.
+- You see how many updates are waiting (and how many are security updates), when the automatic updates last ran, and the list of packages. *Check now* fetches the package lists, **Update Debian now** installs everything (also Docker, Kopia and NVIDIA, which are never updated automatically), with the log under *Details*.
+- **A restart is needed** appears after a new kernel or library. *Restart now* only shows when ZFS is ready for the new kernel; otherwise HomeBaseOS says to wait.
+- Services that use an updated library are restarted automatically (needrestart), but never Docker, so your apps keep running.
+
 ## Date and time
 
 In **Settings > General** you choose the server's **time zone** (apps from the app store get the same `TZ`), and whether the time is set automatically over the internet (NTP). You can enter your own time servers, e.g. `be.pool.ntp.org` or your router; empty = Debian's default. If you turn NTP off, you set the date and time yourself. That is also where you choose the **time format** (24 or 12 hour) for everyone.

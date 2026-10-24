@@ -61,6 +61,7 @@ const auth = require('./lib/auth');
 const datetime = require('./lib/datetime');
 const release = require('./lib/release');
 const updater = require('./lib/updater');
+const debian = require('./lib/debian');
 const onboarding = require('./lib/onboarding');
 const paths = require('./lib/paths');
 const migrate = require('./lib/migrate');
@@ -420,6 +421,10 @@ async function handleApi(req, res, url) {
   if (p === '/api/update' && method === 'GET') return sendJson(res, 200, { ...release.status(), install: updater.canUpdate(), running: updater.isRunning() });
   if (p === '/api/update/progress' && method === 'GET') return sendJson(res, 200, updater.progress());
   if (p === '/api/update/install' && method === 'POST') return sendJson(res, 200, await updater.start((await readBody(req)).version));
+  // Debian itself: what is waiting, automatic security updates, reboot needed (lib/debian.js).
+  if (p === '/api/system-updates' && method === 'GET') return sendJson(res, 200, await debian.status());
+  if (p === '/api/system-updates/progress' && method === 'GET') return sendJson(res, 200, debian.progress());
+  if ((m = p.match(/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off)$/)) && method === 'POST') return sendJson(res, 200, await debian.start(m[1]));
   if (p === '/api/update/check' && method === 'POST') return sendJson(res, 200, await release.check());
   // Change password (welcome wizard and Security). Other sessions are signed out, this one stays signed in.
   if (p === '/api/password' && method === 'POST') {
