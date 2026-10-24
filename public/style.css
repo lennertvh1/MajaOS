@@ -300,12 +300,10 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .home-widget[data-h="2"][data-w="2"] .vm-ip,
 .home-widget[data-h="2"][data-w="2"] .vm-mini .muted { display: none; }
 .home-widget.short .share-mini, .home-widget.short .vm-mini { display: none; }
-.app-grid.arranging .home-widget .widget, .app-grid.arranging .home-widget .widget-btn { padding-left: 36px; }
-.app-grid.arranging .home-widget .clock-widget { padding-left: 36px; }
 .home-pad {
   grid-column: span 1; grid-row: span 2; min-width: 0; min-height: 0; pointer-events: none;
 }
-.app-grid.arranging > .home-pad {
+.app-grid.placing > .home-pad {
   pointer-events: auto;
   border-radius: 20px;
   border: 1.5px dashed color-mix(in srgb, var(--glass-line) 80%, transparent);
@@ -314,7 +312,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
   display: none; position: absolute; inset: 3px; z-index: 3; pointer-events: none;
   border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 20px; box-sizing: border-box;
 }
-.app-grid.arranging .home-widget .widget-frame { display: block; }
+.home-widget:hover .widget-frame, .home-widget.resizing .widget-frame { display: block; }
 .home-widget.resizing { z-index: 6; }
 .widget-handle {
   position: absolute; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 0;
@@ -1174,22 +1172,10 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .window.console-win[open] { display: flex; }
 .console-win iframe { flex: 1; width: 100%; border: 0; background: var(--screen-bg); }
 
-/* ---- arranging the home screen and folders (like on an iPad) */
-.app-grid.arranging .app, .app-grid.arranging .home-widget {
-  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
-}
-.app-grid img { -webkit-user-drag: none; user-select: none; }
-.app-grid.arranging .app-open, .app-grid.arranging .home-widget .widget-btn { cursor: grab; touch-action: none; }
-.app-grid.arranging .home-widget .widget, .app-grid.arranging .home-widget .widget-btn { pointer-events: none; }
-.app-grid.arranging .home-widget .widget-ctl, .app-grid.arranging .home-widget .widget-handle { pointer-events: auto; }
-.app-grid.arranging .app-more { display: none; }
-.app-grid.arranging .app:hover { background: none; }
-@media (prefers-reduced-motion: no-preference) {
-  .app-grid.arranging .app-icon { animation: wiggle .3s ease-in-out infinite alternate; }
-  .app-grid.arranging .app:nth-child(2n) .app-icon { animation-delay: -.15s; }
-}
-@keyframes wiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
-.app.dragging, .home-widget.dragging { opacity: .35; pointer-events: none; }
+/* ---- dragging apps and widgets on the home screen */
+.app, .widget-slot { user-select: none; -webkit-user-select: none; }
+.app-grid img, .widget img { -webkit-user-drag: none; user-select: none; }
+.app.dragging, .home-widget.dragging, .widget-slot.dragging { opacity: .35; pointer-events: none; }
 .app.dragging .app-icon { animation: none !important; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; transform-origin: top left; opacity: .95;
   overflow: hidden; border-radius: 22px; box-shadow: 0 22px 34px -12px rgba(0, 0, 0, .6); }
@@ -1321,18 +1307,15 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 
 /* ---- customising widgets: order and hiding */
 .widget-slot { position: relative; }
-.widgets-edit { align-self: center; font-size: 13px; }
 .widgets.editing .widget { pointer-events: none; }
 .widgets.editing .widget-slot { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .widgets.editing .widget-slot .widget { outline: 1.5px dashed var(--glass-line); outline-offset: -1px; }
 .widget-slot.is-hidden { display: none; }
-#widgets.arranging .widget-slot { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
-#widgets.arranging .widget, #widgets.arranging .widget-btn { pointer-events: none; cursor: grab; }
-#widgets.arranging .widget-ctl { pointer-events: auto; }
-#widgets.arranging .widget-slot .widget, #widgets.arranging .clock-widget { padding-left: 36px; }
 .widget-slot.lifting { z-index: 5; }
 .widget-slot.lifting .widget { box-shadow: 0 20px 40px -16px rgba(0, 0, 0, .55); transform: scale(1.02); }
-.widget-ctl { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; z-index: 4; }
+.widget-ctl { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; z-index: 4; opacity: 0; pointer-events: none; }
+.widget-slot:hover > .widget-ctl, .widget-slot:focus-within > .widget-ctl { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .widget-ctl { opacity: 1; pointer-events: auto; } }
 .widget-ctl button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; border: 1px solid var(--glass-line);
   background: var(--glass-strong); color: var(--text); cursor: pointer; }
 .widget-ctl button:hover { background: var(--glass-hover); }

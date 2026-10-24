@@ -164,7 +164,7 @@
     vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
     store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
     view: (() => { try { return localStorage.getItem('tb-app-view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })(), // per device
-    layout: { items: [] }, shortcuts: [], arrange: false, folder: null };
+    layout: { items: [] }, shortcuts: [], placing: false, folder: null };
 
   /* ------------------------------------------------------------ notifications */
   function toast(msg, bad) {
@@ -333,14 +333,11 @@
     const grid = $('#appGrid');
     // Searching or filtering: a plain list. Otherwise the own layout with folders and widgets.
     const flat = !!q || S.filter !== 'all', listView = S.view === 'list';
-    $('#arrangeBtn').disabled = flat || listView;
-    $('#arrangeBtn').title = listView ? t('Arranging works in the grid view.') : flat ? t('Clear the search and choose All to arrange.') : '';
-    $('#widgetsEdit').disabled = flat || listView;
-    if ((flat || listView) && S.arrange) setArrange(false);
-    grid.classList.toggle('arranging', S.arrange);
+    if ((flat || listView) && S.placing) S.placing = false;
     grid.classList.toggle('app-list', listView);
-    const mixed = !flat && !listView && (S.arrange || homeItems().some((it) => it && it.widget));
+    const mixed = !flat && !listView && (S.placing || homeItems().some((it) => it && it.widget));
     grid.classList.toggle('home-mix', mixed);
+    grid.classList.toggle('placing', !!S.placing && mixed);
     $$('#viewSeg [data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === S.view)));
     stashHomeWidgets();
     if (listView) {
@@ -561,7 +558,6 @@
       btn.setAttribute('aria-label', t(key, { name }));
     });
     let ctl = slot.querySelector(':scope > .widget-ctl');
-    if (!S.arrange) { if (ctl) ctl.remove(); return; }
     if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; slot.appendChild(ctl); }
     ctl.innerHTML = `<button type="button" data-wact="hide" aria-label="${esc(t('Hide {name}', { name }))}" title="${esc(t('Hide {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS.eyeOff}</svg></button>`;
   }
@@ -572,7 +568,10 @@
     const frame = slot.querySelector(':scope > .widget-frame'); if (frame) frame.remove();
   }
   function stashHomeWidgets() {
-    $$('#appGrid > .widget-slot').forEach((el) => { stripWidgetChrome(el); widgetBox.appendChild(el); });
+    $$('#appGrid > .widget-slot').forEach((el) => {
+      if (drag && drag.el === el) return;
+      stripWidgetChrome(el); widgetBox.appendChild(el);
+    });
   }
   function htmlNode(html) {
     const t2 = document.createElement('template'); t2.innerHTML = html.trim();
@@ -624,7 +623,7 @@
   function fillHomePads() {
     const grid = $('#appGrid');
     $$('#appGrid > .home-pad').forEach((el) => el.remove());
-    if (!grid.classList.contains('home-mix') || !S.arrange) return;
+    if (!grid.classList.contains('home-mix') || !S.placing) return;
     const n = homeCols() * 3;
     for (let i = 0; i < n; i++) {
       const pad = document.createElement('div');
@@ -636,10 +635,7 @@
   function applyWidgets() {
     const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
     const placed = new Set(homeItems().filter((it) => it && it.widget).map((it) => it.widget));
-    const edit = $('#widgetsEdit'), tray = $('#widgetTray'), list = $('#widgetTrayList');
-    const arranging = !!S.arrange;
-    edit.textContent = t('Widgets');
-    edit.classList.toggle('primary', arranging && hidden.size > 0);
+    const tray = $('#widgetTray'), list = $('#widgetTrayList');
     const order = ((S.layout && S.layout.widgets) || {}).order || [];
     const col = WIDGET_IDS.filter((id) => !placed.has(id) && !hidden.has(id));
     const sorted = [...order.filter((id) => col.includes(id)), ...col.filter((id) => !order.includes(id))];
@@ -650,14 +646,10 @@
       widgetBox.appendChild(el);
       el.hidden = false;
       el.classList.remove('is-hidden');
-      el.classList.toggle('arranging', arranging);
+      const name = t(WIDGET_NAMES[id] || id);
       let ctl = el.querySelector(':scope > .widget-ctl');
-      if (!arranging) { if (ctl) ctl.remove(); }
-      else {
-        const name = t(WIDGET_NAMES[id] || id);
-        if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; el.appendChild(ctl); }
-        ctl.innerHTML = `<button type="button" data-wact="hide" aria-label="${esc(t('Hide {name}', { name }))}" title="${esc(t('Hide {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS.eyeOff}</svg></button>`;
-      }
+      if (!ctl) { ctl = document.createElement('div'); ctl.className = 'widget-ctl'; el.appendChild(ctl); }
+      ctl.innerHTML = `<button type="button" data-wact="hide" aria-label="${esc(t('Hide {name}', { name }))}" title="${esc(t('Hide {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true">${WIDGET_ICONS.eyeOff}</svg></button>`;
     });
     WIDGET_IDS.filter((id) => hidden.has(id)).forEach((id) => {
       const el = widgetBox.querySelector(`[data-widget="${id}"]`) || $(`#appGrid [data-widget="${id}"]`);
@@ -669,11 +661,9 @@
       const ctl = el.querySelector(':scope > .widget-ctl'); if (ctl) ctl.remove();
     });
     widgetBox.hidden = sorted.length === 0;
-    widgetBox.classList.toggle('arranging', arranging);
     $('#desk').classList.toggle('no-widgets', sorted.length === 0);
-    $('#desk').classList.toggle('arranging', arranging);
     const hid = WIDGET_IDS.filter((id) => hidden.has(id));
-    tray.hidden = !arranging || !hid.length;
+    tray.hidden = !hid.length;
     list.innerHTML = hid.map((id) => `<button type="button" class="btn sm" data-add-widget="${esc(id)}">${esc(t(WIDGET_NAMES[id] || id))}</button>`).join('');
     $('#widgetTrayHint').textContent = t('Hidden widgets. Tap one to put it back on the home screen.');
   }
@@ -685,10 +675,6 @@
     S.layout = { ...S.layout, items: tidy(items), widgets: { order: prev.length ? prev : WIDGET_IDS, hidden: [...cur] } };
     renderApps(); postLayout();
   }
-  $('#widgetsEdit').addEventListener('click', () => {
-    if ($('#widgetsEdit').disabled) return;
-    setArrange(true);
-  });
   $('#widgetTrayList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-add-widget]'); if (!b) return;
     setWidgetHidden(b.dataset.addWidget, false);
@@ -950,22 +936,17 @@
     setLayout(next);
   }
 
-  // Arrange: icons wiggle, clicking opens nothing, dragging moves.
-  function setArrange(on) {
-    S.arrange = !!on;
-    $('#arrangeBtn').setAttribute('aria-pressed', String(S.arrange));
-    $('#arrangeBtn').textContent = t(S.arrange ? 'Ready' : 'Arrange');
-    $('#arrangeBtn').classList.toggle('primary', S.arrange);
+  // While a widget is held, the home screen becomes a cell grid so it can be dropped among the apps.
+  function setPlacing(on) {
+    const flat = !!S.search.trim() || S.filter !== 'all' || S.view === 'list';
+    S.placing = !!on && !flat;
     const grid = $('#appGrid');
-    grid.classList.toggle('arranging', S.arrange);
-    grid.classList.toggle('home-mix', !!(S.arrange || homeItems().some((it) => it && it.widget)));
-    $('#folderGrid').classList.toggle('arranging', S.arrange);
-    applyWidgets();
-    $$('#appGrid > .widget-slot').forEach((el) => applyWidgetChrome(el, Number(el.dataset.w), Number(el.dataset.h)));
+    const mixed = !flat && (S.placing || homeItems().some((it) => it && it.widget));
+    grid.classList.toggle('home-mix', mixed);
+    grid.classList.toggle('placing', S.placing && mixed);
+    if (mixed) grid.style.setProperty('--home-cols', String(homeCols()));
     fillHomePads();
-    renderFolderHint();
   }
-  $('#arrangeBtn').addEventListener('click', () => setArrange(!S.arrange));
   $('#shortcutBtn').addEventListener('click', () => shortcutWindow());
 
   /* open a folder: a panel above the home screen */
@@ -989,11 +970,10 @@
     const name = $('#folderName');
     if (document.activeElement !== name) name.value = f.name;
     $('#folderGrid').innerHTML = f.apps.map(appByName).filter(Boolean).map(appTile).join('');
-    $('#folderGrid').classList.toggle('arranging', S.arrange);
     renderFolderHint();
   }
   function renderFolderHint() {
-    $('#folderHint').textContent = S.arrange ? t('Drag an app outside to take it out of the folder.') : t('Click the name to rename the folder.');
+    $('#folderHint').textContent = t('Drag an app outside to take it out of the folder. Click the name to rename it.');
   }
   $('#folderClose').addEventListener('click', closeFolder);
   folderOverlay.addEventListener('click', () => { if (!drag) closeFolder(); });
@@ -1011,7 +991,7 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.folder && menu.hidden) closeFolder(); });
 
   /* dragging (mouse and touch), like on an iPad: the other apps move aside; holding above an app for a moment makes a folder */
-  let drag = null, pressTimer = null;
+  let drag = null;
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   // FLIP: after a change in the grid the tiles slide smoothly from their old to their new place.
   function flip(grid, change) {
@@ -1137,21 +1117,11 @@
   function onDragStart(e) {
     if (e.button > 0 || drag || S.view === 'list') return;
     const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item], #widgets [data-item]');
-    if (!tile || e.target.closest('.app-more, .widget-frame, .widget-handle, [data-wact]')) return;
-    const ctx = tile.closest('#folderGrid') ? 'folder' : 'home';
-    if (!S.arrange) {
-      // A long press (like on an iPad) turns on Arrange.
-      if ($('#arrangeBtn').disabled) return;
-      const x0 = e.clientX, y0 = e.clientY;
-      clearTimeout(pressTimer);
-      pressTimer = setTimeout(() => { pressTimer = null; setArrange(true); ignoreNextClick(); }, 550);
-      const cancel = (ev) => { if (ev.type !== 'pointermove' || Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) { clearTimeout(pressTimer); off(); } };
-      const off = () => ['pointermove', 'pointerup', 'pointercancel'].forEach((t2) => document.removeEventListener(t2, cancel));
-      ['pointermove', 'pointerup', 'pointercancel'].forEach((t2) => document.addEventListener(t2, cancel));
-      return;
-    }
-    e.preventDefault(); // no text selection or focus jumps while dragging
-    drag = { item: tile.dataset.item, ctx, el: tile, x0: e.clientX, y0: e.clientY, pointerId: e.pointerId, started: false, hoverKey: '', moved: false, fromCol: tile.parentNode === widgetBox };
+    if (!tile || e.target.closest('.app-more, .widget-frame, .widget-handle, [data-wact], input, textarea, select')) return;
+    const inFolder = !!tile.closest('#folderGrid');
+    if (!inFolder && (S.search.trim() || S.filter !== 'all')) return;
+    // A click that does not move still opens the app. The drag starts after a small movement.
+    drag = { item: tile.dataset.item, ctx: inFolder ? 'folder' : 'home', el: tile, x0: e.clientX, y0: e.clientY, pointerId: e.pointerId, started: false, hoverKey: '', moved: false, fromCol: tile.parentNode === widgetBox };
     document.addEventListener('pointermove', onDragMove);
     document.addEventListener('pointerup', onDragEnd);
     document.addEventListener('pointercancel', onDragEnd);
@@ -1175,6 +1145,7 @@
       drag.ghost.style.width = r.width + 'px'; drag.ghost.style.height = r.height + 'px';
       document.body.appendChild(drag.ghost);
       drag.el.classList.add('dragging');
+      if (drag.item.startsWith('w:')) setPlacing(true);
     }
     e.preventDefault();
     drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px) scale(1.1)`;
@@ -1193,7 +1164,7 @@
     folderOverlay.classList.remove('drop-out');
     // The icon flies to its place (or shrinks into the folder); only then save the layout.
     const land = (rect, into, then) => {
-      const done = () => { d.ghost.remove(); d.el.classList.remove('dragging'); drag = null; then(); };
+      const done = () => { d.ghost.remove(); d.el.classList.remove('dragging'); drag = null; then(); setPlacing(false); };
       if (calm() || !rect) { done(); return; }
       const to = `translate(${rect.left}px, ${rect.top}px) scale(${into ? 0.3 : 1})`;
       const a = d.ghost.animate([{ transform: d.ghost.style.transform, opacity: 1 }, { transform: to, opacity: into ? 0 : 1 }],
@@ -1317,9 +1288,9 @@
   // The browser's own dragging (image or link) breaks our dragging with pointercancel: always prevent it.
   ['#appGrid', '#folderGrid'].forEach((sel) => $(sel).addEventListener('dragstart', (e) => e.preventDefault()));
   // After dragging or a long press: ignore the click that follows.
-  document.addEventListener('click', (e) => { if (suppressClick) { suppressClick = false; if (e.target.closest('#appGrid, #folderGrid')) { e.stopPropagation(); e.preventDefault(); } } }, true);
+  document.addEventListener('click', (e) => { if (suppressClick) { suppressClick = false; if (e.target.closest('#appGrid, #folderGrid, #widgets')) { e.stopPropagation(); e.preventDefault(); } } }, true);
   $('#folderGrid').addEventListener('contextmenu', (e) => {
-    const tg = e.target.closest('[data-app]'); if (!tg || S.arrange) return;
+    const tg = e.target.closest('[data-app]'); if (!tg) return;
     const a = S.apps.find((x) => x.id === tg.dataset.app); if (!a) return;
     e.preventDefault();
     openAppMenu(a, e.clientX, e.clientY, tg);
@@ -6909,7 +6880,6 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const cut = e.target.closest('[data-shortcut]');
     if (cut && !menu.contains(cut)) {
-      if (S.arrange && cut.closest('#appGrid, #folderGrid')) return;
       const s = shortcutById(cut.dataset.shortcut); if (!s) return;
       if (cut.dataset.action === 'menu') return shortcutWindow(s.id);
       window.open(s.url, '_blank', 'noopener,noreferrer');
@@ -6917,13 +6887,11 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const open = e.target.closest('[data-open]');
     if (open) {
-      if (S.arrange && open.closest('#appGrid')) return;
       ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
       return;
     }
     const fo = e.target.closest('[data-folder-open]');
     if (fo) { openFolder(fo.dataset.folderOpen); return; }
-    if (S.arrange && e.target.closest('#appGrid, #folderGrid')) return; // arranging: clicking opens nothing
     // A left click opens the web interface (like in Unraid). No address or is the app off? Then the menu.
     const app = e.target.closest('[data-app]');
     if (app && !menu.contains(app)) {
@@ -6943,8 +6911,8 @@ sudo ./install.sh</pre></div>`}` : '') +
   }, true);
   $('#appGrid').addEventListener('contextmenu', (e) => {
     const cut = e.target.closest('[data-shortcut]');
-    if (cut) { e.preventDefault(); if (!S.arrange) shortcutWindow(cut.dataset.shortcut); return; }
-    const t = e.target.closest('[data-app]'); if (!t || S.arrange) return;
+    if (cut) { e.preventDefault(); shortcutWindow(cut.dataset.shortcut); return; }
+    const t = e.target.closest('[data-app]'); if (!t) return;
     const a = S.apps.find((x) => x.id === t.dataset.app); if (!a) return;
     e.preventDefault();
     openAppMenu(a, e.clientX, e.clientY, t);

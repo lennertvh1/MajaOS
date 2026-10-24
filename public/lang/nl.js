@@ -608,6 +608,7 @@ window.TB_LANG.nl = {
   "Drag a corner to resize.": "Sleep een hoek om de grootte te veranderen.",
   "Drag a disk to a bay. On a full bay the two swap places. Can't drag? Tap a disk and then a bay.": "Sleep een schijf naar een bay. Op een volle bay wisselen de twee van plaats. Slepen gaat niet? Tik op een schijf en daarna op een bay.",
   "Drag an app outside to take it out of the folder.": "Sleep een app naar buiten om ze uit de map te halen.",
+  "Drag an app outside to take it out of the folder. Click the name to rename it.": "Sleep een app naar buiten om ze uit de map te halen. Klik op de naam om ze te hernoemen.",
   "Drive bays": "Schijfbays",
   "Drop files here to upload them.": "Sleep bestanden hierheen om ze te uploaden.",
   "Drop a disk here": "Sleep hier een schijf",
