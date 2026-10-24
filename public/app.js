@@ -258,9 +258,14 @@
 
   /* ------------------------------------------------------------ apps */
   function isRunning(a) { return /RUNNING/i.test(a.state); }
+  // An update that is running: its job (lib/appstore.js startUpdate), with percent and phase.
+  const updating = (a) => (a && a.updateJob && !a.updateJob.done ? a.updateJob : null);
+  const progHtml = (job) => `<span class="app-prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${job.percent || 0}"><span style="width:${job.percent || 0}%"></span></span>`;
   function iconHtml(a) {
+    const job = updating(a);
     const dot = `<span class="dot ${isRunning(a) ? 'on' : ''}" aria-hidden="true"></span>` +
-      (a.update ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : '');
+      (a.update && !job ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : '') +
+      (job ? progHtml(job) : '');
     if (a.icon) return `<span class="app-icon" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" loading="lazy" draggable="false">${dot}</span>`;
     return `<span class="app-icon" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}${dot}</span>`;
   }
@@ -298,10 +303,10 @@
   }
   function appTile(a) {
     const label = prettyName(a.name);
-    const busy = S.appBusy[a.id];
-    const state = busy ? t(APP_ACTS[busy].noun).toLowerCase() + '…' : t(a.update ? 'update available' : isRunning(a) ? 'running' : 'stopped');
-    const hint = t(appUrl(a) ? 'click to open' : 'click for the menu');
-    return `<div class="app ${isRunning(a) ? '' : 'stopped'}${busy ? ' busy' : ''}" data-item="${esc(a.name)}">
+    const busy = S.appBusy[a.id], job = updating(a);
+    const state = job ? t('updating… {n}%', { n: job.percent || 0 }) : busy ? t(APP_ACTS[busy].noun).toLowerCase() + '…' : t(a.update ? 'update available' : isRunning(a) ? 'running' : 'stopped');
+    const hint = t(job ? 'click to follow the update' : appUrl(a) ? 'click to open' : 'click for the menu');
+    return `<div class="app ${isRunning(a) ? '' : 'stopped'}${busy ? ' busy' : ''}${job ? ' updating' : ''}" data-item="${esc(a.name)}">
         <button class="app-open" type="button" data-app="${esc(a.id)}" data-action="open" title="${esc(label)} – ${state}, ${hint}">
           ${iconHtml(a)}<span class="app-name">${esc(label)}</span>
         </button>
@@ -751,14 +756,65 @@
     if (!list.length) return;
     if (!(await ask(t(list.length === 1 ? 'Update {n} app? {names}. It will be unavailable for a moment while it restarts.'
       : 'Update {n} apps? {names}. Each will be unavailable for a moment while it restarts.', { n: list.length, names: list.map((a) => prettyName(a.name)).join(', ') }), t('Update all')))) return;
-    let ok = 0;
-    for (const a of list) {
-      S.appBusy[a.id] = 'update'; renderApps();
-      try { await api.post(appPath(a, '/update')); ok++; } catch (e) { toast(t('Updating {name} failed: {error}', { name: prettyName(a.name), error: e.message }), true); }
-      delete S.appBusy[a.id];
-    }
-    toast(t('{n} of {total} updated.', { n: ok, total: list.length }));
-    await loadApps().catch(() => renderApps());
+    for (const a of list) await startAppUpdate(a, true);
+  }
+
+  // Update an app: a job with progress (bar on the tile) and a log (click the tile, or Update log in the menu).
+  async function startAppUpdate(a, quiet) {
+    try {
+      const r = await api.post(appPath(a, '/update'));
+      a.updateJob = { job: r.job, done: false, ok: false, percent: 0, phase: 'pull' };
+      renderApps(); watchUpdates();
+      if (!quiet) toast(t('Updating {name}… Click the app to follow it.', { name: prettyName(a.name) }));
+    } catch (e) { toast(t('Updating {name} failed: {error}', { name: prettyName(a.name), error: e.message }), true); }
+  }
+  // One poller for all running updates: the bar on each tile follows the job; when it is done, a notification and the new list.
+  let updWatch = null;
+  function watchUpdates() {
+    if (updWatch) return;
+    const tick = async () => {
+      const list = S.apps.filter(updating);
+      if (!list.length) { updWatch = null; return; }
+      let finished = false;
+      await Promise.all(list.map(async (a) => {
+        let j; try { j = await api.get('/api/store/jobs/' + a.updateJob.job); } catch (e) { return; }
+        Object.assign(a.updateJob, { done: j.done, ok: j.ok, error: j.error, percent: j.percent, phase: j.phase });
+        const tile = $(`.app[data-item="${CSS.escape(a.name)}"]`);
+        const bar = tile && $('.app-prog', tile);
+        if (bar) { bar.firstElementChild.style.width = (j.percent || 0) + '%'; bar.setAttribute('aria-valuenow', String(j.percent || 0)); }
+        const open = tile && $('.app-open', tile);
+        if (open && !j.done) open.title = `${prettyName(a.name)} – ${t('updating… {n}%', { n: j.percent || 0 })}, ${t('click to follow the update')}`;
+        if (j.done) {
+          finished = true;
+          if (j.ok) toast(t('Updated: {name}', { name: prettyName(a.name) }));
+          else toast(t('Updating {name} failed: {error}', { name: prettyName(a.name), error: tr(j.error || '') }), true);
+        }
+      }));
+      if (finished) await loadApps().catch(() => renderApps());
+      updWatch = setTimeout(tick, 1000);
+    };
+    updWatch = setTimeout(tick, 600);
+  }
+  // The update's progress and log in a window, like when installing.
+  function updateLogWindow(a) {
+    const label = prettyName(a.name), id = a.updateJob && a.updateJob.job;
+    if (!id) return;
+    openWindow(t('{name} · update', { name: label }), jobHtml(), (body) => {
+      $('#storeJob', body).hidden = false;
+      const follow = async () => {
+        let j;
+        try { j = await api.get('/api/store/jobs/' + id); }
+        catch (e) { $('#jobState', body).textContent = t('This update is no longer known (the log is kept for an hour).'); return; }
+        if (!body.isConnected) return;
+        drawJob(body, j);
+        if (!j.done) { setTimeout(follow, 1000); return; }
+        $('#jobState', body).innerHTML = j.ok ? esc(t('Updated: {name}', { name: label }))
+          : `<span class="temp-bad">${esc(t('Updating {name} failed: {error}', { name: label, error: tr(j.error || '') }))}</span>`;
+        if (!j.ok) $('.job-log', body).open = true;
+        $('#jobBtns', body).innerHTML = `<button class="btn" type="button" data-close>${t('Close')}</button>`;
+      };
+      follow();
+    });
   }
   $('#updInfo').addEventListener('click', (e) => {
     const b = e.target.closest('[data-upd]'); if (!b) return;
@@ -826,7 +882,7 @@
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     start: '<path d="M7 5l12 7-12 7z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
     restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', update: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
-    logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
+    logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', updlog: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
     tofolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
@@ -845,7 +901,8 @@
     const items = [
       appUrl(a) && ['open', t('Open')], '-',
       !run && ['start', t('Start')], run && ['restart', t('Restart')], run && ['stop', t('Stop'), 'danger'],
-      a.canUpdate && (a.update ? ['update', t('Update to the new version'), 'accent'] : ['update', t('Update')]),
+      a.canUpdate && !updating(a) && (a.update ? ['update', t('Update to the new version'), 'accent'] : ['update', t('Update')]),
+      a.updateJob && ['updlog', updating(a) ? t('Update progress') : t('Update log')],
       !a.canUpdate && a.update && ['update', t('Updating only works for compose apps'), 'off'], '-',
       ['logs', t('Logs')], run && ['console', t('Console')], ['settings', t('Settings')], '-',
       ['tofolder', t('Move to folder…')], folderOf(a.name) && ['outfolder', t('Remove from folder')],
@@ -887,6 +944,8 @@
     const label = prettyName(a.name);
     if (act === 'open') return openAppUrl(a);
     if (act === 'logs') return logWindow(a);
+    if (act === 'update') return startAppUpdate(a);
+    if (act === 'updlog') return updateLogWindow(a);
     if (act === 'console') return consoleWindow(a);
     if (act === 'settings') return appSettingsWindow(a);
     if (act === 'remove') return removeApp(a);
@@ -4958,7 +5017,7 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* ------------------------------------------------------------ loading */
   async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); }
-  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); }
+  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); if (S.apps.some(updating)) watchUpdates(); }
   async function loadVms() {
     try { S.vms = await api.get('/api/vms'); S.vmError = null; }
     catch (e) { S.vmError = e.message; throw e; }
@@ -5477,6 +5536,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const app = e.target.closest('[data-app]');
     if (app && !menu.contains(app)) {
       const a = S.apps.find((x) => x.id === app.dataset.app); if (!a) return;
+      if (app.dataset.action === 'open' && updating(a)) return updateLogWindow(a);
       if (app.dataset.action === 'open' && appUrl(a)) return openAppUrl(a);
       const r = app.getBoundingClientRect();
       openAppMenu(a, app.dataset.action === 'menu' ? r.right - 8 : r.left + 8, r.bottom + 4, app);

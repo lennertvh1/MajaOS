@@ -316,7 +316,8 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/apps' && method === 'GET') {
     const apps = await docker.listApps();
-    return sendJson(res, 200, apps.map((a) => (a.icon ? a : { ...a, icon: appstore.iconFor(a.image, a.name) })));
+    const upd = appstore.updateStates();
+    return sendJson(res, 200, apps.map((a) => ({ ...a, icon: a.icon || appstore.iconFor(a.image, a.name), updateJob: upd[a.name] || null })));
   }
   if (p === '/api/layout' && method === 'GET') return sendJson(res, 200, layout.getLayout());
   if (p === '/api/layout' && method === 'POST') return sendJson(res, 200, layout.saveLayout(await readBody(req)));
@@ -329,7 +330,9 @@ async function handleApi(req, res, url) {
     const tail = Math.min(2000, Math.max(10, Number(url.searchParams.get('tail')) || 200));
     return sendJson(res, 200, await docker.logs(decodeURIComponent(m[1]), tail));
   }
-  if ((m = p.match(/^\/api\/apps\/([^/]+)\/(start|stop|restart|update)$/)) && method === 'POST') {
+  // Updating is a job with progress and a log (lib/appstore.js), followed through /api/store/jobs/:id.
+  if ((m = p.match(/^\/api\/apps\/([^/]+)\/update$/)) && method === 'POST') return sendJson(res, 200, await appstore.startUpdate(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/apps\/([^/]+)\/(start|stop|restart)$/)) && method === 'POST') {
     await docker.appAction(decodeURIComponent(m[1]), m[2]);
     return sendJson(res, 200, { ok: true });
   }

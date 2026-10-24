@@ -1007,7 +1007,38 @@
     storeJobs[id] = { started: Date.now(), name, a, fields, webPort, network, own, extraPorts };
     return { job: id, name, file: '/opt/stacks/' + name + '/compose.yaml', warnings: storeWarnings(a, network) };
   }
+  // Updating an app, like startUpdate() in lib/appstore.js: layers that update in place, then the restart (~7 s).
+  const appUpdates = {}; // app name → job id
+  function updJob(id) {
+    const j = storeJobs[id], t = (Date.now() - j.started) / 1000;
+    const layers = [['5c32499ab806', 28.4e6, 0.3, 3.2], ['b0c1d2e3f405', 0, 0, 0], ['77aa3e1d0c9f', 11.2e6, 0.5, 2.2]];
+    const mb = (n) => (n / 1e6).toFixed(1) + 'MB';
+    const pullEnd = 4.4, end = pullEnd + 2.2, done = t >= end;
+    const st = layers.map(([lid, size, from, to]) => {
+      if (!size) return { line: lid + ' Already exists', done: 1, cur: 0, size: 0 };
+      if (t < from) return { line: lid + ' Pulling fs layer', done: 0, cur: 0, size };
+      if (t < to) { const f = (t - from) / (to - from); return { line: `${lid} Downloading [${'='.repeat(Math.round(f * 40))}>${' '.repeat(40 - Math.round(f * 40))}]  ${mb(f * size)}/${mb(size)}`, done: 0.75 * f, cur: f * size, size }; }
+      return { line: lid + ' Pull complete', done: 1, cur: size, size };
+    });
+    const phase = t < pullEnd ? 'pull' : 'start';
+    const lines = ['Downloading image: ' + j.image, j.name + (phase === 'pull' ? ' Pulling' : ' Pulled'), ...st.map((x) => x.line)];
+    if (phase === 'start') lines.push('Restarting the app with the new version…', 'Container ' + j.name + '  ' + (t < pullEnd + 0.8 ? 'Recreate' : t < pullEnd + 1.5 ? 'Recreated' : 'Started'));
+    if (done && !j.added) {
+      j.added = true;
+      const a = apps.find((x) => x.name === j.name);
+      if (a) { a.update = false; a.updateChecked = Date.now(); a.state = 'RUNNING'; a.status = 'Up Less than a second'; }
+    }
+    return { kind: 'update', done, ok: done, error: null, name: j.name, webui: null, lines, phase: done ? 'done' : phase,
+      percent: done ? 100 : phase === 'start' ? 90 : 3 + Math.round(82 * st.reduce((acc, x) => acc + x.done, 0) / st.length),
+      layers: st.length, layersDone: st.filter((x) => x.done >= 1).length, downloaded: st.reduce((acc, x) => acc + x.cur, 0), size: st.reduce((acc, x) => acc + x.size, 0) };
+  }
+  function updStates() {
+    const out = {};
+    for (const [name, id] of Object.entries(appUpdates)) if (storeJobs[id]) { const j = updJob(id); out[name] = { job: id, done: j.done, ok: j.ok, error: null, percent: j.percent, phase: j.phase }; }
+    return out;
+  }
   function storeJob(id) {
+    if (storeJobs[id] && storeJobs[id].kind === 'update') return updJob(id);
     const j = storeJobs[id]; if (!j) throw err('This installation is not (or no longer) known.', 404);
     const t = (Date.now() - j.started) / 1000;
     // Like the server: one line per layer that updates in place, and the progress from the layers.
@@ -1711,7 +1742,8 @@
     if (path === '/api/shares') return sharesGet();
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {
-      return apps.map((a) => { const o = appOvr[a.name] || {}; return { ...copy(a), webui: o.webui ? resolvePorts(o.webui, a.ports) : a.webui, icon: o.icon || a.icon }; });
+      const upd = updStates();
+      return apps.map((a) => { const o = appOvr[a.name] || {}; return { ...copy(a), webui: o.webui ? resolvePorts(o.webui, a.ports) : a.webui, icon: o.icon || a.icon, updateJob: upd[a.name] || null }; });
     }
     const ms = path.match(/^\/api\/apps\/([^/]+)\/settings$/);
     if (ms) {
@@ -1881,7 +1913,15 @@
       if (!a) throw err('Container not found', 404);
       if (m[2] === 'stop') { a.state = 'EXITED'; a.status = 'Exited (0) Less than a second ago'; }
       else { a.state = 'RUNNING'; a.status = 'Up Less than a second'; }
-      if (m[2] === 'update') { await wait(800); a.update = false; a.updateChecked = Date.now(); }
+      if (m[2] === 'update') {
+        if (!a.compose) throw err('Updating only works for apps started with Docker Compose.');
+        const prev = storeJobs[appUpdates[a.name]];
+        if (prev && !updJob(appUpdates[a.name]).done) throw err(a.name + ' is already being updated.', 409);
+        const id = Math.random().toString(16).slice(2, 14).padEnd(12, '0');
+        storeJobs[id] = { kind: 'update', started: Date.now(), name: a.name, image: a.image };
+        appUpdates[a.name] = id;
+        return { job: id, name: a.name };
+      }
       return { ok: true };
     }
     m = path.match(/^\/api\/store\/apps\/([0-9a-f]{12})\/install$/);

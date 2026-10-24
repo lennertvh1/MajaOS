@@ -184,7 +184,7 @@ HomeBaseOS only erases folders inside the app data folder.
 
 ## Apps
 
-HomeBaseOS shows all Docker containers. Preferably set apps up with **Docker Compose**: then the *Update* button works too (it pulls the newest image and recreates the container).
+HomeBaseOS shows all Docker containers. Preferably set apps up with **Docker Compose**: then the *Update* button works too (it pulls the newest image and recreates the container). While an app updates, a bar on its icon fills up; click the app (or *Update progress* in its menu) to see the progress and Docker's output. The log of the last update stays available for an hour under *Update log*.
 If an app has no icon of its own, HomeBaseOS looks for one in the Community Apps catalogue (same image) or in the open [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) collection. If that fails, you see a coloured letter.
 With two labels you choose the icon and the address yourself:
 
