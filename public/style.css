@@ -1148,6 +1148,15 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .files-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .files-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .files-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--glass-line); }
+.files-actions { display: flex; flex: none; gap: 8px; margin-left: auto; }
+.files-actions .btn { flex: none; }
+.files-actions .btn[hidden] { display: none; }
+.files-check { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+.files-cap { display: flex; align-items: flex-start; justify-content: center; gap: 6px; max-width: 100%; }
+.files-tick { width: 28px; }
+.files-hit, .files-name-btn { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.files-name-btn { min-width: 0; text-align: inherit; }
+.files-table .files-name-btn { display: block; width: 100%; text-align: left; }
 .files-hist { display: flex; gap: 4px; }
 .files-crumb { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; font-size: 13px; min-width: 0; flex: 1; }
 .files-crumb button { background: none; border: 0; color: var(--text); cursor: pointer; padding: 2px 4px; font: inherit; border-radius: 6px; }

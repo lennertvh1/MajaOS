@@ -3952,7 +3952,7 @@
   const fx = {
     gen: 0, stack: [], at: -1, nav: null, wired: false,
     view: (() => { try { return localStorage.getItem('tb-files-view') === 'list' ? 'list' : 'icons'; } catch (e) { return 'icons'; } })(),
-    share: '', path: '', sel: '', filter: '', data: null, shares: null, ptr: 'mouse', renameFrom: '',
+    share: '', path: '', picked: new Set(), filter: '', data: null, shares: null, ptr: 'mouse', renameFrom: '',
   };
   function filesHash(share, rel) {
     if (!share) return 'files';
@@ -3999,9 +3999,12 @@
     const dt = iso ? new Date(iso) : null;
     return dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() }) : '';
   }
-  function selectedFile() {
-    if (!fx.data || !fx.sel) return null;
-    return (fx.data.items || []).find((it) => filesJoin(fx.data.path, it.name) === fx.sel) || null;
+  function fileCheck(pth, name) {
+    return `<input type="checkbox" class="files-check" data-files-check="${esc(pth)}" aria-label="${esc(t('Select {name}', { name }))}"${fx.picked.has(pth) ? ' checked' : ''}>`;
+  }
+  function pickedItems() {
+    const items = (fx.data && fx.data.items) || [];
+    return items.filter((it) => fx.picked.has(filesJoin(fx.data.path, it.name)));
   }
   function paintSide(shares) {
     const side = $('#filesSide');
@@ -4016,12 +4019,9 @@
     $('#filesCrumb').innerHTML = [`<button type="button" data-files-go="">${esc(fx.share || t('Files'))}</button>`]
       .concat(parts.map((p, i) => `<span aria-hidden="true">/</span><button type="button" data-files-go="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join('');
     $$('#filesView button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === fx.view)));
-    const sel = selectedFile();
-    $('#filesOpen').hidden = !sel || sel.type !== 'dir';
-    $('#filesDl').hidden = !sel || sel.type === 'dir';
-    $('#filesRename').hidden = !sel;
-    $('#filesDel').hidden = !sel;
-    $$('[data-files-item]', $('#filesPage')).forEach((n) => n.classList.toggle('is-sel', n.dataset.filesItem === fx.sel));
+    $('#filesDel').hidden = fx.picked.size === 0;
+    $$('[data-files-check]', $('#filesPage')).forEach((box) => { box.checked = fx.picked.has(box.dataset.filesCheck); });
+    $$('[data-files-item]', $('#filesPage')).forEach((n) => n.classList.toggle('is-sel', fx.picked.has(n.dataset.filesItem)));
   }
   function paintItems() {
     const stage = $('#filesStage');
@@ -4030,14 +4030,14 @@
     if (!items.length) {
       stage.innerHTML = `<p class="files-empty">${esc(q ? t('Nothing matches.') : t('This folder is empty. Drop files here, or click Upload.'))}</p>`;
     } else if (fx.view === 'list') {
-      stage.innerHTML = `<table class="files-table"><thead><tr><th></th><th>${t('Name')}</th><th class="files-meta">${t('Size')}</th><th class="files-meta">${t('Modified')}</th></tr></thead><tbody>${items.map((it) => {
+      stage.innerHTML = `<table class="files-table"><thead><tr><th></th><th></th><th>${t('Name')}</th><th class="files-meta">${t('Size')}</th><th class="files-meta">${t('Modified')}</th></tr></thead><tbody>${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.sel === pth ? 'is-sel' : ''}"><td>${fileGlyph(it.type)}</td><td><div class="files-name">${esc(it.name)}</div></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
+        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.picked.has(pth) ? 'is-sel' : ''}"><td class="files-tick">${fileCheck(pth, it.name)}</td><td>${fileGlyph(it.type)}</td><td><button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
       }).join('')}</tbody></table>`;
     } else {
       stage.innerHTML = `<div class="files-icons">${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<button type="button" class="files-icon${fx.sel === pth ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}">${fileGlyph(it.type)}<span class="files-name">${esc(it.name)}</span></button>`;
+        return `<div class="files-icon${fx.picked.has(pth) ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}"><button type="button" class="files-hit" aria-label="${esc(it.name)}">${fileGlyph(it.type)}</button><span class="files-cap">${fileCheck(pth, it.name)}<button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></span></div>`;
       }).join('')}</div>`;
     }
     const shown = items.length, all = (fx.data && fx.data.items || []).length;
@@ -4091,20 +4091,15 @@
       if (shareBtn) return filesOpen(shareBtn.dataset.filesShare, '');
       const go = e.target.closest('[data-files-go]');
       if (go && page.contains(go)) return filesOpen(fx.share, go.dataset.filesGo || '');
-      const item = e.target.closest('[data-files-item]');
-      if (item) {
-        if (fx.ptr === 'touch') {
-          if (item.dataset.filesKind === 'dir' || fx.sel === item.dataset.filesItem) return openFileItem(item);
-          fx.sel = item.dataset.filesItem;
-          paintChrome();
-          return;
-        }
-        if (e.detail >= 2 || fx.sel === item.dataset.filesItem) return openFileItem(item);
-        fx.sel = item.dataset.filesItem;
+      const box = e.target.closest('[data-files-check]');
+      if (box) {
+        if (box.checked) fx.picked.add(box.dataset.filesCheck); else fx.picked.delete(box.dataset.filesCheck);
         paintChrome();
         return;
       }
-      if (e.target === stage || e.target.classList.contains('files-empty') || e.target.classList.contains('files-icons')) { fx.sel = ''; paintChrome(); }
+      const item = e.target.closest('[data-files-item]');
+      if (item) return openFileItem(item);
+      if (e.target === stage || e.target.classList.contains('files-empty') || e.target.classList.contains('files-icons')) { fx.picked.clear(); paintChrome(); }
     });
     $('#filesBack').addEventListener('click', () => {
       if (fx.at <= 0) return;
@@ -4146,27 +4141,26 @@
         renderFiles();
       } catch (e) { toast(e.message, true); }
     });
-    $('#filesOpen').addEventListener('click', () => { const item = $('[data-files-item].is-sel, tr.is-sel', page); openFileItem(item); });
-    $('#filesDl').addEventListener('click', () => { if (fx.sel) filesDownload(fx.sel); });
-    $('#filesRename').addEventListener('click', () => { const sel = selectedFile(); if (sel) showNameRow('rename', { path: fx.sel, name: sel.name }); });
     $('#filesDel').addEventListener('click', async () => {
-      const sel = selectedFile(); if (!sel) return;
-      const isDir = sel.type === 'dir';
-      const r = await ask(t('Remove {name}?', { name: sel.name }), t('Remove'), isDir ? t('Also delete everything in this folder') : null);
+      const items = pickedItems(); if (!items.length) return;
+      const hasDir = items.some((it) => it.type === 'dir');
+      const r = await ask(items.length === 1 ? t('Remove {name}?', { name: items[0].name }) : t('Remove {n} items?', { n: items.length }), t('Remove'), hasDir ? t('Also delete everything in this folder') : null);
       if (!r) return;
       try {
-        await api.del(filesApi(fx.share, fx.sel, isDir && r.checked ? { recursive: true } : null));
-        toast(t('Removed: {name}', { name: sel.name }));
-        fx.sel = '';
+        for (const it of items) await api.del(filesApi(fx.share, filesJoin(fx.data.path, it.name), hasDir && r.checked ? { recursive: true } : null));
+        toast(items.length === 1 ? t('Removed: {name}', { name: items[0].name }) : t('{n} deleted', { n: items.length }));
+        fx.picked.clear();
         renderFiles();
-      } catch (e) { toast(e.message, true); }
+      } catch (e) { toast(e.message, true); renderFiles(); }
     });
     stage.addEventListener('dragover', (e) => { e.preventDefault(); stage.classList.add('is-over'); });
     stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('is-over'); });
     stage.addEventListener('drop', (e) => { e.preventDefault(); stage.classList.remove('is-over'); uploadFiles(e.dataTransfer.files); });
     stage.addEventListener('keydown', (e) => {
-      const item = selectedFile();
-      if (e.key === 'Enter' && item) openFileItem($('[data-files-item].is-sel, tr.is-sel', page));
+      if (e.key === 'Enter' && fx.picked.size === 1) {
+        const only = [...fx.picked][0];
+        openFileItem([...$$('[data-files-item]', page)].find((n) => n.dataset.filesItem === only));
+      }
       if (e.key === 'Backspace' && !e.target.closest('input')) {
         const parts = fx.path.split('/').filter(Boolean);
         if (parts.length) filesOpen(fx.share, parts.slice(0, -1).join('/'));
@@ -4207,7 +4201,7 @@
     }
     fx.share = loc.share;
     fx.path = loc.path;
-    fx.sel = '';
+    fx.picked.clear();
     rememberLoc(loc);
     paintSide(shares);
     paintChrome();

@@ -293,12 +293,11 @@
               <button type="button" role="radio" aria-checked="true" data-view="icons">Icons</button>
               <button type="button" role="radio" aria-checked="false" data-view="list">List</button>
             </div>
-            <button class="btn sm" type="button" id="filesOpen" hidden>Open</button>
-            <button class="btn sm" type="button" id="filesDl" hidden>Download</button>
-            <button class="btn sm" type="button" id="filesRename" hidden>Rename</button>
-            <button class="btn sm danger" type="button" id="filesDel" hidden>Remove</button>
-            <button class="btn sm" type="button" id="filesMkdir">New folder</button>
-            <button class="btn sm primary" type="button" id="filesUpload">Upload</button>
+            <div class="files-actions">
+              <button class="btn sm danger" type="button" id="filesDel" hidden>Remove</button>
+              <button class="btn sm" type="button" id="filesMkdir">New folder</button>
+              <button class="btn sm primary" type="button" id="filesUpload">Upload</button>
+            </div>
           </header>
           <div class="files-new" id="filesNew" hidden>
             <input class="field" id="filesNewName" maxlength="255" placeholder="Type a name and press Enter." autocomplete="off" spellcheck="false">
