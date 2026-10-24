@@ -507,11 +507,13 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
 
-  if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), admin: auth.userName() });
+  if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), places: await files.places(), admin: auth.userName() });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
+  if (p === '/api/files/eject' && method === 'POST') return sendJson(res, 200, await files.eject((await readBody(req)).id));
   if ((m = p.match(/^\/api\/shares\/([^/]+)\/files$/))) {
     const name = decodeURIComponent(m[1]);
     const rel = url.searchParams.get('path') || '';
+    await files.prepare(name);
     if (method === 'GET' && url.searchParams.get('text') === '1') return sendJson(res, 200, files.readText(name, rel));
     if (method === 'GET' && url.searchParams.get('zip') === '1') { await files.sendZip(res, name, rel); return; }
     if (method === 'GET' && (url.searchParams.get('dl') === '1' || url.searchParams.get('inline') === '1')) {

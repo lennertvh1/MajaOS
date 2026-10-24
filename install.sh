@@ -33,7 +33,7 @@ fi
 apt-get update
 
 step "Base packages"
-apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils bridge-utils rsync rclone
+apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone
 # Keep the clock right: the codes of two-step verification depend on the time.
 apt-get install -y systemd-timesyncd || true
 timedatectl set-ntp true || true

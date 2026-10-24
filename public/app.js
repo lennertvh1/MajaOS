@@ -4396,6 +4396,13 @@
     }
     fx.nav = null;
   }
+  function strokeIcon(inner) {
+    return `<svg class="stroke" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+  }
+  function diskGlyph(media) {
+    if (media === 'sd') return strokeIcon('<path d="M7 3h7l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M9 8v3M12 8v3M15 8v3"/>');
+    return strokeIcon('<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 12h18"/><circle cx="7.5" cy="15.2" r="1"/><circle cx="11" cy="15.2" r="1"/>');
+  }
   function fileGlyph(kind) {
     if (kind === 'dir') return '<svg class="files-glyph dir" viewBox="0 0 64 52" aria-hidden="true"><path d="M2 14a6 6 0 0 1 6-6h16l6 6h26a6 6 0 0 1 6 6v22a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6z"/></svg>';
     return '<svg class="files-glyph file" viewBox="0 0 48 58" aria-hidden="true"><path d="M6 2h24l14 14v36a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z"/><path d="M30 2v14h14" fill="var(--glass-strong)"/></svg>';
@@ -4411,17 +4418,40 @@
     const items = (fx.data && fx.data.items) || [];
     return items.filter((it) => fx.picked.has(filesJoin(fx.data.path, it.name)));
   }
-  function paintSide(shares) {
+  function placeText(p) {
+    if (!p) return '';
+    const base = (p.kind === 'share' || p.kind === 'folder' || (p.kind === 'disk' && !p.generic)) ? p.name : t(p.name);
+    const extra = p.detail || (p.generic ? p.model : '');
+    return extra ? base + ' · ' + extra : base;
+  }
+  function placeLabel(id) {
+    const p = (fx.shares || []).find((s) => s.id === id);
+    return p ? placeText(p) : id;
+  }
+  function paintSide(places) {
+    const groups = [
+      ['Folders', places.filter((p) => p.kind === 'share' || p.kind === 'folder')],
+      ['System', places.filter((p) => p.kind === 'system')],
+      ['Disks', places.filter((p) => p.kind === 'disk')],
+    ].filter(([, list]) => list.length);
     const side = $('#filesSide');
-    side.innerHTML = `<p class="files-side-title">${t('Shared folders')}</p>` + (shares.length ? shares.map((sh) =>
-      `<button type="button" data-files-share="${esc(sh.name)}"${sh.name === fx.share ? ' aria-current="page"' : ''}>${fileGlyph('dir')}<span>${esc(sh.name)}</span></button>`).join('')
-      : `<p class="muted small" style="padding:4px 10px">${t('No shared folders to browse yet.')}</p>`);
+    if (!groups.length) {
+      side.innerHTML = `<p class="files-side-title">${t('Folders')}</p><p class="muted small" style="padding:4px 10px">${t('No folders to browse yet.')}</p>`;
+      return;
+    }
+    const row = (sh) => {
+      const label = placeText(sh);
+      const icon = sh.kind === 'disk' ? diskGlyph(sh.media) : fileGlyph('dir');
+      const eject = sh.eject ? `<button type="button" class="files-eject" data-files-eject="${esc(sh.id)}" aria-label="${esc(t('Eject {name}', { name: label }))}">${strokeIcon('<path d="M7 14.5 12 8l5 6.5z"/><path d="M7 18h10"/>')}</button>` : '';
+      return `<div class="files-side-row${sh.id === fx.share ? ' is-current' : ''}"><button type="button" data-files-share="${esc(sh.id)}"${sh.id === fx.share ? ' aria-current="page"' : ''}>${icon}<span>${esc(label)}</span></button>${eject}</div>`;
+    };
+    side.innerHTML = groups.map(([title, list]) => `<div class="files-side-group"><p class="files-side-title">${t(title)}</p>${list.map(row).join('')}</div>`).join('');
   }
   function paintChrome() {
     $('#filesBack').disabled = fx.at <= 0;
     $('#filesFwd').disabled = fx.at < 0 || fx.at >= fx.stack.length - 1;
     const parts = String(fx.path || '').split('/').filter(Boolean);
-    $('#filesCrumb').innerHTML = [`<button type="button" data-files-go="">${esc(fx.share || t('Files'))}</button>`]
+    $('#filesCrumb').innerHTML = [`<button type="button" data-files-go="">${esc(placeLabel(fx.share) || t('Files'))}</button>`]
       .concat(parts.map((p, i) => `<span aria-hidden="true">/</span><button type="button" data-files-go="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join('');
     $$('#filesView button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === fx.view)));
     $('#filesDel').hidden = fx.picked.size === 0;
@@ -4632,8 +4662,25 @@
     fx.wired = true;
     const page = $('#filesPage'), stage = $('#filesStage');
     page.addEventListener('pointerdown', (e) => { fx.ptr = e.pointerType || 'mouse'; });
-    page.addEventListener('click', (e) => {
+    page.addEventListener('click', async (e) => {
       if (fx.menuAt && Date.now() - fx.menuAt < 500) return;
+      const ejectBtn = e.target.closest('[data-files-eject]');
+      if (ejectBtn) {
+        const id = ejectBtn.dataset.filesEject;
+        const name = placeLabel(id);
+        if (!(await ask(t('Eject {name}? You can unplug it afterwards.', { name }), t('Eject')))) return;
+        ejectBtn.disabled = true;
+        try {
+          await api.post('/api/files/eject', { id });
+          toast(t('{name} ejected. You can unplug it.', { name }));
+          fx.placeSig = '';
+          if (fx.share === id) {
+            const next = (fx.shares || []).find((p) => p.id !== id);
+            filesOpen(next ? next.id : '', '', { replace: true });
+          } else renderFiles();
+        } catch (ex) { toast(ex.message, true); ejectBtn.disabled = false; }
+        return;
+      }
       const shareBtn = e.target.closest('[data-files-share]');
       if (shareBtn) return filesOpen(shareBtn.dataset.filesShare, '');
       const go = e.target.closest('[data-files-go]');
@@ -4736,6 +4783,23 @@
         if (parts.length) filesOpen(fx.share, parts.slice(0, -1).join('/'));
       }
     });
+    // A USB disk or SD card can be plugged in while Files is open.
+    setInterval(async () => {
+      if ($('#filesPage').hidden) return;
+      try {
+        const d = await api.get('/api/shares');
+        const places = Array.isArray(d.places) ? d.places : [];
+        const sig = places.map((p) => p.id).join('|');
+        if (sig === fx.placeSig) return;
+        fx.placeSig = sig;
+        fx.shares = places;
+        paintSide(places);
+        if (fx.share && !places.some((p) => p.id === fx.share)) {
+          const next = places[0];
+          if (next) filesOpen(next.id, '', { replace: true });
+        }
+      } catch (e) { /* keep the list that is already on screen */ }
+    }, 4000);
   }
   async function renderFiles() {
     wireFiles();
@@ -4750,13 +4814,14 @@
     try {
       const d = await api.get('/api/shares');
       if (gen !== fx.gen) return;
-      if (!d.installed) {
+      shares = Array.isArray(d.places) ? d.places : (d.shares || []).map((s) => ({ id: s.name, name: s.name, kind: 'share' }));
+      fx.shares = shares;
+      fx.placeSig = shares.map((p) => p.id).join('|');
+      if (!shares.length && !d.installed) {
         paintSide([]);
         stage.innerHTML = `<p class="files-empty">${esc(t('Samba is not installed yet. Run install.sh again, or on the server: sudo apt install samba'))}</p>`;
         return;
       }
-      shares = d.shares || [];
-      fx.shares = shares;
     } catch (e) {
       stage.innerHTML = `<p class="files-empty">${esc(t('The shared folders could not be loaded: {error}', { error: e.message }))}</p>`;
       return;
@@ -4764,8 +4829,8 @@
     if (gen !== fx.gen) return;
     if (!loc.share) {
       paintSide(shares);
-      if (shares[0]) return filesOpen(shares[0].name, '', { replace: true });
-      stage.innerHTML = `<p class="files-empty">${esc(t('No shared folders to browse yet.'))}</p>`;
+      if (shares[0]) return filesOpen(shares[0].id, '', { replace: true });
+      stage.innerHTML = `<p class="files-empty">${esc(t('No folders to browse yet.'))}</p>`;
       $('#filesStatus').textContent = '';
       return;
     }
@@ -4775,8 +4840,8 @@
     rememberLoc(loc);
     paintSide(shares);
     paintChrome();
-    if (!shares.some((s) => s.name === loc.share)) {
-      stage.innerHTML = `<p class="files-empty">${esc(t('This shared folder no longer exists.'))}</p>`;
+    if (!shares.some((s) => s.id === loc.share)) {
+      stage.innerHTML = `<p class="files-empty">${esc(t('This folder no longer exists.'))}</p>`;
       return;
     }
     stage.innerHTML = `<p class="files-empty">${esc(t('Loading…'))}</p>`;

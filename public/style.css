@@ -1287,15 +1287,24 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   box-shadow: var(--shade);
 }
 .files-side { padding: 14px 10px; overflow: auto; border-right: 1px solid var(--glass-line); background: color-mix(in srgb, var(--glass) 70%, transparent); }
+.files-side-group + .files-side-group { margin-top: 14px; }
 .files-side-title { margin: 2px 10px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.files-side-row { display: flex; align-items: stretch; border-radius: 8px; }
+.files-side-row > button[data-files-share] { flex: 1; min-width: 0; width: auto; }
+.files-side-row > button[data-files-share] span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-side .files-eject { flex: none; width: 34px; padding: 0; display: flex; align-items: center; justify-content: center; }
 .files-side button {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit;
   font: inherit; cursor: pointer;
 }
 .files-side button svg { width: 16px; height: 16px; flex: none; fill: var(--accent); }
-.files-side button[aria-current="page"] { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.files-side button:hover { background: var(--glass-hover); }
+.files-side button svg.stroke { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.files-side-row:hover { background: var(--glass-hover); }
+.files-side-row.is-current { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.files-side-row.is-current:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.files-side-row > button:hover,
+.files-side-row > button[aria-current="page"] { background: transparent; }
 .files-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .files-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .files-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--glass-line); }
@@ -1351,6 +1360,8 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   .finder { grid-template-columns: 1fr; grid-template-rows: auto minmax(240px, 1fr); min-height: 0; }
   .pop-body .finder { grid-template-rows: auto minmax(0, 1fr); }
   .files-side { display: flex; gap: 4px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--glass-line); padding: 8px; }
+  .files-side-group { display: flex; gap: 4px; }
+  .files-side-group + .files-side-group { margin-top: 0; }
   .files-side-title { display: none; }
   .files-side button { width: auto; white-space: nowrap; }
   .files-filter input { width: 100%; }

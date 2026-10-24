@@ -600,7 +600,30 @@
       'todo.txt': filesFile(80, 1, 'Call the notary.\n'),
     }),
     TimeMachine: filesDir({}),
+    '@zdocker': filesDir({ overlay2: filesDir({}) }),
+    '@appdata': filesDir({ jellyfin: filesDir({}), immich: filesDir({}) }),
+    '@vms': filesDir({
+      'home-assistant': filesDir({ 'haos.qcow2': filesFile(9.6e9, 3) }),
+    }),
+    '@isos': filesDir({
+      'debian-13.1.0-amd64-netinst.iso': filesFile(754e6, 20),
+      'ubuntu-24.04.3-live-server-amd64.iso': filesFile(3.1e9, 40),
+    }),
+    '@backups': filesDir({ kopia: filesDir({}) }),
+    '@dphotos': filesDir({ DCIM: filesDir({ 'IMG_0001.JPG': filesFile(3.2e6, 2) }) }),
+    '@dsd': filesDir({ DCIM: filesDir({}) }),
   };
+  let demoDisks = [
+    { id: '@dphotos', name: 'PHOTOS', kind: 'disk', eject: true, media: 'usb' },
+    { id: '@dsd', name: 'SD card', kind: 'disk', generic: true, eject: true, media: 'sd' },
+  ];
+  const filePlaces = () => shareList.map((s) => ({ id: s.name, name: s.name, kind: 'share' })).concat([
+    { id: '@zdocker', name: 'docker', kind: 'folder' },
+    { id: '@appdata', name: 'App data', kind: 'system' },
+    { id: '@vms', name: 'VMs', kind: 'system' },
+    { id: '@isos', name: 'ISOs', kind: 'system' },
+    { id: '@backups', name: 'Backups', kind: 'system' },
+  ], demoDisks);
   function parseFilesApi(urlPath) {
     const u = new URL(urlPath, 'http://demo.local');
     const m = u.pathname.match(/^\/api\/shares\/([^/]+)\/files$/);
@@ -618,7 +641,7 @@
     return parts;
   }
   function filesRoot(name) {
-    if (!shareList.some((s) => s.name === name)) throw err('This shared folder no longer exists.', 404);
+    if (!filePlaces().some((p) => p.id === name)) throw err(String(name).startsWith('@d') ? 'This disk is no longer connected.' : 'This folder no longer exists.', 404);
     if (!shareTrees[name]) shareTrees[name] = filesDir({});
     return shareTrees[name];
   }
@@ -776,7 +799,7 @@
   const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'fast', mountpoint: '/fast' }]
     .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
   function sharesGet() {
-    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
+    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), places: filePlaces(), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
       connections: { total: 2, perShare: { media: 2, photos: 1 } }, admin: acct.user,
       users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => shareEffective(x)[name]).map((x) => x.name),
         groups: shareGroups.filter((g) => g.members.includes(name)).map((g) => g.name) })) };
@@ -2160,6 +2183,13 @@
     if (path === '/api/shortcuts') return cutCreate(body);
     { const cm = path.match(/^\/api\/shortcuts\/([^/]+)$/); if (cm) return cutUpdate(decodeURIComponent(cm[1]), body); }
     if (path === '/api/shares') { await wait(rnd(400, 800)); return shareSave(body, null); }
+    if (path === '/api/files/eject') {
+      const id = String((body || {}).id || '');
+      const hit = demoDisks.find((d) => d.id === id);
+      if (!hit) throw err('This disk is no longer connected.', 404);
+      demoDisks = demoDisks.filter((d) => d.id !== id);
+      return { ejected: true, name: hit.name };
+    }
     { const q = parseFilesApi(path); if (q) { await wait(rnd(150, 400)); return filesAct(q, body); } }
     const shm = path.match(/^\/api\/shares\/([^/]+)$/);
     if (shm) { await wait(rnd(300, 600)); return shareSave(body, decodeURIComponent(shm[1])); }

@@ -102,6 +102,31 @@ test('readText returns text and refuses a binary file', () => {
   }
 });
 
+test('places lists shared folders plus the VM and ISO folders', async () => {
+  const root = tmpShare();
+  const vms = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-vms-'));
+  const isos = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-isos-'));
+  fs.writeFileSync(path.join(vms, 'haos.qcow2'), 'disk');
+  fs.writeFileSync(path.join(isos, 'debian.iso'), 'iso');
+  // The VM folder is the same as the share, so it must not show up a second time.
+  fs.writeFileSync(path.join(DATA_DIR, 'paths.json'), JSON.stringify({ vms: root, isos }));
+  require('../lib/paths')._reset();
+  try {
+    const ids = (await files.places()).map((p) => p.id);
+    assert.ok(ids.includes('media'));
+    assert.ok(!ids.includes('@vms'));
+    assert.ok(ids.includes('@isos'));
+    const listed = files.list('@isos', '');
+    assert.ok(listed.items.some((x) => x.name === 'debian.iso' && x.type === 'file'));
+    files.mkdir('@isos', 'extra');
+    assert.ok(files.list('@isos', '').items.some((x) => x.name === 'extra' && x.type === 'dir'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(vms, { recursive: true, force: true });
+    fs.rmSync(isos, { recursive: true, force: true });
+  }
+});
+
 test('copy places a duplicate next to the original', () => {
   const root = tmpShare();
   try {

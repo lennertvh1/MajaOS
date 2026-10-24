@@ -78,7 +78,8 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 | POST | `/api/update/install` | {version} → {started, version} |
 | GET | `/api/update/progress` | state: idle\|running\|done\|failed\|rolledback, step, percent, message, reason, version, from, bytes, total, log |
 | GET/POST | `/api/settings` | {language: a code from public/lang/languages.js, clock: auto\|24\|12, updateCheck, updateChannel: stable\|beta\|dev, terminal, terminalPassword, ssh (default false), sshState {installed, enabled, active} on GET, password (when making things less strict)} |
-| GET | `/api/shares` | installed, running, hostname, shares (+ groups), users (name, managed, shares (also through a group), groups), groups, roots (name, mountpoint), appUser, connections {total, perShare} (`smbstatus -j`), admin (the dashboard's user name) |
+| GET | `/api/shares` | installed, running, hostname, shares (+ groups), places (id, name, kind: share\|folder\|system\|disk — the Files sidebar: shared folders, other datasets, system folders and USB/SD disks with `eject` and `media: usb|sd`), users (name, managed, shares (also through a group), groups), groups, roots (name, mountpoint), appUser, connections {total, perShare} (`smbstatus -j`), admin (the dashboard's user name) |
+| POST | `/api/files/eject` | {id} of a disk place → unmount and eject {ejected, name} |
 | POST | `/api/shares`, `/api/shares/:name` | create or edit {name, path or create {parent}, comment, users {name: ro\|rw}, guest, timemachine} |
 | DELETE | `/api/shares/:name` | stop sharing (the files stay) |
 | POST | `/api/share-users` | {name, password, groups} |
