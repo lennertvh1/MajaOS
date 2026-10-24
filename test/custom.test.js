@@ -8,7 +8,7 @@ const path = require('node:path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-test-'));
 process.env.APPDATA_DIR = process.env.APPDATA_DIR || '/fast/appdata';
 const store = require('../lib/appstore');
-const { validateLayout } = require('../lib/layout');
+const { validateLayout, defaultLayout } = require('../lib/layout');
 const { pickManifest } = require('../lib/registry');
 
 test('link or name → image', () => {
@@ -89,7 +89,16 @@ test('home screen layout with widgets and VMs between the apps', () => {
   assert.throws(() => validateLayout({ items: [{ vm: 'a/b' }] }), /not a valid VM name/);
   const pages = validateLayout({ items: [{ page: 'files' }, 'plex', { page: 'files' }, { page: 'store' }, { page: 'backup' }] });
   assert.deepEqual(pages.items, [{ page: 'files' }, 'plex', { page: 'store' }, { page: 'backup' }]);
+  assert.deepEqual(validateLayout({ items: [{ page: 'storage' }, { page: 'shares' }, { page: 'vms' }] }).items, [{ page: 'storage' }, { page: 'shares' }, { page: 'vms' }]);
   assert.throws(() => validateLayout({ items: [{ page: 'settings' }] }), /not a valid page/);
+  const grouped = validateLayout({ items: [{ folder: 'f1', name: 'System', apps: [{ page: 'storage' }, { page: 'shares' }, 'plex', { page: 'storage' }] }] });
+  assert.deepEqual(grouped.items, [{ folder: 'f1', name: 'System', apps: [{ page: 'storage' }, { page: 'shares' }, 'plex'] }]);
+  assert.deepEqual(validateLayout({ items: [{ page: 'storage' }, { folder: 'f9', name: 'A', apps: [{ page: 'storage' }, 'plex', 'jellyfin'] }] }).items,
+    [{ page: 'storage' }, { folder: 'f9', name: 'A', apps: ['plex', 'jellyfin'] }]);
+  assert.deepEqual(validateLayout({ items: [{ folder: 'f2', name: 'One', apps: [{ page: 'vms' }] }] }).items, [{ page: 'vms' }]);
+  const fresh = validateLayout(defaultLayout());
+  assert.equal(fresh.items[0].folder, 'fsystem');
+  assert.deepEqual(fresh.items[0].apps.map((n) => n.page), ['storage', 'shares', 'vms', 'store', 'files', 'backup']);
   const cuts = validateLayout({ items: ['plex', { shortcut: 's0123abcd' }, { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }] });
   assert.deepEqual(cuts.items, ['plex', { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }]);
   assert.throws(() => validateLayout({ items: [{ shortcut: 'nope' }] }), /not a valid shortcut/);

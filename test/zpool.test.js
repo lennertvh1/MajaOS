@@ -50,7 +50,7 @@ test('recognising free disks', () => {
 test('building and checking zpool create', () => {
   const opts = { disks: zp.classifyDisks(LSBLK, ctx), pools: ['tank'] };
   const args = zp.buildCreate({ name: 'data', layout: 'raidz1', disks: ['sda', 'sdb', 'sdc'], compression: 'zstd', confirm: 'data' }, opts);
-  assert.deepEqual(args, ['create', '-f', '-o', 'ashift=12', '-O', 'compression=zstd', '-O', 'atime=off', '-O', 'xattr=sa', '-O', 'acltype=posixacl',
+  assert.deepEqual(args, ['create', '-f', '-o', 'ashift=12', '-o', 'autoreplace=on', '-O', 'compression=zstd', '-O', 'atime=off', '-O', 'xattr=sa', '-O', 'acltype=posixacl',
     '-m', '/data', 'data', 'raidz1', '/dev/disk/by-id/ata-WDC_WD20EFZX_A', '/dev/disk/by-id/ata-WDC_WD20EFZX_B', '/dev/sdc']);
   const bad = (b, re) => assert.throws(() => zp.buildCreate({ name: 'data', layout: 'mirror', disks: ['sda', 'sdb'], confirm: 'data', ...b }, opts), re);
   bad({ name: 'tank', confirm: 'tank' }, /already exists/);

@@ -233,8 +233,9 @@
     $('#storeFree').textContent = bytes(s.free);
     $('#storeFreeLabel').textContent = t('free');
     const bar = $('#storeBar'); bar.style.width = pct.toFixed(1) + '%'; bar.className = level(pct, 80, 92);
-    $('#storeLine').textContent = t(s.pools > 1 ? '{used} of {total} used in {n} pools' : '{used} of {total} used', { used: bytes(s.used), total: bytes(s.total), n: s.pools });
-    const [label, cls] = poolHealth(s.health);
+    const fix = repairLine(s.repair);
+    $('#storeLine').textContent = fix || t(s.pools > 1 ? '{used} of {total} used in {n} pools' : '{used} of {total} used', { used: bytes(s.used), total: bytes(s.total), n: s.pools });
+    const [label, cls] = s.repair && s.repair.state === 'rebuilding' ? [t('Rebuilding'), 'warn'] : poolHealth(s.health);
     st.textContent = label; st.className = 'pill ' + cls;
     const extra = [];
     if (s.used != null) extra.push([t('Used'), bytes(s.used)]);
@@ -242,6 +243,15 @@
     if (s.pools) extra.push([t('Pools'), String(s.pools)]);
     const factsEl = $('#storeFacts');
     if (factsEl) factsEl.innerHTML = extra.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  }
+  function repairLine(r) {
+    if (!r) return '';
+    if (r.state === 'rebuilding') return t('Rebuilding {pool}: {pct}%', { pool: r.pool, pct: nf0.format(r.progress || 0) });
+    if (r.state === 'replacing') return t('New disk found. Rebuilding {pool} starts now.', { pool: r.pool });
+    if (r.state === 'waiting' && r.bay) return t('A disk failed in bay {bay}. Put a new disk in that bay and the pool rebuilds itself.', { bay: r.bay });
+    if (r.state === 'waiting') return t('A disk in {pool} failed. Put a new disk in its place and the pool rebuilds itself.', { pool: r.pool });
+    if (r.state === 'failing') return t('Disk {disk} in {pool} is failing. Replace it and the pool rebuilds itself.', { disk: r.disk, pool: r.pool });
+    return '';
   }
   function poolHealth(h) {
     if (h === 'ONLINE') return [t('Healthy'), 'ok'];
@@ -275,29 +285,89 @@
       PMSUSPENDED: 'Suspended', NOSTATE: 'Unknown' })[String(s).toUpperCase()];
     return k ? t(k) : s;
   }
+  let vmWidgetSig = '';
   function renderVmWidget() {
     const ul = $('#vmMini');
     const running = S.vms.filter((v) => vmKind(v.state) === 'on').length;
     $('#vmWidgetCount').textContent = S.vms.length ? t('{n} of {total} running', { n: running, total: S.vms.length }) : '';
     if (!S.vms.length) {
+      const empty = S.vmError ? 'err:' + S.vmError : 'empty';
+      if (vmWidgetSig === empty) return;
+      vmWidgetSig = empty;
       ul.innerHTML = `<li class="muted small">${S.vmError ? t('VMs not available: {error}', { error: esc(S.vmError) }) : t('No virtual machines yet')}</li>`;
       return;
     }
-    const slot = $('#appGrid [data-widget="vms"], #widgets [data-widget="vms"]');
-    const cap = widgetListCap(slot);
-    ul.innerHTML = S.vms.slice(0, cap).map((v) => {
+    // State and address rebuild the rows. CPU, RAM and the start countdown only change the text, so a click is not lost.
+    const sig = S.vms.map((v) => [v.id, v.state, S.vmBusy[v.id] || '', (v.ips || []).join(',')].join('|')).join('\n');
+    if (sig !== vmWidgetSig) {
+      vmWidgetSig = sig;
+      const dot = { on: 'on', paused: 'warn', stopping: 'warn', bad: 'bad' };
+      ul.innerHTML = S.vms.map((v) => {
+        const kind = vmKind(v.state);
+        const live = kind === 'on' || kind === 'paused';
+        const ip = v.ips && v.ips.length ? v.ips[0] + (v.ips.length > 1 ? ' +' + (v.ips.length - 1) : '') : '';
+        const extra = live
+          ? `<span class="vm-stat">CPU ${esc(vmCpuText(v))}</span><span class="vm-stat">${esc(vmRamText(v))}</span><span class="vm-stat">${esc(ip || '–')}</span>`
+          : `<span class="vm-stat">${esc(vmPendingText(v) || vmStateText(v.state))}</span>`;
+        return `<li><button type="button" class="vm-mini-btn" data-vm-menu="${esc(v.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(v.name)}, ${esc(vmStateText(v.state))}">
+          <span class="vm-dot ${dot[kind] || ''}" aria-hidden="true"></span>
+          <span class="vm-mini-name">${esc(v.name)}</span>
+          <span class="vm-mini-extra">${extra}</span>
+        </button></li>`;
+      }).join('');
+    }
+    S.vms.forEach((v) => {
+      const btn = $(`[data-vm-menu="${CSS.escape(v.id)}"]`, ul); if (!btn) return;
+      const stats = $$('.vm-stat', btn);
       const kind = vmKind(v.state);
-      const live = kind === 'on' || kind === 'paused';
-      const sub = live ? 'CPU ' + vmCpuText(v) + ' · RAM ' + vmRamText(v) : vmPendingText(v);
-      const bar = (pct) => `<span class="${level(pct || 0)}" style="width:${Math.min(100, pct || 0).toFixed(1)}%"></span>`;
-      return `<li>
-        <div class="vm-mini-row"><span class="vm-mini-name">${esc(v.name)}</span><span class="pill ${VM_PILL[kind]}">${esc(vmStateText(v.state))}</span></div>
-        ${live ? `<div class="vm-mini-bars" aria-hidden="true"><div class="bar">${bar(vmCpuPct(v))}</div><div class="bar">${bar(vmRamPct(v))}</div></div>` : ''}
-        ${sub ? `<div class="muted small">${esc(sub)}</div>` : ''}
-        ${live && v.ips && v.ips.length ? `<div class="vm-ip">${esc(v.ips[0])}${v.ips.length > 1 ? ' <span class="muted">+' + (v.ips.length - 1) + '</span>' : ''}</div>` : ''}
-      </li>`;
-    }).join('') + (S.vms.length > cap ? `<li class="muted small">${t('and {n} more', { n: S.vms.length - cap })}</li>` : '');
+      if (kind === 'on' || kind === 'paused') {
+        if (stats[0]) stats[0].textContent = 'CPU ' + vmCpuText(v);
+        if (stats[1]) stats[1].textContent = vmRamText(v);
+      } else if (stats[0]) stats[0].textContent = vmPendingText(v) || vmStateText(v.state);
+    });
+    if (vmTipFor) showVmTip(vmTipFor, true);
   }
+  // Hover on a name shows CPU, RAM and the address when the widget itself is too small to show them.
+  let vmTipFor = null, vmTipTimer = null;
+  function hideVmTip() {
+    clearTimeout(vmTipTimer); vmTipTimer = null; vmTipFor = null;
+    const tip = $('#vmTip'); if (tip) tip.hidden = true;
+  }
+  function vmTipHtml(v) {
+    const live = vmKind(v.state) === 'on' || vmKind(v.state) === 'paused';
+    const ip = v.ips && v.ips.length ? v.ips[0] + (v.ips.length > 1 ? ' +' + (v.ips.length - 1) : '') : '';
+    const rows = [['CPU', live ? vmCpuText(v) : '–'], ['RAM', live ? vmRamText(v) : '–'], [t('IP'), live && ip ? ip : '–']];
+    const note = live ? '' : `<span class="muted">${esc(vmPendingText(v) || vmStateText(v.state))}</span>`;
+    return `<b>${esc(v.name)}</b>${note}<dl>${rows.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join('')}</dl>`;
+  }
+  function showVmTip(btn, refresh) {
+    const tip = $('#vmTip'); if (!tip || !btn.isConnected) return hideVmTip();
+    const extra = $('.vm-mini-extra', btn);
+    if ((drag && drag.started) || (extra && getComputedStyle(extra).display !== 'none') || !menu.hidden) return hideVmTip();
+    const v = S.vms.find((x) => x.id === btn.dataset.vmMenu); if (!v) return hideVmTip();
+    tip.innerHTML = vmTipHtml(v);
+    tip.hidden = false;
+    vmTipFor = btn;
+    if (refresh) return;
+    const r = btn.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    let left = r.right + 8, top = r.top + (r.height - tr.height) / 2;
+    if (left + tr.width > innerWidth - 8) { left = Math.max(8, r.left); top = r.bottom + 6; }
+    if (top + tr.height > innerHeight - 8) top = Math.max(8, r.top - tr.height - 6);
+    tip.style.left = Math.max(8, Math.min(left, innerWidth - tr.width - 8)) + 'px';
+    tip.style.top = top + 'px';
+  }
+  $('#vmMini').addEventListener('pointerover', (e) => {
+    const btn = e.target.closest('[data-vm-menu]');
+    if (!btn || btn.contains(e.relatedTarget)) return;
+    clearTimeout(vmTipTimer);
+    vmTipTimer = setTimeout(() => showVmTip(btn), 280);
+  });
+  $('#vmMini').addEventListener('pointerout', (e) => {
+    const btn = e.target.closest('[data-vm-menu]');
+    if (!btn || btn.contains(e.relatedTarget)) return;
+    hideVmTip();
+  });
+  $('#vmMini').addEventListener('scroll', hideVmTip);
 
   /* ------------------------------------------------------------ apps */
   function isRunning(a) { return /RUNNING/i.test(a.state); }
@@ -372,14 +442,17 @@
           ${iconHtml(a)}<span class="row-name"><b>${esc(label)}</b><span class="muted small">${esc(a.image || '')}</span></span></button>
         <span class="row-status">${pill}${a.update && !job ? ` <span class="pill warn">${t('update available')}</span>` : ''}</span>
         <span class="row-where small">${where ? `<span>${esc(where)}</span>` : ''}${ports ? `<span class="muted">${esc(ports)}</span>` : ''}</span>
-        <span class="row-folder muted small">${f ? esc(f.name) : ''}</span>
+        <span class="row-folder muted small">${f ? esc(folderLabel(f.name)) : ''}</span>
         <span class="row-actions">${url && run ? quick('open', t('Open'), 'primary') : ''}${run ? quick('restart', t('Restart')) : quick('start', t('Start'))}
           <button class="app-more" type="button" data-app="${esc(a.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: label }))}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button></span>
       </div>`;
   }
-  const PAGE_IDS = ['store', 'files', 'backup'];
+  const PAGE_IDS = ['storage', 'shares', 'vms', 'store', 'files', 'backup'];
   const PAGE_META = {
+    storage: { name: 'Storage', open: 'storage', color: '#3d6d8c', svg: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>' },
+    shares: { name: 'Shared folders', open: 'shares', color: '#c47a32', svg: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/>' },
+    vms: { name: 'VMs', open: 'vms', color: '#5b4b8a', svg: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>' },
     store: { name: 'App store', open: 'store', color: '#3e8e7e', svg: '<path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>' },
     files: { name: 'Files', open: 'files', color: '#2f6f9f', svg: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/>' },
     backup: { name: 'Backups', open: 'backup', color: '#4f5fb3', svg: '<path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/>' },
@@ -448,7 +521,11 @@
       if (typeof it === 'string') { const a = appByName(it); return a ? [appRow(a)] : []; }
       if (it && it.page) return [pageRow(it.page)];
       if (it && it.shortcut) { const s = shortcutById(it.shortcut); return s ? [shortcutRow(s)] : []; }
-      if (it && it.apps) return it.apps.map(appByName).filter(Boolean).map(appRow);
+      if (it && it.apps) return it.apps.flatMap((n) => {
+        if (n && n.page) return [pageRow(n.page)];
+        const a = appByName(n);
+        return a ? [appRow(a)] : [];
+      });
       return [];
     }).join('');
   }
@@ -467,15 +544,24 @@
       </div>`;
   }
   // Folder: a frosted-glass tile with the icons of the first nine apps in a 3 × 3 grid, like on an iPad.
+  function memberMini(n) {
+    if (n && n.page && PAGE_META[n.page]) {
+      const p = PAGE_META[n.page];
+      return `<span class="mini" style="background:${p.color}"><svg viewBox="0 0 24 24">${p.svg}</svg></span>`;
+    }
+    const a = appByName(n);
+    if (!a) return '';
+    return a.icon ? `<span class="mini" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" draggable="false"></span>`
+      : `<span class="mini" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}</span>`;
+  }
   function folderTile(f) {
-    const apps = f.apps.map(appByName).filter(Boolean);
-    const mini = apps.slice(0, 9).map((a) => (a.icon ? `<span class="mini" data-letter="${esc(a.name.charAt(0).toUpperCase())}" data-color="${colorFor(a.name)}"><img src="${esc(a.icon)}" alt="" draggable="false"></span>`
-      : `<span class="mini" style="background:${colorFor(a.name)}">${esc(a.name.charAt(0).toUpperCase())}</span>`)).join('');
+    const apps = f.apps.map((n) => (typeof n === 'string' ? appByName(n) : null)).filter(Boolean);
+    const mini = f.apps.slice(0, 9).map(memberMini).filter(Boolean).join('');
     const upd = apps.some((a) => a.update), on = apps.filter(isRunning).length;
     return `<div class="app folder" data-item="f:${esc(f.folder)}">
-        <button class="app-open" type="button" data-folder-open="${esc(f.folder)}" title="${esc(t('{name} – folder with {n} apps, {on} running', { name: f.name, n: apps.length, on }))}">
+        <button class="app-open" type="button" data-folder-open="${esc(f.folder)}" title="${esc(t('{name} – folder with {n} apps, {on} running', { name: folderLabel(f.name), n: f.apps.length, on }))}">
           <span class="app-icon folder-icon">${mini}${upd ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : ''}</span>
-          <span class="app-name">${esc(f.name)}</span>
+          <span class="app-name">${esc(folderLabel(f.name))}</span>
         </button>
       </div>`;
   }
@@ -608,10 +694,13 @@
         if (html) { const next = htmlNode(html); el.replaceWith(next); el = next; }
       }
       const ref = [...grid.children].filter((x) => x.dataset.item)[i];
-      if (el && el !== ref) grid.insertBefore(el, ref || null);
+      // A widget after the last app must stay in front of the empty cells, or the cleanup below sends it back to the column.
+      const tail = grid.querySelector(':scope > .home-pad, :scope > #widgetSizePreview');
+      if (el && el !== ref) grid.insertBefore(el, ref || tail || null);
     });
-    for (const extra of [...grid.children].slice(items.length)) {
+    for (const extra of [...grid.children]) {
       if (extra.classList.contains('home-pad') || extra.id === 'widgetSizePreview') continue;
+      if (want.includes(extra.dataset.item)) continue;
       if (extra.classList.contains('widget-slot')) { stripWidgetChrome(extra); widgetBox.appendChild(extra); }
       else extra.remove();
     }
@@ -718,6 +807,7 @@
   async function loadBackups() {
     try { S.backup = await api.get('/api/backup?brief=1'); S.backupError = null; } catch (e) { S.backupError = e.message; }
     renderBackupWidget();
+    renderNotes();
   }
   function renderBackupWidget() {
     const ul = $('#bkMini'), pill = $('#bkState'), d = S.backup;
@@ -767,15 +857,26 @@
         continue;
       }
       if (!it || !it.apps) continue;
-      const apps = it.apps.filter((n) => names.has(n) && !placed.has(n));
-      apps.forEach((n) => placed.add(n));
+      const apps = [];
+      for (const n of it.apps) {
+        if (n && n.page) {
+          if (PAGE_IDS.includes(n.page) && !placedP.has(n.page)) { placedP.add(n.page); apps.push({ page: n.page }); }
+        } else if (typeof n === 'string' && names.has(n) && !placed.has(n)) { placed.add(n); apps.push(n); }
+      }
       if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
     }
     S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
     (S.shortcuts || []).forEach((s) => { if (!placedS.has(s.id)) out.push({ shortcut: s.id }); });
-    const missing = PAGE_IDS.filter((id) => !placedP.has(id)).map((page) => ({ page }));
-    return missing.concat(out);
+    // Built-in pages that nobody has placed yet share one folder. A saved layout keeps its own order.
+    const missing = PAGE_IDS.filter((id) => !placedP.has(id));
+    if (missing.length > 1) {
+      const folder = out.some((it) => it && it.folder === 'fsystem') ? 'fosapps' : 'fsystem';
+      out.unshift({ folder, name: 'System', apps: missing.map((page) => ({ page })) });
+    } else if (missing.length === 1) out.unshift({ page: missing[0] });
+    return out;
   }
+  // Folder names that are interface text ("System") are translated; a name you typed stays as it is.
+  const folderLabel = (name) => t(name || 'Folder');
   // Folders with one app become a plain app again; empty folders disappear. Widgets and VMs stay.
   const tidy = (items) => items.flatMap((it) => {
     if (typeof it === 'string') return [it];
@@ -783,8 +884,16 @@
     if (it && it.vm) return [{ vm: it.vm }];
     if (it && it.page && PAGE_IDS.includes(it.page)) return [{ page: it.page }];
     if (it && it.shortcut && shortcutById(it.shortcut)) return [{ shortcut: it.shortcut }];
-    if (it && it.apps && it.apps.length > 1) return [it];
-    return (it && it.apps) || [];
+    if (it && it.apps) {
+      const seen = new Set(), apps = [];
+      for (const n of it.apps) {
+        if (n && n.page && PAGE_IDS.includes(n.page) && !seen.has('p:' + n.page)) { seen.add('p:' + n.page); apps.push({ page: n.page }); }
+        else if (typeof n === 'string' && !seen.has(n)) { seen.add(n); apps.push(n); }
+      }
+      if (apps.length > 1 && it.folder) return [{ folder: it.folder, name: it.name, apps }];
+      return apps;
+    }
+    return [];
   });
   let layoutTimer = null;
   function columnIds() {
@@ -917,22 +1026,25 @@
     });
   }
   const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  const memberKey = (n) => (typeof n === 'string' ? n : n && n.page ? 'p:' + n.page : '');
+  const memberFromKey = (key) => (String(key).startsWith('p:') ? { page: String(key).slice(2) } : key);
   const folderOf = (name) => ((S.layout && S.layout.items) || []).find((it) => it && it.apps && it.apps.includes(name)) || null;
-  // Take an app out of the layout (home or out of a folder). Returns the new list.
-  function without(items, name) {
-    return items.filter((it) => it !== name).map((it) => (typeof it === 'string' || it.widget || it.vm || !it.apps ? it : { ...it, apps: it.apps.filter((n) => n !== name) }));
+  // Take an app or a built-in page out of the layout (home or out of a folder). Returns the new list.
+  function without(items, key) {
+    return items.filter((it) => itemKey(it) !== key).map((it) => (!it || typeof it === 'string' || !it.apps ? it : { ...it, apps: it.apps.filter((n) => memberKey(n) !== key) }));
   }
-  function moveToFolder(name, folderId, folderName) {
-    let items = without(homeItems(), name);
-    if (folderId) items = items.map((it) => (it.folder === folderId ? { ...it, apps: [...it.apps, name] } : it));
-    else items.push({ folder: newFolderId(), name: folderName || t('New folder'), apps: [name] });
+  function moveToFolder(key, folderId, folderName) {
+    let items = without(homeItems(), key);
+    const member = memberFromKey(key);
+    if (folderId) items = items.map((it) => (it.folder === folderId ? { ...it, apps: [...it.apps, member] } : it));
+    else items.push({ folder: newFolderId(), name: folderName || t('New folder'), apps: [member] });
     setLayout(items);
   }
-  function takeOutOfFolder(name) {
-    const items = homeItems(), at = items.findIndex((it) => typeof it !== 'string' && it.apps && it.apps.includes(name));
+  function takeOutOfFolder(key) {
+    const items = homeItems(), at = items.findIndex((it) => it && it.apps && it.apps.some((n) => memberKey(n) === key));
     if (at < 0) return;
-    const next = without(items, name);
-    next.splice(at + 1, 0, name); // right after the folder
+    const next = without(items, key);
+    next.splice(at + 1, 0, memberFromKey(key)); // right after the folder
     setLayout(next);
   }
 
@@ -968,8 +1080,9 @@
     const f = homeItems().find((it) => it.folder === S.folder);
     if (!f) { closeFolder(); return; }
     const name = $('#folderName');
-    if (document.activeElement !== name) name.value = f.name;
-    $('#folderGrid').innerHTML = f.apps.map(appByName).filter(Boolean).map(appTile).join('');
+    if (document.activeElement !== name) name.value = folderLabel(f.name);
+    const tileFor = (n) => (n && n.page ? pageTile(n.page) : (appByName(n) ? appTile(appByName(n)) : ''));
+    $('#folderGrid').innerHTML = f.apps.map(tileFor).filter(Boolean).join('');
     renderFolderHint();
   }
   function renderFolderHint() {
@@ -1024,13 +1137,13 @@
     if (tile === drag.el) return { mode: 'hold' };
     if (tile) {
       if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
-      const pinned = (k) => /^(f:|w:|vm:|p:|s:)/.test(k);
-      const dragApp = !pinned(drag.item);
-      const targetApp = !pinned(tile.dataset.item);
+      // Widgets, VM tiles and shortcuts stay on their own. Apps and built-in pages can start or join a folder.
+      const fixed = (k) => /^(w:|vm:|s:)/.test(k);
+      const canGroup = (k) => k && !fixed(k) && !k.startsWith('f:');
       const icon = tile.querySelector('.app-icon');
       const r = (icon || tile).getBoundingClientRect();
       const inner = icon && x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2 && y > r.top + r.height * 0.2 && y < r.bottom - r.height * 0.2;
-      if (inner && drag.ctx === 'home' && dragApp && (targetApp || tile.dataset.item.startsWith('f:'))) return { tile, mode: 'merge' };
+      if (inner && drag.ctx === 'home' && canGroup(drag.item) && (tile.dataset.item.startsWith('f:') || canGroup(tile.dataset.item))) return { tile, mode: 'merge' };
       return { tile, mode: 'move' };
     }
     if (drag.ctx !== 'home') return null;
@@ -1179,7 +1292,7 @@
         if (target.startsWith('f:')) { moveToFolder(d.item, target.slice(2)); bump(target); return; }
         // New folder in the place of the app you dropped on.
         const id = newFolderId();
-        setLayout(without(homeItems(), d.item).map((it) => (it === target ? { folder: id, name: t('New folder'), apps: [target, d.item] } : it)));
+        setLayout(without(homeItems(), d.item).map((it) => (itemKey(it) === target ? { folder: id, name: t('New folder'), apps: [memberFromKey(target), memberFromKey(d.item)] } : it)));
         bump('f:' + id, 'pop-in');
         setTimeout(() => { openFolder(id); const n = $('#folderName'); n.focus(); n.select(); }, calm() ? 0 : 260);
       });
@@ -1200,7 +1313,7 @@
       if (!d.el.parentNode || d.el.parentNode.id !== 'appGrid') return;
       // The order as it is in the grid now.
       const order = [...d.el.parentNode.children].map((x) => x.dataset.item).filter(Boolean);
-      if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order } : it)));
+      if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order.map(memberFromKey) } : it)));
       else {
         const by = new Map(homeItems().map((it) => [itemKey(it), it]));
         if (d.item.startsWith('w:') && !by.has(d.item)) {
@@ -1301,7 +1414,7 @@
     const folders = homeItems().filter((it) => it && it.folder);
     const cur = folderOf(a.name);
     openWindow(t('Move {name} to a folder', { name: prettyName(a.name) }), `
-      <ul class="rows">${folders.map((f) => `<li><div><div class="row-title">${esc(f.name)}</div><div class="row-sub">${esc(t('{n} apps', { n: f.apps.length }))}</div></div>
+      <ul class="rows">${folders.map((f) => `<li><div><div class="row-title">${esc(folderLabel(f.name))}</div><div class="row-sub">${esc(t('{n} apps', { n: f.apps.length }))}</div></div>
         <div class="row-side">${cur && cur.folder === f.folder ? `<span class="muted">${t('already here')}</span>` : `<button class="btn sm" type="button" data-pick="${esc(f.folder)}">${t('Move here')}</button>`}</div></li>`).join('')
         || `<li><span class="muted">${t('No folders yet.')}</span></li>`}</ul>
       <form class="inline-form" id="newFolderForm" style="margin-top:14px">
@@ -1474,6 +1587,8 @@
     start: '<path d="M7 5l12 7-12 7z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
     restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', update: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', updlog: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
+    pause: '<path d="M9 5v14M15 5v14"/>', resume: '<path d="M8 5v14l10-7z"/>',
+    reset: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', 'force-stop': '<path d="M12 3v9M7.5 6.5a7 7 0 1 0 9 0"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
@@ -1489,8 +1604,18 @@
   function closeMenu(refocus) {
     if (menu.hidden) return;
     menu.hidden = true;
+    if (menuOpener) menuOpener.setAttribute('aria-expanded', 'false');
     if (refocus && menuOpener) menuOpener.focus();
     menuOpener = null;
+  }
+  function placeMenu(x, y, opener) {
+    menu.hidden = false;
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+    menu.style.top = Math.max(8, y + r.height > innerHeight - 8 ? y - r.height : y) + 'px';
+    if (opener) opener.setAttribute('aria-expanded', 'true');
+    menuOpener = opener || null;
+    const first = $('.menu-item:not([disabled])', menu); if (first) first.focus();
   }
   function openAppMenu(a, x, y, opener) {
     const run = isRunning(a), busy = S.appBusy[a.id];
@@ -1508,16 +1633,42 @@
         ${a.update && !busy ? `<span class="menu-upd">${t('A new version is available')}</span>` : ''}</div>` +
       items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${(busy && APP_ACTS[it[0]]) || it[2] === 'off' ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}</button>`)).join('');
+    delete menu.dataset.forVm;
     menu.dataset.forApp = a.id; // not data-app: the tiles' click handling reacts to that
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
-    menu.style.top = Math.max(8, y + r.height > innerHeight - 8 ? y - r.height : y) + 'px';
-    menuOpener = opener || null;
-    const first = $('.menu-item:not([disabled])', menu); if (first) first.focus();
+    placeMenu(x, y, opener);
+  }
+  const VM_MENU_ICON = { reboot: 'restart', edit: 'settings' };
+  function openVmMenu(v, x, y, opener) {
+    const kind = vmKind(v.state), busy = S.vmBusy[v.id];
+    const items = [
+      kind !== 'on' && kind !== 'paused' && kind !== 'stopping' && ['start', t('Start')],
+      kind === 'paused' && ['resume', t('Resume')],
+      kind === 'on' && ['pause', t('Pause')],
+      (kind === 'on' || kind === 'paused') && ['console', t('Console')],
+      kind === 'on' && ['reboot', t('Restart')],
+      kind === 'on' && ['stop', t('Shut down'), 'danger'],
+      '-',
+      (kind === 'on' || kind === 'paused' || kind === 'stopping' || kind === 'bad') && ['force-stop', t('Force off'), 'danger'],
+      kind === 'on' && ['reset', t('Hard reset'), 'danger'],
+      '-',
+      ['edit', t('Edit')],
+    ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
+    menu.innerHTML = `<div class="menu-head"><b>${esc(v.name)}</b><span>${esc(busy ? t(VM_ACTS[busy].noun) + '…' : vmStateText(v.state))}</span></div>` +
+      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
+        ${busy && VM_ACTS[it[0]] ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[VM_MENU_ICON[it[0]] || it[0]] || ''}</svg>${it[1]}</button>`)).join('');
+    delete menu.dataset.forApp;
+    menu.dataset.forVm = v.id;
+    placeMenu(x, y, opener);
   }
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('[data-menu]'); if (!b) return;
+    if (menu.dataset.forVm) {
+      const v = S.vms.find((x) => x.id === menu.dataset.forVm);
+      const act = b.dataset.menu;
+      closeMenu(false);
+      if (v) vmCommand(v, act);
+      return;
+    }
     const a = S.apps.find((x) => x.id === menu.dataset.forApp);
     closeMenu(false);
     if (a) appCommand(a, b.dataset.menu);
@@ -1544,7 +1695,7 @@
       }
     }
   });
-  window.addEventListener('scroll', () => closeMenu(false), true);
+  window.addEventListener('scroll', () => { closeMenu(false); hideVmTip(); }, true);
 
   async function appCommand(a, act) {
     const label = prettyName(a.name);
@@ -2349,6 +2500,7 @@
       </div>
       <section class="bays-sec" id="baySec"></section>
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS reported an error: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
+      ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
       ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('There is no ZFS pool yet. Click Create pool to combine your disks.')}</p>` : ''}
       <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Create pool')}</button></div>
       ${s.pools.map(poolBlock).join('')}
@@ -2527,11 +2679,20 @@
   }
 
   async function vmRun(v, act, request) {
-    S.vmBusy[v.id] = act; renderVmPage();
+    S.vmBusy[v.id] = act; renderVmPage(); renderVmWidget();
     try { const r = await request(); toast(t(VM_ACTS[act].done) + ': ' + v.name + (r && r.kept && r.kept.length ? '. ' + t('These files were kept: {list}', { list: r.kept.join(', ') }) : '')); }
     catch (err) { toast(t('{action} {name} failed: {error}', { action: t(VM_ACTS[act].noun), name: v.name, error: err.message }), true); }
     delete S.vmBusy[v.id];
-    await loadVms().catch(() => renderVmPage());
+    await loadVms().catch(() => { renderVmPage(); renderVmWidget(); });
+  }
+  async function vmCommand(v, act) {
+    if (!v || S.vmBusy[v.id]) return;
+    if (act === 'console') return openConsole(v.id);
+    if (act === 'edit') return vmEditWindow(v.id);
+    const def = VM_ACTS[act];
+    if (!def || act === 'delete') return;
+    if (def.ask && !(await ask(def.ask(v.name), t(def.yes)))) return;
+    return vmRun(v, act, () => api.post('/api/vms/' + encodeURIComponent(v.id) + '/' + act));
   }
 
   $('#vmList').addEventListener('click', async (e) => {
@@ -2539,15 +2700,14 @@
     const edit = e.target.closest('[data-vm-edit]');
     if (edit) { vmEditWindow(edit.dataset.vmEdit); return; }
     const b = e.target.closest('[data-vm]'); if (!b) return;
-    const v = S.vms.find((x) => x.id === b.dataset.vm); const act = b.dataset.do; const def = VM_ACTS[act];
-    if (!v || !def || S.vmBusy[v.id]) return;
+    const v = S.vms.find((x) => x.id === b.dataset.vm); const act = b.dataset.do;
+    if (!v || !VM_ACTS[act] || S.vmBusy[v.id]) return;
     if (act === 'delete') {
       const r = await ask(t('Remove {name}? The VM disappears from the list. This cannot be undone.', { name: v.name }), t('Remove'), t('Also delete the disk files'));
       if (!r) return;
       return vmRun(v, act, () => api.del('/api/vms/' + encodeURIComponent(v.id) + (r.checked ? '?disks=1' : '')));
     }
-    if (def.ask && !(await ask(def.ask(v.name), t(def.yes)))) return;
-    vmRun(v, act, () => api.post('/api/vms/' + encodeURIComponent(v.id) + '/' + act));
+    vmCommand(v, act);
   });
   $('#vmSearch').addEventListener('input', (e) => { S.vmSearch = e.target.value; renderVmPage(); });
   $('#vmFilters').addEventListener('click', (e) => {
@@ -4101,6 +4261,7 @@
     const host = d.hostname;
     el.innerHTML = `
       ${d.running ? '' : `<p class="lead temp-warn">${t('Samba is not running. Start it on the server with: sudo systemctl start smbd')}</p>`}
+      <p class="muted small">${t('Windows can open an older copy of a file: right-click it, then Properties, then Previous Versions. A snapshot is taken every hour and kept for a day, then one per day for 2 weeks and one per week for 8 weeks.')}</p>
       <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Folders')}</h2>
         <button class="btn sm primary" type="button" data-share-new>+ ${t('Shared folder')}</button></div>
       <ul class="rows">${d.shares.map((sh) => `<li>
@@ -5596,6 +5757,14 @@
   }
 
   /* --- Security: the terminal on the server */
+  function sshNote(cur) {
+    const st = cur.sshState || { installed: true, active: !!cur.ssh };
+    if (st.installed === false) return t('OpenSSH is not installed on the server, so SSH stays off.');
+    if (cur.ssh && st.active) return t('On. Sign in from another computer with an account on this server.');
+    if (cur.ssh) return t('SSH is turned on, but the service is not running. Turn it off and on again.');
+    return t('Off. Nobody can sign in to this server with SSH.');
+  }
+
   async function securityPane(el) {
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
     let cur;
@@ -5615,6 +5784,12 @@
         <label class="check"><input type="checkbox" name="terminal"${cur.terminal ? ' checked' : ''}> ${t('Allow the terminal on the server')}</label>
         <label class="check"><input type="checkbox" name="terminalPassword"${cur.terminalPassword ? ' checked' : ''}${cur.terminal ? '' : ' disabled'}> ${t('Ask for the password again when opening the terminal')}</label>
         <p class="muted small" style="margin-top:-4px">${t('Recommended. That way someone using a signed-in browser (e.g. a shared PC) cannot run root commands right away.')}</p>
+      </div>
+      <h2 class="pane-title">${t('SSH')}</h2>
+      <p class="muted small">${t('SSH lets someone sign in to this server from another computer. Leave it off unless you need it.')}</p>
+      <div class="form" style="margin-top:12px">
+        <label class="check"><input type="checkbox" name="ssh"${cur.ssh && (cur.sshState || {}).installed !== false ? ' checked' : ''}${(cur.sshState || {}).installed === false ? ' disabled' : ''}> ${t('Allow SSH')}</label>
+        <p class="muted small" style="margin-top:-4px">${esc(sshNote(cur))}</p>
       </div>
       <form class="inline-form sec-confirm" id="secConfirm" hidden>
         <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('HomeBaseOS password')}" aria-label="${t('HomeBaseOS password')}">
@@ -5649,9 +5824,10 @@
       } catch (e) { $('#secErr', el).textContent = e.message; }
     };
     el.onchange = (e) => {
-      const n = e.target.name; if (n !== 'terminal' && n !== 'terminalPassword') return;
+      const n = e.target.name; if (n !== 'terminal' && n !== 'terminalPassword' && n !== 'ssh') return;
       const body = { terminal: box('terminal').checked, terminalPassword: box('terminalPassword').checked };
-      const looser = (body.terminal && !cur.terminal) || (!body.terminalPassword && cur.terminalPassword);
+      if (box('ssh') && !box('ssh').disabled) body.ssh = box('ssh').checked;
+      const looser = (body.terminal && !cur.terminal) || (!body.terminalPassword && cur.terminalPassword) || (body.ssh && !cur.ssh);
       if (looser && needsPw) {
         pending = body; confirmForm.hidden = false; $('#secHint', el).hidden = false;
         confirmForm.elements.password.focus();
@@ -5808,6 +5984,7 @@
     const u = S.update, on = !!(u && u.updateAvailable);
     $('#updDot').hidden = !on; $('#updTabBadge').hidden = !on;
     $('#updTabBadge').textContent = on ? String(u.newer.length) : '';
+    renderNotes();
     if (!on) return;
     let seen = null;
     try { seen = localStorage.getItem('tb-update-seen'); } catch (e) { /* private window */ }
@@ -6159,7 +6336,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   async function loadVms() {
     try { S.vms = await api.get('/api/vms'); S.vmError = null; }
     catch (e) { S.vmError = e.message; throw e; }
-    finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); }
+    finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); renderNotes(); }
   }
   async function loadAi(quiet) {
     try { S.ai = await api.get('/api/ai'); S.aiError = null; S.aiDown = false; }
@@ -6179,6 +6356,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (bad.reason && bad.reason.status === 401) return showLogin();
       if (++failures === 1) toast(t('Server not reachable: {error}', { error: bad.reason.message }), true);
     } else failures = 0;
+    renderNotes();
   }
 
   /* ------------------------------------------------------------ screens */
@@ -6265,6 +6443,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#loginScreen').hidden = true; setChrome(true); route();
   }
   function showLogin() {
+    if (typeof closeNotes === 'function') closeNotes(false);
     if (setWin.open) closeSettings();
     if (win.open) win.close();
     timers.forEach(clearInterval); timers = []; // stop refreshing (and don't empty the form) while signing in
@@ -6288,12 +6467,96 @@ sudo ./install.sh</pre></div>`}` : '') +
     refresh(true);
     loadLayout();
     loadUpdate();
+    loadDebianNote();
     timers.forEach(clearInterval);
     timers = [
       setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
       setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
-      setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadBackups(); loadUpdate(); } }, 30000),
+      setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadBackups(); loadUpdate(); loadDebianNote(); } }, 30000),
     ];
+  }
+
+  /* --- notifications: a bell in the top bar, a sidebar with what needs attention now */
+  let noteSig = '', noteActions = new Map();
+  function collectNotes() {
+    const out = [];
+    const s = S.overview && S.overview.storage;
+    const fix = s && s.repair && repairLine(s.repair);
+    if (fix) out.push({ id: 'repair', level: s.repair.state === 'rebuilding' || s.repair.state === 'replacing' ? 'warn' : 'bad', title: fix, detail: t('Storage'), go: () => storageWindow() });
+    else if (s && s.pools && s.health && s.health !== 'ONLINE') {
+      const [label] = poolHealth(s.health);
+      out.push({ id: 'pool', level: s.health === 'DEGRADED' ? 'warn' : 'bad', title: t('Storage is {state}', { state: label }), detail: t('Storage'), go: () => storageWindow() });
+    }
+    (S.vms || []).filter((v) => vmKind(v.state) === 'bad').forEach((v) => {
+      out.push({ id: 'vm:' + v.id, level: 'bad', title: t('{name} crashed', { name: v.name }), detail: t('Virtual machines'), go: () => { location.hash = 'vms'; } });
+    });
+    ((S.backup && S.backup.jobs) || []).filter((j) => !j.running && j.lastRun && j.lastRun.state === 'failed').forEach((j) => {
+      const errText = j.lastRun.error ? tr(j.lastRun.error) : '';
+      out.push({ id: 'bk:' + j.id, level: 'bad', title: t('Backup {name} failed', { name: j.name }), detail: [ago(j.lastRun.ended), errText].filter(Boolean).join(' · '), go: () => backupWindow() });
+    });
+    (S.apps || []).filter((a) => a.update).forEach((a) => {
+      out.push({ id: 'app:' + a.id, level: 'warn', title: t('{name} has an update', { name: prettyName(a.name) }), detail: t('Apps'), go: () => {
+        S.filter = 'update'; S.search = '';
+        const search = $('#search'); if (search) search.value = '';
+        $$('#filters button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.filter === 'update')));
+        if (location.hash && location.hash !== '#') location.hash = '';
+        renderApps();
+      } });
+    });
+    if (S.update && S.update.updateAvailable && S.update.latest) {
+      out.push({ id: 'sw', level: 'info', title: t('HomeBaseOS {version} is available', { version: S.update.latest.version }), detail: t('Software update'), go: () => { location.hash = '#settings/update'; } });
+    }
+    if (S.debian && S.debian.updates && S.debian.updates.length) {
+      const n = S.debian.updates.length, sec = S.debian.security;
+      const title = t(n === 1 ? '{n} update for Debian' : '{n} updates for Debian', { n })
+        + (sec ? ' · ' + t(sec === 1 ? '{n} security update' : '{n} security updates', { n: sec }) : '');
+      out.push({ id: 'deb', level: sec ? 'bad' : 'warn', title, detail: t('Debian (the system)'), go: () => { location.hash = '#settings/update'; } });
+    }
+    if (S.debian && S.debian.reboot && S.debian.reboot.required) {
+      out.push({ id: 'reboot', level: 'warn', title: t('A restart is needed to finish the updates.'), detail: t('Debian (the system)'), go: () => { location.hash = '#settings/update'; } });
+    }
+    const rank = { bad: 0, warn: 1, info: 2 };
+    out.sort((a, b) => rank[a.level] - rank[b.level]);
+    return out;
+  }
+  function renderNotes() {
+    const list = collectNotes();
+    const dot = $('#noteDot');
+    if (dot) { dot.hidden = !list.length; dot.textContent = list.length > 9 ? '9+' : String(list.length); }
+    const sig = list.map((n) => [n.id, n.level, n.title, n.detail].join('|')).join('\n');
+    if (sig === noteSig) return;
+    noteSig = sig;
+    noteActions = new Map(list.map((n) => [n.id, n.go]));
+    const box = $('#noteList'); if (!box) return;
+    box.innerHTML = list.length ? list.map((n) => `<button type="button" class="note-item ${n.level}" data-note="${esc(n.id)}">
+        <span class="note-mark" aria-hidden="true"></span><b>${esc(n.title)}</b>${n.detail ? `<span class="note-detail">${esc(n.detail)}</span>` : ''}</button>`).join('')
+      : `<p class="empty">${t('No notifications.')}</p>`;
+  }
+  function openNotes() {
+    renderNotes();
+    $('#noteBackdrop').hidden = false; $('#noteSide').hidden = false;
+    $('#noteBtn').setAttribute('aria-expanded', 'true');
+    $('#noteClose').focus();
+  }
+  function closeNotes(focus) {
+    if ($('#noteSide').hidden) return;
+    $('#noteBackdrop').hidden = true; $('#noteSide').hidden = true;
+    $('#noteBtn').setAttribute('aria-expanded', 'false');
+    if (focus) $('#noteBtn').focus();
+  }
+  $('#noteBtn').addEventListener('click', () => { if ($('#noteSide').hidden) openNotes(); else closeNotes(false); });
+  $('#noteClose').addEventListener('click', () => closeNotes(true));
+  $('#noteBackdrop').addEventListener('click', () => closeNotes(false));
+  $('#noteList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-note]'); if (!b) return;
+    const go = noteActions.get(b.dataset.note);
+    closeNotes(false);
+    if (go) go();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#noteSide').hidden) { e.preventDefault(); closeNotes(true); } });
+  async function loadDebianNote() {
+    try { S.debian = await api.get('/api/system-updates'); renderNotes(); }
+    catch (e) { /* keep the last Debian status */ }
   }
 
   /* --- power: restart or shut down the server (button at the top) */
@@ -6444,7 +6707,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       run: () => { goSettings('vms'); vmEditWindow(v.id); },
     }));
     const folders = homeItems().filter((it) => it && it.folder).map((it) => item({
-      id: 'folder:' + it.folder, group: 'folders', title: it.name, keys: it.apps, hint: t('Folder'), ico: spotIco('folder'),
+      id: 'folder:' + it.folder, group: 'folders', title: folderLabel(it.name), keys: it.apps.map((n) => (n && n.page && PAGE_META[n.page] ? t(PAGE_META[n.page].name) : n)), hint: t('Folder'), ico: spotIco('folder'),
       run: () => { goHome(); openFolder(it.folder); },
     }));
     const shares = ((S.shares && S.shares.shares) || []).map((sh) => item({
@@ -6883,6 +7146,15 @@ sudo ./install.sh</pre></div>`}` : '') +
       const s = shortcutById(cut.dataset.shortcut); if (!s) return;
       if (cut.dataset.action === 'menu') return shortcutWindow(s.id);
       window.open(s.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const vmBtn = e.target.closest('[data-vm-menu]');
+    if (vmBtn && !menu.contains(vmBtn)) {
+      e.preventDefault();
+      hideVmTip();
+      const v = S.vms.find((x) => x.id === vmBtn.dataset.vmMenu); if (!v) return;
+      const r = vmBtn.getBoundingClientRect();
+      openVmMenu(v, r.left + 8, r.bottom + 4, vmBtn);
       return;
     }
     const open = e.target.closest('[data-open]');

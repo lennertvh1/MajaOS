@@ -46,6 +46,7 @@ const vms = require('./lib/vms');
 const storage = require('./lib/storage');
 const appstore = require('./lib/appstore');
 const settings = require('./lib/settings');
+const ssh = require('./lib/ssh');
 const network = require('./lib/network');
 const dockernet = require('./lib/dockernet');
 const vmnet = require('./lib/vmnet');
@@ -53,6 +54,8 @@ const ws = require('./lib/websocket');
 const about = require('./lib/about');
 const bays = require('./lib/bays');
 const zpool = require('./lib/zpool');
+const replace = require('./lib/replace');
+const shadow = require('./lib/shadow');
 const disks = require('./lib/disks');
 const layout = require('./lib/layout');
 const shortcuts = require('./lib/shortcuts');
@@ -180,10 +183,12 @@ const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::fff
 /* ---------------------------------------------------------------- system */
 
 async function apiOverview() {
-  const [cpu, gpu, store] = await Promise.all([sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null)]);
+  const [cpu, gpu, store, repair] = await Promise.all([
+    sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null), replace.look().then((r) => r.repair, () => null),
+  ]);
   return {
     hostname: os.hostname(), uptime: sys.uptime(), version: sys.osName(),
-    cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(), storage: store, gpu,
+    cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(), storage: store ? { ...store, repair } : store, gpu,
   };
 }
 
@@ -407,11 +412,28 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true });
   }
 
-  if (p === '/api/settings' && method === 'GET') return sendJson(res, 200, settings.getSettings());
+  if (p === '/api/settings' && method === 'GET') {
+    const s = settings.getSettings();
+    const sshState = CFG.demo
+      ? { installed: true, enabled: !!s.ssh, active: !!s.ssh }
+      : await ssh.status().catch(() => ({ installed: false, enabled: false, active: false }));
+    return sendJson(res, 200, { ...s, sshState });
+  }
   if (p === '/api/settings' && method === 'POST') {
     const body = await readBody(req);
-    try { return sendJson(res, 200, settings.saveSettings(body, { checkPassword })); }
+    const before = settings.getSettings();
+    let saved;
+    try { saved = settings.saveSettings(body, { checkPassword }); }
     catch (e) { if (e.status === 403) await new Promise((r) => setTimeout(r, 800)); throw e; } // slow down guessing
+    // The file is the wish; systemctl is what the server actually does. A failure puts the wish back.
+    if (body.ssh != null && !!saved.ssh !== !!before.ssh && !CFG.demo) {
+      try { await ssh.apply(saved.ssh); }
+      catch (e) {
+        try { settings.saveSettings({ ssh: !!before.ssh }, { checkPassword: () => true }); } catch { /* the systemctl error is the one to show */ }
+        throw e;
+      }
+    }
+    return sendJson(res, 200, saved);
   }
   // Terminal: first a one-time ticket (with the password if Security asks for it), then the WebSocket.
   if (p === '/api/terminal/ticket' && method === 'POST') {
@@ -548,7 +570,10 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/backup\/devices\/([^/]+)$/)) && method === 'DELETE') {
     return sendJson(res, 200, await backup.deleteDevice(decodeURIComponent(m[1]), url.searchParams.get('data') === '1'));
   }
-  if (p === '/api/storage' && method === 'GET') return sendJson(res, 200, await storage.storage());
+  if (p === '/api/storage' && method === 'GET') {
+    const [body, repair] = await Promise.all([storage.storage(), replace.look().then((r) => r.repair, () => null)]);
+    return sendJson(res, 200, { ...body, repair });
+  }
   if ((m = p.match(/^\/api\/disks\/([^/]+)$/)) && method === 'GET') return sendJson(res, 200, await disks.diskInfo(decodeURIComponent(m[1]), url.searchParams.get('wake') === '1'));
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
   if (p === '/api/pools/options' && method === 'GET') return sendJson(res, 200, await zpool.poolOptions());
@@ -667,6 +692,7 @@ server.listen(CFG.port, () => {
   if (needsSetup()) console.log(`No account yet. Open http://<address>:${CFG.port} to create one.`);
   if (!CFG.demo) {
     paths.detect().catch(() => {}); // pools that already have an appdata/vms/isos folder
+    ssh.enforce(settings.getSettings().ssh).catch((e) => console.error('SSH: ' + e.message));
     vms.bootAutostart();
     // Updates: 2 minutes after start and then every 6 hours (only what hasn't been checked for 6 hours).
     const check = () => docker.checkUpdates(false).then((r) => r.updates && console.log(r.updates + ' app(s) with an update.')).catch(() => {});
@@ -675,5 +701,7 @@ server.listen(CFG.port, () => {
     release.startSchedule((msg) => console.log(msg)); // new versions of HomeBaseOS itself
     backup.startSchedule(); // scheduled backup tasks
     sysbackup.startSchedule(); // scheduled backups of apps and VMs
+    shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
+    replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
   }
 });

@@ -59,24 +59,16 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg>
           <span>Overview</span>
         </button>
-        <button class="nav-btn" data-open="storage" type="button" title="Storage">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
-          <span>Storage</span>
-        </button>
-        <button class="nav-btn" data-open="shares" type="button" title="Shared folders">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg>
-          <span>Shared folders</span>
-        </button>
-        <button class="nav-btn" data-open="vms" type="button" title="VMs">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          <span>VMs</span>
-        </button>
         <button class="nav-btn" data-open="ai" type="button" title="AI">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2.1 2.2.9-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.9z"/></svg>
           <span>AI</span>
         </button>
       </nav>
       <div class="top-actions" id="topActions">
+        <button class="nav-btn icon-only has-dot" type="button" id="noteBtn" aria-label="Notifications" title="Notifications" aria-expanded="false" aria-controls="noteSide">
+          <span class="nav-count" id="noteDot" hidden></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+        </button>
         <button class="nav-btn icon-only" type="button" id="termBtn" hidden aria-label="Terminal on the server" title="Terminal on the server">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/></svg>
         </button>
@@ -164,10 +156,13 @@
         </div>
 
         <div class="widget-slot" data-widget="vms" data-item="w:vms">
-          <button class="widget widget-btn" data-open="vms" type="button" aria-label="Open virtual machines">
-            <header class="widget-head"><h2>Virtual machines</h2><span class="muted small" id="vmWidgetCount"></span></header>
+          <section class="widget" aria-labelledby="vmTitle">
+            <header class="widget-head">
+              <h2 id="vmTitle"><button class="widget-title" type="button" data-open="vms" aria-label="Open virtual machines">Virtual machines</button></h2>
+              <span class="muted small" id="vmWidgetCount"></span>
+            </header>
             <ul class="vm-mini" id="vmMini"></ul>
-          </button>
+          </section>
         </div>
       </aside>
 
@@ -423,7 +418,18 @@
     <div class="folder-foot"><span class="muted small" id="folderHint"></span>
       <button class="linkish" type="button" id="folderUngroup">Remove folder</button></div>
   </section>
+  <div class="note-backdrop" id="noteBackdrop" hidden></div>
+  <aside class="note-side" id="noteSide" hidden aria-labelledby="noteTitle">
+    <header class="note-head">
+      <h2 id="noteTitle">Notifications</h2>
+      <button class="close" type="button" id="noteClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="note-list" id="noteList"></div>
+  </aside>
   <div class="menu" id="appMenu" role="menu" aria-label="Actions for this app" hidden></div>
+  <div class="vm-tip" id="vmTip" role="tooltip" hidden></div>
   <div class="menu" id="fileMenu" role="menu" aria-label="Actions for this file" hidden></div>
 
   <!-- Power: menu at the button at the top, and a window while the server restarts or is off -->

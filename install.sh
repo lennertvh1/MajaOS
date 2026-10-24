@@ -79,6 +79,13 @@ fi
 systemctl enable --now smbd
 systemctl enable --now wsdd 2>/dev/null || true
 
+step "SSH (off until you turn it on in Settings → Security)"
+apt-get install -y openssh-server
+# The package turns SSH on. HomeBaseOS keeps it off unless Settings saved "ssh": true.
+if ! grep -q '"ssh": true' /var/lib/homebaseos/settings.json 2>/dev/null; then
+  systemctl disable --now ssh || true
+fi
+
 step "Backup app for your PCs (Kopia, official package source)"
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://kopia.io/signing-key | gpg --dearmor --yes -o /etc/apt/keyrings/kopia-keyring.gpg

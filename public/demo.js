@@ -53,7 +53,8 @@
   Object.assign(apps.find((a) => a.name === 'pihole'), { webui: 'http://192.168.1.53/admin/', ports: [] });
 
   /* ---- settings: language, about and network */
-  const demoSecurity = { terminal: true, terminalPassword: true };
+  const demoSecurity = { terminal: true, terminalPassword: true, ssh: false };
+  const demoSshState = () => ({ installed: true, enabled: !!demoSecurity.ssh, active: !!demoSecurity.ssh });
   /* ---- welcome wizard: remembered per browser whether it is finished */
   const onb = { passwordChanged: null };
   const onbDone = () => { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } };
@@ -425,7 +426,9 @@
   }
 
   /* ---- layout of the home screen: two folders, the rest follows by itself */
-  let layout = { items: ['jellyfin', 'immich', 'nextcloud', 'paperless-ngx', 'vaultwarden',
+  let layout = { items: [
+    { folder: 'fsystem', name: 'System', apps: ['storage', 'shares', 'vms', 'store', 'files', 'backup'].map((page) => ({ page })) },
+    'jellyfin', 'immich', 'nextcloud', 'paperless-ngx', 'vaultwarden',
     { folder: 'fsmarthome', name: 'Home automation', apps: ['mosquitto', 'zigbee2mqtt', 'whisper', 'piper', 'frigate'] },
     { folder: 'fai', name: 'AI', apps: ['ollama', 'open-webui'] }] };
   function saveLayout(b) {
@@ -442,7 +445,7 @@
       }
       if (it && it.page) {
         const id = String(it.page);
-        if (!['store', 'files', 'backup'].includes(id) || pages.has(id)) return null;
+        if (!['storage', 'shares', 'vms', 'store', 'files', 'backup'].includes(id) || pages.has(id)) return null;
         pages.add(id);
         return { page: id };
       }
@@ -458,8 +461,16 @@
         cuts.add(id);
         return { shortcut: id };
       }
-      const apps = (it.apps || []).filter((n) => !seen.has(n) && seen.add(n));
-      return apps.length > 1 ? { folder: it.folder, name: String(it.name || 'Folder').slice(0, 40), apps } : apps[0] || null;
+      const members = [];
+      for (const n of it.apps || []) {
+        if (n && typeof n === 'object' && n.page) {
+          const id = String(n.page);
+          if (!['storage', 'shares', 'vms', 'store', 'files', 'backup'].includes(id) || pages.has(id)) continue;
+          pages.add(id);
+          members.push({ page: id });
+        } else if (typeof n === 'string' && !seen.has(n)) { seen.add(n); members.push(n); }
+      }
+      return members.length > 1 ? { folder: it.folder, name: String(it.name || 'Folder').slice(0, 40), apps: members } : members[0] || null;
     }).filter(Boolean);
     const ok = (a) => [...new Set((Array.isArray(a) ? a : []).filter((x) => /^[a-z]{2,16}$/.test(x)))];
     layout = { items, widgets: { order: ok(b.widgets && b.widgets.order), hidden: ok(b.widgets && b.widgets.hidden) } };
@@ -2026,7 +2037,7 @@
       return { running, lines: copy(lines), last: (j.history || [])[0] || null };
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
-    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity };
+    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity, sshState: demoSshState() };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
@@ -2132,8 +2143,9 @@
     if (path === '/api/settings' && body.language == null) {
       // In the demo there is no password (like the server without APP_PASSWORD): making things less strict is allowed without one.
       Object.assign(demoSecurity, { terminal: body.terminal == null ? demoSecurity.terminal : !!body.terminal,
-        terminalPassword: body.terminalPassword == null ? demoSecurity.terminalPassword : !!body.terminalPassword });
-      return { language: demoLang(), ...demoSecurity };
+        terminalPassword: body.terminalPassword == null ? demoSecurity.terminalPassword : !!body.terminalPassword,
+        ssh: body.ssh == null ? demoSecurity.ssh : !!body.ssh });
+      return { language: demoLang(), clock: demoClock(), ...demoSecurity, sshState: demoSshState() };
     }
     if (path === '/api/settings') {
       if (!(body.language in (window.TB_LANGS || { en: 1 }))) throw err('Unknown language.');
