@@ -472,6 +472,113 @@
     return out;
   }
   const shareEmpty = (groups = shareGroups) => shareList.filter((x) => !x.guest && !Object.keys(shareEffective(x, groups)).length).map((x) => x.name);
+  function filesDir(kids) { return { type: 'dir', mtime: Date.now(), kids }; }
+  function filesFile(size, days, body) { return { type: 'file', size, mtime: Date.now() - days * 86400000, body: body || '' }; }
+  const shareTrees = {
+    media: filesDir({
+      Movies: filesDir({ 'Dune (2021).mkv': filesFile(4.2e9, 40), 'The Holdovers.mkv': filesFile(3.1e9, 12) }),
+      Series: filesDir({ 'The Bear': filesDir({ 'S03E01.mkv': filesFile(1.2e9, 8) }) }),
+      Music: filesDir({ 'Radiohead — In Rainbows': filesDir({ '01 15 Step.flac': filesFile(32e6, 200) }) }),
+      'readme.txt': filesFile(240, 2, 'Films, series and music on this NAS.\n'),
+    }),
+    photos: filesDir({
+      2026: filesDir({ 'IMG_4101.HEIC': filesFile(3.2e6, 5), 'IMG_4102.HEIC': filesFile(2.8e6, 5) }),
+      2025: filesDir({ 'holiday.jpg': filesFile(4.1e6, 300) }),
+    }),
+    documents: filesDir({
+      Taxes: filesDir({ '2025.pdf': filesFile(220e3, 90) }),
+      House: filesDir({ 'insurance.pdf': filesFile(180e3, 20) }),
+      'todo.txt': filesFile(80, 1, 'Call the notary.\n'),
+    }),
+    TimeMachine: filesDir({}),
+  };
+  function parseFilesApi(urlPath) {
+    const u = new URL(urlPath, 'http://demo.local');
+    const m = u.pathname.match(/^\/api\/shares\/([^/]+)\/files$/);
+    if (!m) return null;
+    return {
+      name: decodeURIComponent(m[1]), rel: u.searchParams.get('path') || '',
+      dl: u.searchParams.get('dl') === '1', overwrite: u.searchParams.get('overwrite') === '1',
+      recursive: u.searchParams.get('recursive') === '1',
+    };
+  }
+  function filesParts(rel) {
+    const parts = String(rel || '').replace(/\\/g, '/').split('/').filter((p) => p && p !== '.');
+    if (parts.some((p) => p === '..' || p.includes('\0'))) throw err('That path is not allowed.', 400);
+    return parts;
+  }
+  function filesRoot(name) {
+    if (!shareList.some((s) => s.name === name)) throw err('This shared folder no longer exists.', 404);
+    if (!shareTrees[name]) shareTrees[name] = filesDir({});
+    return shareTrees[name];
+  }
+  function filesWalk(name, rel, createLast) {
+    const parts = filesParts(rel);
+    let node = filesRoot(name), parent = null, key = '';
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (node.type !== 'dir') throw err('This file or folder does not exist (anymore).', 404);
+      parent = node; key = p;
+      if (!node.kids[p]) {
+        if (i === parts.length - 1 && createLast) return { node: null, parent, key, parts, missing: true };
+        throw err('This file or folder does not exist (anymore).', 404);
+      }
+      node = node.kids[p];
+    }
+    return { node, parent, key, parts, missing: false };
+  }
+  function filesList(q) {
+    const w = filesWalk(q.name, q.rel);
+    if (w.node.type !== 'dir') throw err('This is a file, not a folder.', 400);
+    const items = Object.keys(w.node.kids).map((name) => {
+      const n = w.node.kids[name];
+      return { name, type: n.type, size: n.type === 'file' ? n.size : null, mtime: new Date(n.mtime).toISOString() };
+    }).sort((a, b) => (a.type === 'dir' ? 0 : 1) - (b.type === 'dir' ? 0 : 1) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return { share: q.name, path: filesParts(q.rel).join('/'), items };
+  }
+  function filesAct(q, body) {
+    if ((body || {}).action === 'mkdir') {
+      const w = filesWalk(q.name, body.path, true);
+      if (!w.missing) throw err('A folder with that name already exists.', 409);
+      w.parent.kids[w.key] = filesDir({});
+      return { name: w.key, path: w.parts.join('/') };
+    }
+    if ((body || {}).action === 'rename') {
+      const n = String(body.name || '').trim();
+      if (!n || n.includes('/') || n === '.' || n === '..') throw err('That name is not allowed.', 400);
+      const w = filesWalk(q.name, body.path);
+      if (!w.parts.length) throw err('You cannot rename the shared folder itself here.', 400);
+      if (w.parent.kids[n]) throw err('A file with that name already exists. Choose another name, or overwrite it.', 409);
+      w.parent.kids[n] = w.node; delete w.parent.kids[w.key];
+      const parts = w.parts.slice(); parts[parts.length - 1] = n;
+      return { name: n, path: parts.join('/') };
+    }
+    throw err('Unknown action.', 400);
+  }
+  function filesRemove(q) {
+    const w = filesWalk(q.name, q.rel);
+    if (!w.parts.length) throw err('You cannot delete the shared folder itself here.', 400);
+    if (w.node.type === 'dir' && Object.keys(w.node.kids).length && !q.recursive) throw err('The folder is not empty. Tick the box to delete everything in it.', 409);
+    delete w.parent.kids[w.key];
+    return { removed: w.key };
+  }
+  async function filesPut(q, body) {
+    const w = filesWalk(q.name, q.rel, true);
+    if (!w.parts.length) throw err('Choose a name.', 400);
+    if (!w.missing && w.node && w.node.type === 'dir') throw err('A folder with that name already exists.', 409);
+    if (!w.missing && !q.overwrite) throw err('A file with that name already exists. Choose another name, or overwrite it.', 409);
+    let size = 0, text = '';
+    if (body && typeof body.size === 'number') size = body.size;
+    if (typeof body === 'string') { text = body; size = body.length; }
+    else if (body && typeof body.text === 'function') { try { text = await body.text(); size = size || text.length; } catch (e) { text = ''; } }
+    w.parent.kids[w.key] = filesFile(size, 0, String(text).slice(0, 8000));
+    return { name: w.key, size, path: filesParts(q.rel).join('/') };
+  }
+  async function filesDownload(q) {
+    const w = filesWalk(q.name, q.rel);
+    if (!w.node || w.node.type !== 'file') throw err('Choose a file to download.', 400);
+    return { blob: new Blob([w.node.body || 'Demo file: ' + w.key]), name: w.key };
+  }
   const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'fast', mountpoint: '/fast' }]
     .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
   function sharesGet() {
@@ -494,6 +601,10 @@
     const i = shareList.findIndex((x) => x.name === original);
     if (original && i < 0) throw err('This shared folder no longer exists.', 404);
     if (i >= 0) shareList[i] = share; else shareList.push(share);
+    if (original && original !== name) {
+      shareTrees[name] = shareTrees[original] || filesDir({});
+      delete shareTrees[original];
+    } else if (!shareTrees[name]) shareTrees[name] = filesDir({});
     return share;
   }
   function shareUserCreate(b) {
@@ -1752,6 +1863,7 @@
     }
     if (path === '/api/layout') return copy(layout);
     if (path === '/api/shares') return sharesGet();
+    { const q = parseFilesApi(path); if (q) { if (q.dl) throw err('Choose a file to download.', 400); return filesList(q); } }
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {
       const upd = updStates();
@@ -1850,6 +1962,7 @@
     if (path === '/api/bays') return saveBays(body);
     if (path === '/api/layout') return saveLayout(body);
     if (path === '/api/shares') { await wait(rnd(400, 800)); return shareSave(body, null); }
+    { const q = parseFilesApi(path); if (q) { await wait(rnd(150, 400)); return filesAct(q, body); } }
     const shm = path.match(/^\/api\/shares\/([^/]+)$/);
     if (shm) { await wait(rnd(300, 600)); return shareSave(body, decodeURIComponent(shm[1])); }
     if (path === '/api/share-users') { await wait(rnd(300, 600)); return shareUserCreate(body); }
@@ -2013,8 +2126,13 @@
     m = path.match(/^\/api\/vm-networks\/([^/]+)$/);
     if (m) return vmNetDelete(decodeURIComponent(m[1]));
     if (path.startsWith('/api/backup/')) { const r = bkDel(path); if (r) return r; }
+    { const q = parseFilesApi(path); if (q) { await wait(rnd(120, 280)); return filesRemove(q); } }
     m = path.match(/^\/api\/shares\/([^/]+)$/);
-    if (m) { const i = shareList.findIndex((x) => x.name === decodeURIComponent(m[1])); if (i < 0) throw err('This shared folder no longer exists.', 404); shareList.splice(i, 1); return { removed: decodeURIComponent(m[1]) }; }
+    if (m) {
+      const name = decodeURIComponent(m[1]);
+      const i = shareList.findIndex((x) => x.name === name); if (i < 0) throw err('This shared folder no longer exists.', 404);
+      shareList.splice(i, 1); delete shareTrees[name]; return { removed: name };
+    }
     m = path.match(/^\/api\/share-users\/([^/]+)$/);
     if (m) return shareUserDelete(decodeURIComponent(m[1]));
     m = path.match(/^\/api\/share-groups\/([^/]+)$/);
@@ -2053,5 +2171,18 @@
     throw err('Unknown endpoint', 404);
   }
 
-  window.HomeBaseOSDemo = { get, post, del, stream, user: () => acct.user };
+  async function put(path, body) {
+    await wait(rnd(80, 220));
+    const q = parseFilesApi(path);
+    if (!q) throw err('Unknown endpoint', 404);
+    return filesPut(q, body);
+  }
+  async function download(path) {
+    await wait(rnd(80, 180));
+    const q = parseFilesApi(path);
+    if (!q) throw err('Unknown endpoint', 404);
+    return filesDownload(q);
+  }
+
+  window.HomeBaseOSDemo = { get, post, del, stream, put, download, user: () => acct.user };
 })();

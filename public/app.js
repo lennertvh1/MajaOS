@@ -115,6 +115,26 @@
     get(p) { return this.req('GET', p); },
     post(p, b) { return this.req('POST', p, b || {}); },
     del(p) { return this.req('DELETE', p); },
+    async put(p, body) {
+      const res = await fetch(p, { method: 'PUT', credentials: 'same-origin', body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
+      return data;
+    },
+    async download(p) {
+      const res = await fetch(p, { credentials: 'same-origin' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = cd.match(/filename="([^"]+)"/i) || cd.match(/filename=([^;]+)/i);
+      let name = 'download';
+      try { name = decodeURIComponent((star && star[1]) || (plain && plain[1]) || 'download'); } catch (e) { name = (plain && plain[1]) || 'download'; }
+      return { blob, name };
+    },
     async stream(path, body, onLine) {
       const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok || !res.body) { const d = await res.json().catch(() => ({})); throw new Error(tr(d.error) || t('Error {status}', { status: res.status })); }
@@ -136,7 +156,7 @@
   // The demo throws the same (English) messages as the server: translate those too.
   function translatedApi(src) {
     const wrap = (fn) => async (...args) => { try { return await fn(...args); } catch (e) { e.message = tr(e.message); throw e; } };
-    return { get: wrap(src.get), post: wrap(src.post), del: wrap(src.del), stream: wrap(src.stream) };
+    return { get: wrap(src.get), post: wrap(src.post), del: wrap(src.del), stream: wrap(src.stream), put: wrap(src.put), download: wrap(src.download) };
   }
 
   /* ------------------------------------------------------------ state */
@@ -3808,6 +3828,21 @@
     openWindow(t('Shared folders'), `<p class="lead">${t('Loading…')}</p>`, (body) => sharesPane(body));
     onWinClose = () => loadShares(); // update the widget after changes
   }
+  function filesJoin(dir, name) { return [dir, name].filter(Boolean).join('/'); }
+  function filesApi(share, rel, extra) {
+    const q = new URLSearchParams();
+    if (rel) q.set('path', rel);
+    Object.entries(extra || {}).forEach(([k, v]) => { if (v) q.set(k, v === true ? '1' : String(v)); });
+    const s = q.toString();
+    return '/api/shares/' + encodeURIComponent(share) + '/files' + (s ? '?' + s : '');
+  }
+  function saveBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
   const ACCESS = { ro: 'Read', rw: 'Read and write' };
   async function sharesPane(el, editing) {
     el.onchange = null;
@@ -3832,7 +3867,8 @@
               ${Object.entries(sh.groups || {}).map(([g, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${t('group {name}', { name: esc(g) })} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${sh.guest ? `<span class="pill warn">${t('guests · read')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
             <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div></div>
-          <div class="row-side btn-row"><button class="btn sm" type="button" data-share-edit="${esc(sh.name)}">${t('Edit')}</button>
+          <div class="row-side btn-row"><button class="btn sm primary" type="button" data-share-files="${esc(sh.name)}">${t('Files')}</button>
+            <button class="btn sm" type="button" data-share-edit="${esc(sh.name)}">${t('Edit')}</button>
             <button class="btn sm danger" type="button" data-share-del="${esc(sh.name)}">${t('Remove')}</button></div></li>`).join('')
         || `<li><span class="muted">${t(d.users.length ? 'No shared folders yet.' : 'No shared folders yet. First create a user under Settings → Users.')}</span></li>`}</ul>
       <p class="muted small" style="margin-top:8px">${t('On a Mac: Finder → Go → Connect to Server. On Windows: type the address with \\\\ in File Explorer.')}</p>
@@ -3843,6 +3879,7 @@
     el.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.shareNew != null) return sharesPane(el, null);
+      if (b.dataset.shareFiles) return filesOpen(b.dataset.shareFiles, '');
       if (b.dataset.shareEdit) return sharesPane(el, b.dataset.shareEdit);
       if (b.dataset.shareDel) {
         const name = b.dataset.shareDel;
@@ -3910,6 +3947,283 @@
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
     F.name.focus();
+  }
+
+  const fx = {
+    gen: 0, stack: [], at: -1, nav: null, wired: false,
+    view: (() => { try { return localStorage.getItem('tb-files-view') === 'list' ? 'list' : 'icons'; } catch (e) { return 'icons'; } })(),
+    share: '', path: '', sel: '', filter: '', data: null, shares: null, ptr: 'mouse', renameFrom: '',
+  };
+  function filesHash(share, rel) {
+    if (!share) return 'files';
+    const parts = ['files', encodeURIComponent(share)];
+    String(rel || '').split('/').filter(Boolean).forEach((p) => parts.push(encodeURIComponent(p)));
+    return parts.join('/');
+  }
+  function filesLoc() {
+    const parts = location.hash.replace(/^#/, '').split('/').filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch (e) { return p; } });
+    if (parts[0] !== 'files') return { share: '', path: '' };
+    return { share: parts[1] || '', path: parts.slice(2).join('/') };
+  }
+  function filesOpen(share, rel, opt) {
+    if (win.open) win.close();
+    opt = opt || {};
+    const hash = filesHash(share, rel || '');
+    fx.nav = opt.nav || (opt.replace ? 'replace' : 'push');
+    if (location.hash.replace(/^#/, '') === hash) { renderFiles(); return; }
+    if (opt.replace && currentView() === 'files') { history.replaceState(null, '', '#' + hash); pageHash = '#' + hash; renderFiles(); return; }
+    location.hash = hash;
+  }
+  function rememberLoc(loc) {
+    if (fx.nav === 'back' || fx.nav === 'fwd') { fx.nav = null; return; }
+    if (fx.nav === 'replace') {
+      if (fx.at < 0) { fx.stack = [loc]; fx.at = 0; } else fx.stack[fx.at] = loc;
+      fx.nav = null; return;
+    }
+    const prev = fx.stack[fx.at - 1], next = fx.stack[fx.at + 1];
+    if (prev && prev.share === loc.share && prev.path === loc.path) { fx.at--; fx.nav = null; return; }
+    if (next && next.share === loc.share && next.path === loc.path) { fx.at++; fx.nav = null; return; }
+    const top = fx.stack[fx.at];
+    if (!top || top.share !== loc.share || top.path !== loc.path) {
+      fx.stack = fx.stack.slice(0, fx.at + 1);
+      fx.stack.push(loc);
+      fx.at = fx.stack.length - 1;
+    }
+    fx.nav = null;
+  }
+  function fileGlyph(kind) {
+    if (kind === 'dir') return '<svg class="files-glyph dir" viewBox="0 0 64 52" aria-hidden="true"><path d="M2 14a6 6 0 0 1 6-6h16l6 6h26a6 6 0 0 1 6 6v22a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6z"/></svg>';
+    return '<svg class="files-glyph file" viewBox="0 0 48 58" aria-hidden="true"><path d="M6 2h24l14 14v36a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z"/><path d="M30 2v14h14" fill="var(--glass-strong)"/></svg>';
+  }
+  function filesWhen(iso) {
+    const dt = iso ? new Date(iso) : null;
+    return dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() }) : '';
+  }
+  function selectedFile() {
+    if (!fx.data || !fx.sel) return null;
+    return (fx.data.items || []).find((it) => filesJoin(fx.data.path, it.name) === fx.sel) || null;
+  }
+  function paintSide(shares) {
+    const side = $('#filesSide');
+    side.innerHTML = `<p class="files-side-title">${t('Shared folders')}</p>` + (shares.length ? shares.map((sh) =>
+      `<button type="button" data-files-share="${esc(sh.name)}"${sh.name === fx.share ? ' aria-current="page"' : ''}>${fileGlyph('dir')}<span>${esc(sh.name)}</span></button>`).join('')
+      : `<p class="muted small" style="padding:4px 10px">${t('No shared folders to browse yet.')}</p>`);
+  }
+  function paintChrome() {
+    $('#filesBack').disabled = fx.at <= 0;
+    $('#filesFwd').disabled = fx.at < 0 || fx.at >= fx.stack.length - 1;
+    const parts = String(fx.path || '').split('/').filter(Boolean);
+    $('#filesCrumb').innerHTML = [`<button type="button" data-files-go="">${esc(fx.share || t('Files'))}</button>`]
+      .concat(parts.map((p, i) => `<span aria-hidden="true">/</span><button type="button" data-files-go="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join('');
+    $$('#filesView button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === fx.view)));
+    const sel = selectedFile();
+    $('#filesOpen').hidden = !sel || sel.type !== 'dir';
+    $('#filesDl').hidden = !sel || sel.type === 'dir';
+    $('#filesRename').hidden = !sel;
+    $('#filesDel').hidden = !sel;
+    $$('[data-files-item]', $('#filesPage')).forEach((n) => n.classList.toggle('is-sel', n.dataset.filesItem === fx.sel));
+  }
+  function paintItems() {
+    const stage = $('#filesStage');
+    const q = fx.filter.trim().toLowerCase();
+    const items = ((fx.data && fx.data.items) || []).filter((it) => !q || it.name.toLowerCase().includes(q));
+    if (!items.length) {
+      stage.innerHTML = `<p class="files-empty">${esc(q ? t('Nothing matches.') : t('This folder is empty. Drop files here, or click Upload.'))}</p>`;
+    } else if (fx.view === 'list') {
+      stage.innerHTML = `<table class="files-table"><thead><tr><th></th><th>${t('Name')}</th><th class="files-meta">${t('Size')}</th><th class="files-meta">${t('Modified')}</th></tr></thead><tbody>${items.map((it) => {
+        const pth = filesJoin(fx.data.path, it.name);
+        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.sel === pth ? 'is-sel' : ''}"><td>${fileGlyph(it.type)}</td><td><div class="files-name">${esc(it.name)}</div></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    } else {
+      stage.innerHTML = `<div class="files-icons">${items.map((it) => {
+        const pth = filesJoin(fx.data.path, it.name);
+        return `<button type="button" class="files-icon${fx.sel === pth ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}">${fileGlyph(it.type)}<span class="files-name">${esc(it.name)}</span></button>`;
+      }).join('')}</div>`;
+    }
+    const shown = items.length, all = (fx.data && fx.data.items || []).length;
+    $('#filesStatus').textContent = q && shown !== all ? t('{n} of {total}', { n: shown, total: all }) : t(shown === 1 ? '{n} item' : '{n} items', { n: shown });
+    paintChrome();
+  }
+  function openFileItem(item) {
+    if (!item) return;
+    if (item.dataset.filesKind === 'dir') filesOpen(fx.share, item.dataset.filesItem);
+    else filesDownload(item.dataset.filesItem);
+  }
+  async function filesDownload(rel) {
+    try { const f = await api.download(filesApi(fx.share, rel, { dl: true })); saveBlob(f.blob, f.name); }
+    catch (e) { toast(e.message, true); }
+  }
+  async function uploadFiles(list) {
+    const arr = [...list].filter((f) => f && f.name);
+    if (!arr.length || !fx.share) return;
+    let ok = 0;
+    for (const f of arr) {
+      const dest = filesJoin(fx.path, f.name);
+      try { await api.put(filesApi(fx.share, dest), f); ok++; }
+      catch (e) {
+        if (e.status === 409) {
+          if (await ask(t('A file named {name} already exists. Overwrite it?', { name: f.name }), t('Overwrite'))) {
+            try { await api.put(filesApi(fx.share, dest, { overwrite: true }), f); ok++; } catch (e2) { toast(e2.message, true); }
+          }
+        } else toast(e.message, true);
+      }
+    }
+    if (ok === 1) toast(t('Uploaded: {name}', { name: arr[0].name }));
+    else if (ok > 1) toast(t('{n} files uploaded.', { n: ok }));
+    if (ok) renderFiles();
+  }
+  function showNameRow(mode, value) {
+    const row = $('#filesNew'), field = $('#filesNewName');
+    fx.renameFrom = mode === 'rename' ? value.path : '';
+    field.value = mode === 'rename' ? value.name : '';
+    $('#filesNewOk').textContent = t(mode === 'rename' ? 'Save' : 'Create');
+    row.hidden = false;
+    field.focus();
+    if (mode === 'rename') field.select();
+  }
+  function wireFiles() {
+    if (fx.wired) return;
+    fx.wired = true;
+    const page = $('#filesPage'), stage = $('#filesStage');
+    page.addEventListener('pointerdown', (e) => { fx.ptr = e.pointerType || 'mouse'; });
+    page.addEventListener('click', (e) => {
+      const shareBtn = e.target.closest('[data-files-share]');
+      if (shareBtn) return filesOpen(shareBtn.dataset.filesShare, '');
+      const go = e.target.closest('[data-files-go]');
+      if (go && page.contains(go)) return filesOpen(fx.share, go.dataset.filesGo || '');
+      const item = e.target.closest('[data-files-item]');
+      if (item) {
+        if (fx.ptr === 'touch') {
+          if (item.dataset.filesKind === 'dir' || fx.sel === item.dataset.filesItem) return openFileItem(item);
+          fx.sel = item.dataset.filesItem;
+          paintChrome();
+          return;
+        }
+        if (e.detail >= 2 || fx.sel === item.dataset.filesItem) return openFileItem(item);
+        fx.sel = item.dataset.filesItem;
+        paintChrome();
+        return;
+      }
+      if (e.target === stage || e.target.classList.contains('files-empty') || e.target.classList.contains('files-icons')) { fx.sel = ''; paintChrome(); }
+    });
+    $('#filesBack').addEventListener('click', () => {
+      if (fx.at <= 0) return;
+      fx.at--; const s = fx.stack[fx.at];
+      filesOpen(s.share, s.path, { nav: 'back' });
+    });
+    $('#filesFwd').addEventListener('click', () => {
+      if (fx.at >= fx.stack.length - 1) return;
+      fx.at++; const s = fx.stack[fx.at];
+      filesOpen(s.share, s.path, { nav: 'fwd' });
+    });
+    $('#filesView').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-view]'); if (!b) return;
+      fx.view = b.dataset.view;
+      try { localStorage.setItem('tb-files-view', fx.view); } catch (err) { /* private window */ }
+      paintItems();
+    });
+    $('#filesFilter').addEventListener('input', (e) => { fx.filter = e.target.value; if (fx.data) paintItems(); });
+    $('#filesUpload').addEventListener('click', () => $('#filesInput').click());
+    $('#filesInput').addEventListener('change', () => { uploadFiles($('#filesInput').files); $('#filesInput').value = ''; });
+    $('#filesMkdir').addEventListener('click', () => showNameRow('mkdir'));
+    $('#filesNewCancel').addEventListener('click', () => { $('#filesNew').hidden = true; fx.renameFrom = ''; });
+    $('#filesNewName').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { $('#filesNew').hidden = true; fx.renameFrom = ''; }
+      if (e.key === 'Enter') { e.preventDefault(); $('#filesNewOk').click(); }
+    });
+    $('#filesNewOk').addEventListener('click', async () => {
+      const name = $('#filesNewName').value.trim();
+      if (!name || !fx.share) return;
+      try {
+        if (fx.renameFrom) {
+          await api.post(filesApi(fx.share), { action: 'rename', path: fx.renameFrom, name });
+          toast(t('Renamed to {name}.', { name }));
+        } else {
+          await api.post(filesApi(fx.share), { action: 'mkdir', path: filesJoin(fx.path, name) });
+          toast(t('Folder created.'));
+        }
+        $('#filesNew').hidden = true; fx.renameFrom = '';
+        renderFiles();
+      } catch (e) { toast(e.message, true); }
+    });
+    $('#filesOpen').addEventListener('click', () => { const item = $('[data-files-item].is-sel, tr.is-sel', page); openFileItem(item); });
+    $('#filesDl').addEventListener('click', () => { if (fx.sel) filesDownload(fx.sel); });
+    $('#filesRename').addEventListener('click', () => { const sel = selectedFile(); if (sel) showNameRow('rename', { path: fx.sel, name: sel.name }); });
+    $('#filesDel').addEventListener('click', async () => {
+      const sel = selectedFile(); if (!sel) return;
+      const isDir = sel.type === 'dir';
+      const r = await ask(t('Remove {name}?', { name: sel.name }), t('Remove'), isDir ? t('Also delete everything in this folder') : null);
+      if (!r) return;
+      try {
+        await api.del(filesApi(fx.share, fx.sel, isDir && r.checked ? { recursive: true } : null));
+        toast(t('Removed: {name}', { name: sel.name }));
+        fx.sel = '';
+        renderFiles();
+      } catch (e) { toast(e.message, true); }
+    });
+    stage.addEventListener('dragover', (e) => { e.preventDefault(); stage.classList.add('is-over'); });
+    stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('is-over'); });
+    stage.addEventListener('drop', (e) => { e.preventDefault(); stage.classList.remove('is-over'); uploadFiles(e.dataTransfer.files); });
+    stage.addEventListener('keydown', (e) => {
+      const item = selectedFile();
+      if (e.key === 'Enter' && item) openFileItem($('[data-files-item].is-sel, tr.is-sel', page));
+      if (e.key === 'Backspace' && !e.target.closest('input')) {
+        const parts = fx.path.split('/').filter(Boolean);
+        if (parts.length) filesOpen(fx.share, parts.slice(0, -1).join('/'));
+      }
+    });
+  }
+  async function renderFiles() {
+    wireFiles();
+    const loc = filesLoc();
+    const gen = ++fx.gen;
+    const stage = $('#filesStage');
+    $('#filesNew').hidden = true;
+    fx.filter = '';
+    const filter = $('#filesFilter');
+    if (filter) filter.value = '';
+    let shares = fx.shares;
+    try {
+      const d = await api.get('/api/shares');
+      if (gen !== fx.gen) return;
+      if (!d.installed) {
+        paintSide([]);
+        stage.innerHTML = `<p class="files-empty">${esc(t('Samba is not installed yet. Run install.sh again, or on the server: sudo apt install samba'))}</p>`;
+        return;
+      }
+      shares = d.shares || [];
+      fx.shares = shares;
+    } catch (e) {
+      stage.innerHTML = `<p class="files-empty">${esc(t('The shared folders could not be loaded: {error}', { error: e.message }))}</p>`;
+      return;
+    }
+    if (gen !== fx.gen) return;
+    if (!loc.share) {
+      paintSide(shares);
+      if (shares[0]) return filesOpen(shares[0].name, '', { replace: true });
+      stage.innerHTML = `<p class="files-empty">${esc(t('No shared folders to browse yet.'))}</p>`;
+      $('#filesStatus').textContent = '';
+      return;
+    }
+    fx.share = loc.share;
+    fx.path = loc.path;
+    fx.sel = '';
+    rememberLoc(loc);
+    paintSide(shares);
+    paintChrome();
+    if (!shares.some((s) => s.name === loc.share)) {
+      stage.innerHTML = `<p class="files-empty">${esc(t('This shared folder no longer exists.'))}</p>`;
+      return;
+    }
+    stage.innerHTML = `<p class="files-empty">${esc(t('Loading…'))}</p>`;
+    try { fx.data = await api.get(filesApi(loc.share, loc.path)); }
+    catch (e) {
+      if (gen !== fx.gen) return;
+      stage.innerHTML = `<p class="files-empty">${esc(e.message)}</p>`;
+      return;
+    }
+    if (gen !== fx.gen) return;
+    paintItems();
   }
 
   /* --- Backups: the NAS to the cloud or another NAS (rclone), and devices to the NAS (a shared folder per device) */
@@ -5465,12 +5779,17 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ screens */
-  const VIEWS = { '#vms': 'vms', '#store': 'store' };
   // Settings is a window above the page you're on (like System Settings on macOS).
   // pageHash remembers that page; #settings/... in the address bar only opens the window.
   let pageHash = location.hash.startsWith('#settings') ? '' : location.hash;
   const settingsHash = () => location.hash.startsWith('#settings');
-  function currentView() { return VIEWS[settingsHash() ? pageHash : location.hash] || 'home'; }
+  function currentView() {
+    const h = (settingsHash() ? pageHash : location.hash) || '';
+    if (h === '#vms') return 'vms';
+    if (h === '#store') return 'store';
+    if (h === '#files' || h.startsWith('#files/')) return 'files';
+    return 'home';
+  }
   let pageLoaded = false;
   function route() {
     const inSettings = settingsHash();
@@ -5478,6 +5797,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#desk').hidden = view !== 'home';
     $('#vmPage').hidden = view !== 'vms';
     $('#storePage').hidden = view !== 'store';
+    $('#filesPage').hidden = view !== 'files';
     $$('.nav-btn[data-open]').forEach((b) => {
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -5490,6 +5810,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (!pageChanged && view !== 'home') return; // window closed: the page below just stays
     if (view === 'vms') { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); }
     if (view === 'store') { window.scrollTo(0, 0); loadStore(); }
+    if (view === 'files') { window.scrollTo(0, 0); renderFiles(); }
   }
   const setWin = $('#setWin');
   // Close: straight back to the address of the page below, without rebuilding it.
@@ -5519,7 +5840,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (win.open) win.close();
     timers.forEach(clearInterval); timers = []; // stop refreshing (and don't empty the form) while signing in
     const wasHidden = $('#loginScreen').hidden;
-    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#loginScreen').hidden = false; setChrome(false);
+    $('#desk').hidden = true; $('#vmPage').hidden = true; $('#storePage').hidden = true; $('#filesPage').hidden = true; $('#loginScreen').hidden = false; setChrome(false);
     const demoInfo = S.config && S.config.demo;
     $('#loginDemo').hidden = !demoInfo;
     if (demoInfo) $('#loginDemo').innerHTML = t('Demo: sign in as {user} with the password {pw}.', { user: '<b>' + esc(window.HomeBaseOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
@@ -5630,6 +5951,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
     term: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/>',
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    files: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/>',
   };
   const spotIco = (k) => `<span class="spot-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SPOT_ICO[k] || SPOT_ICO.settings}</svg></span>`;
   const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI' };
@@ -5658,6 +5980,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       { id: 'p:store', group: 'pages', title: t('App store'), keys: ['store', 'catalogue', 'install', t('App store')], ico: spotIco('store'), run: () => { goSettings('store'); } },
       { id: 'p:storage', group: 'pages', title: t('Storage'), keys: ['storage', 'disks', 'zfs', 'pool', 'bays', t('Storage')], ico: spotIco('storage'), run: () => storageWindow() },
       { id: 'p:shares', group: 'pages', title: t('Shared folders'), keys: ['shares', 'samba', 'smb', t('Shared folders')], ico: spotIco('shares'), run: () => sharesWindow() },
+      { id: 'p:files', group: 'pages', title: t('Files'), keys: ['files', 'explorer', 'finder', 'upload', t('Files')], ico: spotIco('files'), run: () => filesOpen('', '') },
       { id: 'p:backup', group: 'pages', title: t('Backups'), keys: ['backup', 'rclone', 'kopia', t('Backups')], ico: spotIco('backup'), run: () => backupWindow() },
       { id: 'p:vms', group: 'pages', title: t('Virtual machines'), keys: ['vms', 'kvm', 'libvirt', t('VMs'), t('Virtual machines')], ico: spotIco('vms'), run: () => { goSettings('vms'); } },
       { id: 'p:ai', group: 'pages', title: t('AI'), keys: ['ai', 'ollama', 'llm'], ico: spotIco('ai'), run: () => aiWindow() },
@@ -5696,7 +6019,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }));
     const shares = ((S.shares && S.shares.shares) || []).map((sh) => item({
       id: 'share:' + sh.name, group: 'shares', title: sh.name, keys: [sh.comment, sh.path], hint: t('Shared folders'), ico: spotIco('shares'),
-      run: () => sharesWindow(),
+      run: () => filesOpen(sh.name, ''),
     }));
     const backups = ((S.backup && S.backup.jobs) || []).map((j) => item({
       id: 'bk:' + (j.id || j.name), group: 'backups', title: j.name, keys: [], hint: t('Backups'), ico: spotIco('backup'),
@@ -6124,7 +6447,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const open = e.target.closest('[data-open]');
     if (open) {
       if (S.arrange && open.closest('#appGrid')) return;
-      ({ home: goHome, storage: storageWindow, shares: sharesWindow, backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
+      ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => { if (currentView() !== 'files') filesOpen('', ''); else if (win.open) win.close(); }, backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { location.hash = 'store'; }, ai: aiWindow })[open.dataset.open]();
       return;
     }
     const fo = e.target.closest('[data-folder-open]');

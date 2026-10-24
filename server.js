@@ -57,6 +57,7 @@ const disks = require('./lib/disks');
 const layout = require('./lib/layout');
 const terminal = require('./lib/terminal');
 const shares = require('./lib/shares');
+const files = require('./lib/files');
 const auth = require('./lib/auth');
 const datetime = require('./lib/datetime');
 const release = require('./lib/release');
@@ -466,6 +467,15 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), admin: auth.userName() });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
+  if ((m = p.match(/^\/api\/shares\/([^/]+)\/files$/))) {
+    const name = decodeURIComponent(m[1]);
+    const rel = url.searchParams.get('path') || '';
+    if (method === 'GET' && url.searchParams.get('dl') === '1') { files.sendFile(res, name, rel); return; }
+    if (method === 'GET') return sendJson(res, 200, files.list(name, rel));
+    if (method === 'PUT') return sendJson(res, 200, await files.upload(req, name, rel, { overwrite: url.searchParams.get('overwrite') === '1' }));
+    if (method === 'DELETE') return sendJson(res, 200, files.remove(name, rel, { recursive: url.searchParams.get('recursive') === '1' }));
+    if (method === 'POST') return sendJson(res, 200, files.act(name, await readBody(req)));
+  }
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteShare(decodeURIComponent(m[1])));
   if (p === '/api/share-users' && method === 'POST') return sendJson(res, 200, await shares.createUser(await readBody(req)));

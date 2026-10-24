@@ -71,6 +71,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg>
           <span>Shared folders</span>
         </button>
+        <button class="nav-btn" data-open="files" type="button" title="Files">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/></svg>
+          <span>Files</span>
+        </button>
         <button class="nav-btn" data-open="backup" type="button" title="Backups">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/></svg>
           <span>Backups</span>
@@ -262,6 +266,50 @@
       <p class="store-source muted small" id="storeSource"></p>
       <div class="store-grid" id="storeGrid" aria-live="polite"></div>
       <div class="store-more"><button class="btn" type="button" id="storeMore" hidden>Show more</button></div>
+    </main>
+
+    <main class="page files-page" id="filesPage" hidden>
+      <div class="finder">
+        <aside class="files-side" id="filesSide" aria-label="Shared folders">
+          <p class="files-side-title">Shared folders</p>
+        </aside>
+        <section class="files-main" aria-labelledby="filesTitle">
+          <h1 id="filesTitle" class="files-title">Files</h1>
+          <header class="files-toolbar">
+            <div class="files-hist">
+              <button class="btn back" type="button" id="filesBack" aria-label="Back" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>
+              </button>
+              <button class="btn back" type="button" id="filesFwd" aria-label="Forward" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+              </button>
+            </div>
+            <nav class="files-crumb" id="filesCrumb" aria-label="Files"></nav>
+            <label class="search files-filter">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input id="filesFilter" type="search" placeholder="Search in this folder" autocomplete="off">
+            </label>
+            <div class="seg" role="radiogroup" aria-label="View" id="filesView">
+              <button type="button" role="radio" aria-checked="true" data-view="icons">Icons</button>
+              <button type="button" role="radio" aria-checked="false" data-view="list">List</button>
+            </div>
+            <button class="btn sm" type="button" id="filesOpen" hidden>Open</button>
+            <button class="btn sm" type="button" id="filesDl" hidden>Download</button>
+            <button class="btn sm" type="button" id="filesRename" hidden>Rename</button>
+            <button class="btn sm danger" type="button" id="filesDel" hidden>Remove</button>
+            <button class="btn sm" type="button" id="filesMkdir">New folder</button>
+            <button class="btn sm primary" type="button" id="filesUpload">Upload</button>
+          </header>
+          <div class="files-new" id="filesNew" hidden>
+            <input class="field" id="filesNewName" maxlength="255" placeholder="Type a name and press Enter." autocomplete="off" spellcheck="false">
+            <button class="btn sm primary" type="button" id="filesNewOk">Create</button>
+            <button class="btn sm" type="button" id="filesNewCancel">Cancel</button>
+          </div>
+          <div class="files-stage" id="filesStage" tabindex="0" data-drop="Drop files here to upload them."></div>
+          <footer class="files-status" id="filesStatus"></footer>
+          <input type="file" id="filesInput" multiple hidden>
+        </section>
+      </div>
     </main>
 
     <main class="center-screen" id="loginScreen" hidden>
