@@ -1080,7 +1080,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   .app-grid.arranging .app:nth-child(2n) .app-icon { animation-delay: -.15s; }
 }
 @keyframes wiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
-.app.dragging, .home-widget.dragging { opacity: .3; }
+.app.dragging, .home-widget.dragging { opacity: .35; pointer-events: none; }
 .app.dragging .app-icon { animation: none !important; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; transform-origin: top left; opacity: .95;
   overflow: hidden; border-radius: 22px; box-shadow: 0 22px 34px -12px rgba(0, 0, 0, .6); }

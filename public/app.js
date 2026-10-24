@@ -819,13 +819,15 @@
     const el = document.elementFromPoint(x, y);
     if (!el) return null;
     if (S.folder && drag.ctx === 'folder' && !folderPanel.contains(el)) return { out: true };
-    if (drag.item.startsWith('w:') && (el.id === 'widgets' || el.closest('#widgets'))) {
+    const overCol = !!(el.id === 'widgets' || el.closest('#widgets'));
+    if (drag.item.startsWith('w:') && overCol) {
       const col = el.closest('#widgets > .widget-slot');
       if (col && col !== drag.el) return { tile: col, mode: 'col' };
-      return drag.el.closest('#appGrid') ? { mode: 'dock' } : null;
+      return drag.el.parentNode === $('#appGrid') ? { mode: 'dock' } : { mode: 'hold' };
     }
     const tile = el.closest('#appGrid [data-item], #folderGrid [data-item]');
-    if (tile && tile !== drag.el) {
+    if (tile === drag.el) return { mode: 'hold' };
+    if (tile) {
       if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
       const dragApp = !drag.item.startsWith('f:') && !drag.item.startsWith('w:') && !drag.item.startsWith('vm:');
       const targetApp = !tile.dataset.item.startsWith('f:') && !tile.dataset.item.startsWith('w:') && !tile.dataset.item.startsWith('vm:');
@@ -839,54 +841,61 @@
     const grid = $('#appGrid');
     const gr = grid.getBoundingClientRect();
     if (x < gr.left || x > gr.right || y < gr.top || y > gr.bottom) return null;
-    const pad = el.closest('#appGrid .home-pad');
-    if (pad) return { tile: pad, mode: 'move' };
-    const order = [...grid.children].filter((k) => k !== drag.el && (k.dataset.item || k.classList.contains('home-pad')));
-    const last = order[order.length - 1];
-    return last ? { tile: last, mode: 'move' } : null;
+    const firstPad = grid.querySelector(':scope > .home-pad');
+    if (firstPad) return { tile: firstPad, mode: 'move', key: 'pad' };
+    return { mode: 'hold' };
   }
   function setMerge(tile) {
     if (drag.merge) drag.merge.classList.remove('merge');
     drag.merge = tile || null;
     if (tile) tile.classList.add('merge');
   }
+  function dropRef(tile, x, y) {
+    if (!tile || tile.classList.contains('home-pad')) return tile;
+    const r = tile.getBoundingClientRect();
+    const after = y > r.top + r.height * 0.55 || (y >= r.top && x > r.left + r.width * 0.55);
+    return after ? tile.nextSibling : tile;
+  }
+  function putDragBefore(parent, ref) {
+    if (ref === drag.el || drag.el.nextSibling === ref) return false;
+    flip(parent, () => parent.insertBefore(drag.el, ref || null));
+    drag.moved = true;
+    return true;
+  }
   // The place of the app you are dragging (half transparent) moves to the app you hover over; the rest moves along.
-  function movePlaceholder(tile) {
+  function movePlaceholder(tile, x, y) {
     if (tile && tile.parentNode === widgetBox) {
       if (drag.el.parentNode !== widgetBox) stripWidgetChrome(drag.el);
-      const kids = [...widgetBox.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
-      if (from < 0 || to < 0) return;
-      flip(widgetBox, () => widgetBox.insertBefore(drag.el, to > from ? tile.nextSibling : tile));
-      drag.moved = true; drag.hoverKey = ''; drag.restX = null;
+      putDragBefore(widgetBox, dropRef(tile, x, y));
       return;
     }
     const grid = $('#appGrid');
+    if (!grid.contains(tile) && tile !== grid) return;
     if (drag.el.parentNode !== grid) {
       const id = drag.el.dataset.widget;
       const [w, h] = WIDGET_DEFAULT[id] || [2, 2];
       applyWidgetChrome(drag.el, w, h);
-      flip(grid, () => grid.insertBefore(drag.el, tile));
-      drag.moved = true; drag.hoverKey = ''; drag.restX = null;
-      return;
+      if (drag.ghost) {
+        const { cellW, cellH, gapX, gapY } = gridMetrics();
+        drag.ghost.style.width = Math.max(0, w * cellW + (w - 1) * gapX) + 'px';
+        drag.ghost.style.height = Math.max(0, h * cellH + (h - 1) * gapY) + 'px';
+        drag.ghost.dataset.w = String(w); drag.ghost.dataset.h = String(h);
+      }
     }
-    const kids = [...grid.children], from = kids.indexOf(drag.el), to = kids.indexOf(tile);
-    if (from < 0 || to < 0) return;
-    const after = to > from && !tile.classList.contains('home-pad');
-    flip(grid, () => grid.insertBefore(drag.el, after ? tile.nextSibling : tile));
-    drag.moved = true; drag.hoverKey = ''; drag.restX = null;
+    putDragBefore(grid, dropRef(tile, x, y));
   }
   // Only react when you hold still: whoever just slides over it (on the way to the middle of an app) moves nothing.
   function hover(tg, x, y) {
-    const key = !tg ? '' : tg.out ? 'out' : tg.mode === 'dock' ? 'dock' : (tg.tile.dataset.item || ('pad:' + [...tg.tile.parentNode.children].indexOf(tg.tile))) + ':' + tg.mode;
-    const still = drag.restX != null && Math.hypot(x - drag.restX, y - drag.restY) < 6;
+    const key = !tg ? '' : tg.out ? 'out' : tg.mode === 'dock' ? 'dock' : tg.mode === 'hold' ? 'hold'
+      : (tg.key || (tg.tile && tg.tile.dataset.item) || 'x') + ':' + tg.mode;
+    const still = drag.restX != null && Math.hypot(x - drag.restX, y - drag.restY) < 8;
     if (key === drag.hoverKey && still) return;
     drag.restX = x; drag.restY = y;
     if (key !== drag.hoverKey && drag.merge) setMerge(null);
     drag.hoverKey = key; drag.out = key === 'out';
-    drag.dock = key === 'dock' || (tg && tg.mode === 'col');
     clearTimeout(drag.timer);
     folderOverlay.classList.toggle('drop-out', drag.out);
-    if (!tg || tg.out) return;
+    if (!tg || tg.out || tg.mode === 'hold') return;
     if (tg.mode === 'dock') {
       setMerge(null);
       drag.timer = setTimeout(() => {
@@ -894,17 +903,20 @@
         stripWidgetChrome(drag.el);
         widgetBox.appendChild(drag.el);
         drag.moved = true;
-      }, 160);
+      }, 280);
       return;
     }
     if (tg.mode === 'col') {
       setMerge(null);
-      drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160);
+      drag.timer = setTimeout(() => movePlaceholder(tg.tile, x, y), 160);
       return;
     }
-    // Wait a moment, so nothing jumps when you just slide over it.
-    if (tg.mode === 'merge') { if (drag.merge !== tg.tile) drag.timer = setTimeout(() => setMerge(tg.tile), 280); }
-    else { setMerge(null); drag.timer = setTimeout(() => movePlaceholder(tg.tile), 160); }
+    if (tg.mode === 'merge') { if (drag.merge !== tg.tile) drag.timer = setTimeout(() => setMerge(tg.tile), 280); return; }
+    setMerge(null);
+    const grid = $('#appGrid');
+    const first = drag.el.parentNode !== grid;
+    if (first) movePlaceholder(tg.tile, x, y);
+    else drag.timer = setTimeout(() => movePlaceholder(tg.tile, x, y), 180);
   }
   function onDragStart(e) {
     if (e.button > 0 || drag || S.view === 'list') return;
@@ -923,8 +935,7 @@
       return;
     }
     e.preventDefault(); // no text selection or focus jumps while dragging
-    drag = { item: tile.dataset.item, ctx, el: tile, x0: e.clientX, y0: e.clientY, started: false, hoverKey: '', moved: false };
-    try { tile.setPointerCapture(e.pointerId); } catch (err) { /* capture is best-effort */ }
+    drag = { item: tile.dataset.item, ctx, el: tile, x0: e.clientX, y0: e.clientY, pointerId: e.pointerId, started: false, hoverKey: '', moved: false, fromCol: tile.parentNode === widgetBox };
     document.addEventListener('pointermove', onDragMove);
     document.addEventListener('pointerup', onDragEnd);
     document.addEventListener('pointercancel', onDragEnd);
@@ -988,17 +999,18 @@
       return;
     }
     if (d.out) { land(null, false, () => takeOutOfFolder(d.item)); return; }
-    if (d.item.startsWith('w:') && (d.dock || d.el.closest('#widgets'))) {
+    const inCol = d.el.parentNode === widgetBox;
+    if (d.item.startsWith('w:') && inCol) {
       land(d.el.getBoundingClientRect(), false, () => {
         if (!d.moved) return;
-        const items = homeItems().filter((it) => itemKey(it) !== d.item);
-        setLayout(items, mergedColumnOrder());
+        setLayout(homeItems().filter((it) => itemKey(it) !== d.item), mergedColumnOrder());
       });
       return;
     }
     const landEl = d.el.querySelector('.app-icon') || d.el;
     land(landEl.getBoundingClientRect(), false, () => {
-      if (!d.moved) return;
+      if (!d.moved && !d.fromCol) return;
+      if (!d.el.parentNode || d.el.parentNode.id !== 'appGrid') return;
       // The order as it is in the grid now.
       const order = [...d.el.parentNode.children].map((x) => x.dataset.item).filter(Boolean);
       if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order } : it)));
