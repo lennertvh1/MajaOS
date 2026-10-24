@@ -164,7 +164,7 @@
     vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
     store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
     view: (() => { try { return localStorage.getItem('tb-app-view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })(), // per device
-    layout: { items: [] }, arrange: false, folder: null };
+    layout: { items: [] }, shortcuts: [], arrange: false, folder: null };
 
   /* ------------------------------------------------------------ notifications */
   function toast(msg, bad) {
@@ -345,13 +345,13 @@
     stashHomeWidgets();
     if (listView) {
       const html = flat
-        ? visiblePages().map(pageRow).join('') + list.map(appRow).join('')
+        ? visiblePages().map(pageRow).join('') + visibleShortcuts().map(shortcutRow).join('') + list.map(appRow).join('')
         : homeListRows();
       grid.innerHTML = html || `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
       return;
     }
     if (flat) {
-      const tiles = visiblePages().map(pageTile).concat(list.map(appTile));
+      const tiles = visiblePages().map(pageTile).concat(visibleShortcuts().map((s) => shortcutTile(s.id)), list.map(appTile));
       grid.innerHTML = tiles.length ? tiles.join('') : `<p class="empty">${t(S.apps.length ? 'No apps match.' : 'No containers found yet.')}</p>`;
       return;
     }
@@ -411,10 +411,45 @@
           ${pageIcon(id)}<span class="row-name"><b>${esc(label)}</b></span></button>
       </div>`;
   }
+  const shortcutById = (id) => (S.shortcuts || []).find((s) => s.id === id);
+  function shortcutHost(url) { try { return new URL(url).host; } catch (e) { return ''; } }
+  function visibleShortcuts() {
+    if (S.filter !== 'all') return [];
+    const q = S.search.trim().toLowerCase();
+    return (S.shortcuts || []).filter((s) => !q || s.name.toLowerCase().includes(q) || shortcutHost(s.url).toLowerCase().includes(q));
+  }
+  function shortcutIconHtml(s) {
+    const letter = esc((s.name || '?').trim().charAt(0).toUpperCase() || '?');
+    if (s.icon) return `<span class="app-icon" data-letter="${letter}" data-color="${colorFor(s.name)}"><img src="${esc(s.icon)}" alt="" draggable="false"></span>`;
+    return `<span class="app-icon" style="background:${colorFor(s.name)}">${letter}</span>`;
+  }
+  const shortcutMore = (s) => `<button class="app-more" type="button" data-shortcut="${esc(s.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: s.name }))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>`;
+  function shortcutTile(id) {
+    const s = shortcutById(id); if (!s) return '';
+    return `<div class="app shortcut-tile" data-item="s:${esc(id)}">
+        <button class="app-open" type="button" data-shortcut="${esc(id)}" data-action="open" title="${esc(s.name)} – ${esc(s.url)}">
+          ${shortcutIconHtml(s)}<span class="app-name">${esc(s.name)}</span>
+        </button>
+        ${shortcutMore(s)}
+      </div>`;
+  }
+  function shortcutRow(s) {
+    const host = shortcutHost(s.url);
+    return `<div class="app-row shortcut-tile" data-item="s:${esc(s.id)}">
+        <button class="app-open row-open" type="button" data-shortcut="${esc(s.id)}" data-action="open" title="${esc(s.name)} – ${esc(s.url)}">
+          ${shortcutIconHtml(s)}<span class="row-name"><b>${esc(s.name)}</b><span class="muted small">${esc(s.url)}</span></span></button>
+        <span class="row-status"><span class="pill">${t('Shortcut')}</span></span>
+        <span class="row-where small">${host ? `<span>${esc(host)}</span>` : ''}</span>
+        <span class="row-folder"></span>
+        <span class="row-actions"><button class="btn sm" type="button" data-shortcut="${esc(s.id)}" data-action="menu">${t('Edit')}</button>${shortcutMore(s)}</span>
+      </div>`;
+  }
   function homeListRows() {
     return homeItems().flatMap((it) => {
       if (typeof it === 'string') { const a = appByName(it); return a ? [appRow(a)] : []; }
       if (it && it.page) return [pageRow(it.page)];
+      if (it && it.shortcut) { const s = shortcutById(it.shortcut); return s ? [shortcutRow(s)] : []; }
       if (it && it.apps) return it.apps.map(appByName).filter(Boolean).map(appRow);
       return [];
     }).join('');
@@ -475,6 +510,7 @@
     if (it.widget) return 'w:' + it.widget;
     if (it.vm) return 'vm:' + it.vm;
     if (it.page) return 'p:' + it.page;
+    if (it.shortcut) return 's:' + it.shortcut;
     return '';
   }
   function homeCols() {
@@ -563,12 +599,12 @@
         applyWidgetChrome(el, it.w, it.h);
       } else if (!el) {
         const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : '';
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : it.shortcut ? shortcutTile(it.shortcut) : '';
         if (!html) return;
         el = htmlNode(html);
       } else if (!(drag && drag.el === el)) {
         const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : '';
+        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : it.shortcut ? shortcutTile(it.shortcut) : '';
         if (html) { const next = htmlNode(html); el.replaceWith(next); el = next; }
       }
       const ref = [...grid.children].filter((x) => x.dataset.item)[i];
@@ -719,7 +755,7 @@
   // The saved layout, without apps that are gone and with new apps at the end.
   // Widgets in items sit between the apps; the rest stay in the left column.
   function homeItems() {
-    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), placedP = new Set(), out = [];
+    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), placedP = new Set(), placedS = new Set(), out = [];
     const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
     const vmNames = new Set((S.vms || []).map((v) => v.name));
     for (const it of (S.layout && S.layout.items) || []) {
@@ -739,12 +775,17 @@
         if (PAGE_IDS.includes(it.page) && !placedP.has(it.page)) { placedP.add(it.page); out.push({ page: it.page }); }
         continue;
       }
+      if (it && it.shortcut) {
+        if (shortcutById(it.shortcut) && !placedS.has(it.shortcut)) { placedS.add(it.shortcut); out.push({ shortcut: it.shortcut }); }
+        continue;
+      }
       if (!it || !it.apps) continue;
       const apps = it.apps.filter((n) => names.has(n) && !placed.has(n));
       apps.forEach((n) => placed.add(n));
       if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
     }
     S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
+    (S.shortcuts || []).forEach((s) => { if (!placedS.has(s.id)) out.push({ shortcut: s.id }); });
     const missing = PAGE_IDS.filter((id) => !placedP.has(id)).map((page) => ({ page }));
     return missing.concat(out);
   }
@@ -754,6 +795,7 @@
     if (it && it.widget) { const [w, h] = clampWidgetSize(it.widget, it.w, it.h); return [{ widget: it.widget, w, h }]; }
     if (it && it.vm) return [{ vm: it.vm }];
     if (it && it.page && PAGE_IDS.includes(it.page)) return [{ page: it.page }];
+    if (it && it.shortcut && shortcutById(it.shortcut)) return [{ shortcut: it.shortcut }];
     if (it && it.apps && it.apps.length > 1) return [it];
     return (it && it.apps) || [];
   });
@@ -779,8 +821,88 @@
     layoutTimer = setTimeout(() => api.post('/api/layout', S.layout).catch((e) => toast(t('Saving the layout failed: {error}', { error: e.message }), true)), 300);
   }
   async function loadLayout() {
-    try { S.layout = await api.get('/api/layout'); } catch (e) { S.layout = { items: [] }; }
+    try {
+      const [lay, cuts] = await Promise.all([api.get('/api/layout'), api.get('/api/shortcuts').catch(() => [])]);
+      S.layout = lay;
+      S.shortcuts = Array.isArray(cuts) ? cuts : [];
+    } catch (e) { S.layout = { items: [] }; S.shortcuts = []; }
     renderApps(); applyWidgets();
+  }
+  function readDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ''));
+      r.onerror = () => reject(new Error(t('This file could not be read.')));
+      r.readAsDataURL(file);
+    });
+  }
+  function shortcutWindow(id) {
+    const s = id ? shortcutById(id) : null;
+    if (id && !s) return;
+    const preview = s && s.icon
+      ? `<span class="app-icon" data-letter="${esc((s.name || '?').charAt(0).toUpperCase())}" data-color="${colorFor(s.name)}"><img src="${esc(s.icon)}" alt=""></span>`
+      : '';
+    openWindow(s ? t('Edit shortcut') : t('New shortcut'), `
+      <form class="form" id="cutForm">
+        <div class="store-head">${preview}</div>
+        <label class="fld"><span>${t('Name')}</span><input class="field" name="name" required maxlength="40" value="${s ? esc(s.name) : ''}"></label>
+        <label class="fld"><span>${t('Address')}</span><input class="field" name="url" required placeholder="https://" value="${s ? esc(s.url) : ''}" spellcheck="false" autocomplete="off">
+          <small>${t('Opens in a new tab.')}</small></label>
+        <label class="fld"><span>${t('Icon')}</span><input class="field" name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,.ico">
+          <small>${t('Upload an image, or leave this empty to use the site\'s icon.')}</small></label>
+        <label class="check"><input type="checkbox" name="fetchIcon"${s && s.icon ? '' : ' checked'}> ${t('Use the site\'s icon')}</label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row">
+          <button class="btn primary" type="submit">${t('Save')}</button>
+          ${s ? `<button class="btn danger" type="button" data-cut-del>${t('Remove')}</button>` : ''}
+          <button class="btn" type="button" data-close>${t('Cancel')}</button>
+        </div>
+      </form>`);
+    const form = $('#cutForm');
+    const err = $('.form-error', form);
+    let previewUrl = '';
+    onWinClose = () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+    form.elements.file.addEventListener('change', () => {
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = ''; }
+      const file = form.elements.file.files[0];
+      const head = $('.store-head', form);
+      if (!file) { if (head && !s) head.innerHTML = ''; return; }
+      form.elements.fetchIcon.checked = false;
+      previewUrl = URL.createObjectURL(file);
+      if (head) head.innerHTML = `<span class="app-icon"><img src="${esc(previewUrl)}" alt=""></span>`;
+    });
+    if (s) {
+      const del = $('[data-cut-del]', form);
+      del.addEventListener('click', async () => {
+        if (!(await ask(t('Remove {name}?', { name: s.name }), t('Remove')))) return;
+        del.disabled = true;
+        try {
+          await api.del('/api/shortcuts/' + encodeURIComponent(s.id));
+          S.shortcuts = (S.shortcuts || []).filter((x) => x.id !== s.id);
+          setLayout(homeItems());
+          win.close();
+        } catch (e) { err.textContent = e.message; del.disabled = false; }
+      });
+    }
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+      const file = form.elements.file.files[0];
+      if (file && file.size > 512 * 1024) { err.textContent = t('The icon is too big. Use an image under 512 KB.'); return; }
+      const body = { name: form.elements.name.value, url: form.elements.url.value };
+      try { if (file) body.icon = await readDataUrl(file); } catch (ex) { err.textContent = ex.message; return; }
+      if (!body.icon) body.fetchIcon = form.elements.fetchIcon.checked;
+      const btn = form.querySelector('[type=submit]');
+      btn.disabled = true;
+      try {
+        const r = await api.post(s ? '/api/shortcuts/' + encodeURIComponent(s.id) : '/api/shortcuts', body);
+        try { S.shortcuts = await api.get('/api/shortcuts'); } catch (ex) { /* the tile still shows after the next refresh */ }
+        setLayout(homeItems());
+        if (body.fetchIcon && r.iconFetched === false) toast(t('The site has no icon HomeBaseOS can use. Upload one instead.'), true);
+        else toast(t('Saved.'));
+        win.close();
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    });
   }
   const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
   const folderOf = (name) => ((S.layout && S.layout.items) || []).find((it) => it && it.apps && it.apps.includes(name)) || null;
@@ -795,7 +917,7 @@
     setLayout(items);
   }
   function takeOutOfFolder(name) {
-    const items = homeItems(), at = items.findIndex((it) => typeof it !== 'string' && it.apps.includes(name));
+    const items = homeItems(), at = items.findIndex((it) => typeof it !== 'string' && it.apps && it.apps.includes(name));
     if (at < 0) return;
     const next = without(items, name);
     next.splice(at + 1, 0, name); // right after the folder
@@ -818,6 +940,7 @@
     renderFolderHint();
   }
   $('#arrangeBtn').addEventListener('click', () => setArrange(!S.arrange));
+  $('#shortcutBtn').addEventListener('click', () => shortcutWindow());
 
   /* open a folder: a panel above the home screen */
   const folderPanel = $('#folderPanel'), folderOverlay = $('#folderOverlay');
@@ -895,7 +1018,7 @@
     if (tile === drag.el) return { mode: 'hold' };
     if (tile) {
       if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
-      const pinned = (k) => /^(f:|w:|vm:|p:)/.test(k);
+      const pinned = (k) => /^(f:|w:|vm:|p:|s:)/.test(k);
       const dragApp = !pinned(drag.item);
       const targetApp = !pinned(tile.dataset.item);
       const icon = tile.querySelector('.app-icon');
@@ -6264,7 +6387,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     files: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/>',
   };
   const spotIco = (k) => `<span class="spot-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SPOT_ICO[k] || SPOT_ICO.settings}</svg></span>`;
-  const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI' };
+  const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI', shortcuts: 'Shortcuts' };
   let spotHits = [], spotSel = 0;
 
   function spotMark(text, q) {
@@ -6345,7 +6468,11 @@ sudo ./install.sh</pre></div>`}` : '') +
       id: 'ai:' + m.name, group: 'ai', title: m.name, keys: [m.params, m.quant], hint: t('AI'), ico: spotIco('ai'),
       run: () => aiWindow(),
     }));
-    return pages.map(item).concat(settings, apps, vms, folders, shares, backups, store, models);
+    const cuts = (S.shortcuts || []).map((s) => item({
+      id: 'cut:' + s.id, group: 'shortcuts', title: s.name, keys: [s.url, shortcutHost(s.url)], hint: t('Shortcut'), ico: shortcutIconHtml(s),
+      run: () => window.open(s.url, '_blank', 'noopener,noreferrer'),
+    }));
+    return pages.map(item).concat(settings, apps, vms, folders, shares, backups, store, models, cuts);
   }
   function hitsForQuery(q) {
     const items = buildSpotItems();
@@ -6754,6 +6881,14 @@ sudo ./install.sh</pre></div>`}` : '') +
       toast(t(ext.href.startsWith('vnc:') ? 'In the demo this opens the VM\'s screen on your own server.' : 'In the demo this opens the app on your own server.'));
       return;
     }
+    const cut = e.target.closest('[data-shortcut]');
+    if (cut && !menu.contains(cut)) {
+      if (S.arrange && cut.closest('#appGrid, #folderGrid')) return;
+      const s = shortcutById(cut.dataset.shortcut); if (!s) return;
+      if (cut.dataset.action === 'menu') return shortcutWindow(s.id);
+      window.open(s.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const open = e.target.closest('[data-open]');
     if (open) {
       if (S.arrange && open.closest('#appGrid')) return;
@@ -6781,6 +6916,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     img.replaceWith(document.createTextNode(box.dataset.letter || '?'));
   }, true);
   $('#appGrid').addEventListener('contextmenu', (e) => {
+    const cut = e.target.closest('[data-shortcut]');
+    if (cut) { e.preventDefault(); if (!S.arrange) shortcutWindow(cut.dataset.shortcut); return; }
     const t = e.target.closest('[data-app]'); if (!t || S.arrange) return;
     const a = S.apps.find((x) => x.id === t.dataset.app); if (!a) return;
     e.preventDefault();

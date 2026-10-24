@@ -90,6 +90,9 @@ test('home screen layout with widgets and VMs between the apps', () => {
   const pages = validateLayout({ items: [{ page: 'files' }, 'plex', { page: 'files' }, { page: 'store' }, { page: 'backup' }] });
   assert.deepEqual(pages.items, [{ page: 'files' }, 'plex', { page: 'store' }, { page: 'backup' }]);
   assert.throws(() => validateLayout({ items: [{ page: 'settings' }] }), /not a valid page/);
+  const cuts = validateLayout({ items: ['plex', { shortcut: 's0123abcd' }, { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }] });
+  assert.deepEqual(cuts.items, ['plex', { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }]);
+  assert.throws(() => validateLayout({ items: [{ shortcut: 'nope' }] }), /not a valid shortcut/);
 });
 
 test('widget size on the home screen', () => {

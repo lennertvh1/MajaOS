@@ -430,7 +430,7 @@
     { folder: 'fai', name: 'AI', apps: ['ollama', 'open-webui'] }] };
   function saveLayout(b) {
     if (!b || !Array.isArray(b.items)) throw err('The layout is not valid.');
-    const seen = new Set(), widgets = new Set(), vms = new Set(), pages = new Set();
+    const seen = new Set(), widgets = new Set(), vms = new Set(), pages = new Set(), cuts = new Set();
     const cell = (n, d) => (Number.isInteger(n) && n >= 1 && n <= 8 ? n : d);
     const items = b.items.map((it) => {
       if (typeof it === 'string') { if (seen.has(it)) return null; seen.add(it); return it; }
@@ -451,12 +451,68 @@
         if (!/^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,62}$/.test(name) || vms.has(name)) return null;
         vms.add(name); return { vm: name };
       }
+      if (it && it.shortcut != null) {
+        const id = String(it.shortcut);
+        if (!/^s[0-9a-f]{8}$/.test(id)) throw err('"' + id + '" is not a valid shortcut.');
+        if (cuts.has(id)) return null;
+        cuts.add(id);
+        return { shortcut: id };
+      }
       const apps = (it.apps || []).filter((n) => !seen.has(n) && seen.add(n));
       return apps.length > 1 ? { folder: it.folder, name: String(it.name || 'Folder').slice(0, 40), apps } : apps[0] || null;
     }).filter(Boolean);
     const ok = (a) => [...new Set((Array.isArray(a) ? a : []).filter((x) => /^[a-z]{2,16}$/.test(x)))];
     layout = { items, widgets: { order: ok(b.widgets && b.widgets.order), hidden: ok(b.widgets && b.widgets.hidden) } };
     return copy(layout);
+  }
+
+  /* ---- shortcuts on the home screen (external addresses) */
+  let shortcuts = [];
+  function cutIcon(name) {
+    const letter = String(name || '?').trim().charAt(0).toUpperCase().replace(/[<>&]/g, '') || '?';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="14" fill="#3e8e7e"/><text x="32" y="42" text-anchor="middle" font-size="32" font-family="sans-serif" fill="#fff">' + letter + '</text></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+  function cutPublic(s) { return { id: s.id, name: s.name, url: s.url, icon: s.icon || null }; }
+  function cutCheck(body, prev) {
+    const name = String(body.name == null ? '' : body.name).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
+    if (!name) throw err('Choose a name.');
+    let u;
+    try { u = new URL(String(body.url == null ? '' : body.url).trim()); }
+    catch (e) { throw err('That is not a valid address. Start it with http:// or https://.'); }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw err('The address must start with http:// or https://.');
+    if (u.username || u.password) throw err('Leave the user name and password out of the address.');
+    u.hash = '';
+    if (u.href.length > 2000) throw err('That address is too long.');
+    let icon = prev ? prev.icon : null, iconFetched;
+    if (body.icon) {
+      if (!/^data:image\/(png|jpeg|gif|webp|x-icon|vnd\.microsoft\.icon);base64,/i.test(body.icon) || String(body.icon).length > 800000) throw err('The icon has to be a PNG, JPEG, GIF, WebP or ICO image.');
+      icon = body.icon;
+    } else if (body.fetchIcon) {
+      if (u.hostname === 'no-icon.invalid') iconFetched = false;
+      else { icon = cutIcon(name); iconFetched = true; }
+    }
+    return { name, url: u.href, icon, iconFetched };
+  }
+  function cutCreate(body) {
+    if (shortcuts.length >= 200) throw err('There are already 200 shortcuts. Remove one first.');
+    const c = cutCheck(body, null);
+    const item = { id: 's' + Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0'), name: c.name, url: c.url, icon: c.icon };
+    shortcuts.push(item);
+    return { ...cutPublic(item), iconFetched: c.iconFetched };
+  }
+  function cutUpdate(id, body) {
+    const item = shortcuts.find((x) => x.id === id);
+    if (!item) throw err('Unknown shortcut.', 404);
+    const c = cutCheck(body, item);
+    item.name = c.name; item.url = c.url; item.icon = c.icon;
+    return { ...cutPublic(item), iconFetched: c.iconFetched };
+  }
+  function cutRemove(id) {
+    const i = shortcuts.findIndex((x) => x.id === id);
+    if (i < 0) throw err('Unknown shortcut.', 404);
+    shortcuts.splice(i, 1);
+    return { removed: id };
   }
 
   /* ---- shared folders (Samba) */
@@ -1978,6 +2034,7 @@
       return { choice: '@lan', network: lan ? lan.name : null, home: { name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }, ipRange: lan ? lan.ipRange : '192.168.1.224/27', suggestion };
     }
     if (path === '/api/layout') return copy(layout);
+    if (path === '/api/shortcuts') return shortcuts.map(cutPublic);
     if (path === '/api/shares') return sharesGet();
     { const q = parseFilesApi(path); if (q) { if (q.text) return filesText(q); if (q.dl || q.zip) throw err('Choose a file to download.', 400); return filesList(q); } }
     if (path === '/api/overview') return overview();
@@ -2077,6 +2134,8 @@
     if (path === '/api/vm-networks') { await wait(rnd(400, 800)); return vmNetCreate(body); }
     if (path === '/api/bays') return saveBays(body);
     if (path === '/api/layout') return saveLayout(body);
+    if (path === '/api/shortcuts') return cutCreate(body);
+    { const cm = path.match(/^\/api\/shortcuts\/([^/]+)$/); if (cm) return cutUpdate(decodeURIComponent(cm[1]), body); }
     if (path === '/api/shares') { await wait(rnd(400, 800)); return shareSave(body, null); }
     { const q = parseFilesApi(path); if (q) { await wait(rnd(150, 400)); return filesAct(q, body); } }
     const shm = path.match(/^\/api\/shares\/([^/]+)$/);
@@ -2220,6 +2279,7 @@
 
   async function del(path) {
     await wait(400);
+    { const cm = path.match(/^\/api\/shortcuts\/([^/]+)$/); if (cm) return cutRemove(decodeURIComponent(cm[1])); }
     { const r = path.includes('/snapshots') ? snapRoute('DELETE', path) : path.startsWith('/api/sysbackups') ? sysRoute('DELETE', path) : undefined; if (r !== undefined) return r; }
     let m = path.match(/^\/api\/apps\/([^/?]+)(\?data=1)?$/);
     if (m) {

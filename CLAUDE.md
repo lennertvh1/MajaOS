@@ -105,7 +105,11 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 | POST | `/api/apps/:id/(start\|stop\|restart)` | container actions |
 | POST | `/api/apps/:id/update` | update as a job → {job, name}; follow it with `/api/store/jobs/:id` (409 if it is already being updated) |
 | POST | `/api/apps/check-updates` | check all images now → {checked, updates, errors} |
-| GET/POST | `/api/layout` | home screen layout {items, widgets {order, hidden}} |
+| GET/POST | `/api/layout` | home screen layout {items, widgets {order, hidden}}; a shortcut is `{shortcut: "<id>"}` |
+| GET | `/api/shortcuts` | shortcuts [{id, name, url, icon}] (`icon` is `/api/shortcuts/:id/icon` or null) |
+| POST | `/api/shortcuts`, `/api/shortcuts/:id` | create or edit {name, url, icon (data URL), fetchIcon} → {id, name, url, icon, iconFetched} |
+| DELETE | `/api/shortcuts/:id` | remove the shortcut (the layout item is dropped by the browser) |
+| GET | `/api/shortcuts/:id/icon` | the icon bytes (PNG, JPEG, GIF, WebP or ICO) |
 | POST | `/api/apps/custom/inspect` | {image: name or link} → image, name, ports, volumes, env, webui, icon, storeMatch, warnings, folders, networks, networkDefault, appdataDir, stacksDir, appdataMissing |
 | POST | `/api/apps/custom` | install an own app {name, image, restart, privileged, network, ip, ports, volumes, env, devices, labels, webui, icon} → {job, name, file} |
 | GET | `/api/apps/:id/settings` | name, image, ports, autoStart, restartPolicy, webui/webuiDefault/webuiAuto, icon/iconDefault, compose {project, service, files, file, workingDir, editable, text, form (see `serviceForm`) or formError} |

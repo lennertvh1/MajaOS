@@ -55,6 +55,7 @@ const bays = require('./lib/bays');
 const zpool = require('./lib/zpool');
 const disks = require('./lib/disks');
 const layout = require('./lib/layout');
+const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
 const shares = require('./lib/shares');
 const files = require('./lib/files');
@@ -322,6 +323,17 @@ async function handleApi(req, res, url) {
   }
   if (p === '/api/layout' && method === 'GET') return sendJson(res, 200, layout.getLayout());
   if (p === '/api/layout' && method === 'POST') return sendJson(res, 200, layout.saveLayout(await readBody(req)));
+  if (p === '/api/shortcuts' && method === 'GET') return sendJson(res, 200, shortcuts.list());
+  if (p === '/api/shortcuts' && method === 'POST') return sendJson(res, 200, await shortcuts.create(await readBody(req, 2e6)));
+  if ((m = p.match(/^\/api\/shortcuts\/([^/]+)\/icon$/)) && method === 'GET') {
+    const ic = shortcuts.icon(decodeURIComponent(m[1]));
+    if (!ic) return sendJson(res, 404, { error: 'This shortcut has no icon.' });
+    res.writeHead(200, { 'Content-Type': ic.type, 'Content-Length': ic.size, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+    fs.createReadStream(ic.path).pipe(res);
+    return;
+  }
+  if ((m = p.match(/^\/api\/shortcuts\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shortcuts.update(decodeURIComponent(m[1]), await readBody(req, 2e6)));
+  if ((m = p.match(/^\/api\/shortcuts\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, shortcuts.remove(decodeURIComponent(m[1])));
   if (p === '/api/apps/custom/inspect' && method === 'POST') return sendJson(res, 200, await appstore.inspectImage((await readBody(req)).image));
   if (p === '/api/apps/custom' && method === 'POST') return sendJson(res, 200, await appstore.installCustom(await readBody(req)));
   if (p === '/api/apps/draft' && method === 'POST') return sendJson(res, 200, await appstore.draft(await readBody(req)));
