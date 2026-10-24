@@ -155,7 +155,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .spot-ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .spot-hit .app-icon { width: 32px; height: 32px; border-radius: 9px; font-size: 14px; box-shadow: none; flex: none; overflow: hidden; }
 .spot-hit .app-icon img { padding: 4px; }
-.spot-hit .app-icon .dot, .spot-hit .app-icon .upd-badge, .spot-hit .app-icon .app-prog { display: none; }
+.spot-hit .app-icon .dot, .spot-hit .app-icon .upd-badge, .spot-hit .app-icon .app-prog, .spot-hit .app-icon .cut-badge { display: none; }
 .spot-empty { padding: 16px 12px; text-align: center; color: var(--muted); font-size: 14px; }
 .nav-btn {
   display: inline-flex; align-items: center; gap: 0.45em; border: 0; background: transparent;
@@ -361,6 +361,12 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .app-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; background: #fff; padding: 9px; }
 .app-icon .dot { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; border: 3px solid var(--body-bg); background: var(--faint); }
 .app-icon .dot.on { background: var(--ok); }
+.app-icon .cut-badge {
+  position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--text); color: var(--body-bg);
+  border: 2px solid var(--body-bg); box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+}
+.app-icon .cut-badge svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .app-icon .upd-badge {
   position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
   background: var(--warn); border: 2px solid var(--body-bg); box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
@@ -1429,6 +1435,8 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .app-row .app-icon { width: 42px; height: 42px; border-radius: 12px; font-size: 18px; flex: none; }
 .app-row .app-icon img { padding: 6px; }
 .app-row .app-icon .dot { width: 12px; height: 12px; border-width: 2px; right: -3px; bottom: -3px; }
+.app-row .app-icon .cut-badge { width: 16px; height: 16px; right: -4px; bottom: -4px; }
+.app-row .app-icon .cut-badge svg { width: 10px; height: 10px; }
 .app-row .app-icon .upd-badge { display: none; }
 .app-row .app-prog { left: 4px; right: 4px; bottom: 4px; height: 5px; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .85); }
 .app-row .row-name { display: grid; min-width: 0; }

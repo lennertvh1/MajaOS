@@ -418,10 +418,11 @@
     const q = S.search.trim().toLowerCase();
     return (S.shortcuts || []).filter((s) => !q || s.name.toLowerCase().includes(q) || shortcutHost(s.url).toLowerCase().includes(q));
   }
+  const shortcutBadge = '<span class="cut-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 5h5v5"/><path d="M19 5 10 14"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></span>';
   function shortcutIconHtml(s) {
     const letter = esc((s.name || '?').trim().charAt(0).toUpperCase() || '?');
-    if (s.icon) return `<span class="app-icon" data-letter="${letter}" data-color="${colorFor(s.name)}"><img src="${esc(s.icon)}" alt="" draggable="false"></span>`;
-    return `<span class="app-icon" style="background:${colorFor(s.name)}">${letter}</span>`;
+    if (s.icon) return `<span class="app-icon" data-letter="${letter}" data-color="${colorFor(s.name)}"><img src="${esc(s.icon)}" alt="" draggable="false">${shortcutBadge}</span>`;
+    return `<span class="app-icon" style="background:${colorFor(s.name)}">${letter}${shortcutBadge}</span>`;
   }
   const shortcutMore = (s) => `<button class="app-more" type="button" data-shortcut="${esc(s.id)}" data-action="menu" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: s.name }))}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>`;
