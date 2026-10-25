@@ -98,4 +98,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1');
+server.listen(PORT, '127.0.0.1', () => {
+  try {
+    fs.mkdirSync(DIR, { recursive: true });
+    fs.writeFileSync(path.join(DIR, 'server-ready'), '1');
+  } catch { /* the session still opens the page */ }
+});

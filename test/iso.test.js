@@ -50,6 +50,10 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.match(read('kiosk.sh'), /retain-splash/);
   assert.match(read('serve.js'), /ui-ready/);
   assert.doesNotMatch(live, /TTYReset=yes/);
+  assert.match(live, /Type=simple/);
+  assert.match(live, /-comp zstd/);
+  assert.match(read('serve.js'), /server-ready/);
+  assert.doesNotMatch(read('xsession.sh'), /node -e/);
   assert.match(live, /COMPRESS=gzip/);
   assert.match(live, /fonts-noto-cjk/);
   assert.match(live, /WLR_RENDERER=pixman/);

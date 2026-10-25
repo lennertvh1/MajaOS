@@ -58,7 +58,7 @@ After=systemd-logind.service plymouth-start.service
 Wants=systemd-logind.service
 [Service]
 ExecStart=/opt/homebaseos-installer/iso/kiosk.sh
-Type=idle
+Type=simple
 StandardOutput=journal
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
@@ -77,6 +77,9 @@ INITRD="$(ls "$R"/boot/initrd.img-* | head -1)"
 chroot "$R" lsinitramfs "/boot/$(basename "$INITRD")" | grep -q 'scripts/live' || { echo "The live initramfs has no live-boot scripts."; exit 1; }
 cp "$VMLINUZ" "$OUT/vmlinuz"
 cp "$INITRD" "$OUT/initrd.img"
+# Chromium otherwise rebuilds the font list on first start. The CJK fonts make that slow.
+chroot "$R" fc-cache -fr >/dev/null 2>&1 || true
 umount "$R/dev" "$R/proc" "$R/sys"
-mksquashfs "$R" "$OUT/filesystem.squashfs" -comp xz -e boot -noappend
+# zstd unpacks much faster than xz. On a VM the CPU is the limit, not the size.
+mksquashfs "$R" "$OUT/filesystem.squashfs" -comp zstd -Xcompression-level 15 -e boot -noappend
 echo "==> live system in $OUT"

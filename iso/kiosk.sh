@@ -37,7 +37,9 @@ fi
 if command -v cage >/dev/null && command -v chromium >/dev/null; then
   plymouth quit 2>/dev/null || true
   WLR_NO_HARDWARE_CURSORS=1 WLR_RENDERER=pixman cage -s -- chromium --kiosk --no-sandbox --disable-gpu --disable-dev-shm-usage \
-    --no-first-run --disable-infobars --ozone-platform=wayland --start-fullscreen "$url" || true
+    --no-first-run --no-default-browser-check --disable-infobars --disable-extensions --disable-sync \
+    --disable-translate --disable-background-networking --disable-component-update --disable-default-apps \
+    --ozone-platform=wayland --start-fullscreen "$url" || true
   say "The installer screen stopped. Open $url"
   say "The log is /tmp/homebaseos-installer.log"
   exec sleep infinity
