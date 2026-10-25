@@ -48,6 +48,7 @@ test('the generated preseed names one disk and the chosen locale, and still has 
   assert.match(built.text, /^d-i partman\/confirm_nooverwrite boolean true$/m);
   assert.match(built.text, /^d-i debian-installer\/locale string de_DE\.UTF-8$/m);
   assert.match(built.text, /^d-i debian-installer\/language string de$/m);
+  assert.match(built.text, /^d-i grub-installer\/bootdev string \/dev\/nvme0n1$/m);
   assert.equal(built.cmdline, 'homebaseos.lang=de');
   assert.doesNotMatch(built.text, /passwd\/user-password /);
   assert.match(base, /en_US\.UTF-8/); // the file in git is unchanged

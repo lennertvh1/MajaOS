@@ -44,23 +44,25 @@ HASH="$(openssl passwd -6 "$(od -An -tx1 -N 18 /dev/urandom | tr -d ' \n')")" ||
 printf 'd-i passwd/user-password-crypted password %s\n' "$HASH" >> "$PRESEED"
 unset HASH
 
-status running 30 "Partitioning the disk"
-MEDIUM="${MEDIUM:-/run/live/medium}"
-VMLINUZ="$MEDIUM/install.amd/vmlinuz"
-SRC_INITRD="$MEDIUM/homebaseos/initrd.gz"
-[ -f "$VMLINUZ" ] && [ -f "$SRC_INITRD" ] || fail "The Debian installer was not found on this disc." 30
+# The disc may be mounted in more than one place, depending on the live system.
+MEDIUM=""
+for cand in /run/live/medium /lib/live/mount/medium /cdrom; do
+  if [ -f "$cand/install.amd/vmlinuz" ] && [ -f "$cand/homebaseos/initrd.gz" ]; then MEDIUM="$cand"; break; fi
+done
+[ -n "$MEDIUM" ] || fail "The Debian installer was not found on this disc." 20
+echo "Installer files on $MEDIUM" >> "$LOG"
 
-WORK="$(mktemp -d)"
-gunzip -c "$SRC_INITRD" > "$WORK/initrd" || fail "The Debian installer was not found on this disc." 30
-(cd "$DIR" && echo preseed.cfg | cpio -H newc -o -A -F "$WORK/initrd") >>"$LOG" 2>&1 || fail "The installation could not be prepared." 40
-gzip -9 -c "$WORK/initrd" > "$DIR/initrd.gz" || fail "The installation could not be prepared." 40
-rm -rf "$WORK"
+# A second, tiny archive after the installer's initrd. The kernel reads both, and this preseed replaces the one without a disk.
+# Unpacking and recompressing that initrd here is what made this step sit on "Partitioning the disk".
+status running 40 "Preparing the installation"
+(cd "$DIR" && echo preseed.cfg | cpio -H newc -o) > "$DIR/preseed.cpio" 2>>"$LOG" || fail "The installation could not be prepared." 40
+cat "$MEDIUM/homebaseos/initrd.gz" "$DIR/preseed.cpio" > "$DIR/initrd.gz" || fail "The installation could not be prepared." 40
 
 CMDLINE="$(cat "$PRESEED.cmdline")"
 [ "$NVIDIA" = 1 ] && CMDLINE="$CMDLINE homebaseos.nvidia=1"
-status running 70 "Installing Debian"
+status running 70 "The installation continues on its own. You don't have to do anything."
 if ! command -v kexec >/dev/null; then fail "kexec is missing, so the installer cannot continue." 70; fi
-kexec -l "$VMLINUZ" --initrd="$DIR/initrd.gz" --command-line="vga=788 $CMDLINE --- quiet" >>"$LOG" 2>&1 || fail "The Debian installer was not found on this disc." 70
-status running 90 "The installation continues on its own. You don't have to do anything."
-sleep 2
+# Leave the screen in text mode. A graphics mode here stays black on a UEFI VM. Partitioning happens in the Debian installer, after this handoff.
+kexec -l "$MEDIUM/install.amd/vmlinuz" --initrd="$DIR/initrd.gz" --command-line="$CMDLINE console=tty0 ---" >>"$LOG" 2>&1 || fail "The Debian installer was not found on this disc." 70
+sync
 kexec -e >>"$LOG" 2>&1 || fail "The Debian installer was not found on this disc." 90
