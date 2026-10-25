@@ -11,8 +11,16 @@ cp "$SRC/homebaseos.tar.gz" /target/tmp/homebaseos.tar.gz
 in-target tar -xzf /tmp/homebaseos.tar.gz -C /opt/homebaseos-setup
 rm -f /target/tmp/homebaseos.tar.gz
 
-# Chosen in the boot menu: "Install HomeBaseOS with NVIDIA".
+# Chosen in the installer: the NVIDIA checkbox, and the language of the screen.
 if grep -q 'homebaseos.nvidia=1' /proc/cmdline; then touch /target/opt/homebaseos-setup/.nvidia; fi
+LANG_CODE="$(sed -n 's/.*homebaseos\.lang=\([a-z][a-z]*\).*/\1/p' /proc/cmdline | head -1)"
+if [ -n "$LANG_CODE" ]; then
+  mkdir -p /target/var/lib/homebaseos
+  printf '{"language":"%s"}\n' "$LANG_CODE" > /target/var/lib/homebaseos/settings.json
+  chmod 600 /target/var/lib/homebaseos/settings.json
+fi
+# The installer set a random password so Debian would not ask. Lock it: the account is created in the browser.
+in-target passwd -l homebase || true
 
 cp "$SRC/homebaseos-firstboot.service" /target/etc/systemd/system/homebaseos-firstboot.service
 in-target systemctl enable homebaseos-firstboot.service

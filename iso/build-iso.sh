@@ -6,24 +6,27 @@
 #   ./iso/build-iso.sh --iso debian.iso     use your own Debian ISO (no download)
 #   ./iso/build-iso.sh --out folder         write somewhere else
 #   ./iso/build-iso.sh --worktree           use the current files instead of the last commit
+#   ./iso/build-iso.sh --live               also build the graphical installer (root, debootstrap; the release ISO)
 #
 # What changes in the Debian ISO (the rest stays identical byte for byte):
 #   /homebaseos/initrd.gz      copy of install.amd/initrd.gz with preseed.cfg in it
 #   /homebaseos/*              HomeBaseOS (tar.gz), late.sh, the first-boot service, screen text
-#   /boot/grub/grub.cfg        UEFI (and GRUB): two HomeBaseOS entries at the top, the first one by default
+#   /live/                     with --live: the graphical installer (language, disk, confirm)
+#   /boot/grub/grub.cfg        UEFI: Install HomeBaseOS first (the live screen with --live, otherwise the Debian installer)
 #   /isolinux/*.cfg            BIOS: the same in the isolinux menu
 #   /md5sum.txt                updated for the changed and new files
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HERE="$ROOT/iso"
-SRC_ISO=""; OUT="$ROOT/dist"; WORKTREE=0
+SRC_ISO=""; OUT="$ROOT/dist"; WORKTREE=0; LIVE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --iso) SRC_ISO="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --worktree) WORKTREE=1; shift ;;
-    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    --live) LIVE=1; shift ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (use --help)"; exit 1 ;;
   esac
 done
@@ -80,12 +83,31 @@ else
   [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] || echo "Note: there are uncommitted changes; they are NOT in the ISO (use --worktree)."
   git -C "$ROOT" archive --format=tar.gz -o "$WORK/hb/homebaseos.tar.gz" HEAD
 fi
-cp "$HERE/late.sh" "$HERE/homebaseos-firstboot.service" "$HERE/installing.issue" "$HERE/preseed.cfg" "$WORK/hb/"
+cp "$HERE/late.sh" "$HERE/homebaseos-firstboot.service" "$HERE/installing.issue" "$HERE/preseed.cfg" \
+  "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$WORK/hb/"
+if [ "$LIVE" = 1 ]; then
+  step "Building the graphical installer"
+  bash "$HERE/build-live.sh" "$WORK/live"
+fi
 
 # 4. Boot menus: HomeBaseOS at the top and the default; the normal Debian installation stays below.
 step "Changing the boot menus"
 KERNEL=/install.amd/vmlinuz
-cat > "$WORK/grub-entries.cfg" <<EOF
+if [ -f "$WORK/live/vmlinuz" ]; then
+  cat > "$WORK/grub-entries.cfg" <<EOF
+menuentry --hotkey=h 'Install HomeBaseOS $VERSION' {
+    set background_color=black
+    linux    /live/vmlinuz boot=live components quiet
+    initrd   /live/initrd.img
+}
+menuentry 'Install HomeBaseOS $VERSION (recovery)' {
+    set background_color=black
+    linux    $KERNEL vga=788 --- quiet
+    initrd   /homebaseos/initrd.gz
+}
+EOF
+else
+  cat > "$WORK/grub-entries.cfg" <<EOF
 menuentry --hotkey=h 'Install HomeBaseOS $VERSION' {
     set background_color=black
     linux    $KERNEL vga=788 --- quiet
@@ -97,13 +119,27 @@ menuentry --hotkey=n 'Install HomeBaseOS $VERSION with the NVIDIA driver' {
     initrd   /homebaseos/initrd.gz
 }
 EOF
+fi
 grep -q '^menuentry' "$WORK/grub.cfg" || { echo "Unexpected grub.cfg: no menuentry found."; exit 1; }
 awk -v f="$WORK/grub-entries.cfg" '!done && /^menuentry/ { while ((getline l < f) > 0) print l; done = 1 } { print }' "$WORK/grub.cfg" > "$WORK/grub.cfg.new"
 mv "$WORK/grub.cfg.new" "$WORK/grub.cfg"
 
 MAPS=(-map "$WORK/grub.cfg" /boot/grub/grub.cfg)
 if [ "$BIOS" = 1 ]; then
-  cat > "$WORK/homebaseos.cfg" <<EOF
+  if [ -f "$WORK/live/vmlinuz" ]; then
+    cat > "$WORK/homebaseos.cfg" <<EOF
+label homebaseos
+	menu label ^Install HomeBaseOS $VERSION
+	menu default
+	kernel /live/vmlinuz
+	append boot=live components quiet initrd=/live/initrd.img
+label homebaseos-recovery
+	menu label Install HomeBaseOS $VERSION (recovery)
+	kernel $KERNEL
+	append vga=788 initrd=/homebaseos/initrd.gz --- quiet
+EOF
+  else
+    cat > "$WORK/homebaseos.cfg" <<EOF
 label homebaseos
 	menu label ^Install HomeBaseOS $VERSION
 	menu default
@@ -114,6 +150,7 @@ label homebaseos-nvidia
 	kernel $KERNEL
 	append vga=788 initrd=/homebaseos/initrd.gz homebaseos.nvidia=1 --- quiet
 EOF
+  fi
   grep -q '^include gtk.cfg' "$WORK/menu.cfg" || { echo "Unexpected isolinux/menu.cfg."; exit 1; }
   awk -v title="menu title HomeBaseOS $VERSION (Debian 13)" \
     '/^include gtk.cfg/ { print "include homebaseos.cfg" } /^menu title / { print title; next } { print }' "$WORK/menu.cfg" > "$WORK/menu.cfg.new"
@@ -130,6 +167,12 @@ sum_line() { printf '%s  ./%s\n' "$(md5sum < "$1" | cut -d' ' -f1)" "$2"; }
 grep -v -e ' \./boot/grub/grub\.cfg$' -e ' \./homebaseos/' "$WORK/md5sum.txt" > "$WORK/md5sum.new" || true
 sum_line "$WORK/grub.cfg" boot/grub/grub.cfg >> "$WORK/md5sum.new"
 for f in "$WORK"/hb/*; do sum_line "$f" "homebaseos/$(basename "$f")" >> "$WORK/md5sum.new"; done
+if [ -d "$WORK/live" ]; then
+  grep -v ' \./live/' "$WORK/md5sum.new" > "$WORK/md5sum.live" || true
+  mv "$WORK/md5sum.live" "$WORK/md5sum.new"
+  for f in "$WORK"/live/*; do sum_line "$f" "live/$(basename "$f")" >> "$WORK/md5sum.new"; done
+  MAPS+=(-map "$WORK/live" /live)
+fi
 MAPS+=(-map "$WORK/md5sum.new" /md5sum.txt -map "$WORK/hb" /homebaseos)
 
 # 6. The new ISO: the same boot setup as the original (BIOS + UEFI, also on a USB stick).

@@ -24,16 +24,13 @@ Every release has an installation ISO: `homebaseos-<version>-amd64.iso`. It is t
 
 1. Turn **Secure Boot off** in the BIOS (the ZFS and NVIDIA modules are not signed). Set the server to UEFI.
 2. Put the ISO on a USB stick with [balenaEtcher](https://etcher.balena.io), or: `sudo dd if=homebaseos-….iso of=/dev/sdX bs=4M status=progress conv=fsync`.
-3. Boot the server from the stick and choose **Install HomeBaseOS** (or *with the NVIDIA driver* for an NVIDIA card). The server needs internet.
-4. The installer asks only three things:
-   - **the disk for the system**: choose the SSD for Debian, *not* one of your data disks;
-   - the confirmation that this disk may be erased;
-   - a password for the administrator `homebase` (for SSH and `sudo`).
+3. Boot the server from the stick and choose **Install HomeBaseOS**. The server needs internet.
+4. The installer asks for a language, then the disk. It marks the USB stick and will not install on it. *Erase and install* confirms that disk. Tick **Install the NVIDIA driver** if the computer has an NVIDIA card. You create your account later in the browser. The account `homebase` exists for the system and is locked.
 5. After the reboot HomeBaseOS installs itself (5 to 15 minutes). Then the address appears on the server's screen. Open that address in your browser: the welcome wizard creates your account and does the rest.
 
-The installer runs in English; the country, keyboard and time zone are set to Belgium, Belgian AZERTY and Europe/Brussels (change them in `iso/preseed.cfg`, the time zone also in the wizard). If the installation fails at the first boot, the screen says so; the log is `/var/log/homebaseos-firstboot.log` and `sudo systemctl restart homebaseos-firstboot` tries again.
+The language you pick is the language of the welcome wizard. The keyboard stays Belgian AZERTY, and the country and time zone stay Belgium and Europe/Brussels (change them in `iso/preseed.cfg`; the time zone also in the wizard). Building the ISO with the graphical screen needs Linux, root and `./iso/build-iso.sh --live` (debootstrap and squashfs-tools). Without `--live` the stick still boots the Debian installer, which asks for the disk itself. If the installation fails at the first boot, the screen says so; the log is `/var/log/homebaseos-firstboot.log` and `sudo systemctl restart homebaseos-firstboot` tries again.
 
-**Building the ISO yourself.** GitHub Actions does this for every new version: a pushed tag `vX.Y.Z` creates the release and attaches the ISO (`.github/workflows/iso.yml`), or by hand via *Actions > Release and ISO > Run workflow*. On a Linux PC: `sudo apt install xorriso cpio && ./iso/build-iso.sh` (the ISO ends up in `dist/`).
+**Building the ISO yourself.** GitHub Actions does this for every new version: a pushed tag `vX.Y.Z` creates the release and attaches the ISO (`.github/workflows/iso.yml`), or by hand via *Actions > Release and ISO > Run workflow*. On a Linux PC the release build is `sudo apt install xorriso cpio debootstrap squashfs-tools && sudo ./iso/build-iso.sh --live` (the ISO ends up in `dist/`). Without `--live`, `./iso/build-iso.sh` only remasters the net installer.
 
 ## Installing by hand
 
@@ -232,7 +229,7 @@ Updating on the server: copy the folder again and run `sudo ./install.sh`.
 ### Branches, tests and test versions
 
 - Work happens on the **`dev`** branch. **`main`** only contains official versions, and only tags on `main` become releases (with an ISO).
-- Every push to `dev` (and `main`) runs the tests on GitHub (*Actions > Test*). When the installer changes on `dev`, that run also builds a **test ISO**, which you download from the run (kept 14 days). You can also start it by hand: *Actions > Test > Run workflow*.
+- Every push to `dev` (and `main`) runs the tests on GitHub (*Actions > Test*). When the installer changes on `dev`, that run also builds a **test ISO** with the graphical installer (`--live`), which you download from the run (kept 14 days). You can also start it by hand: *Actions > Test > Run workflow*.
 - A **test server** follows `dev` directly, without releases: *Settings > Software update > Development*. Every new commit on `dev` then shows up as an update (`0.6.0+dev.abc1234`, with the commit messages as notes) and *Update now* installs it, with the same backup copy and rollback as a normal update.
 - The first time (a server on 0.5.0 doesn't know that channel yet), on the test server:
 

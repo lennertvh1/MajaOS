@@ -2042,10 +2042,36 @@
     return undefined;
   }
 
+  /* ---- installation screen (public/install.html) */
+  const instDisks = [
+    { name: 'sda', model: 'Samsung SSD 870 EVO', size: 500 * GB, rotational: false, tran: 'sata', install: false },
+    { name: 'sdb', model: 'WDC WD20EFRX-68EUZN0', size: 2 * TB, rotational: true, tran: 'sata', install: false },
+    { name: 'sdc', model: 'SanDisk Ultra Fit', size: 32 * GB, rotational: false, tran: 'usb', install: true },
+  ];
+  const instSteps = [
+    [12, 'Preparing the installation'],
+    [30, 'Partitioning the disk'],
+    [55, 'Installing Debian'],
+    [78, 'Installing the boot loader'],
+    [92, 'Preparing HomeBaseOS'],
+    [100, 'The installation continues on its own. You don\'t have to do anything.'],
+  ];
+  let instJob = null;
+  function instProgress() {
+    if (!instJob) return { state: 'idle', percent: 0, message: '', log: '' };
+    if (instJob.failed) return { state: 'failed', percent: instJob.percent, message: instJob.message, log: instJob.log };
+    const i = Math.min(instSteps.length - 1, Math.floor((Date.now() - instJob.start) / 900));
+    const step = instSteps[i];
+    const done = i === instSteps.length - 1 && Date.now() - instJob.start > 900 * instSteps.length;
+    return { state: done ? 'done' : 'running', percent: step[0], message: step[1], log: instJob.log };
+  }
+
   async function get(path) {
     await wait(rnd(120, 300));
     { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
     if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    if (path === '/api/install/disks') return copy(instDisks);
+    if (path === '/api/install/progress') return instProgress();
     if (path === '/api/storage-paths') return spGet();
     if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
     const bkb = path.match(/^\/api\/backup\/remotes\/([^/]+)\/browse\?path=(.*)$/);
@@ -2134,6 +2160,16 @@
   }
 
   async function post(path, body = {}) {
+    if (path === '/api/install') {
+      await wait(400);
+      const disk = instDisks.find((d) => d.name === body.name);
+      if (!disk) throw err('Choose a disk.');
+      if (disk.install) throw err('This disk is the installer. Choose another disk.');
+      if (body.confirm !== disk.name) throw err('Type the disk name to confirm.');
+      instJob = { start: Date.now(), log: disk.model + ' (' + disk.name + ')' + (body.nvidia ? '\nNVIDIA driver' : '') + '\n' + (body.language || 'en') };
+      return { started: true };
+    }
+    if (path === '/api/install/reboot') return { ok: true };
     if (path.includes('/snapshots')) { await wait(rnd(800, 1600)); const r = snapRoute('POST', path, body); if (r !== undefined) return r; }
     if (path.startsWith('/api/sysbackups')) { await wait(rnd(200, 500)); const r = sysRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/login' || path === '/api/login/mfa' || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }

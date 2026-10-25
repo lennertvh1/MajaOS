@@ -58,14 +58,14 @@ jobs:
   iso:
     needs: release
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
       - name: Install tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio
+        run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio debootstrap squashfs-tools
 
       - name: Keep the Debian ISO between runs
         uses: actions/cache@v6
@@ -75,7 +75,7 @@ jobs:
           restore-keys: debian-netinst-
 
       - name: Build the ISO
-        run: ./iso/build-iso.sh --out dist
+        run: sudo ./iso/build-iso.sh --live --out dist
 
       - name: Attach to the release
         env:

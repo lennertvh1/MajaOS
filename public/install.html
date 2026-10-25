@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Install HomeBaseOS</title>
+  <meta name="theme-color" content="#101a33">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="install.css">
+</head>
+<body>
+  <svg class="wallpaper" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" class="sky-top"/><stop offset=".62" class="sky-mid"/><stop offset="1" class="sky-low"/>
+      </linearGradient>
+      <radialGradient id="glow" cx=".72" cy=".74" r=".5">
+        <stop offset="0" class="glow-in"/><stop offset="1" class="glow-out"/>
+      </radialGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#sky)"/>
+    <rect width="1600" height="900" fill="url(#glow)"/>
+    <g class="stars"></g>
+    <path class="land far" d="M0 700 C 220 680 380 690 560 676 S 920 664 1120 678 1420 668 1600 674 V900 H0Z"/>
+    <path class="land mid" d="M0 748 C 260 730 470 742 700 728 S 1100 720 1330 734 1520 728 1600 732 V900 H0Z"/>
+    <g class="trees">
+      <path d="M1180 734 v-34 m0 0 c-9 6 -13 16 -12 24 h24 c1 -8 -3 -18 -12 -24z"/>
+      <path d="M1214 736 v-46 m0 0 c-12 9 -17 22 -16 34 h32 c1 -12 -4 -25 -16 -34z"/>
+      <path d="M1246 735 v-28 m0 0 c-8 5 -11 13 -10 20 h20 c1 -7 -2 -15 -10 -20z"/>
+      <path d="M318 744 v-30 m0 0 c-8 6 -12 14 -11 21 h22 c1 -7 -3 -15 -11 -21z"/>
+    </g>
+    <path class="land near" d="M0 800 C 300 780 600 794 900 782 S 1400 778 1600 786 V900 H0Z"/>
+  </svg>
+  <main class="inst" id="inst"></main>
+  <script src="lang/languages.js"></script>
+  <script src="install.js"></script>
+</body>
+</html>

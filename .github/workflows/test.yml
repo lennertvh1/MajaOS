@@ -1,6 +1,6 @@
 # Checks every push to dev and main, and every pull request: syntax of all JavaScript and shell scripts, and the tests.
 # On dev a test ISO is built as well (an artifact to download from the run, kept 14 days; never a release):
-# for every push that changes the installer, or by hand (Actions > Test > Run workflow).
+# the same --live image as a release, for every push that changes the installer, or by hand (Actions > Test > Run workflow).
 # Test servers follow the dev branch through Settings > Software update > Development.
 name: Test
 
@@ -52,12 +52,12 @@ jobs:
     needs: test
     if: needs.test.outputs.iso == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
       - name: Install tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio
+        run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio debootstrap squashfs-tools
 
       - name: Keep the Debian ISO between runs
         uses: actions/cache@v6
@@ -67,7 +67,7 @@ jobs:
           restore-keys: debian-netinst-
 
       - name: Build the test ISO
-        run: ./iso/build-iso.sh --out dist
+        run: sudo ./iso/build-iso.sh --live --out dist
 
       - name: Upload as an artifact
         uses: actions/upload-artifact@v5
