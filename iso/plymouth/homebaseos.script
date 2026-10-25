@@ -4,8 +4,7 @@ Window.SetBackgroundBottomColor(0.063, 0.102, 0.200);
 logo.image = Image("logo.png");
 logo.sprite = Sprite(logo.image);
 
-# The bar only creeps toward the middle here. The splash on the display continues it
-# and leaves when the language screen has actually been drawn.
+# Keeps moving until Cog replaces this screen. It never quite finishes on its own.
 meter.image = Image("bar.png");
 meter.track = Sprite(meter.image.Scale(220, 6));
 meter.track.SetOpacity(0.28);
@@ -16,7 +15,7 @@ fun refresh () {
   if (Window.GetWidth() < 16) return;
   logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
   logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2 - 16);
-  meter.level = meter.level + (0.45 - meter.level) * 0.02;
+  meter.level = meter.level + (0.9 - meter.level) * 0.02;
   if (meter.level < 0.04) meter.level = 0.04;
   fill_w = Math.Int(220 * meter.level);
   if (fill_w < 8) fill_w = 8;
