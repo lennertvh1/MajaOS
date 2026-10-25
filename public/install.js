@@ -89,7 +89,7 @@
       const title = failed ? t('The installation failed. You can try again.') : (state.step === 'done' ? t('Installing HomeBaseOS') : t('Installing HomeBaseOS'));
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(title)}</h1>
         <p class="lead">${esc(t(job.message || ''))}</p>
-        <div class="bar" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
+        <div class="bar${failed || state.step === 'done' ? '' : ' loading'}" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
         ${state.step === 'done' ? `<p class="lead">${esc(t('Remove the USB stick when the computer restarts.'))}</p>` : ''}
         ${job.log ? `<details><summary>${esc(t('Details'))}</summary><pre>${esc(job.log)}</pre></details>` : ''}
         <p class="inst-error" role="alert">${esc(failed ? '' : state.error)}</p>

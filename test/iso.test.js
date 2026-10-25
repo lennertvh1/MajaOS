@@ -49,7 +49,7 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.doesNotMatch(live, /ln -sf \/dev\/null/);
   assert.match(kiosk, /--no-sandbox/);
   const handoff = read('run-install.sh');
-  assert.match(handoff, /cpio -H newc -o/);
-  assert.doesNotMatch(handoff, /gzip -9/);
-  assert.doesNotMatch(handoff, /vga=788/);
+  assert.match(handoff, /debootstrap trixie/);
+  assert.doesNotMatch(handoff, /kexec/);
+  assert.match(live, /debootstrap/);
 });

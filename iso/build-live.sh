@@ -24,7 +24,7 @@ mount --bind /dev "$R/dev"
 chroot "$R" apt-get update -q
 DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus nodejs \
-  chromium cage libgl1-mesa-dri fonts-dejavu-core fonts-noto-cjk kexec-tools openssl cpio gzip
+  chromium cage libgl1-mesa-dri fonts-dejavu-core fonts-noto-cjk debootstrap parted dosfstools openssl cpio gzip
 # gzip, not zstd: the installer's GRUB must be able to load this initrd. CD and USB modules stay in even though this build machine has neither.
 printf '\nMODULES=most\nCOMPRESS=gzip\n' >> "$R/etc/initramfs-tools/initramfs.conf"
 printf 'iso9660\nsquashfs\noverlay\nloop\nsr_mod\nusb-storage\nuas\n' >> "$R/etc/initramfs-tools/modules"
