@@ -24,7 +24,10 @@ mount --bind /dev "$R/dev"
 chroot "$R" apt-get update -q
 DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus nodejs \
-  chromium cage libgl1-mesa-dri fonts-dejavu-core fonts-noto-cjk plymouth debootstrap parted dosfstools openssl cpio gzip
+  chromium cage libgl1-mesa-dri fonts-dejavu-core fonts-noto-cjk plymouth \
+  xserver-xorg-core xserver-xorg-input-libinput xserver-xorg-video-fbdev xserver-xorg-video-vesa \
+  xinit x11-xserver-utils xfonts-base python3-tk \
+  debootstrap parted dosfstools openssl cpio gzip
 # gzip, not zstd: the installer's GRUB must be able to load this initrd. CD and USB modules stay in even though this build machine has neither.
 printf '\nMODULES=most\nCOMPRESS=gzip\n' >> "$R/etc/initramfs-tools/initramfs.conf"
 printf 'iso9660\nsquashfs\noverlay\nloop\nsr_mod\nusb-storage\nuas\n' >> "$R/etc/initramfs-tools/modules"
@@ -32,39 +35,35 @@ printf 'iso9660\nsquashfs\noverlay\nloop\nsr_mod\nusb-storage\nuas\n' >> "$R/etc
 echo "==> installer files"
 APP="$R/opt/homebaseos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
-cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
+cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/xsession.sh" "$HERE/splash.py" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
 cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
 cp "$ROOT/public/install.html" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
 cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
-chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
+chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/xsession.sh" "$APP/iso/run-install.sh"
 
-# Logo on a quiet boot, instead of the kernel text. The kiosk quits Plymouth when the screen is ready.
+# Logo on a quiet boot. Plymouth keeps it until X draws the same logo; a login prompt would wipe it.
 THEME="$R/usr/share/plymouth/themes/homebaseos"
-mkdir -p "$THEME" "$R/etc/plymouth"
-cp "$HERE/plymouth/homebaseos.plymouth" "$HERE/plymouth/homebaseos.script" "$HERE/plymouth/logo.png" "$THEME/"
+mkdir -p "$THEME" "$R/etc/plymouth" "$R/etc/X11"
+cp "$HERE/plymouth/homebaseos.plymouth" "$HERE/plymouth/homebaseos.script" "$HERE/plymouth/logo.png" "$HERE/plymouth/bar.png" "$THEME/"
 printf '[Daemon]\nTheme=homebaseos\nShowDelay=0\n' > "$R/etc/plymouth/plymouthd.conf"
+printf 'allowed_users=anybody\nneeds_root_rights=yes\n' > "$R/etc/X11/Xwrapper.config"
 chroot "$R" plymouth-set-default-theme homebaseos || ln -sf homebaseos/homebaseos.plymouth "$R/usr/share/plymouth/themes/default.plymouth"
-chroot "$R" systemctl mask plymouth-quit.service plymouth-quit-wait.service >/dev/null 2>&1 || true
+chroot "$R" systemctl mask plymouth-quit.service plymouth-quit-wait.service || true
+chroot "$R" systemctl mask getty@tty1.service || true
 
 cat > "$R/etc/systemd/system/homebaseos-kiosk.service" <<'EOF'
 [Unit]
 Description=HomeBaseOS installer
-After=systemd-logind.service systemd-user-sessions.service getty@tty1.service
+After=systemd-logind.service plymouth-start.service
 Wants=systemd-logind.service
-Conflicts=getty@tty1.service
 [Service]
 ExecStart=/opt/homebaseos-installer/iso/kiosk.sh
 Type=idle
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-StandardInput=tty
-StandardOutput=tty
-StandardError=tty
-PAMName=login
-UtmpIdentifier=tty1
+StandardOutput=journal
+StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=WLR_RENDERER=pixman
+Environment=WLR_NO_HARDWARE_CURSORS=1
 [Install]
 WantedBy=multi-user.target
 EOF

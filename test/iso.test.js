@@ -44,6 +44,12 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.match(build, /boot=live components quiet splash/);
   const live = read('build-live.sh'), kiosk = read('kiosk.sh');
   assert.match(live, /plymouth-set-default-theme homebaseos/);
+  assert.match(live, /python3-tk/);
+  assert.match(live, /splash.py/);
+  assert.match(read('plymouth/homebaseos.script'), /bar.png/);
+  assert.match(read('kiosk.sh'), /retain-splash/);
+  assert.match(read('serve.js'), /ui-ready/);
+  assert.doesNotMatch(live, /TTYReset=yes/);
   assert.match(live, /COMPRESS=gzip/);
   assert.match(live, /fonts-noto-cjk/);
   assert.match(live, /WLR_RENDERER=pixman/);
