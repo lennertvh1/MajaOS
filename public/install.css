@@ -29,13 +29,7 @@
 .inst-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .inst-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; color: var(--muted); }
 .inst-check input { margin-top: 3px; accent-color: var(--accent); }
-.inst .bar.loading { position: relative; }
-.inst .bar.loading::after {
-  content: ""; position: absolute; inset: 0; width: 40%;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 70%, white), transparent);
-  animation: inst-load 1.3s ease-in-out infinite;
-}
-@keyframes inst-load { from { transform: translateX(-120%); } to { transform: translateX(320%); } }
+.inst .btn[disabled] { cursor: not-allowed; }
 .inst-error { color: var(--bad); min-height: 1.3em; margin-top: 10px; }
 .inst details { margin-top: 12px; color: var(--muted); font-size: .9rem; }
 .inst pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; margin: 8px 0 0; }

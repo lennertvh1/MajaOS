@@ -71,7 +71,7 @@
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Choose the disk'))}</h1>
         <p class="lead">${esc(t('HomeBaseOS will be installed on this disk. Everything on it will be erased.'))}</p>
         ${cards}<p class="inst-error" role="alert">${esc(state.error)}</p>
-        ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="confirm"', true))}</section>`;
+        ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="confirm"' + (state.disk ? '' : ' disabled'), true))}</section>`;
       return;
     }
     if (state.step === 'confirm') {
@@ -87,14 +87,42 @@
       const job = state.job || { percent: 0, message: t('Preparing the installation'), state: 'running', log: '' };
       const failed = job.state === 'failed';
       const title = failed ? t('The installation failed. You can try again.') : (state.step === 'done' ? t('Installing HomeBaseOS') : t('Installing HomeBaseOS'));
-      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(title)}</h1>
-        <p class="lead">${esc(t(job.message || ''))}</p>
-        <div class="bar${failed || state.step === 'done' ? '' : ' loading'}" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
+      root.innerHTML = `<section class="inst-card" ${state.step === 'progress' && !failed ? 'data-step="progress"' : ''}>${brand()}<h1>${esc(title)}</h1>
+        <p class="lead" data-msg>${esc(t(job.message || ''))}</p>
+        <div class="bar" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
         ${state.step === 'done' ? `<p class="lead">${esc(t('Remove the USB stick when the computer restarts.'))}</p>` : ''}
         ${job.log ? `<details><summary>${esc(t('Details'))}</summary><pre>${esc(job.log)}</pre></details>` : ''}
         <p class="inst-error" role="alert">${esc(failed ? '' : state.error)}</p>
         ${failed ? actions(btn(t('Try again'), 'data-go="disk"', true)) : (state.step === 'done' ? actions(btn(t('Restart'), 'data-go="reboot"', true)) : '')}</section>`;
     }
+  }
+
+  // Later polls only change the text and the bar. Rebuilding the card closed Details on every tick.
+  function paintProgress() {
+    const card = $('#inst [data-step="progress"]');
+    const job = state.job;
+    if (!card || !job || state.step !== 'progress' || job.state === 'failed') return false;
+    const lead = card.querySelector('[data-msg]');
+    const text = t(job.message || '');
+    if (lead && lead.textContent !== text) lead.textContent = text;
+    const span = card.querySelector('.bar span');
+    const bar = card.querySelector('.bar');
+    if (span) span.style.width = (job.percent || 0) + '%';
+    if (bar) bar.setAttribute('aria-valuenow', String(job.percent || 0));
+    if (job.log) {
+      let pre = card.querySelector('pre');
+      if (!pre) {
+        const det = document.createElement('details');
+        const sum = document.createElement('summary');
+        sum.textContent = t('Details');
+        pre = document.createElement('pre');
+        det.append(sum, pre);
+        const err = card.querySelector('.inst-error');
+        if (err) err.before(det); else card.append(det);
+      }
+      if (pre.textContent !== job.log) pre.textContent = job.log;
+    }
+    return true;
   }
 
   async function loadDisks() {
@@ -124,9 +152,9 @@
     const poll = async () => {
       try { state.job = await api.get('/api/install/progress'); }
       catch (e) { state.job = { state: 'failed', percent: 0, message: e.message }; }
-      if (state.job.state === 'done') { state.step = 'done'; if (state.timer) clearInterval(state.timer); }
-      if (state.job.state === 'failed' && state.timer) clearInterval(state.timer);
-      draw();
+      if (state.job.state === 'done') { state.step = 'done'; if (state.timer) clearInterval(state.timer); draw(); return; }
+      if (state.job.state === 'failed') { if (state.timer) clearInterval(state.timer); draw(); return; }
+      if (!paintProgress()) draw();
     };
     await poll();
     state.timer = setInterval(poll, 700);

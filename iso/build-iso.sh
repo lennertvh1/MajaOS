@@ -97,7 +97,7 @@ if [ -f "$WORK/live/vmlinuz" ]; then
   cat > "$WORK/grub-entries.cfg" <<EOF
 menuentry --hotkey=h 'Install HomeBaseOS $VERSION' {
     set background_color=black
-    linux    /live/vmlinuz boot=live components console=tty0 live-media-path=/live
+    linux    /live/vmlinuz boot=live components quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0 live-media-path=/live
     initrd   /live/initrd.img
 }
 menuentry 'Install HomeBaseOS $VERSION (recovery)' {
@@ -132,7 +132,7 @@ label homebaseos
 	menu label ^Install HomeBaseOS $VERSION
 	menu default
 	kernel /live/vmlinuz
-	append boot=live components console=tty0 live-media-path=/live initrd=/live/initrd.img
+	append boot=live components quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0 live-media-path=/live initrd=/live/initrd.img
 label homebaseos-recovery
 	menu label Install HomeBaseOS $VERSION (recovery)
 	kernel $KERNEL

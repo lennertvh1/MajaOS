@@ -15,6 +15,7 @@ URL="http://127.0.0.1:${INSTALL_PORT:-8753}/install.html"
 say() { printf '%s\n' "$*" > /dev/tty1 || true; printf '%s\n' "$*"; }
 # Chromium refuses to start as root without --no-sandbox. pixman draws without a GPU, which a VM usually lacks.
 if command -v cage >/dev/null && command -v chromium >/dev/null; then
+  plymouth quit 2>/dev/null || true
   cage -s -- chromium --kiosk --no-sandbox --disable-gpu --disable-dev-shm-usage \
     --no-first-run --disable-infobars --ozone-platform=wayland --start-fullscreen "$URL" || true
   say "The installer screen stopped. Open $URL"

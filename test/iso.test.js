@@ -41,12 +41,13 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   // The build script copies everything late.sh uses from /cdrom/homebaseos.
   const build = read('build-iso.sh');
   for (const f of ['late.sh', 'homebaseos-firstboot.service', 'installing.issue', 'serve.js', 'kiosk.sh', 'run-install.sh']) assert.ok(build.includes('"$HERE/' + f + '"'), f);
-  assert.match(build, /boot=live components console=tty0 live-media-path=\/live/);
+  assert.match(build, /boot=live components quiet splash/);
   const live = read('build-live.sh'), kiosk = read('kiosk.sh');
+  assert.match(live, /plymouth-set-default-theme homebaseos/);
   assert.match(live, /COMPRESS=gzip/);
   assert.match(live, /fonts-noto-cjk/);
   assert.match(live, /WLR_RENDERER=pixman/);
-  assert.doesNotMatch(live, /ln -sf \/dev\/null/);
+  assert.doesNotMatch(live, /getty@tty1\.service[\s\S]{0,40}\/dev\/null/);
   assert.match(kiosk, /--no-sandbox/);
   const handoff = read('run-install.sh');
   assert.match(handoff, /debootstrap trixie/);
