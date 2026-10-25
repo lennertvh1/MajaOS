@@ -44,6 +44,7 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.match(build, /boot=live components console=tty0 live-media-path=\/live/);
   const live = read('build-live.sh'), kiosk = read('kiosk.sh');
   assert.match(live, /COMPRESS=gzip/);
+  assert.match(live, /fonts-noto-cjk/);
   assert.match(live, /WLR_RENDERER=pixman/);
   assert.doesNotMatch(live, /ln -sf \/dev\/null/);
   assert.match(kiosk, /--no-sandbox/);
