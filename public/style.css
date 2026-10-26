@@ -793,6 +793,7 @@ select.field { padding-right: 8px; }
 .msg { max-width: 85%; padding: 9px 13px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 5px; }
 .msg.assistant { align-self: flex-start; background: var(--glass); border: 1px solid var(--glass-line); border-bottom-left-radius: 5px; }
+.msg.tool { align-self: flex-start; max-width: 100%; padding: 2px 4px; background: none; color: var(--muted); font-size: 13px; }
 .chat > .field { flex: none; width: 100%; }
 .chat textarea { min-height: 72px; padding: 10px 12px; resize: vertical; height: auto; }
 

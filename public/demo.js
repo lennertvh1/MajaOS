@@ -53,7 +53,7 @@
   Object.assign(apps.find((a) => a.name === 'pihole'), { webui: 'http://192.168.1.53/admin/', ports: [] });
 
   /* ---- settings: language, about and network */
-  const demoSecurity = { terminal: true, terminalPassword: true, ssh: false };
+  const demoSecurity = { terminal: true, terminalPassword: true, ssh: false, mcp: true };
   const demoSshState = () => ({ installed: true, enabled: !!demoSecurity.ssh, active: !!demoSecurity.ssh });
   /* ---- welcome wizard: remembered per browser whether it is finished */
   const onb = { passwordChanged: null };
@@ -1917,16 +1917,16 @@
   ];
   const CLAUDE_MODELS = ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-1'];
   function demoAiCfg() {
-    const base = { provider: 'ollama', url: 'http://127.0.0.1:11434', model: '', hasKey: false, enabled: true };
+    const base = { provider: 'ollama', url: 'http://127.0.0.1:11434', model: '', hasKey: false, enabled: true, tools: true };
     try {
       const s = JSON.parse(localStorage.getItem('tb-ai') || 'null');
-      if (s && s.provider) Object.assign(base, { provider: s.provider, url: s.url || base.url, model: s.model || '', hasKey: !!s.hasKey, enabled: s.enabled !== false });
+      if (s && s.provider) Object.assign(base, { provider: s.provider, url: s.url || base.url, model: s.model || '', hasKey: !!s.hasKey, enabled: s.enabled !== false, tools: s.tools !== false });
     } catch { /* keep the sample Ollama */ }
     return base;
   }
   function demoAiView() {
     const c = demoAiCfg();
-    const common = { enabled: c.enabled !== false, choices: AI_CHOICES, claudeModels: CLAUDE_MODELS, gpu: null, version: null };
+    const common = { enabled: c.enabled !== false, tools: c.tools !== false, choices: AI_CHOICES, claudeModels: CLAUDE_MODELS, gpu: null, version: null };
     if (c.enabled === false) {
       return { ...common, provider: c.provider, url: c.provider === 'claude' || c.provider === 'off' ? '' : (c.url || ''), model: c.model, hasKey: !!c.hasKey, reachable: false, error: null, models: [] };
     }
@@ -1943,7 +1943,8 @@
     if (!['off', 'ollama', 'lmstudio', 'llamacpp', 'localai', 'claude'].includes(provider)) throw err('Choose an AI.', 400);
     const cur = demoAiCfg();
     const enabled = body.enabled === undefined ? cur.enabled !== false : !!body.enabled;
-    const next = { enabled, provider, url: '', model: String(body.model || '').slice(0, 200), hasKey: !!cur.hasKey };
+    const tools = body.tools === undefined ? cur.tools !== false : !!body.tools;
+    const next = { enabled, tools, provider, url: '', model: String(body.model || '').slice(0, 200), hasKey: !!cur.hasKey };
     if (provider === 'claude' && enabled) {
       const key = String(body.key || '').trim();
       if (key) {
@@ -1958,7 +1959,7 @@
     }
     localStorage.setItem('tb-ai', JSON.stringify(next));
     const view = demoAiView();
-    return { enabled: view.enabled, provider: view.provider, url: view.url, model: view.model, hasKey: view.hasKey, choices: view.choices, claudeModels: view.claudeModels };
+    return { enabled: view.enabled, tools: view.tools, provider: view.provider, url: view.url, model: view.model, hasKey: view.hasKey, choices: view.choices, claudeModels: view.claudeModels };
   }
 
   function overview() {
@@ -2189,7 +2190,7 @@
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
     if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
-    if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal };
+    if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
@@ -2326,7 +2327,8 @@
       // In the demo there is no password (like the server without APP_PASSWORD): making things less strict is allowed without one.
       Object.assign(demoSecurity, { terminal: body.terminal == null ? demoSecurity.terminal : !!body.terminal,
         terminalPassword: body.terminalPassword == null ? demoSecurity.terminalPassword : !!body.terminalPassword,
-        ssh: body.ssh == null ? demoSecurity.ssh : !!body.ssh });
+        ssh: body.ssh == null ? demoSecurity.ssh : !!body.ssh,
+        mcp: body.mcp == null ? demoSecurity.mcp !== false : !!body.mcp });
       return { language: demoLang(), clock: demoClock(), ...demoSecurity, sshState: demoSshState() };
     }
     if (path === '/api/settings') {
@@ -2553,10 +2555,18 @@
       return;
     }
     if (path === '/api/ai/chat') {
-      if (demoAiCfg().enabled === false) throw err('AI is turned off. Turn it on in Settings.', 409);
-      if (demoAiCfg().provider === 'off') throw err('No AI is connected yet. Choose one in Settings.', 409);
+      const cfg = demoAiCfg();
+      if (cfg.enabled === false) throw err('AI is turned off. Turn it on in Settings.', 409);
+      if (cfg.provider === 'off') throw err('No AI is connected yet. Choose one in Settings.', 409);
       const q = (body.messages[body.messages.length - 1] || {}).content || '';
-      const reply = 'This is demo mode, so I am not really running on your GPU. On your own server ' + body.model +
+      let tool = '';
+      if (/vm|virtual|virtuele/i.test(q)) tool = 'vms_list';
+      else if (/file|bestand|map/i.test(q)) tool = 'files_places';
+      else if (/opslag|storage|disk|schijf|pool/i.test(q)) tool = 'storage';
+      else if (/app|container|jellyfin/i.test(q)) tool = 'apps_list';
+      if (cfg.tools === false) tool = '';
+      if (tool) { onLine({ tool: { name: tool } }); await wait(220); }
+      const reply = (tool ? 'I looked that up on the sample server. ' : '') + 'This is demo mode, so I am not really running on your GPU. On your own server ' + body.model +
         ' would answer this here: "' + q.slice(0, 80) + (q.length > 80 ? '…' : '') + '". With an RTX 3060 Ti an 8B model gets roughly 60 to 70 tokens per second.';
       await wait(350);
       for (const word of reply.split(/(\s+)/)) { onLine({ message: { content: word }, done: false }); await wait(28); }

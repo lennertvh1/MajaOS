@@ -3854,7 +3854,22 @@
     if (settingsTab() !== 'mcp') return;
     const mcpUrl = location.origin + '/mcp';
     const security = `<a href="#settings/security">${t('Security')}</a>`;
+    const on = info.enabled !== false;
+    const needsPw = !S.config.demo && S.config.passwordEnabled;
     el.innerHTML = `
+      <label class="toggle">
+        <input type="checkbox" role="switch" name="mcp"${on ? ' checked' : ''} aria-checked="${on ? 'true' : 'false'}">
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span><b>${t('Allow programs to connect')}</b><span class="muted small">${t('A program can manage this server after it signs in. Turn this off to refuse every connection.')}</span></span>
+      </label>
+      <p class="form-error" role="alert" data-mcp-err></p>
+      <form class="inline-form" id="mcpPw" hidden>
+        <p class="muted small">${t('This makes security less strict. Type your password to confirm.')}</p>
+        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('HomeBaseOS password')}" aria-label="${t('HomeBaseOS password')}">
+        <button class="btn primary" type="submit">${t('Confirm')}</button>
+        <button class="btn" type="button" data-mcp-cancel>${t('Cancel')}</button>
+      </form>
+      <div data-mcp-rest${on ? '' : ' hidden'}>
       <h2 class="pane-title">${t('Connect a program')}</h2>
       <p class="muted small">${t('A program on your computer can manage this server: apps, virtual machines, files and everything else you can do here.')}</p>
       <label class="fld" style="max-width:280px;margin:14px 0">
@@ -3867,6 +3882,7 @@
       <div class="code-view" id="mcpCodeView">
         <div class="code-view-bar"><span id="mcpFile">${t('Address')}</span><button class="btn sm" type="button" data-mcp-copy>${t('Copy')}</button></div>
         <pre class="logs" id="mcpCode" aria-label="${t('MCP configuration')}"></pre>
+      </div>
       </div>`;
     const code = $('#mcpCode', el);
     const clientSelect = $('#mcpClient', el);
@@ -3882,7 +3898,33 @@
     };
     clientSelect.addEventListener('change', paint);
     paint();
+    const box = $('[name="mcp"]', el);
+    const rest = $('[data-mcp-rest]', el);
+    const pwForm = $('#mcpPw', el);
+    const err = $('[data-mcp-err]', el);
+    const apply = async (enabled, password) => {
+      err.textContent = '';
+      const r = await api.post('/api/settings', { mcp: enabled, password });
+      info.enabled = r.mcp !== false;
+      box.checked = info.enabled;
+      box.setAttribute('aria-checked', info.enabled ? 'true' : 'false');
+      rest.hidden = !info.enabled;
+      pwForm.hidden = true;
+      if (pwForm.elements.password) pwForm.elements.password.value = '';
+    };
+    box.addEventListener('change', async () => {
+      box.setAttribute('aria-checked', box.checked ? 'true' : 'false');
+      if (box.checked && needsPw && info.enabled === false) { pwForm.hidden = false; pwForm.elements.password.focus(); return; }
+      try { await apply(box.checked); }
+      catch (ex) { box.checked = info.enabled !== false; box.setAttribute('aria-checked', box.checked ? 'true' : 'false'); err.textContent = ex.message; }
+    });
+    pwForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await apply(true, pwForm.elements.password.value); }
+      catch (ex) { err.textContent = ex.message; }
+    });
     el.onclick = async (e) => {
+      if (e.target.closest('[data-mcp-cancel]')) { box.checked = false; box.setAttribute('aria-checked', 'false'); pwForm.hidden = true; err.textContent = ''; return; }
       const btn = e.target.closest('[data-mcp-copy]');
       if (!btn) return;
       const text = code.textContent;
@@ -6507,6 +6549,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const picked = models.some((m) => m.name === S.ai.model) ? S.ai.model : models[0].name;
     body.innerHTML = `<form class="chat" id="chatForm">
       <label class="fld">${t('Model')}<select class="field" id="chatModel">${models.map((m) => `<option value="${esc(m.name)}"${m.name === picked ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+      ${S.ai && S.ai.tools === false ? '' : `<p class="muted small">${t('It can manage this server, the same as an MCP connection.')}</p>`}
       <div class="chat-log" id="chatLog">${chatHistory.map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div>
       <textarea class="field" id="chatInput" rows="3" placeholder="${t('Ask your own model a question')}" required></textarea>
       <div class="btn-row"><button class="btn primary" type="submit">${t('Send')}</button></div>
@@ -6519,15 +6562,32 @@ sudo ./install.sh</pre></div>`}` : '') +
       const btn = form.querySelector('button'); btn.disabled = true; input.value = '';
       chatHistory.push({ role: 'user', content: text });
       log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
-      const out = document.createElement('div'); out.className = 'msg assistant'; out.textContent = '…'; log.appendChild(out);
+      const wait = document.createElement('div'); wait.className = 'msg assistant'; wait.textContent = '…'; log.appendChild(wait);
       log.scrollTop = log.scrollHeight;
-      let answer = '';
+      let answer = '', shown = 0, out = null;
+      const dropWait = () => { if (wait.parentNode) wait.remove(); };
       try {
         await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
-          if (l.message && l.message.content) { answer += l.message.content; out.textContent = answer; log.scrollTop = log.scrollHeight; }
+          if (l.tool && l.tool.name) {
+            dropWait(); shown = answer.length; out = null;
+            log.insertAdjacentHTML('beforeend', `<div class="msg tool">${esc(t('Using {name}', { name: l.tool.name }))}</div>`);
+          }
+          if (l.message && l.message.content) {
+            dropWait();
+            if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
+            const piece = l.message.content === 'I stopped after too many steps. Ask again for what is still left.' ? tr(l.message.content) : l.message.content;
+            answer += piece; out.textContent = answer.slice(shown);
+          }
+          log.scrollTop = log.scrollHeight;
         });
-        chatHistory.push({ role: 'assistant', content: answer });
-      } catch (err) { out.textContent = t('No answer: {error}', { error: err.message }); chatHistory.pop(); }
+        if (!answer) dropWait();
+        else chatHistory.push({ role: 'assistant', content: answer });
+      } catch (err) {
+        dropWait();
+        if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
+        out.textContent = t('No answer: {error}', { error: err.message });
+        chatHistory.pop();
+      }
       btn.disabled = false; input.focus();
     });
     form.addEventListener('keydown', (e) => {
@@ -6543,6 +6603,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const choices = [['off', 'None']].concat((ai.choices || []).map((c) => [c.id, AI_NAMES[c.id] || c.id]));
     const defaults = Object.fromEntries((ai.choices || []).map((c) => [c.id, c.url]));
     const aiOn = ai.enabled !== false;
+    const toolsOn = ai.tools !== false;
     el.innerHTML = `
       <h2 class="pane-title">${t('AI')}</h2>
       <form id="aiSet">
@@ -6552,6 +6613,11 @@ sudo ./install.sh</pre></div>`}` : '') +
           <span><b>${t('Use AI')}</b><span class="muted small">${t('Turn this off to hide the AI button.')}</span></span>
         </label>
         <div data-ai-rest>
+        <label class="toggle" data-ai="tools">
+          <input type="checkbox" role="switch" name="tools"${toolsOn ? ' checked' : ''} aria-checked="${toolsOn ? 'true' : 'false'}">
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span><b>${t('Let the chat manage this server')}</b><span class="muted small">${t('The chat can start apps, change files and the rest. Turn this off for answers only.')}</span></span>
+        </label>
         <p class="muted small">${t('Choose where the chat runs.')}</p>
         <label class="fld">${t('Which AI')}<select class="field" name="provider">${choices.map(([id, name]) => `<option value="${esc(id)}"${id === ai.provider ? ' selected' : ''}>${esc(t(name))}</option>`).join('')}</select></label>
         <p class="muted small" id="aiHelp"></p>
@@ -6571,18 +6637,31 @@ sudo ./install.sh</pre></div>`}` : '') +
       $('[data-ai=url]', form).hidden = p === 'off' || p === 'claude';
       $('[data-ai=key]', form).hidden = p !== 'claude';
       $('[data-ai=model]', form).hidden = p === 'off';
+      $('[data-ai=tools]', form).hidden = p === 'off';
     };
+    const payload = () => ({ enabled: form.enabled.checked, tools: form.tools.checked, provider: form.provider.value, url: form.url.value, key: form.key.value, model: form.model.value });
     form.enabled.addEventListener('change', async () => {
       form.enabled.setAttribute('aria-checked', form.enabled.checked ? 'true' : 'false');
       paint();
       try {
-        await api.post('/api/ai/settings', { enabled: form.enabled.checked, provider: form.provider.value, url: form.url.value, key: form.key.value, model: form.model.value });
+        await api.post('/api/ai/settings', payload());
         await loadAi();
       } catch (err) {
         toast(err.message, true);
         form.enabled.checked = !form.enabled.checked;
         form.enabled.setAttribute('aria-checked', form.enabled.checked ? 'true' : 'false');
         paint();
+      }
+    });
+    form.tools.addEventListener('change', async () => {
+      form.tools.setAttribute('aria-checked', form.tools.checked ? 'true' : 'false');
+      try {
+        await api.post('/api/ai/settings', payload());
+        await loadAi();
+      } catch (err) {
+        toast(err.message, true);
+        form.tools.checked = !form.tools.checked;
+        form.tools.setAttribute('aria-checked', form.tools.checked ? 'true' : 'false');
       }
     });
     form.provider.addEventListener('change', () => {
@@ -6641,7 +6720,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (e.target.id !== 'aiSet') return;
       const btn = e.target.querySelector('button'); btn.disabled = true;
       try {
-        await api.post('/api/ai/settings', { enabled: form.enabled.checked, provider: form.provider.value, url: form.url.value, key: form.key.value, model: form.model.value });
+        await api.post('/api/ai/settings', payload());
         toast(t('Saved'));
         await loadAi();
         aiPane(el);

@@ -421,7 +421,7 @@ async function handleApi(req, res, url) {
   }
   // What Cursor needs to talk to this server. The token is a normal session (30 days); the password never leaves this check.
   if (p === '/api/mcp' && method === 'GET') {
-    return sendJson(res, 200, { user: auth.userName() || '', passwordEnabled: passwordEnabled(), terminal: !!settings.getSettings().terminal });
+    return sendJson(res, 200, { user: auth.userName() || '', passwordEnabled: passwordEnabled(), terminal: !!settings.getSettings().terminal, enabled: settings.getSettings().mcp !== false });
   }
   if (p === '/api/mcp/token' && method === 'POST') {
     const body = await readBody(req);
@@ -608,7 +608,9 @@ async function handleApi(req, res, url) {
     if (!MODEL_NAME.test(body.name || '')) return sendJson(res, 400, { error: 'Invalid model name' });
     return proxyStream(res, '/api/pull', { name: body.name, stream: true });
   }
-  if (p === '/api/ai/chat' && method === 'POST') return ai.chat(res, await readBody(req, 5e6));
+  if (p === '/api/ai/chat' && method === 'POST') {
+    return ai.chat(res, await readBody(req, 5e6), { token: cookies(req).tb_session || '', port: CFG.port });
+  }
   if ((m = p.match(/^\/api\/ai\/models\/(.+)$/)) && method === 'DELETE') {
     const base = needOllama();
     const name = decodeURIComponent(m[1]);
@@ -669,6 +671,7 @@ function onRequest(req, res) {
       return mcphttp.handle(req, res, {
         port: () => CFG.port, validToken, makeToken, checkPassword, auth, passwordEnabled, needsSetup,
         language: () => settings.getSettings().language, clientIp, slow,
+        enabled: () => settings.getSettings().mcp !== false,
       });
     }
     return url.pathname.startsWith('/api/') ? handleApi(req, res, url) : serveStatic(req, res, url);

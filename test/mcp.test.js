@@ -129,6 +129,10 @@ test('the connector address signs in with PKCE and then answers MCP', async () =
   assert.equal(JSON.parse(init.body).result.serverInfo.name, 'homebaseos');
   const nope = await call('GET', '/mcp');
   assert.equal(nope.status, 405);
+  deps.enabled = () => false;
+  const stopped = await call('POST', '/mcp', {}, '{}');
+  assert.equal(stopped.status, 403);
+  assert.match(stopped.body, /turned off/);
 });
 
 test('an empty command is refused, a real one returns its output', async () => {

@@ -36,6 +36,10 @@ test('security: making it less strict asks for the password', () => {
   assert.throws(() => settings.saveSettings({ terminalPassword: false }, { checkPassword: check }), /Type your password/);
   assert.equal(settings.saveSettings({ terminalPassword: false, password: 'geheim' }, { checkPassword: check }).terminalPassword, false);
   assert.equal(settings.saveSettings({ terminalPassword: true }, { checkPassword: check }).terminalPassword, true);
+  assert.equal(settings.getSettings().mcp, true);
+  assert.equal(settings.saveSettings({ mcp: false }, { checkPassword: check }).mcp, false);
+  assert.throws(() => settings.saveSettings({ mcp: true }, { checkPassword: check }), /Type your password/);
+  assert.equal(settings.saveSettings({ mcp: true, password: 'geheim' }, { checkPassword: check }).mcp, true);
 });
 
 test('WebSocket with a shell behind it: keys in, output out', async () => {

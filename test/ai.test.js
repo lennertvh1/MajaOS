@@ -41,6 +41,11 @@ test('the Claude key is saved on disk and is not returned', () => {
   assert.equal(offSwitch.enabled, false);
   assert.equal(offSwitch.provider, 'claude');
   assert.equal(ai.save({ enabled: true }).enabled, true);
+  assert.equal(ai.publicConfig().tools, true);
+  assert.equal(ai.save({ tools: false }).tools, false);
+  assert.equal(ai.effective().tools, false);
+  assert.equal(ai.save({}).tools, false);
+  assert.equal(ai.save({ tools: true }).tools, true);
   assert.equal(JSON.stringify(out).includes('sk-ant-'), false);
   const raw = JSON.parse(fs.readFileSync(path.join(dir, 'ai.json'), 'utf8'));
   assert.equal(raw.key, 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz');
@@ -54,4 +59,35 @@ test('the Claude key is saved on disk and is not returned', () => {
   assert.equal(ai.effective().provider, 'ollama');
   assert.equal(ai.effective().url, 'http://127.0.0.1:11434');
   delete process.env.OLLAMA_URL;
+});
+
+test('the chat runs a tool and then answers', async () => {
+  const seen = [];
+  const messages = [{ role: 'system', content: 'manage the server' }, { role: 'user', content: 'Which apps are running?' }];
+  let step = 0;
+  await ai.foldTools(messages, {
+    ask: async () => {
+      step += 1;
+      if (step === 1) return { text: '', calls: [{ id: 'c1', name: 'apps_list', arguments: {} }] };
+      return { text: 'Jellyfin is running.', calls: [] };
+    },
+    run: async (name) => { seen.push(name); return '{"apps":["jellyfin"]}'; },
+    write: (obj) => seen.push(obj),
+  });
+  assert.deepEqual(seen, [{ tool: { name: 'apps_list' } }, 'apps_list', { message: { content: 'Jellyfin is running.' } }]);
+  const claude = ai.toClaude(messages);
+  assert.equal(claude.system, 'manage the server');
+  assert.equal(claude.messages[1].content[0].type, 'tool_use');
+  assert.equal(claude.messages[2].content[0].type, 'tool_result');
+  const openai = ai.toOpenAI(messages);
+  assert.equal(openai[3].role, 'tool');
+  assert.equal(openai[3].tool_call_id, 'c1');
+  const ollama = ai.parseOllama({ message: { content: '', tool_calls: [{ function: { name: 'storage', arguments: { wake: false } } }] } });
+  assert.equal(ollama.calls[0].name, 'storage');
+  assert.equal(ollama.calls[0].arguments.wake, false);
+});
+
+test('shutting down from the chat still needs confirm', async () => {
+  const mcp = require('../lib/mcp');
+  await assert.rejects(() => mcp.runTool('power', { action: 'reboot' }, { call() { throw new Error('should not run'); } }), /confirm/);
 });
