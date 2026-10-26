@@ -53,6 +53,17 @@ test('date and time for set-time', () => {
 test('time format in the settings', () => {
   assert.equal(settings.getSettings().clock, 'auto');
   assert.equal(settings.saveSettings({ clock: '12' }).clock, '12');
+  const prevPort = process.env.PORT, prevDemo = process.env.DEMO;
+  delete process.env.PORT; delete process.env.DEMO;
+  assert.equal(settings.listenPort(), 80);
+  process.env.PORT = '8080';
+  assert.equal(settings.listenPort(), 8080);
+  assert.equal(settings.saveSettings({ port: 90 }).port, 90);
+  assert.equal(settings.listenPort(), 90);
+  assert.throws(() => settings.saveSettings({ port: 0 }), /port/);
+  assert.throws(() => settings.saveSettings({ port: 70000 }), /port/);
+  if (prevPort === undefined) delete process.env.PORT; else process.env.PORT = prevPort;
+  if (prevDemo === undefined) delete process.env.DEMO; else process.env.DEMO = prevDemo;
   assert.equal(settings.getSettings().clock, '12');
   assert.throws(() => settings.saveSettings({ clock: '13' }), /time format/);
 });

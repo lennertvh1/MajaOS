@@ -93,6 +93,13 @@ echo "deb [signed-by=/etc/apt/keyrings/kopia-keyring.gpg] http://packages.kopia.
 apt-get update
 apt-get install -y kopia
 
+step "Remote access without port forwarding (cloudflared)"
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /etc/apt/keyrings/cloudflare-main.gpg
+echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
+apt-get update
+apt-get install -y cloudflared
+
 step "Docker (official package source)"
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
@@ -141,8 +148,10 @@ systemctl enable homebaseos >/dev/null
 systemctl restart homebaseos
 
 IP="$(hostname -I | awk '{print $1}')"
+PORT="$(sed -n 's/^PORT=//p' "$ETC/homebaseos.env" | tail -1)"
+PORT="${PORT:-80}"
 step "Done"
-echo "Open http://$IP:8080"
+if [ "$PORT" = 80 ]; then echo "Open http://$IP"; else echo "Open http://$IP:$PORT"; fi
 if [ "$NEW_INSTALL" = 1 ]; then
   echo "Open that address in your browser: the welcome wizard creates your account and helps you with the name, the time zone and your storage."
   echo "You can also create a pool there; HomeBaseOS right away creates the folders appdata, media, backups, vms and isos on it."

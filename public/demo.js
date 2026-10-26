@@ -75,6 +75,7 @@
     return { ok: true, changed: onb.passwordChanged };
   }
   const demoClock = () => { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } };
+  const demoWebPort = () => { try { const n = Number(localStorage.getItem('tb-port')); if (Number.isInteger(n) && n >= 1 && n <= 65535) return n; } catch (e) { /* private window */ } return 80; };
 
   /* ---- software update: a simulated new version with release notes */
   const upd = { auto: true, channel: 'stable', checked: new Date(Date.now() - 3 * 3600000).toISOString() };
@@ -1907,6 +1908,59 @@
       temp: Math.round(rnd(41, 47)), power: Math.round(rnd(18, 34)) }];
   }
 
+  const AI_CHOICES = [
+    { id: 'ollama', url: 'http://127.0.0.1:11434' },
+    { id: 'lmstudio', url: 'http://127.0.0.1:1234/v1' },
+    { id: 'llamacpp', url: 'http://127.0.0.1:8080/v1' },
+    { id: 'localai', url: 'http://127.0.0.1:8080/v1' },
+    { id: 'claude', url: '' },
+  ];
+  const CLAUDE_MODELS = ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-1'];
+  function demoAiCfg() {
+    const base = { provider: 'ollama', url: 'http://127.0.0.1:11434', model: '', hasKey: false, enabled: true };
+    try {
+      const s = JSON.parse(localStorage.getItem('tb-ai') || 'null');
+      if (s && s.provider) Object.assign(base, { provider: s.provider, url: s.url || base.url, model: s.model || '', hasKey: !!s.hasKey, enabled: s.enabled !== false });
+    } catch { /* keep the sample Ollama */ }
+    return base;
+  }
+  function demoAiView() {
+    const c = demoAiCfg();
+    const common = { enabled: c.enabled !== false, choices: AI_CHOICES, claudeModels: CLAUDE_MODELS, gpu: null, version: null };
+    if (c.enabled === false) {
+      return { ...common, provider: c.provider, url: c.provider === 'claude' || c.provider === 'off' ? '' : (c.url || ''), model: c.model, hasKey: !!c.hasKey, reachable: false, error: null, models: [] };
+    }
+    if (c.provider === 'off') return { ...common, provider: 'off', url: '', model: '', hasKey: false, reachable: false, error: null, models: [] };
+    if (c.provider === 'claude') {
+      return { ...common, provider: 'claude', url: '', model: c.model || CLAUDE_MODELS[0], hasKey: !!c.hasKey, reachable: !!c.hasKey,
+        error: c.hasKey ? null : 'Paste the API key from Claude.', models: CLAUDE_MODELS.map((name) => ({ name })) };
+    }
+    if (c.provider === 'ollama') return { ...common, provider: 'ollama', url: c.url, model: c.model, hasKey: false, reachable: true, error: null, models: copy(models), version: '0.13.4', gpu: gpu() };
+    return { ...common, provider: c.provider, url: c.url, model: c.model || 'local-model', hasKey: false, reachable: true, error: null, models: [{ name: c.model || 'local-model' }] };
+  }
+  function demoAiSave(body) {
+    const provider = String(body.provider || 'off');
+    if (!['off', 'ollama', 'lmstudio', 'llamacpp', 'localai', 'claude'].includes(provider)) throw err('Choose an AI.', 400);
+    const cur = demoAiCfg();
+    const enabled = body.enabled === undefined ? cur.enabled !== false : !!body.enabled;
+    const next = { enabled, provider, url: '', model: String(body.model || '').slice(0, 200), hasKey: !!cur.hasKey };
+    if (provider === 'claude' && enabled) {
+      const key = String(body.key || '').trim();
+      if (key) {
+        if (!key.startsWith('sk-ant-')) throw err('Paste the API key from Claude. It starts with sk-ant-.', 400);
+        next.hasKey = true;
+      }
+      if (!next.hasKey) throw err('Paste the API key from Claude.', 400);
+      if (!next.model) next.model = CLAUDE_MODELS[0];
+    } else if (provider !== 'off') {
+      next.url = String(body.url || '').trim();
+      if (!/^https?:\/\/[^@\s]+$/.test(next.url)) throw err('Type an address like http://127.0.0.1:11434.', 400);
+    }
+    localStorage.setItem('tb-ai', JSON.stringify(next));
+    const view = demoAiView();
+    return { enabled: view.enabled, provider: view.provider, url: view.url, model: view.model, hasKey: view.hasKey, choices: view.choices, claudeModels: view.claudeModels };
+  }
+
   function overview() {
     const used = rnd(15.2, 16.6) * GB;
     return {
@@ -2066,10 +2120,58 @@
     return { state: done ? 'done' : 'running', percent: step[0], message: step[1], log: instJob.log };
   }
 
+  let demoLinks = [];
+  function demoRemote() {
+    try { return JSON.parse(localStorage.getItem('tb-remote') || '') || { mode: 'off' }; } catch (e) { return { mode: 'off' }; }
+  }
+  function demoRemoteSave(st) { try { localStorage.setItem('tb-remote', JSON.stringify(st)); } catch (e) { /* private window */ } }
+  function demoRemoteView() {
+    const st = { mode: 'off', url: '', address: '', hasToken: false, ...demoRemote() };
+    return { installed: true, running: st.mode !== 'off', mode: st.mode, url: st.mode === 'off' ? '' : (st.url || ''), address: st.address || '', hasToken: !!st.hasToken };
+  }
+  function demoLinkUrl(row) {
+    const remote = demoRemoteView();
+    const p = '/s/' + row.token;
+    return { id: row.id, name: row.name, dir: row.dir, place: row.place, rel: row.rel, created: row.created, expires: row.expires, path: p, url: remote.url ? remote.url + p : null };
+  }
+  function demoLinkCreate(body) {
+    const days = Number(body.days);
+    if (days !== 0 && ![1, 7, 30].includes(days)) throw err('Choose how long the link works.');
+    const w = filesWalk(body.place, body.path || '');
+    if (demoLinks.length >= 100) throw err('Remove a shared link first. You can have 100.', 409);
+    const row = {
+      id: Math.random().toString(16).slice(2, 10).padEnd(8, '0'),
+      token: (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + 'link').slice(0, 24),
+      name: w.parts.length ? w.parts[w.parts.length - 1] : String(body.place || 'file'), dir: w.node.type === 'dir',
+      place: body.place, rel: w.parts.join('/'), created: Date.now(), expires: days === 0 ? null : Date.now() + days * 86400000,
+    };
+    demoLinks.push(row);
+    return demoLinkUrl(row);
+  }
+  function demoRemoteSet(body) {
+    const cur = { mode: 'off', url: '', address: '', hasToken: false, ...demoRemote() };
+    if (body.mode === 'off') { demoRemoteSave({ ...cur, mode: 'off', url: '' }); return demoRemoteView(); }
+    if (body.mode === 'quick') { demoRemoteSave({ ...cur, mode: 'quick', url: 'https://freddy.trycloudflare.com' }); return demoRemoteView(); }
+    if (body.mode === 'token') {
+      let origin = String(body.address || '').trim();
+      if (!origin) throw err('Type an address like https://home.example.com.');
+      try { if (!/^https?:\/\//i.test(origin)) origin = 'https://' + origin; origin = new URL(origin).origin; }
+      catch (e) { throw err('Type an address like https://home.example.com.'); }
+      const token = String(body.token || '').trim();
+      if (!token && !cur.hasToken) throw err('Paste the tunnel token from Cloudflare.');
+      if (token && !/^[A-Za-z0-9+/=_.-]{20,8000}$/.test(token)) throw err('Paste the tunnel token from Cloudflare.');
+      demoRemoteSave({ mode: 'token', url: origin, address: origin, hasToken: true });
+      return demoRemoteView();
+    }
+    throw err('Choose a temporary address or a fixed address.');
+  }
+
   async function get(path) {
     await wait(rnd(120, 300));
     { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
-    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: true, language: demoLang(), clock: demoClock(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: demoAiCfg().provider === 'ollama', language: demoLang(), clock: demoClock(), port: demoWebPort(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    if (path === '/api/remote') return demoRemoteView();
+    if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
     if (path === '/api/install/progress') return instProgress();
     if (path === '/api/storage-paths') return spGet();
@@ -2086,7 +2188,7 @@
       return { running, lines: copy(lines), last: (j.history || [])[0] || null };
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
-    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), ...demoSecurity, sshState: demoSshState() };
+    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
@@ -2155,7 +2257,7 @@
     const dk = path.match(/^\/api\/disks\/([^/?]+)(\?wake=1)?$/);
     if (dk) { await wait(rnd(250, 600)); return demoDisk(decodeURIComponent(dk[1]), !!dk[2]); }
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
-    if (path === '/api/ai') return { version: '0.13.4', gpu: gpu(), models: copy(models) };
+    if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
   }
 
@@ -2170,6 +2272,9 @@
       return { started: true };
     }
     if (path === '/api/install/reboot') return { ok: true };
+    if (path === '/api/remote') { await wait(400); return demoRemoteSet(body); }
+    if (path === '/api/ai/settings') { await wait(200); return demoAiSave(body); }
+    if (path === '/api/share-links') { await wait(200); return demoLinkCreate(body); }
     if (path.includes('/snapshots')) { await wait(rnd(800, 1600)); const r = snapRoute('POST', path, body); if (r !== undefined) return r; }
     if (path.startsWith('/api/sysbackups')) { await wait(rnd(200, 500)); const r = sysRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/login' || path === '/api/login/mfa' || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }
@@ -2193,6 +2298,12 @@
       if (body.updateCheck != null) upd.auto = !!body.updateCheck;
       if (body.updateChannel != null) { if (!['stable', 'beta', 'dev'].includes(body.updateChannel)) throw err('Choose stable, beta or development.'); upd.channel = body.updateChannel; }
       return { language: demoLang(), clock: demoClock(), ...demoSecurity, updateCheck: upd.auto, updateChannel: upd.channel };
+    }
+    if (path === '/api/settings' && body.port != null) {
+      const n = Number(body.port);
+      if (!Number.isInteger(n) || n < 1 || n > 65535) throw err('Choose a port from 1 to 65535.');
+      try { localStorage.setItem('tb-port', String(n)); } catch (e) { /* private window */ }
+      return { language: demoLang(), clock: demoClock(), port: n, ...demoSecurity, sshState: demoSshState() };
     }
     if (path === '/api/settings' && body.clock != null) {
       if (!['auto', '24', '12'].includes(String(body.clock))) throw err('Choose a time format: automatic, 24-hour or 12-hour.');
@@ -2368,6 +2479,11 @@
 
   async function del(path) {
     await wait(400);
+    { const lm = path.match(/^\/api\/share-links\/([0-9a-f]{8})$/); if (lm) {
+      const i = demoLinks.findIndex((row) => row.id === lm[1]);
+      if (i < 0) throw err('This link does not exist.', 404);
+      demoLinks.splice(i, 1); return { removed: lm[1] };
+    } }
     { const cm = path.match(/^\/api\/shortcuts\/([^/]+)$/); if (cm) return cutRemove(decodeURIComponent(cm[1])); }
     { const r = path.includes('/snapshots') ? snapRoute('DELETE', path) : path.startsWith('/api/sysbackups') ? sysRoute('DELETE', path) : undefined; if (r !== undefined) return r; }
     let m = path.match(/^\/api\/apps\/([^/?]+)(\?data=1)?$/);
@@ -2425,6 +2541,8 @@
       return;
     }
     if (path === '/api/ai/chat') {
+      if (demoAiCfg().enabled === false) throw err('AI is turned off. Turn it on in Settings.', 409);
+      if (demoAiCfg().provider === 'off') throw err('No AI is connected yet. Choose one in Settings.', 409);
       const q = (body.messages[body.messages.length - 1] || {}).content || '';
       const reply = 'This is demo mode, so I am not really running on your GPU. On your own server ' + body.model +
         ' would answer this here: "' + q.slice(0, 80) + (q.length > 80 ? '…' : '') + '". With an RTX 3060 Ti an 8B model gets roughly 60 to 70 tokens per second.';

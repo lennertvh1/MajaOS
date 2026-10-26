@@ -25,6 +25,17 @@ if ! command -v kopia >/dev/null 2>&1; then
   } || echo "Installing Kopia failed. Run sudo ./install.sh later to use the backup app."
 fi
 
+# Remote access (cloudflared). If the package source is unreachable, the update continues.
+if ! command -v cloudflared >/dev/null 2>&1; then
+  echo "Installing cloudflared"
+  {
+    install -m 0755 -d /etc/apt/keyrings &&
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /etc/apt/keyrings/cloudflare-main.gpg &&
+    echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list &&
+    apt-get update -q && apt-get install -y -q cloudflared
+  } || echo "Installing cloudflared failed. Run sudo ./install.sh later to turn on remote access."
+fi
+
 # Automatic security updates (since 0.6): turned on once; whoever turns them off in Settings > Software update keeps them off.
 if [ ! -f /etc/apt/apt.conf.d/52homebaseos ] && [ -f "$(dirname "$0")/../lib/apt-helper.sh" ]; then
   echo "Turning on automatic security updates"

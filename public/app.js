@@ -261,21 +261,32 @@
 
   function renderAiWidget() {
     const st = $('#aiState');
-    if (S.aiError) {
-      $('#aiLine').textContent = t(!S.config.ollama ? 'Ollama not set up' : S.aiDown ? 'Ollama is not installed' : 'Ollama not reachable');
-      $('#aiSub').textContent = !S.config.ollama ? t('Set OLLAMA_URL in /etc/homebaseos/homebaseos.env.') : S.aiDown ? t('Install Ollama from the app store to run AI models locally.') : S.aiError;
-      st.textContent = S.aiDown ? t('Not active') : ''; st.className = 'pill'; return;
+    const ai = S.ai;
+    const mini = $('#aiMini');
+    if (!ai) {
+      if (!S.aiError) return;
+      $('#aiLine').textContent = t('AI is not reachable');
+      $('#aiSub').textContent = tr(S.aiError);
+      st.textContent = t('Not active'); st.className = 'pill';
+      return;
     }
-    const ai = S.ai; if (!ai) return;
-    const loaded = ai.models.filter((m) => m.loaded);
+    if (ai.provider === 'off' || !ai.reachable) {
+      const off = ai.provider === 'off';
+      $('#aiLine').textContent = t(off ? 'No AI connected' : 'AI is not reachable');
+      $('#aiSub').textContent = off ? t('Choose an AI in Settings.') : tr(ai.error || S.aiError || '');
+      st.textContent = t('Not active'); st.className = 'pill';
+      if (mini) mini.innerHTML = `<li class="muted small">${esc(t(off ? 'No AI connected' : 'AI is not reachable'))}</li>`;
+      return;
+    }
+    const loaded = (ai.models || []).filter((m) => m.loaded);
     $('#aiLine').textContent = loaded.length ? loaded.map((m) => m.name).join(', ') : t('No model loaded');
     const g = ai.gpu && ai.gpu[0];
-    $('#aiSub').textContent = t(ai.models.length === 1 ? '{n} model installed' : '{n} models installed', { n: ai.models.length }) +
+    const nModels = (ai.models || []).length;
+    $('#aiSub').textContent = t(nModels === 1 ? '{n} model installed' : '{n} models installed', { n: nModels }) +
       (g ? ' · ' + t('{used} of {total} VRAM', { used: bytes(g.memUsed), total: bytes(g.memTotal) }) : '');
     st.textContent = t(loaded.length ? 'Ready' : 'Idle'); st.className = 'pill ' + (loaded.length ? 'ok' : '');
-    const mini = $('#aiMini');
     if (mini) {
-      mini.innerHTML = ai.models.map((m) => `<li><span class="name">${esc(m.name)}</span><span class="muted small">${esc(m.loaded ? t('Ready') : t('Idle'))}</span></li>`).join('')
+      mini.innerHTML = (ai.models || []).map((m) => `<li><span class="name">${esc(m.name)}</span><span class="muted small">${esc(m.loaded ? t('Ready') : t('Idle'))}</span></li>`).join('')
         || `<li class="muted small">${t('No model loaded')}</li>`;
     }
   }
@@ -755,6 +766,14 @@
     tray.hidden = !hid.length;
     list.innerHTML = hid.map((id) => `<button type="button" class="btn sm" data-add-widget="${esc(id)}">${esc(t(WIDGET_NAMES[id] || id))}</button>`).join('');
     $('#widgetTrayHint').textContent = t('Hidden widgets. Tap one to put it back on the home screen.');
+    applyAiChrome();
+  }
+  function applyAiChrome() {
+    const on = !S.ai || S.ai.enabled !== false;
+    const btn = $('.topnav [data-open="ai"]');
+    if (btn) btn.hidden = !on;
+    const slot = $('[data-widget="ai"]');
+    if (slot && !on) slot.hidden = true;
   }
   function setWidgetHidden(id, hide) {
     const cur = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
@@ -1531,7 +1550,8 @@
   const win = $('#win');
   let onWinClose = null;
   function openWindow(title, html, after) {
-    win.classList.remove('win-wide', 'file-win'); // only the storage window is wide; the editor is a bit wider
+    win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
+    const gear = $('#winGear'); if (gear) gear.hidden = true;
     if (onWinClose) { try { onWinClose(); } catch (e) { /* ignore */ } onWinClose = null; }
     $('#winTitle').textContent = title;
     // New element, so listeners of a previous window don't hang around.
@@ -1594,6 +1614,7 @@
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
     rename: '<path d="M4 20h4l10-10-4-4L4 16zM13 7l4 4"/>',
     download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    share: '<circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="7" r="2.2"/><circle cx="17" cy="17" r="2.2"/><path d="M8 11.2 15 8.2M8 12.8l7 2.4"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
     rename: '<path d="M4 20h4l10-10-4-4L4 16zM13 7l4 4"/>',
     tofolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
@@ -3701,17 +3722,22 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings() {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', update: 'Software update', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', update: 'Software update', about: 'About' }[tab]);
     $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+  }
+
+  function langSelect() {
+    return `<label class="fld"><select class="field" name="lang" aria-label="${t('Language')}">${Object.entries(LANGS).map(([k, name]) =>
+      `<option value="${esc(k)}"${k === LANG ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>`;
   }
 
   function generalPane(el) {
@@ -3720,9 +3746,7 @@
     el.innerHTML = `
       <h2 class="pane-title">${t('Language')}</h2>
       <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
-      <div class="choice-row" role="radiogroup" aria-label="${t('Language')}">${Object.entries(LANGS).map(([k, name]) => `
-        <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
-      </div>
+      ${langSelect()}
       <h2 class="pane-title">${t('Theme')}</h2>
       <p class="muted small">${t('Applies to this device only.')}</p>
       <div class="choice-row" role="radiogroup" aria-label="${t('Theme')}">${[['auto', t('Automatic')], ['light', t('Light (morning mist)')], ['dark', t('Dark (evening)')]].map(([k, name]) => `
@@ -3733,11 +3757,31 @@
       <div class="choice-row" role="radiogroup" aria-label="${t('Time format')}">${[['auto', t('Follow the language')], ['24', t('24-hour')], ['12', t('12-hour')]].map(([k, name]) => `
         <label class="choice"><input type="radio" name="clock" value="${k}"${k === clock ? ' checked' : ''}><span>${esc(name)} · ${esc(sample(k))}</span></label>`).join('')}
       </div>
+      <h2 class="pane-title">${t('Web interface port')}</h2>
+      <p class="muted small">${t('This is the port of HomeBaseOS in your browser. 80 is the default, so you can open the server address without a port.')}</p>
+      <form class="inline-form" data-port-form>
+        <input class="field sm" name="port" inputmode="numeric" value="${esc(S.config.port || 80)}" aria-label="${t('Web interface port')}" autocomplete="off">
+        <button class="btn sm primary" type="submit">${t('Save')}</button>
+      </form>
       <div id="dtBox"><h2 class="pane-title">${t('Date and time')}</h2><p class="muted small">${t('Loading…')}</p></div>
       <h2 class="pane-title">${t('Welcome wizard')}</h2>
       <p class="muted small">${t('Go through the basic settings again: account, name, time zone, storage and two-step verification.')}</p>
       <div class="btn-row"><button class="btn" type="button" data-onb-open>${t('Open welcome wizard')}</button></div>`;
     el.onclick = (e) => { if (e.target.closest('[data-onb-open]')) { closeSettings(); openOnboarding(0); } };
+    const portForm = $('[data-port-form]', el);
+    if (portForm) portForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const n = Number(portForm.elements.port.value);
+      if (!Number.isInteger(n) || n < 1 || n > 65535) { toast(t('Choose a port from 1 to 65535.'), true); return; }
+      if (n === Number(S.config.port)) return;
+      if (!await ask(t('Open HomeBaseOS on port {port} from now on? This page will reload there.', { port: n }), t('Save'))) return;
+      await withBusy(portForm.querySelector('button'), async () => {
+        const r = await api.post('/api/settings', { port: n });
+        S.config.port = r.port;
+        if (S.config.demo) { toast(t('Saved. On the server, open {url}.', { url: pageOnPort(n) })); return; }
+        location.replace(pageOnPort(r.port));
+      });
+    });
     el.onchange = async (e) => {
       if (e.target.name === 'theme') { setTheme(e.target.value); return; }
       if (e.target.name === 'clock') {
@@ -4455,6 +4499,7 @@
       .concat(parts.map((p, i) => `<span aria-hidden="true">/</span><button type="button" data-files-go="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join('');
     $$('#filesView button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === fx.view)));
     $('#filesDel').hidden = fx.picked.size === 0;
+    $('#filesShare').hidden = fx.picked.size !== 1;
     $$('[data-files-check]', $('#filesPage')).forEach((box) => { box.checked = fx.picked.has(box.dataset.filesCheck); });
     $$('[data-files-item]', $('#filesPage')).forEach((n) => n.classList.toggle('is-sel', fx.picked.has(n.dataset.filesItem)));
   }
@@ -4609,6 +4654,39 @@
       renderFiles();
     } catch (e) { toast(e.message, true); }
   }
+  function linkAddress(link, remote) {
+    return link.url || ((remote && remote.url) || location.origin).replace(/\/$/, '') + link.path;
+  }
+  async function filesShare(rel, name) {
+    openWindow(t('Share {name}', { name }), `
+      <p class="muted">${t('How long should this link work?')}</p>
+      <form id="shareForm"><label class="fld"><span>${t('Share')}</span><select class="field" name="days" aria-label="${t('How long should this link work?')}">
+        <option value="1">${t('1 day')}</option><option value="7" selected>${t('7 days')}</option>
+        <option value="30">${t('30 days')}</option><option value="0">${t('Until you remove it')}</option>
+      </select></label>
+      <div class="btn-row" style="margin-top:14px"><button class="btn primary" type="submit">${t('Create link')}</button></div></form>`, (body) => {
+      body.querySelector('#shareForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button');
+        await withBusy(btn, async () => {
+          const r = await api.post('/api/share-links', { place: fx.share, path: rel, days: Number(new FormData(e.target).get('days')) });
+          const url = linkAddress(r);
+          const note = S.config.demo
+            ? t('In the demo this link is an example. On your server it opens the file.')
+            : t('This link works in your home network.');
+          body.innerHTML = `<p class="muted">${esc(note)}</p>
+            <input class="field" id="shareUrl" readonly value="${esc(url)}" aria-label="${t('Copy link')}">
+            <div class="btn-row" style="margin-top:14px"><button class="btn primary" type="button" id="shareCopy">${t('Copy link')}</button></div>`;
+          body.querySelector('#shareCopy').onclick = async () => {
+            try { await navigator.clipboard.writeText(url); toast(t('Copied.')); }
+            catch (ex) { toast(t('Copying did not work in this browser.'), true); }
+          };
+          const field = body.querySelector('#shareUrl');
+          field.focus(); field.select();
+        });
+      };
+    });
+  }
   function closeFileMenu() { const m = $('#fileMenu'); if (m) m.hidden = true; }
   function openFileMenu(item, x, y) {
     closeMenu(false);
@@ -4617,6 +4695,7 @@
     m.innerHTML = `<div class="menu-head"><b>${esc(name)}</b></div>` + [
       ['open', t('Open'), MENU_ICONS.open],
       ['download', t('Download'), MENU_ICONS.update],
+      ['share', t('Share'), MENU_ICONS.share],
       ['copy', t('Copy'), MENU_ICONS.copy],
       ['rename', t('Rename'), MENU_ICONS.rename],
       ['remove', t('Remove'), MENU_ICONS.remove, 'danger'],
@@ -4747,6 +4826,12 @@
         renderFiles();
       } catch (e) { toast(e.message, true); renderFiles(); }
     });
+    $('#filesShare').addEventListener('click', () => {
+      if (fx.picked.size !== 1) return;
+      const rel = [...fx.picked][0];
+      const item = [...$$('[data-files-item]', page)].find((n) => n.dataset.filesItem === rel);
+      if (item) filesShare(rel, item.dataset.filesName);
+    });
     stage.addEventListener('contextmenu', (e) => {
       const item = e.target.closest('[data-files-item]');
       if (!item) return;
@@ -4761,6 +4846,7 @@
       closeFileMenu();
       if (b.dataset.fileAct === 'open') return openFileItem({ dataset: { filesItem: rel, filesKind: kind, filesName: name } });
       if (b.dataset.fileAct === 'download') return filesDownload(rel, { zip: kind === 'dir' });
+      if (b.dataset.fileAct === 'share') return filesShare(rel, name, kind);
       if (b.dataset.fileAct === 'copy') return filesCopy(rel);
       if (b.dataset.fileAct === 'rename') return showNameRow('rename', { path: rel, name });
       if (b.dataset.fileAct === 'remove') return filesRemoveOne(rel, name, kind);
@@ -5306,8 +5392,9 @@
       ${dev.kind === 'mac' ? `<p class="muted small">${t('Don\'t see the folder? First connect to {smb} in the Finder (Go → Connect to Server).', v)}</p>` : ''}`;
   }
   const kopiaUrl = (k, d) => `https://${k.addresses[0] || d.hostname + '.local'}:${k.port}`;
-  // Address of HomeBaseOS as you use it in your browser now (the app assumes port 8080).
-  const nasAddress = () => location.hostname + (location.port && location.port !== '8080' ? ':' + location.port : !location.port ? ':' + (location.protocol === 'https:' ? 443 : 80) : '');
+  // Address of HomeBaseOS as you use it in your browser now. Port 80 and 443 stay hidden.
+  const nasAddress = () => location.hostname + (location.port && location.port !== '80' && location.port !== '443' ? ':' + location.port : '');
+  const pageOnPort = (port) => location.protocol + '//' + location.hostname + ((location.protocol === 'https:' && Number(port) === 443) || (location.protocol === 'http:' && Number(port) === 80) ? '' : ':' + port) + location.pathname + location.hash;
   // On the device: the HomeBase Backup app (pair with a code), or the plain KopiaUI / command line.
   function kopiaHowTo(dev, d) {
     const k = d.kopia, url = kopiaUrl(k, d), name = dev.user.split('@')[0];
@@ -6289,110 +6376,174 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* --- AI */
   const chatHistory = [];
+  const AI_NAMES = { off: 'None', ollama: 'Ollama', lmstudio: 'LM Studio', llamacpp: 'llama.cpp', localai: 'LocalAI', claude: 'Claude' };
+  const AI_HELP = {
+    off: 'Chat shows a message until you choose an AI.',
+    ollama: 'Ollama runs on this server. Install the Ollama app, then type its address. The usual address is http://127.0.0.1:11434.',
+    lmstudio: 'LM Studio can run on this server or on another computer. Turn on its local server. The usual address is http://127.0.0.1:1234/v1.',
+    llamacpp: 'The llama.cpp server speaks the same language as LM Studio. The usual address is http://127.0.0.1:8080/v1.',
+    localai: 'LocalAI speaks the same language as LM Studio. The usual address is http://127.0.0.1:8080/v1.',
+    claude: 'Claude runs at Anthropic. Paste an API key from console.anthropic.com. The key stays on this server.',
+  };
+  function aiNotice(ai) {
+    if (!ai || ai.provider === 'off') return `<div class="chat-empty"><p class="lead">${t('No AI is connected yet.')}</p><p class="muted">${t('Choose Ollama, LM Studio, llama.cpp, LocalAI or Claude in Settings.')}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
+    if (!ai.reachable) return `<div class="chat-empty"><p class="lead">${esc(tr(ai.error || t('The AI is not reachable.')))}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
+    if (!(ai.models || []).length) return `<div class="chat-empty"><p class="lead">${t('This AI has no model yet.')}</p><p class="muted">${t(ai.provider === 'ollama' ? 'Download a model in AI settings.' : 'Start the AI and check the address in Settings.')}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
+    return '';
+  }
   async function aiWindow() {
     openWindow(t('AI'), `<p class="lead">${t('Loading…')}</p>`);
-    try { await loadAi(true); } catch (e) { /* error is in S.aiError */ }
-    if (S.aiError) {
-      $('#winBody').innerHTML = S.aiDown
-        ? `<p class="lead">${t('Ollama is not running on this server yet. Install the Ollama app from the app store: HomeBaseOS will find it by itself. With an NVIDIA card it uses the GPU.')}</p>
-          <div class="btn-row"><button class="btn primary" type="button" data-ai-store>${t('Find Ollama in the app store')}</button></div>`
-        : `<p class="lead">${esc(S.config.ollama ? t('Ollama is not reachable: {error}', { error: S.aiError })
-          : t('Ollama is not connected yet. Set OLLAMA_URL in /etc/homebaseos/homebaseos.env, for example http://127.0.0.1:11434.'))}</p>`;
-      const b = $('[data-ai-store]');
-      if (b) b.onclick = () => { win.close(); S.storeQuery = 'ollama'; $('#storeSearch').value = 'ollama'; location.hash = 'store'; };
-      return;
-    }
-    const draw = () => {
-      const ai = S.ai; const g = ai.gpu && ai.gpu[0];
-      const opts = ai.models.filter((m) => !/embed/i.test(m.name)).map((m) => `<option value="${esc(m.name)}" ${m.loaded ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
-      $('#winBody').innerHTML = `
-        <div class="stat-strip">
-          ${g ? `<div class="stat"><b>${bytes(g.memUsed)}</b><span>${t('of {total} VRAM', { total: bytes(g.memTotal) })}</span></div>
-                 <div class="stat"><b>${g.util ?? '–'}%</b><span>${t('GPU load')}</span></div>` : ''}
-          <div class="stat"><b>${ai.models.length}</b><span>${t(ai.models.length === 1 ? 'model' : 'models')}</span></div>
-          ${ai.version ? `<div class="stat"><b>${esc(ai.version)}</b><span>${t('Ollama version')}</span></div>` : ''}
-        </div>
-        <h3>${t('Models')}</h3>
-        <ul class="rows" id="modelRows">${ai.models.map((m) => `<li>
-          <div><div class="row-title">${esc(m.name)}</div>
-            <div class="row-sub">${esc([m.params, m.quant, bytes(m.size), m.loaded ? t('loaded in {size} VRAM', { size: bytes(m.vram) }) : null].filter(Boolean).join(' · '))}</div></div>
-          <div class="btn-row">
-            ${m.loaded ? `<button class="btn sm" data-model="${esc(m.name)}" data-do="unload">${t('Unload')}</button>`
-                       : `<button class="btn sm" data-model="${esc(m.name)}" data-do="load">${t('Load')}</button>`}
-            <button class="btn sm danger" data-model="${esc(m.name)}" data-do="delete">${t('Remove')}</button>
-          </div></li>`).join('') || `<li><span class="muted">${t('No models yet. Download one below.')}</span></li>`}</ul>
+    win.classList.add('chat-win');
+    const gear = $('#winGear'); if (gear) gear.hidden = false;
+    try { await loadAi(true); } catch (e) { /* the message below uses S.ai */ }
+    const notice = aiNotice(S.ai);
+    const body = $('#winBody');
+    if (notice) { body.innerHTML = `<div class="chat">${notice}</div>`; return; }
+    const list = (S.ai.models || []).filter((m) => !/embed/i.test(m.name));
+    const models = list.length ? list : S.ai.models;
+    const picked = models.some((m) => m.name === S.ai.model) ? S.ai.model : models[0].name;
+    body.innerHTML = `<form class="chat" id="chatForm">
+      <label class="fld">${t('Model')}<select class="field" id="chatModel">${models.map((m) => `<option value="${esc(m.name)}"${m.name === picked ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+      <div class="chat-log" id="chatLog">${chatHistory.map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div>
+      <textarea class="field" id="chatInput" rows="3" placeholder="${t('Ask your own model a question')}" required></textarea>
+      <div class="btn-row"><button class="btn primary" type="submit">${t('Send')}</button></div>
+    </form>`;
+    const form = $('#chatForm', body);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = $('#chatInput', body); const text = input.value.trim(); if (!text) return;
+      const model = $('#chatModel', body).value; const log = $('#chatLog', body);
+      const btn = form.querySelector('button'); btn.disabled = true; input.value = '';
+      chatHistory.push({ role: 'user', content: text });
+      log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
+      const out = document.createElement('div'); out.className = 'msg assistant'; out.textContent = '…'; log.appendChild(out);
+      log.scrollTop = log.scrollHeight;
+      let answer = '';
+      try {
+        await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
+          if (l.message && l.message.content) { answer += l.message.content; out.textContent = answer; log.scrollTop = log.scrollHeight; }
+        });
+        chatHistory.push({ role: 'assistant', content: answer });
+      } catch (err) { out.textContent = t('No answer: {error}', { error: err.message }); chatHistory.pop(); }
+      btn.disabled = false; input.focus();
+    });
+    form.addEventListener('keydown', (e) => {
+      if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+    });
+  }
 
-        <h3>${t('Download a model')}</h3>
+  async function aiPane(el) {
+    el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+    let ai;
+    try { ai = await api.get('/api/ai'); } catch (e) { if (settingsTab() === 'ai') el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'ai') return;
+    const choices = [['off', 'None']].concat((ai.choices || []).map((c) => [c.id, AI_NAMES[c.id] || c.id]));
+    const defaults = Object.fromEntries((ai.choices || []).map((c) => [c.id, c.url]));
+    const aiOn = ai.enabled !== false;
+    el.innerHTML = `
+      <h2 class="pane-title">${t('AI')}</h2>
+      <form id="aiSet">
+        <label class="toggle">
+          <input type="checkbox" role="switch" name="enabled"${aiOn ? ' checked' : ''} aria-checked="${aiOn ? 'true' : 'false'}">
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span><b>${t('Use AI')}</b><span class="muted small">${t('Turn this off to hide the AI button.')}</span></span>
+        </label>
+        <div data-ai-rest>
+        <p class="muted small">${t('Choose where the chat runs.')}</p>
+        <label class="fld">${t('Which AI')}<select class="field" name="provider">${choices.map(([id, name]) => `<option value="${esc(id)}"${id === ai.provider ? ' selected' : ''}>${esc(t(name))}</option>`).join('')}</select></label>
+        <p class="muted small" id="aiHelp"></p>
+        <label class="fld" data-ai="url">${t('Address')}<input class="field" name="url" value="${esc(ai.url || '')}" autocomplete="off" spellcheck="false"></label>
+        <label class="fld" data-ai="key">${t('API key')}<input class="field" name="key" type="password" autocomplete="off" placeholder="${ai.hasKey ? esc(t('A key is saved. Paste a new one to replace it.')) : ''}"></label>
+        <label class="fld" data-ai="model">${t('Model')}<input class="field" name="model" value="${esc(ai.model || '')}" autocomplete="off" spellcheck="false" placeholder="${esc(t('Leave this empty to choose a model in the chat.'))}"></label>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Save')}</button></div>
+        </div>
+      </form>
+      <div id="aiExtra"></div>`;
+    const form = $('#aiSet', el);
+    const paint = () => {
+      const on = form.enabled.checked;
+      $('[data-ai-rest]', form).hidden = !on;
+      const p = form.provider.value;
+      $('#aiHelp', el).textContent = t(AI_HELP[p] || '');
+      $('[data-ai=url]', form).hidden = p === 'off' || p === 'claude';
+      $('[data-ai=key]', form).hidden = p !== 'claude';
+      $('[data-ai=model]', form).hidden = p === 'off';
+    };
+    form.enabled.addEventListener('change', async () => {
+      form.enabled.setAttribute('aria-checked', form.enabled.checked ? 'true' : 'false');
+      paint();
+      try {
+        await api.post('/api/ai/settings', { enabled: form.enabled.checked, provider: form.provider.value, url: form.url.value, key: form.key.value, model: form.model.value });
+        await loadAi();
+      } catch (err) {
+        toast(err.message, true);
+        form.enabled.checked = !form.enabled.checked;
+        form.enabled.setAttribute('aria-checked', form.enabled.checked ? 'true' : 'false');
+        paint();
+      }
+    });
+    form.provider.addEventListener('change', () => {
+      if (defaults[form.provider.value]) form.url.value = defaults[form.provider.value];
+      paint();
+    });
+    paint();
+    if (ai.provider === 'ollama' && ai.reachable) {
+      $('#aiExtra', el).innerHTML = `
+        <h2 class="pane-title">${t('Models')}</h2>
+        <ul class="rows">${(ai.models || []).map((m) => `<li>
+          <div><div class="row-title">${esc(m.name)}</div>
+            <div class="row-sub">${esc([m.params, m.quant, m.size ? bytes(m.size) : null].filter(Boolean).join(' · '))}</div></div>
+          <div class="btn-row">
+            ${m.loaded ? `<button class="btn sm" type="button" data-model="${esc(m.name)}" data-do="unload">${t('Unload')}</button>`
+                       : `<button class="btn sm" type="button" data-model="${esc(m.name)}" data-do="load">${t('Load')}</button>`}
+            <button class="btn sm danger" type="button" data-model="${esc(m.name)}" data-do="delete">${t('Remove')}</button>
+          </div></li>`).join('') || `<li><span class="muted">${t('No models yet. Download one below.')}</span></li>`}</ul>
+        <h2 class="pane-title">${t('Download a model')}</h2>
         <form class="inline-form" id="pullForm">
           <input class="field" id="pullName" placeholder="${t('for example qwen3:8b')}" autocomplete="off" required>
           <button class="btn primary" type="submit">${t('Download')}</button>
         </form>
         <div class="bar" style="margin-top:10px" hidden id="pullBarWrap"><span id="pullBar"></span></div>
-        <p class="progress-note" id="pullNote"></p>
-
-        <h3>${t('Ask something quickly')}</h3>
-        ${opts ? `<div class="chat">
-          <select class="field" id="chatModel" aria-label="${t('Model')}">${opts}</select>
-          <div class="chat-log" id="chatLog">${chatHistory.map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div>
-          <form class="inline-form" id="chatForm">
-            <textarea class="field" id="chatInput" placeholder="${t('Ask your own model a question')}" required></textarea>
-            <button class="btn primary" type="submit">${t('Send')}</button>
-          </form>
-        </div>` : `<p class="lead">${t('Download a model first to chat.')}</p>`}`;
-    };
-    draw();
-
-    const body = $('#winBody');
-    body.addEventListener('click', async (e) => {
-      const b = e.target.closest('[data-model]'); if (!b) return;
+        <p class="progress-note" id="pullNote"></p>`;
+    }
+    el.onclick = async (e) => {
+      const b = e.target.closest('[data-model]'); if (!b || !el.contains(b)) return;
       const name = b.dataset.model, act = b.dataset.do;
       if (act === 'delete' && !(await ask(t('Remove {name}?', { name }), t('Remove')))) return;
       withBusy(b, async () => {
         if (act === 'delete') await api.del('/api/ai/models/' + encodeURIComponent(name));
         else await api.post('/api/ai/models/' + encodeURIComponent(name) + '/' + act);
         toast(t({ delete: 'Removed', load: 'Loaded', unload: 'Unload' }[act]) + ': ' + name);
-        await loadAi(); draw();
+        await loadAi(); aiPane(el);
       });
-    });
-    body.addEventListener('submit', async (e) => {
+    };
+    el.onsubmit = async (e) => {
       e.preventDefault();
       if (e.target.id === 'pullForm') {
-        const name = $('#pullName').value.trim(); if (!name) return;
+        const name = $('#pullName', el).value.trim(); if (!name) return;
         const btn = e.target.querySelector('button'); btn.disabled = true;
-        $('#pullBarWrap').hidden = false;
+        $('#pullBarWrap', el).hidden = false;
         try {
           await api.stream('/api/ai/pull', { name }, (l) => {
             if (l.total && l.completed != null) {
-              const p = (l.completed / l.total) * 100;
-              $('#pullBar').style.width = p.toFixed(1) + '%';
-              $('#pullNote').textContent = t('Downloading: {done} of {total}', { done: bytes(l.completed), total: bytes(l.total) });
-            } else if (l.status) $('#pullNote').textContent = l.status === 'success' ? t('Ready') : l.status;
+              $('#pullBar', el).style.width = ((l.completed / l.total) * 100).toFixed(1) + '%';
+              $('#pullNote', el).textContent = t('Downloading: {done} of {total}', { done: bytes(l.completed), total: bytes(l.total) });
+            } else if (l.status) $('#pullNote', el).textContent = l.status === 'success' ? t('Ready') : l.status;
           });
           toast(t('Downloaded: {name}', { name }));
-          await loadAi(); draw();
-        } catch (err) { $('#pullNote').textContent = t('Download failed: {error}', { error: err.message }); btn.disabled = false; }
+          await loadAi(); aiPane(el);
+        } catch (err) { $('#pullNote', el).textContent = t('Download failed: {error}', { error: err.message }); btn.disabled = false; }
+        return;
       }
-      if (e.target.id === 'chatForm') {
-        const input = $('#chatInput'); const text = input.value.trim(); if (!text) return;
-        const model = $('#chatModel').value; const log = $('#chatLog');
-        const btn = e.target.querySelector('button'); btn.disabled = true; input.value = '';
-        chatHistory.push({ role: 'user', content: text });
-        log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
-        const out = document.createElement('div'); out.className = 'msg assistant'; out.textContent = '…'; log.appendChild(out);
-        log.scrollTop = log.scrollHeight;
-        let answer = '';
-        try {
-          await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
-            if (l.message && l.message.content) { answer += l.message.content; out.textContent = answer; log.scrollTop = log.scrollHeight; }
-          });
-          chatHistory.push({ role: 'assistant', content: answer });
-        } catch (err) { out.textContent = t('No answer: {error}', { error: err.message }); chatHistory.pop(); }
-        btn.disabled = false; input.focus();
-      }
-    });
-    body.addEventListener('keydown', (e) => {
-      if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit(); }
-    });
+      if (e.target.id !== 'aiSet') return;
+      const btn = e.target.querySelector('button'); btn.disabled = true;
+      try {
+        await api.post('/api/ai/settings', { enabled: form.enabled.checked, provider: form.provider.value, url: form.url.value, key: form.key.value, model: form.model.value });
+        toast(t('Saved'));
+        await loadAi();
+        aiPane(el);
+      } catch (err) { toast(err.message, true); btn.disabled = false; }
+    };
   }
 
   /* ------------------------------------------------------------ loading */
@@ -6403,10 +6554,11 @@ sudo ./install.sh</pre></div>`}` : '') +
     catch (e) { S.vmError = e.message; throw e; }
     finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); renderNotes(); }
   }
-  async function loadAi(quiet) {
+  async function loadAi() {
     try { S.ai = await api.get('/api/ai'); S.aiError = null; S.aiDown = false; }
-    catch (e) { S.aiError = e.message; S.aiDown = !!(e.data && e.data.notRunning); if (!quiet) { /* quiet in the widget */ } }
+    catch (e) { S.aiError = e.message; S.aiDown = !!(e.data && e.data.notRunning); }
     renderAiWidget();
+    applyAiChrome();
   }
 
   let failures = 0;
@@ -6741,19 +6893,20 @@ sudo ./install.sh</pre></div>`}` : '') +
       { id: 'p:files', group: 'pages', title: t('Files'), keys: ['files', 'explorer', 'finder', 'upload', t('Files')], ico: spotIco('files'), run: () => filesOpen('', '') },
       { id: 'p:backup', group: 'pages', title: t('Backups'), keys: ['backup', 'rclone', 'kopia', t('Backups')], ico: spotIco('backup'), run: () => backupWindow() },
       { id: 'p:vms', group: 'pages', title: t('Virtual machines'), keys: ['vms', 'kvm', 'libvirt', t('VMs'), t('Virtual machines')], ico: spotIco('vms'), run: () => { goSettings('vms'); } },
-      { id: 'p:ai', group: 'pages', title: t('AI'), keys: ['ai', 'ollama', 'llm'], ico: spotIco('ai'), run: () => aiWindow() },
       { id: 'p:settings', group: 'pages', title: t('Settings'), keys: ['settings', 'preferences', t('Settings')], ico: spotIco('settings'), run: () => goSettings('settings') },
     ];
+    if (!S.ai || S.ai.enabled !== false) pages.splice(pages.length - 1, 0, { id: 'p:ai', group: 'pages', title: t('AI'), keys: ['ai', 'ollama', 'llm'], ico: spotIco('ai'), run: () => aiWindow() });
     if (S.config.terminal) pages.push({ id: 'p:term', group: 'pages', title: t('Terminal on the server'), keys: ['terminal', 'shell', 'bash', t('Terminal')], ico: spotIco('term'), run: openTerminal });
     pages.forEach((p, i) => { p.order = i; });
     const settings = [
-      ['settings', 'General', ['language', 'theme', 'clock', 'timezone', 'ntp', 'wizard', t('Language'), t('Theme')]],
+      ['settings', 'General', ['language', 'theme', 'clock', 'port', 'timezone', 'ntp', 'wizard', t('Language'), t('Theme'), t('Web interface port')]],
       ['settings/storage', 'Storage', ['appdata', 'paths', 'migrate', t('Storage')]],
       ['settings/network', 'Network', ['hostname', 'dhcp', 'dns', 'bridge', 'ip', t('Network')]],
       ['settings/docker', 'Docker networks', ['macvlan', 'ipvlan', 'bridge', t('Docker networks')]],
       ['settings/vmnet', 'VM networks', ['nat', 'isolated', t('VM networks')]],
       ['settings/security', 'Security', ['password', 'mfa', 'totp', '2fa', 'terminal', t('Security')]],
       ['settings/users', 'Users', ['samba', 'groups', t('Users')]],
+      ['settings/ai', 'AI', ['ollama', 'claude', 'lm studio', 'llama', t('AI')]],
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));
@@ -6986,15 +7139,14 @@ sudo ./install.sh</pre></div>`}` : '') +
             <p class="lead">${ONB.setup ? t('In a few steps your server is ready: an account, a name, storage and extra security. You can change everything later in Settings.')
               : t('In a few steps your server is ready: your own password, a name, storage and extra security. You can change everything later in Settings.')}</p>
             <h2 class="pane-title">${t('Language')}</h2>
-            <div class="choice-row" role="radiogroup" aria-label="${t('Language')}">${Object.entries(LANGS).map(([k, name]) => `
-              <label class="choice"><input type="radio" name="lang" value="${k}"${k === LANG ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
+            ${langSelect()}
             <h2 class="pane-title">${t('Theme')}</h2>
             <div class="choice-row" role="radiogroup" aria-label="${t('Theme')}">${[['auto', t('Automatic')], ['light', t('Light (morning mist)')], ['dark', t('Dark (evening)')]].map(([k, name]) => `
               <label class="choice"><input type="radio" name="theme" value="${k}"${k === themeNow() ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>`;
           el.onchange = (e) => { if (e.target.name === 'theme') setTheme(e.target.value); };
         },
         async next(el) {
-          const lang = $('input[name="lang"]:checked', el).value;
+          const lang = $('select[name="lang"]', el).value;
           if (lang === LANG) return true;
           // Without an account it is not on the server yet: the language goes along when the account is created.
           if (!ONB.setup) await api.post('/api/settings', { language: lang });
@@ -7181,10 +7333,11 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } }
   function demoClock() { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } }
+  function demoWebPort() { try { const n = Number(localStorage.getItem('tb-port')); if (Number.isInteger(n) && n >= 1 && n <= 65535) return n; } catch (e) { /* private window */ } return 80; }
   // The demo starts like a new server: first create an account (until the wizard has been finished once).
   function useDemo() {
     api = translatedApi(window.HomeBaseOSDemo);
-    S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
+    S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), port: demoWebPort(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
     startDesk();
   }
 
@@ -7224,6 +7377,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const open = e.target.closest('[data-open]');
     if (open) {
+      if (open.dataset.open === 'ai' && S.ai && S.ai.enabled === false) return;
       ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
       return;
     }

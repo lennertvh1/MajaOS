@@ -256,7 +256,7 @@ In `/etc/homebaseos/homebaseos.env`, then `sudo systemctl restart homebaseos`.
 |---|---|
 | `APP_PASSWORD` | Only for older installs: applies as long as there is no account of your own. Empty = create an account the first time |
 | `SESSION_SECRET` | Fixed key for sign-ins (otherwise you have to sign in again after a restart) |
-| `PORT` | Port, default `8080` |
+| `PORT` | Web interface port if Settings has none. Unset = `80`. Settings → General overrides this |
 | `OLLAMA_URL` | Address of Ollama, e.g. `http://127.0.0.1:11434` |
 | `VM_DIR`, `ISO_DIR` | Older installs: folder for VM disks and for ISOs. Now in *Settings > Storage*; the variable only applies if nothing is chosen there |
 | `VM_NETWORK` | `network=default` (NAT) or `bridge=br0` (home network) |

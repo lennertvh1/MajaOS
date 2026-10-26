@@ -11,6 +11,7 @@ const zip = require('../lib/zip');
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-files-data-'));
 process.env.DATA_DIR = DATA_DIR;
 const files = require('../lib/files');
+const sharelinks = require('../lib/sharelinks');
 
 function tmpShare() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-files-'));
@@ -204,6 +205,40 @@ test('a file larger than 4 GB is refused before the zip starts', async () => {
     res.writeHead = () => { started = true; };
     await assert.rejects(() => files.sendZip(res, 'media', 'Movies'), /4 GB/);
     assert.equal(started, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a share link stays inside the chosen file', async () => {
+  const root = tmpShare();
+  try {
+    const link = await sharelinks.create({ place: 'media', path: 'readme.txt', days: 7 });
+    assert.match(link.path, /^\/s\/[A-Za-z0-9_-]{20,}$/);
+    assert.equal(link.url, null);
+    assert.equal(link.dir, false);
+    assert.equal(sharelinks.targetRel({ rel: 'readme.txt', dir: false }, ''), 'readme.txt');
+    assert.throws(() => sharelinks.targetRel({ rel: 'readme.txt', dir: false }, 'other.txt'), /one file/);
+    assert.throws(() => sharelinks.targetRel({ rel: 'Movies', dir: true }, '../secret'), /not allowed/);
+    assert.equal(sharelinks.targetRel({ rel: 'Movies', dir: true }, 'Dune.mkv'), 'Movies/Dune.mkv');
+    const html = sharelinks.folderPage({ token: 'abc', name: '<script>' }, { path: '', items: [{ name: '<img>', type: 'file', size: 1 }] }, 'en');
+    assert.match(html, /&lt;script&gt;/);
+    assert.match(html, /&lt;img&gt;/);
+    assert.doesNotMatch(html, /<script>/);
+    const folder = await sharelinks.create({ place: 'media', path: 'Movies', days: 1 });
+    const page = { status: 0, body: '', headers: {}, writeHead(s, h) { this.status = s; this.headers = h; }, end(b) { this.body = b; } };
+    await sharelinks.send({ url: '/s/x', headers: { 'accept-language': 'nl' } }, page, folder.path.slice(3), '', '203.0.113.4');
+    assert.equal(page.status, 200);
+    assert.match(page.body, /Dune\.mkv/);
+    assert.match(page.headers['Content-Security-Policy'], /default-src 'none'/);
+    const escaped = { status: 0, body: '', headers: {}, writeHead(s, h) { this.status = s; this.headers = h; }, end(b) { this.body = b; } };
+    await sharelinks.send({ url: '/s/x', headers: { 'accept-language': 'nl' } }, escaped, folder.path.slice(3), '../readme.txt', '203.0.113.4');
+    assert.equal(escaped.status, 400);
+    assert.match(escaped.body, /bestaat niet/);
+    assert.equal(sharelinks.list().length, 2);
+    sharelinks.remove(link.id);
+    assert.equal(sharelinks.list().some((row) => row.id === link.id), false);
+    await assert.rejects(() => sharelinks.create({ place: 'media', path: 'readme.txt', days: 3 }), /how long/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

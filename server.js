@@ -6,7 +6,7 @@
  * Environment variables (on the server in /etc/homebaseos/homebaseos.env):
  *   APP_PASSWORD     password from older installs (optional). Without a password you create an account the first time.
  *   SESSION_SECRET   fixed key for sign-ins; otherwise random per start
- *   PORT             default 8080
+ *   PORT             web port if Settings has none; otherwise 80 (8080 in the demo)
  *   OLLAMA_URL       e.g. http://127.0.0.1:11434  (optional)
  *   VM_DIR           folder for VM disks (older installs; now in Settings → Storage)
  *   ISO_DIR          folder with ISOs and disk files (older installs; now in Settings → Storage)
@@ -62,6 +62,8 @@ const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
 const shares = require('./lib/shares');
 const files = require('./lib/files');
+const sharelinks = require('./lib/sharelinks');
+const tunnel = require('./lib/tunnel');
 const auth = require('./lib/auth');
 const datetime = require('./lib/datetime');
 const release = require('./lib/release');
@@ -74,9 +76,10 @@ const backup = require('./lib/backup');
 const kopia = require('./lib/kopia');
 const vmsnap = require('./lib/vmsnap');
 const sysbackup = require('./lib/sysbackup');
+const ai = require('./lib/ai');
 
 const CFG = {
-  port: Number(process.env.PORT || 8080),
+  port: settings.listenPort(),
   ollamaUrl: (process.env.OLLAMA_URL || '').replace(/\/+$/, ''),
   password: process.env.APP_PASSWORD || '',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
@@ -194,44 +197,11 @@ async function apiOverview() {
 
 /* ------------------------------------------------------------------ Ollama */
 
-function needOllama() {
-  if (!CFG.ollamaUrl) { const e = new Error('Ollama is not set up (OLLAMA_URL is missing).'); e.status = 503; throw e; }
-}
+function needOllama() { return ai.ollamaBase(); }
 
-// No connection (Ollama isn't installed or is off): a clear message instead of ECONNREFUSED.
-function ollamaDown(e) {
-  if (e.status || !/ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ECONNRESET|Time-out/i.test(String(e.code || '') + ' ' + e.message)) throw e;
-  const err = new Error('Ollama is not running. Install Ollama from the app store, or start the app if it is already installed.');
-  err.status = 503; err.data = { notRunning: true }; throw err;
-}
-
-async function apiAi() {
-  needOllama();
-  const [tags, ps, version, gpu] = await Promise.all([
-    requestJson(CFG.ollamaUrl + '/api/tags', { timeout: 4000 }).catch(ollamaDown),
-    requestJson(CFG.ollamaUrl + '/api/ps').catch(() => ({ models: [] })),
-    requestJson(CFG.ollamaUrl + '/api/version').catch(() => null),
-    sys.gpuStats(),
-  ]);
-  const loaded = {};
-  (ps.models || []).forEach((m) => { loaded[m.name] = m; });
-  return {
-    version: version && version.version,
-    gpu,
-    models: (tags.models || []).map((m) => ({
-      name: m.name, size: m.size, modified: m.modified_at,
-      family: m.details && m.details.family, params: m.details && m.details.parameter_size,
-      quant: m.details && m.details.quantization_level,
-      loaded: !!loaded[m.name], vram: loaded[m.name] ? loaded[m.name].size_vram : null,
-      ramTotal: loaded[m.name] ? loaded[m.name].size : null,
-    })).sort((a, b) => a.name.localeCompare(b.name)),
-  };
-}
-
-// Pass Ollama's NDJSON stream on to the browser unchanged.
+// Pass Ollama's NDJSON stream on to the browser unchanged (model downloads).
 async function proxyStream(res, urlPath, payload) {
-  needOllama();
-  const up = await rawRequest(CFG.ollamaUrl + urlPath, {
+  const up = await rawRequest(needOllama() + urlPath, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeout: 0,
   });
   res.writeHead(up.statusCode, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -249,10 +219,10 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/config' && method === 'GET') {
     return sendJson(res, 200, {
-      demo: CFG.demo, passwordEnabled: passwordEnabled(), needsLogin: passwordEnabled() && !isAuthed(req), ollama: !!CFG.ollamaUrl,
+      demo: CFG.demo, passwordEnabled: passwordEnabled(), needsLogin: passwordEnabled() && !isAuthed(req), ollama: ai.effective().provider === 'ollama',
       setup: needsSetup(), // no account yet: the welcome wizard creates one
       loginUser: !!auth.userName(), // sign in with a user name (older accounts don't have one)
-      language: settings.getSettings().language, clock: settings.getSettings().clock,
+      language: settings.getSettings().language, clock: settings.getSettings().clock, port: settings.listenPort(),
       terminal: settings.getSettings().terminal, terminalPassword: settings.getSettings().terminalPassword && passwordEnabled(),
       onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // show the welcome wizard
     });
@@ -417,10 +387,11 @@ async function handleApi(req, res, url) {
     const sshState = CFG.demo
       ? { installed: true, enabled: !!s.ssh, active: !!s.ssh }
       : await ssh.status().catch(() => ({ installed: false, enabled: false, active: false }));
-    return sendJson(res, 200, { ...s, sshState });
+    return sendJson(res, 200, { ...s, port: settings.listenPort(), sshState });
   }
   if (p === '/api/settings' && method === 'POST') {
     const body = await readBody(req);
+    const beforePort = settings.listenPort();
     const before = settings.getSettings();
     let saved;
     try { saved = settings.saveSettings(body, { checkPassword }); }
@@ -433,7 +404,19 @@ async function handleApi(req, res, url) {
         throw e;
       }
     }
-    return sendJson(res, 200, saved);
+    // Listen on the new port before answering, and keep the old one until this response has left.
+    if (body.port != null && settings.listenPort() !== beforePort) {
+      try { await bind(settings.listenPort()); }
+      catch (e) {
+        try { settings.saveSettings({ port: beforePort }, { checkPassword: () => true }); } catch { /* the listen error is the one to show */ }
+        const wanted = Number(body.port);
+        if (e.code === 'EADDRINUSE') throw Object.assign(new Error(`Port ${wanted} is already in use. Choose another port.`), { status: 409 });
+        if (e.code === 'EACCES' || e.code === 'EPERM') throw Object.assign(new Error(`Port ${wanted} needs HomeBaseOS to run as root. Choose a port above 1024.`), { status: 409 });
+        throw Object.assign(new Error(e.message || 'The port could not be changed.'), { status: 409 });
+      }
+      tunnel.retarget().catch((err) => console.error('Remote access: ' + err.message));
+    }
+    return sendJson(res, 200, { ...saved, port: settings.listenPort() });
   }
   // Terminal: first a one-time ticket (with the password if Security asks for it), then the WebSocket.
   if (p === '/api/terminal/ticket' && method === 'POST') {
@@ -510,6 +493,11 @@ async function handleApi(req, res, url) {
   if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), places: await files.places(), admin: auth.userName() });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
   if (p === '/api/files/eject' && method === 'POST') return sendJson(res, 200, await files.eject((await readBody(req)).id));
+  if (p === '/api/remote' && method === 'GET') return sendJson(res, 200, await tunnel.status());
+  if (p === '/api/remote' && method === 'POST') return sendJson(res, 200, await tunnel.apply(await readBody(req)));
+  if (p === '/api/share-links' && method === 'GET') return sendJson(res, 200, { links: sharelinks.list() });
+  if (p === '/api/share-links' && method === 'POST') return sendJson(res, 200, await sharelinks.create(await readBody(req)));
+  if ((m = p.match(/^\/api\/share-links\/([0-9a-f]{8})$/)) && method === 'DELETE') return sendJson(res, 200, sharelinks.remove(m[1]));
   if ((m = p.match(/^\/api\/shares\/([^/]+)\/files$/))) {
     const name = decodeURIComponent(m[1]);
     const rel = url.searchParams.get('path') || '';
@@ -591,33 +579,28 @@ async function handleApi(req, res, url) {
   if (p === '/api/storage-paths/migration' && method === 'GET') return sendJson(res, 200, { migration: migrate.status() });
   if (p === '/api/bays' && method === 'POST') return sendJson(res, 200, bays.saveBays(await readBody(req)));
 
-  if (p === '/api/ai' && method === 'GET') return sendJson(res, 200, await apiAi());
+  if (p === '/api/ai' && method === 'GET') return sendJson(res, 200, await ai.status());
+  if (p === '/api/ai/settings' && method === 'POST') return sendJson(res, 200, ai.save(await readBody(req)));
   if (p === '/api/ai/pull' && method === 'POST') {
     const body = await readBody(req);
     if (!MODEL_NAME.test(body.name || '')) return sendJson(res, 400, { error: 'Invalid model name' });
     return proxyStream(res, '/api/pull', { name: body.name, stream: true });
   }
-  if (p === '/api/ai/chat' && method === 'POST') {
-    const body = await readBody(req, 5e6);
-    if (!MODEL_NAME.test(body.model || '')) return sendJson(res, 400, { error: 'Invalid model' });
-    const messages = (Array.isArray(body.messages) ? body.messages : []).slice(-40)
-      .map((x) => ({ role: x.role === 'assistant' ? 'assistant' : 'user', content: String(x.content || '').slice(0, 20000) }));
-    return proxyStream(res, '/api/chat', { model: body.model, messages, stream: true });
-  }
+  if (p === '/api/ai/chat' && method === 'POST') return ai.chat(res, await readBody(req, 5e6));
   if ((m = p.match(/^\/api\/ai\/models\/(.+)$/)) && method === 'DELETE') {
-    needOllama();
+    const base = needOllama();
     const name = decodeURIComponent(m[1]);
     if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Invalid model name' });
-    await requestJson(CFG.ollamaUrl + '/api/delete', {
+    await requestJson(base + '/api/delete', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
     });
     return sendJson(res, 200, { ok: true });
   }
   if ((m = p.match(/^\/api\/ai\/models\/(.+)\/(load|unload)$/)) && method === 'POST') {
-    needOllama();
+    const base = needOllama();
     const name = decodeURIComponent(m[1]);
     if (!MODEL_NAME.test(name)) return sendJson(res, 400, { error: 'Invalid model name' });
-    await requestJson(CFG.ollamaUrl + '/api/generate', {
+    await requestJson(base + '/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 120000,
       body: JSON.stringify({ model: name, keep_alive: m[2] === 'load' ? '24h' : 0 }),
     });
@@ -652,20 +635,23 @@ function removePasswordIssue() {
   if (fs.existsSync(pwIssue)) { fs.rmSync(pwIssue, { force: true }); sys.run('agetty', ['--reload']).catch(() => {}); }
 }
 
-const server = http.createServer(async (req, res) => {
+let server;
+
+function onRequest(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  try {
-    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
-    return serveStatic(req, res, url);
-  } catch (e) {
+  const shared = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{16,80})(?:\/(.*))?$/);
+  Promise.resolve().then(() => {
+    if (shared) return sharelinks.send(req, res, shared[1], shared[2] ? decodeURIComponent(shared[2]) : '', clientIp(req));
+    return url.pathname.startsWith('/api/') ? handleApi(req, res, url) : serveStatic(req, res, url);
+  }).catch((e) => {
     const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 502;
     if (!res.headersSent) sendJson(res, status, { ...(e.data || {}), error: e.message || 'Unknown error' });
     else res.end();
-  }
-});
+  });
+}
 
 // Console: the browser (noVNC) opens a WebSocket to /api/vms/<name>/vnc, we pass it on to QEMU's VNC screen.
-server.on('upgrade', async (req, socket, head) => {
+async function onUpgrade(req, socket, head) {
   const deny = (status, text) => socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
   socket.on('error', () => {});
   const url = new URL(req.url, 'http://localhost');
@@ -686,9 +672,29 @@ server.on('upgrade', async (req, socket, head) => {
   }
   try { ws.proxyToTcp(req, socket, head, await vms.vncPort(decodeURIComponent(m[1]))); }
   catch (e) { deny(e.status === 404 ? 404 : 409, 'Conflict'); }
-});
+}
 
-server.listen(CFG.port, () => {
+// Open a port. The previous port stays up until this one is listening, so a failed change does not drop the page.
+function bind(port) {
+  const next = http.createServer(onRequest);
+  next.on('upgrade', onUpgrade);
+  return new Promise((resolve, reject) => {
+    const fail = (err) => { next.removeListener('listening', ok); reject(err); };
+    const ok = () => {
+      next.removeListener('error', fail);
+      const prev = server;
+      server = next;
+      CFG.port = port;
+      if (prev) prev.close();
+      resolve();
+    };
+    next.once('error', fail);
+    next.once('listening', ok);
+    next.listen(port);
+  });
+}
+
+bind(CFG.port).then(() => {
   console.log(`HomeBaseOS is running on port ${CFG.port}` + (CFG.demo ? ' (demo mode)' : ''));
   // HomeBaseOS runs as root: until there is an account, you can only create that account (all other endpoints return 401).
   if (needsSetup()) console.log(`No account yet. Open http://<address>:${CFG.port} to create one.`);
@@ -706,4 +712,7 @@ server.listen(CFG.port, () => {
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
   }
+}).catch((e) => {
+  console.error(`HomeBaseOS could not listen on port ${CFG.port}: ${e.message}`);
+  process.exit(1);
 });

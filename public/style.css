@@ -114,9 +114,9 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .host { color: var(--muted); font-size: 0.93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .host:not(:empty)::before { content: "/"; margin-right: 8px; color: var(--faint); }
 .demo-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--warn); color: #1d1300; }
-.topnav { display: flex; gap: clamp(2px, 0.4vw, 6px); justify-content: flex-end; flex: 0 0 auto; min-width: 0; }
+.topnav { display: flex; gap: clamp(2px, 0.4vw, 6px); justify-content: flex-end; flex: 0 0 auto; min-width: 0; margin-left: auto; }
 .topnav .nav-btn { flex: none; white-space: nowrap; }
-.top-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.top-actions { display: flex; align-items: center; gap: 4px; flex: none; margin-left: calc(4px - clamp(8px, 1vw, 16px)); }
 
 /* ---- header search (Spotlight-style) */
 .spot { position: relative; z-index: 45; flex: 1 1 auto; max-width: 28rem; min-width: 0; width: auto; }
@@ -157,6 +157,7 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .spot-hit .app-icon img { padding: 4px; }
 .spot-hit .app-icon .dot, .spot-hit .app-icon .upd-badge, .spot-hit .app-icon .app-prog, .spot-hit .app-icon .cut-badge { display: none; }
 .spot-empty { padding: 16px 12px; text-align: center; color: var(--muted); font-size: 14px; }
+.nav-btn[hidden] { display: none; }
 .nav-btn {
   display: inline-flex; align-items: center; gap: 0.45em; border: 0; background: transparent;
   padding: 0.5em 0.75em; border-radius: 0.75em; font-weight: 500; font-size: 0.95rem;
@@ -581,6 +582,7 @@ details.adv[open] summary { margin-bottom: 4px; }
 /* ---- forms */
 .form { display: grid; gap: 14px; }
 .fld { display: grid; gap: 6px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.fld[hidden] { display: none; }
 .fld > span { font-size: 14px; font-weight: 500; }
 .fld em { font-style: normal; font-weight: 400; }
 .fld small { font-size: 12.5px; color: var(--muted); }
@@ -590,6 +592,15 @@ details.adv[open] summary { margin-bottom: 4px; }
 .fld-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
 .autostart { padding: 14px; border-radius: 14px; border: 1px solid var(--glass-line); background: var(--glass); gap: 12px; }
 .check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+.toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.toggle > span:last-child { display: grid; gap: 2px; }
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.toggle-ui { width: 46px; height: 28px; border-radius: 999px; background: var(--track); position: relative; flex: none; transition: background .15s ease; }
+.toggle-ui::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .28); transition: transform .15s ease; }
+.toggle input:checked + .toggle-ui { background: var(--accent); }
+.toggle input:checked + .toggle-ui::after { transform: translateX(18px); }
+.toggle input:focus-visible + .toggle-ui { outline: 2px solid var(--accent); outline-offset: 3px; }
+#aiSet .btn-row { margin-top: 16px; }
 .check input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); }
 .ask .check { font-size: 14px; font-weight: 400; }
 .kind-seg { display: flex; width: 100%; }
@@ -723,8 +734,15 @@ video.file-view { width: 100%; background: #000; }
 @keyframes pop { from { transform: translateY(8px) scale(.985); opacity: 0; } }
 .win-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 12px 24px; }
 .win-head h2 { font-size: clamp(1.15rem, 0.85rem + 0.6vw, 1.4rem); font-weight: 600; letter-spacing: -.01em; }
-.close { width: 36px; height: 36px; border-radius: 11px; border: 0; background: var(--track); display: grid; place-items: center; }
-.close svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+.win-tools { display: flex; align-items: center; gap: 8px; }
+.close { width: 36px; height: 36px; border-radius: 11px; border: 0; background: var(--track); display: grid; place-items: center; color: inherit; text-decoration: none; }
+.close[hidden] { display: none; }
+.window.chat-win { width: min(720px, calc(100vw - 24px)); height: min(640px, 86vh, 86dvh); }
+.window.chat-win .win-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.window.chat-win .chat { flex: 1; min-height: 0; }
+.window.chat-win .chat-log { flex: 1; max-height: none; min-height: 8rem; }
+.close svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#winGear svg { stroke-width: 1.7; }
 .win-body { padding: 4px 24px 24px; overflow: auto; -webkit-overflow-scrolling: touch; }
 .win-body h3 { font-size: 15px; font-weight: 600; margin: 22px 0 10px; }
 .win-body h3:first-child { margin-top: 6px; }
@@ -764,6 +782,8 @@ select.field { padding-right: 8px; }
 .progress-note { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 
 .chat { display: flex; flex-direction: column; gap: 10px; }
+.chat-empty { margin: auto; text-align: center; max-width: 28rem; }
+.chat-empty .btn { margin-top: 8px; }
 .chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; padding: 2px; }
 .msg { max-width: 85%; padding: 9px 13px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 5px; }
@@ -967,7 +987,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   .brand-name { display: unset; }
   .top-actions { margin-left: auto; order: 2; }
   .topnav {
-    position: fixed; left: 0; right: 0; bottom: 0; width: 100%; z-index: 42;
+    position: fixed; left: 0; right: 0; bottom: 0; width: 100%; z-index: 42; margin-left: 0;
     flex: none; justify-content: stretch; gap: 0; order: 4;
     padding: 4px 4px max(6px, env(safe-area-inset-bottom, 0px));
     padding-left: max(4px, env(safe-area-inset-left, 0px));
