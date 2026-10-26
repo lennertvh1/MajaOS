@@ -3724,20 +3724,58 @@
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
   const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
-  function showSettings() {
+  function showSettings(keepScroll) {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
     $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', about: 'About' }[tab]);
-    $('#setPane').scrollTop = 0;
+    if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
     ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
   }
 
+  // Settings and the wizard only offer a language once its dictionary covers the interface.
+  // The current language stays in the list, so an installer choice (French, …) can still be changed.
+  function uiLangEntries() {
+    const list = Object.entries(LANG_INFO).filter(([, info]) => info.ui);
+    if (LANG_INFO[LANG] && !LANG_INFO[LANG].ui) list.push([LANG, LANG_INFO[LANG]]);
+    return list;
+  }
   function langSelect() {
-    return `<label class="fld"><select class="field" name="lang" aria-label="${t('Language')}">${Object.entries(LANGS).map(([k, name]) =>
-      `<option value="${esc(k)}"${k === LANG ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>`;
+    return `<label class="fld lang-fld"><select class="field" name="lang" aria-label="${t('Language')}">${uiLangEntries().map(([k, info]) =>
+      `<option value="${esc(k)}"${k === LANG ? ' selected' : ''}>${esc(info.name)}</option>`).join('')}</select></label>`;
+  }
+  // Redraw what is on screen. A reload would flash the whole page, including windows that were open.
+  function applyLanguage() {
+    tickClock();
+    noteSig = '';
+    if (S.overview) renderOverview();
+    if (S.apps) renderApps();
+    renderSharesWidget();
+    renderBackupWidget();
+    renderAiWidget();
+    if (S.vms) { vmWidgetSig = ''; renderVmWidget(); }
+    renderNotes();
+    if (setWin.open) {
+      const top = $('#setPane').scrollTop;
+      showSettings(true);
+      const pane = $('#setPane');
+      const pin = () => { pane.scrollTop = top; };
+      pin();
+      const box = $('#dtBox', pane);
+      if (box) {
+        const obs = new MutationObserver(pin);
+        obs.observe(box, { childList: true });
+        setTimeout(() => obs.disconnect(), 3000);
+      }
+      const sel = pane.querySelector('select[name="lang"]');
+      if (sel) sel.focus({ preventScroll: true });
+    }
+    if (onbWin.open) { ONB.steps = onbSteps(); onbRender(); }
+    if (currentView() === 'vms') { vmSig = ''; renderVmPage(); }
+    if (pop.open && popKindNow === 'store' && S.store) applyStore(S.store);
+    if (pop.open && popKindNow === 'files') renderFiles();
   }
 
   function generalPane(el) {
@@ -3791,11 +3829,12 @@
         } catch (ex) { toast(ex.message, true); }
         return;
       }
-      if (e.target.name !== 'lang') return;
+      if (e.target.name !== 'lang' || e.target.value === LANG) return;
       try {
         await api.post('/api/settings', { language: e.target.value });
+        if (S.config) S.config.language = e.target.value;
         setLang(e.target.value);
-        location.reload(); // rebuild everything in the new language
+        applyLanguage();
       } catch (ex) { toast(t('Saving the language failed: {error}', { error: ex.message }), true); }
     };
     dateTimeSection($('#dtBox', el));
@@ -7333,10 +7372,9 @@ sudo ./install.sh</pre></div>`}` : '') +
           if (lang === LANG) return true;
           // Without an account it is not on the server yet: the language goes along when the account is created.
           if (!ONB.setup) await api.post('/api/settings', { language: lang });
+          if (S.config) S.config.language = lang;
           setLang(lang);
-          try { sessionStorage.setItem('tb-onb-step', '1'); } catch (e) { /* private window */ }
-          location.reload(); // rebuild everything in the new language; the wizard continues at step 2
-          return false;
+          return true;
         },
         focus: false },
       second,
