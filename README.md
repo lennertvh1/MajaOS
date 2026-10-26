@@ -340,6 +340,14 @@ With the power button at the top (next to Settings) you restart or shut down the
 At the top right the terminal icon opens a **root shell on the server**, with colours, `top`, `nano`, tab completion, copy and paste (xterm.js). *Pop out* puts it in a browser window of its own.
 In **Settings > Security** you turn the terminal on or off, and choose whether HomeBaseOS asks for your password again when opening it (on by default). Making security less strict always asks for your password. Every time someone opens or closes the terminal is logged in `journalctl -u homebaseos`.
 
+## MCP server
+
+HomeBaseOS speaks the Model Context Protocol at `/mcp`. A program adds that address and signs in, the same way Home Assistant does. It can then do what the interface can: apps, the app store, VMs, files, shares, storage, backups, network, settings and AI. `shell_run` runs one root command, with the same switch and password as the terminal. Tools that delete, shut down or reboot need `confirm: true`.
+
+**Settings → MCP** shows the address. In Claude: Settings → Connectors → Add custom connector, paste the address, choose Connect and sign in. Claude reaches the server from the internet, so that address has to be reachable there (https, without another port). On your own network, Cursor, VS Code and Claude Code use the same address directly (`claude mcp add --transport http homebaseos <address>`, then `claude mcp login homebaseos`).
+
+Sign-in is OAuth with PKCE. The program opens HomeBaseOS, you type the account password (and the two-step code, if that is on), and the program gets a session for 30 days. Changing your password signs it out. Turn the terminal on in Settings → Security before using `shell_run`.
+
 ## Software update
 
 **Settings > Software update** shows whether there is a new version of HomeBaseOS, with the release notes of each new version. HomeBaseOS checks every 12 hours (or right away with *Check now*) among the releases on GitHub. If there is an update, you get a notification and a red dot on the gear. With *Include beta versions* you also see pre-releases; *Development* follows the `dev` branch (for a test server, see *Branches, tests and test versions*).

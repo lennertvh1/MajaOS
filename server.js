@@ -60,6 +60,7 @@ const disks = require('./lib/disks');
 const layout = require('./lib/layout');
 const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
+const mcphttp = require('./lib/mcphttp');
 const shares = require('./lib/shares');
 const files = require('./lib/files');
 const sharelinks = require('./lib/sharelinks');
@@ -418,6 +419,15 @@ async function handleApi(req, res, url) {
     }
     return sendJson(res, 200, { ...saved, port: settings.listenPort() });
   }
+  // What Cursor needs to talk to this server. The token is a normal session (30 days); the password never leaves this check.
+  if (p === '/api/mcp' && method === 'GET') {
+    return sendJson(res, 200, { user: auth.userName() || '', passwordEnabled: passwordEnabled(), terminal: !!settings.getSettings().terminal });
+  }
+  if (p === '/api/mcp/token' && method === 'POST') {
+    const body = await readBody(req);
+    if (passwordEnabled() && !checkPassword(body.password)) { await slow(); return sendJson(res, 401, { error: 'Wrong password' }); }
+    return sendJson(res, 200, { token: makeToken(), user: auth.userName() || '' });
+  }
   // Terminal: first a one-time ticket (with the password if Security asks for it), then the WebSocket.
   if (p === '/api/terminal/ticket' && method === 'POST') {
     const s0 = settings.getSettings();
@@ -428,6 +438,18 @@ async function handleApi(req, res, url) {
       return sendJson(res, 401, { error: 'Wrong password' });
     }
     return sendJson(res, 200, { ticket: terminal.newTicket() });
+  }
+  // One command on the server (the MCP server). Same switch and password as the terminal.
+  if (p === '/api/terminal/run' && method === 'POST') {
+    const s0 = settings.getSettings();
+    if (!s0.terminal) return sendJson(res, 403, { error: 'The terminal is turned off. Turn it on in Settings → Security.' });
+    const body = await readBody(req);
+    if (s0.terminalPassword && !checkPassword(body.password)) {
+      await new Promise((r) => setTimeout(r, 800));
+      return sendJson(res, 401, { error: 'Wrong password' });
+    }
+    console.log('A command ran through the terminal' + (clientIp(req) ? ' from ' + clientIp(req) : '') + '.');
+    return sendJson(res, 200, await terminal.runCommand(body.command, { timeout: body.timeout }));
   }
   // Manage two-step verification (Settings → Security). Password needed to start, password + code to turn it off.
   if (p === '/api/mfa' && method === 'GET') return sendJson(res, 200, { ...auth.status(), available: passwordEnabled(), passwordChanged: auth.passwordChanged() });
@@ -642,6 +664,13 @@ function onRequest(req, res) {
   const shared = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{16,80})(?:\/(.*))?$/);
   Promise.resolve().then(() => {
     if (shared) return sharelinks.send(req, res, shared[1], shared[2] ? decodeURIComponent(shared[2]) : '', clientIp(req));
+    // MCP connector: one address, then the program signs in. It sits outside the cookie check on purpose.
+    if (mcphttp.match(url.pathname)) {
+      return mcphttp.handle(req, res, {
+        port: () => CFG.port, validToken, makeToken, checkPassword, auth, passwordEnabled, needsSetup,
+        language: () => settings.getSettings().language, clientIp, slow,
+      });
+    }
     return url.pathname.startsWith('/api/') ? handleApi(req, res, url) : serveStatic(req, res, url);
   }).catch((e) => {
     const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 502;

@@ -3722,17 +3722,17 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings() {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', update: 'Software update', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', about: 'About' }[tab]);
     $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
   }
 
   function langSelect() {
@@ -3799,6 +3799,109 @@
       } catch (ex) { toast(t('Saving the language failed: {error}', { error: ex.message }), true); }
     };
     dateTimeSection($('#dtBox', el));
+  }
+
+  // One block per program. The token is a session, so the password itself never goes into the file.
+  const MCP_CLIENTS = [
+    { id: 'claude', name: 'Claude', fileLabel: 'Address', kind: 'url', steps: [
+      'Open Settings, then Connectors, then Add custom connector.',
+      'Name it HomeBaseOS. Paste the address below as the MCP server URL.',
+      'Choose Connect and sign in to HomeBaseOS.',
+    ] },
+    { id: 'claude-code', name: 'Claude Code', fileLabel: 'Command', kind: 'claude-code', steps: [
+      'Run the command below.',
+      'Then run claude mcp login homebaseos and sign in.',
+    ] },
+    { id: 'cursor', name: 'Cursor', file: 'mcp.json', kind: 'url-json', steps: [
+      'Open Cursor Settings, search for MCP, and open mcp.json.',
+      'Paste the configuration below. Cursor asks you to sign in.',
+    ] },
+    { id: 'vscode', name: 'VS Code', file: 'mcp.json', kind: 'vscode', steps: [
+      'In VS Code, open the Command Palette and run MCP: Open User Configuration.',
+      'Paste the configuration below, then sign in when VS Code asks.',
+    ] },
+    { id: 'windsurf', name: 'Windsurf', file: 'mcp_config.json', kind: 'url-json', steps: [
+      'In Windsurf, open Settings, search for MCP, and open mcp_config.json.',
+      'Paste the configuration below, then sign in when Windsurf asks.',
+    ] },
+    { id: 'zed', name: 'Zed', file: 'settings.json', kind: 'zed', steps: [
+      'In Zed, open settings.json.',
+      'Paste the configuration below. If context_servers already exists, add homebaseos next to the other servers.',
+    ] },
+    { id: 'codex', name: 'Codex', file: 'config.toml', kind: 'codex', steps: [
+      'Open the Codex config file ~/.codex/config.toml.',
+      'Paste the configuration below. If the file already has other servers, add this block next to them.',
+    ] },
+    { id: 'other', nameKey: 'Other program', fileLabel: 'Address', kind: 'url', steps: [
+      'Add a custom connector, or the place where the program asks for an MCP server URL.',
+      'Paste the address below and sign in when the program asks.',
+    ] },
+  ];
+
+  function mcpSnippet(client, mcpUrl) {
+    if (client.kind === 'claude-code') return 'claude mcp add --transport http homebaseos ' + mcpUrl;
+    if (client.kind === 'vscode') return JSON.stringify({ servers: { homebaseos: { type: 'http', url: mcpUrl } } }, null, 2);
+    if (client.kind === 'zed') return JSON.stringify({ context_servers: { homebaseos: { url: mcpUrl } } }, null, 2);
+    if (client.kind === 'codex') return '[mcp_servers.homebaseos]\nurl = ' + JSON.stringify(mcpUrl) + '\n';
+    if (client.kind === 'url-json') return JSON.stringify({ mcpServers: { homebaseos: { url: mcpUrl } } }, null, 2);
+    return mcpUrl;
+  }
+
+  async function mcpPane(el) {
+    el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+    let info;
+    try { info = await api.get('/api/mcp'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'mcp') return;
+    const mcpUrl = location.origin + '/mcp';
+    const security = `<a href="#settings/security">${t('Security')}</a>`;
+    el.innerHTML = `
+      <h2 class="pane-title">${t('Connect a program')}</h2>
+      <p class="muted small">${t('A program on your computer can manage this server: apps, virtual machines, files and everything else you can do here.')}</p>
+      <label class="fld" style="max-width:280px;margin:14px 0">
+        <span>${t('Program')}</span>
+        <select class="field" id="mcpClient" aria-label="${t('Program')}">${MCP_CLIENTS.map((c) => `<option value="${esc(c.id)}">${esc(c.nameKey ? t(c.nameKey) : c.name)}</option>`).join('')}</select>
+      </label>
+      <ol class="bk-steps" id="mcpSteps"></ol>
+      <p class="notice">${t('Claude connects from the internet, so that address has to be reachable there. On your own network the other programs can use it directly.')}</p>
+      ${info.terminal ? '' : `<p class="notice warn">${t('The terminal is off, so shell commands are refused. Turn it on in {link}.', { link: security })}</p>`}
+      <div class="code-view" id="mcpCodeView">
+        <div class="code-view-bar"><span id="mcpFile">${t('Address')}</span><button class="btn sm" type="button" data-mcp-copy>${t('Copy')}</button></div>
+        <pre class="logs" id="mcpCode" aria-label="${t('MCP configuration')}"></pre>
+      </div>`;
+    const code = $('#mcpCode', el);
+    const clientSelect = $('#mcpClient', el);
+    const clientOf = () => MCP_CLIENTS.find((c) => c.id === clientSelect.value) || MCP_CLIENTS[0];
+    const paint = () => {
+      const client = clientOf();
+      $('#mcpSteps', el).innerHTML = [
+        ...client.steps.map((step) => t(step)),
+        t('Shell commands use the terminal. Turn it on under {link} if you want them.', { link: security }),
+      ].map((step) => `<li>${step}</li>`).join('');
+      $('#mcpFile', el).textContent = client.fileLabel ? t(client.fileLabel) : client.file;
+      code.textContent = mcpSnippet(client, mcpUrl);
+    };
+    clientSelect.addEventListener('change', paint);
+    paint();
+    el.onclick = async (e) => {
+      const btn = e.target.closest('[data-mcp-copy]');
+      if (!btn) return;
+      const text = code.textContent;
+      const ok = () => toast(t('Copied.'));
+      const fail = () => toast(t('Copying did not work in this browser.'), true);
+      // execCommand runs in this click, so it still works when the clipboard API is blocked.
+      let copied = false;
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta); ta.select();
+        copied = document.execCommand('copy');
+        ta.remove();
+      } catch { copied = false; }
+      if (copied) { ok(); return; }
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(ok, fail);
+      else fail();
+    };
   }
 
   /* --- Storage: where app data, VM disks, ISOs and shared folders are, and moving app data to another pool */
@@ -6907,6 +7010,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/security', 'Security', ['password', 'mfa', 'totp', '2fa', 'terminal', t('Security')]],
       ['settings/users', 'Users', ['samba', 'groups', t('Users')]],
       ['settings/ai', 'AI', ['ollama', 'claude', 'lm studio', 'llama', t('AI')]],
+      ['settings/mcp', 'MCP', ['mcp', 'cursor', 'claude', 'vscode', 'codex', 'token', t('MCP')]],
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));

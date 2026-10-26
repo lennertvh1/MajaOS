@@ -2189,6 +2189,7 @@
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
     if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
+    if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
@@ -2262,6 +2263,11 @@
   }
 
   async function post(path, body = {}) {
+    if (path === '/api/terminal/run') {
+      await wait(200);
+      if (!body.command || !String(body.command).trim()) throw err('Type a command.');
+      return { output: 'demo: ' + body.command + '\n', code: 0, timedOut: false, truncated: false };
+    }
     if (path === '/api/install') {
       await wait(400);
       const disk = instDisks.find((d) => d.name === body.name);
@@ -2282,6 +2288,12 @@
     if (path === '/api/onboarding/finish') { onbSet(true); return { done: true, finished: new Date().toISOString(), skipped: !!body.skipped }; }
     if (path === '/api/onboarding/reset') { onbSet(false); return { done: false }; }
     if (path === '/api/password') { await wait(rnd(300, 600)); return demoPassword(body); }
+    if (path === '/api/mcp/token') {
+      await wait(200);
+      const pwOk = String(body.password || '') === DEMO_PW || (acct.password && body.password === acct.password);
+      if (!pwOk) { await wait(800); throw err('Wrong password', 401); }
+      return { token: 'demo-token', user: acct.user };
+    }
     if (path === '/api/setup') { await wait(rnd(300, 600)); return demoSetup(body); }
     if (path === '/api/storage-paths') { await wait(rnd(300, 600)); return spSet(body); }
     if (path.startsWith('/api/backup/')) { await wait(rnd(200, 500)); return bkPost(path, body); }

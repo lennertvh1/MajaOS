@@ -764,6 +764,11 @@ video.file-view { width: 100%; background: #000; }
   font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-height: 300px; overflow: auto; white-space: pre-wrap;
 }
 .logs .ts { color: #8aa0b5; }
+.code-view { border-radius: 14px; overflow: hidden; border: 1px solid var(--glass-line); background: rgba(0, 0, 0, .78); margin-top: 12px; }
+.code-view[hidden] { display: none; }
+.code-view-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 14px; background: rgba(255, 255, 255, .06); color: #d9e2ec; font-size: 13px; }
+.code-view .logs { border-radius: 0; max-height: 420px; background: transparent; }
+.code-view .btn { color: #e8eef4; background: transparent; border-color: rgba(255, 255, 255, .22); }
 
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 6px; }
 .stat { padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-line); }
