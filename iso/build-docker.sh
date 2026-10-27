@@ -9,8 +9,9 @@ if ! command -v docker >/dev/null; then
   echo "Docker is not installed or not on PATH. Install Docker Desktop or use WSL2 + Docker; see docs/build-iso.md."
   exit 1
 fi
-echo "==> docker run (privileged) build-iso.sh --out dist worktree=$WORKTREE live=$LIVE"
-docker run --rm --privileged \
+# The ISO is always amd64. On Apple Silicon Docker defaults to arm64, which breaks linux-image-amd64 in build-live.sh.
+echo "==> docker run --platform linux/amd64 (privileged) build-iso.sh --out dist worktree=$WORKTREE live=$LIVE"
+docker run --rm --privileged --platform linux/amd64 \
   -e "BUILD_WORKTREE=$WORKTREE" \
   -e "BUILD_LIVE=$LIVE" \
   -v "$ROOT:/work:rw" \

@@ -15,9 +15,9 @@ R="$(mktemp -d)"
 trap 'umount "$R/dev" "$R/proc" "$R/sys" 2>/dev/null || true; rm -rf "$R"' EXIT
 mkdir -p "$OUT"
 
-echo "==> debootstrap Debian 13 (trixie)"
-debootstrap trixie "$R" http://deb.debian.org/debian
-printf 'deb http://deb.debian.org/debian trixie main\ndeb http://deb.debian.org/debian-security trixie-security main\n' > "$R/etc/apt/sources.list"
+echo "==> debootstrap Debian 13 (trixie), amd64"
+debootstrap --arch=amd64 trixie "$R" http://deb.debian.org/debian
+printf 'deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\ndeb http://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n' > "$R/etc/apt/sources.list"
 mount --bind /proc "$R/proc"
 mount --bind /sys "$R/sys"
 mount --bind /dev "$R/dev"

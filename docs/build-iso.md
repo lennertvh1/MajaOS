@@ -136,6 +136,8 @@ cd homebaseos
 ./iso/build-docker.sh
 ```
 
+On **Apple Silicon**, Docker runs an **amd64** container (emulation). The build works but is slower than on an x86 machine.
+
 Optional environment variables:
 
 - `BUILD_WORKTREE=0` — use git `HEAD` instead of the working tree.
