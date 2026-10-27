@@ -30,7 +30,7 @@ Every release has an installation ISO: `homebaseos-<version>-amd64.iso`. It is t
 
 The language you pick is the language of the welcome wizard. The keyboard stays Belgian AZERTY, and the country and time zone stay Belgium and Europe/Brussels (change them in `iso/preseed.cfg`; the time zone also in the wizard). Building the ISO with the graphical screen needs Linux, root and `./iso/build-iso.sh --live` (debootstrap and squashfs-tools). Without `--live` the stick still boots the Debian installer, which asks for the disk itself. If the installation fails at the first boot, the screen says so; the log is `/var/log/homebaseos-firstboot.log` and `sudo systemctl restart homebaseos-firstboot` tries again.
 
-**Building the ISO yourself.** GitHub Actions does this for every new version: a pushed tag `vX.Y.Z` creates the release and attaches the ISO (`.github/workflows/iso.yml`), or by hand via *Actions > Release and ISO > Run workflow*. On a Linux PC the release build is `sudo apt install xorriso cpio debootstrap squashfs-tools && sudo ./iso/build-iso.sh --live` (the ISO ends up in `dist/`). Without `--live`, `./iso/build-iso.sh` only remasters the net installer.
+**Building the ISO yourself.** Run **`./build-iso.sh`** from the repo (see **[docs/build-iso.md](docs/build-iso.md)** for WSL2, Docker, and details). Releases: tag `vX.Y.Z` on `main` builds the ISO via `.github/workflows/iso.yml`, or *Actions → Release and ISO → Run workflow*. On `dev`, pushes that change the installer run a smoke build in *Test*; download a test ISO manually from *Actions → Test → Run workflow* when artifact quota allows.
 
 ## Installing by hand
 

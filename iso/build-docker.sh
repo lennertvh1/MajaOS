@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Build the HomeBaseOS ISO inside Ubuntu 24.04 (Docker). Use on macOS, Windows, or Linux when debootstrap is not on the host.
+# See docs/build-iso.md.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORKTREE="${BUILD_WORKTREE:-1}"
+LIVE="${BUILD_LIVE:-1}"
+if ! command -v docker >/dev/null; then
+  echo "Docker is not installed or not on PATH. Install Docker Desktop or use WSL2 + Docker; see docs/build-iso.md."
+  exit 1
+fi
+echo "==> docker run (privileged) build-iso.sh --out dist worktree=$WORKTREE live=$LIVE"
+docker run --rm --privileged \
+  -e "BUILD_WORKTREE=$WORKTREE" \
+  -e "BUILD_LIVE=$LIVE" \
+  -v "$ROOT:/work:rw" \
+  -w /work \
+  ubuntu:24.04 \
+  bash -ec '
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq xorriso cpio gzip curl git coreutils debootstrap squashfs-tools
+    args=(./iso/build-iso.sh --out dist)
+    [ "$BUILD_WORKTREE" = 1 ] && args+=(--worktree)
+    [ "$BUILD_LIVE" = 1 ] && args+=(--live)
+    if [ -n "${BUILD_EXTRA:-}" ]; then
+      eval "extra=($BUILD_EXTRA)"
+      args+=("${extra[@]}")
+    fi
+    "${args[@]}"
+  '
+echo "==> Done: $ROOT/dist/"
