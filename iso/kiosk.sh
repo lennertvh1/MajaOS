@@ -23,8 +23,9 @@ if [ ! -f /run/homebaseos-install/server-ready ]; then
 fi
 
 # pixman first: works in VMs without GPU passthrough; gles2 when a GPU is available.
+# Only options that cage 0.2.0 (Debian 13) knows: an unknown one (like -D) stops cage at once and leaves a black screen.
 open_screen() {
-  WLR_RENDERER="$1" cage -s -D -- cog --platform=wl --bg-color='#101a33' --doc-viewer \
+  WLR_RENDERER="$1" cage -s -- cog --platform=wl --bg-color='#101a33' --doc-viewer \
     --webprocess-failure=restart "$url" >>/tmp/homebaseos-installer.log 2>&1
 }
 
@@ -36,6 +37,11 @@ if command -v cage >/dev/null && command -v cog >/dev/null; then
   open_screen pixman || open_screen gles2 || true
   say "The installer screen stopped. Open $url"
   say "The log is /tmp/homebaseos-installer.log"
+  # tty1 still holds the boot logo in graphics mode, so text there stays invisible. tty2 is a root shell.
+  printf '
+The installer screen stopped. The log is /tmp/homebaseos-installer.log
+' > /dev/tty2 2>/dev/null || true
+  chvt 2 2>/dev/null || true
   exec sleep infinity
 fi
 say "Open $url"

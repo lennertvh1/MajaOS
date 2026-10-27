@@ -17,6 +17,9 @@ mkdir -p "$OUT"
 
 echo "==> debootstrap Debian 13 (trixie), amd64"
 debootstrap --arch=amd64 trixie "$R" http://deb.debian.org/debian
+# debootstrap copies the name of the build machine; the live system gets its own.
+echo homebaseos-installer > "$R/etc/hostname"
+printf '127.0.0.1\tlocalhost\n127.0.1.1\thomebaseos-installer\n' > "$R/etc/hosts"
 printf 'deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\ndeb http://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n' > "$R/etc/apt/sources.list"
 mount --bind /proc "$R/proc"
 mount --bind /sys "$R/sys"
