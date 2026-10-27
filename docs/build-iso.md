@@ -166,7 +166,7 @@ Test servers on the **dev** channel use *Settings → Software update → Develo
 - Enough RAM (e.g. 4 GB+ for the live installer).
 - First menu entry: **Install HomeBaseOS** (live). **Recovery** uses the classic Debian installer.
 
-If the screen stays black after the house logo: disable **3D/GPU acceleration** in the VM. If the mouse or keyboard does nothing: use a USB tablet as the VM's pointer. On the live system, **Ctrl+Alt+F2** opens a root shell: check `/tmp/homebaseos-installer.log` and `journalctl -u homebaseos-kiosk`. **Ctrl+Alt+F1** goes back to the installer.
+If the screen stays black after the house logo: disable **3D/GPU acceleration** in the VM. If the mouse or keyboard does nothing: use a USB tablet as the VM's pointer. On the live system, **Ctrl+Alt+F2** opens a root shell: check `/tmp/homebaseos-installer.log` and `journalctl -u homebaseos-kiosk`. **Ctrl+Alt+F1** goes back to the installer. If the screen takes no keys at all, the serial port has the same shell: on Unraid or another libvirt host, run `virsh console <vm name>` (leave with Ctrl+]).
 
 ---
 

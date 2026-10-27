@@ -54,6 +54,10 @@ chroot "$R" systemctl mask getty@tty1.service || true
 # Ctrl+Alt+F2 opens a root shell, to read /tmp/homebaseos-installer.log when the screen misbehaves.
 mkdir -p "$R/etc/systemd/system/getty@tty2.service.d"
 printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %%I $TERM\n' > "$R/etc/systemd/system/getty@tty2.service.d/autologin.conf"
+# The same on the serial port, for when the screen takes no keys at all: on Unraid or libvirt, virsh console <vm>.
+mkdir -p "$R/etc/systemd/system/serial-getty@ttyS0.service.d" "$R/etc/systemd/system/getty.target.wants"
+printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 %%I $TERM\n' > "$R/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
+ln -sf /lib/systemd/system/serial-getty@.service "$R/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service"
 
 cat > "$R/etc/systemd/system/homebaseos-kiosk.service" <<'EOF'
 [Unit]
