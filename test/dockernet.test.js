@@ -125,7 +125,7 @@ test('app store: extra ports, and not with host or an own address', () => {
   const host = store.buildCompose(app, 'plex', [], { tz: 'Europe/Brussels', extraPorts });
   assert.match(host.text, /network_mode: "host"/);
   assert.doesNotMatch(host.text, /ports:/);
-  assert.match(host.warnings.join(), /Change a port or pick the default network/);
+  assert.equal(host.warnings.join(), ''); // host is the normal choice now: no warning
 });
 
 test('the shared homebase network: a free subnet and a free address', () => {

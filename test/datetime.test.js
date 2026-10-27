@@ -67,3 +67,10 @@ test('time format in the settings', () => {
   assert.equal(settings.getSettings().clock, '12');
   assert.throws(() => settings.saveSettings({ clock: '13' }), /time format/);
 });
+
+test('experience level in the settings', () => {
+  assert.equal(settings.getSettings().experience, 'beginner');
+  assert.equal(settings.saveSettings({ experience: 'expert' }).experience, 'expert');
+  assert.throws(() => settings.saveSettings({ experience: 'pro' }), /beginner or expert/);
+  assert.throws(() => settings.saveSettings({ experience: 'standard' }), /beginner or expert/);
+});

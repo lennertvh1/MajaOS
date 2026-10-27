@@ -187,12 +187,13 @@ const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::fff
 /* ---------------------------------------------------------------- system */
 
 async function apiOverview() {
-  const [cpu, gpu, store, repair] = await Promise.all([
-    sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null), replace.look().then((r) => r.repair, () => null),
+  const [cpu, gpu, store, found] = await Promise.all([
+    sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null), replace.look().catch(() => null),
   ]);
   return {
     hostname: os.hostname(), uptime: sys.uptime(), version: sys.osName(),
-    cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(), storage: store ? { ...store, repair } : store, gpu,
+    cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(),
+    storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu,
   };
 }
 
@@ -223,7 +224,7 @@ async function handleApi(req, res, url) {
       demo: CFG.demo, passwordEnabled: passwordEnabled(), needsLogin: passwordEnabled() && !isAuthed(req), ollama: ai.effective().provider === 'ollama',
       setup: needsSetup(), // no account yet: the welcome wizard creates one
       loginUser: !!auth.userName(), // sign in with a user name (older accounts don't have one)
-      language: settings.getSettings().language, clock: settings.getSettings().clock, port: settings.listenPort(),
+      language: settings.getSettings().language, clock: settings.getSettings().clock, experience: settings.getSettings().experience, port: settings.listenPort(),
       terminal: settings.getSettings().terminal, terminalPassword: settings.getSettings().terminalPassword && passwordEnabled(),
       onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // show the welcome wizard
     });
@@ -235,7 +236,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     if (body.password !== body.repeat) return sendJson(res, 400, { error: 'The two passwords do not match.' });
     const r = auth.createAccount(body.user, body.password);
-    if (body.language) settings.saveSettings({ language: body.language });
+    if (body.language || body.experience) settings.saveSettings({ language: body.language, experience: body.experience });
     removePasswordIssue();
     setSession(res, true);
     console.log(`Account ${r.user} created from ${clientIp(req)}.`);

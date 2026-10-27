@@ -216,6 +216,7 @@
     acct.user = u; acct.password = v; // the password only in memory; "demo" keeps working too
     try { localStorage.setItem('tb-demo-user', u); } catch (e) { /* private window */ }
     if (b.language) { try { localStorage.setItem('tb-lang', b.language); } catch (e) { /* private window */ } }
+    if (b.experience) { try { localStorage.setItem('tb-experience', String(b.experience)); } catch (e) { /* private window */ } }
     onb.passwordChanged = new Date().toISOString();
     return { ok: true, user: u };
   }
@@ -280,6 +281,13 @@
     throw err('Unknown endpoint', 404);
   }
   const demoLang = () => { try { return localStorage.getItem('tb-lang') || 'en'; } catch (e) { return 'en'; } };
+  const demoExperience = () => {
+    try {
+      const v = localStorage.getItem('tb-experience');
+      if (v === 'standard') return 'beginner';
+      return v === 'beginner' || v === 'expert' ? v : 'beginner';
+    } catch (e) { return 'beginner'; }
+  };
   function demoAbout() {
     return {
       hostname: net.hostname, os: 'Debian GNU/Linux 13 (trixie)', kernel: '6.12.48+deb13-amd64', arch: 'x86_64', uptime: Math.round((Date.now() - bootTime) / 1000),
@@ -1293,15 +1301,18 @@
   function storeWarnings(a, network) {
     const w = [];
     const tpl = a.network || 'bridge';
-    if (network === undefined && !['bridge', 'host', 'none'].includes(tpl)) network = 'bridge';
-    if (!['bridge', 'host', 'none'].includes(tpl) && network === 'bridge') w.push('The template uses the network "' + tpl + '". Choose a network below, or create it in Settings → Docker networks.');
-    if (network === 'host') w.push('This app uses the server\'s network (host) and then listens on its own ports. Want to choose ports yourself? Change a port or pick the default network (bridge). Some apps (like Home Assistant and Plex) work best with host, because they look for devices in your network.');
+    // Like buildCompose: the template's own network only matters when no network was chosen (the form always chooses one).
+    if (network === undefined && !['bridge', 'host', 'none'].includes(tpl)) w.push('The template uses the network "' + tpl + '". Choose a network below, or create it in Settings → Docker networks.');
     if (network && ownIpNet(network)) w.push('This app gets its own address in your home network. The ports are then the app\'s own; the server itself cannot reach the app at this address.');
     if (a.privileged) w.push('This app runs privileged: it gets almost full access to your server.');
     if (a.gpu) w.push('This app uses the NVIDIA GPU. That requires install.sh to have been run with --nvidia.');
     if (a.fields().some((f) => f.value === '/var/run/docker.sock')) w.push('This app gets access to Docker and can therefore manage all your containers.');
     return w;
   }
+  // The ports an app listens on when it uses the server's network, and which of them are already taken (HomeBaseOS itself uses 80).
+  const ownTcp = (fields) => fields.filter((f) => f.type === 'Port' && f.target && !(/udp/.test(f.mode) && !/tcp/.test(f.mode))).map((f) => Number(f.target));
+  const hostTaken = (port) => (port === 80 ? 'HomeBaseOS' : (apps.find((x) => x.ports.some((p) => p.public === port) || (x.hostPorts || []).includes(port)) || {}).name);
+  const WEB_PORTS = [80, 443, 8080, 8443, 3000, 5000, 8000, 8096, 8123, 9000, 8081, 8888];
   function storeDetails(a) {
     let name = storeSlug(a.name);
     for (let n = 2; apps.some((x) => x.name === name); n++) name = storeSlug(a.name) + '-' + n;
@@ -1309,7 +1320,8 @@
     const { fields: _, gpu: __, ...rest } = a;
     const networks = dnets.filter((n) => !n.builtin).map((n) => ({ name: n.name, driver: n.driver, subnet: n.subnet, gateway: n.gateway, ipRange: n.ipRange }));
     const tpl = a.network || 'bridge';
-    const networkDefault = ['bridge', 'host', 'none'].includes(tpl) || networks.some((n) => n.name === tpl) ? tpl : 'bridge';
+    // Like the server: every app uses the server's network, unless one of its ports is already taken.
+    const networkDefault = ownTcp(fields).some(hostTaken) ? 'bridge' : 'host';
     return { ...rest, fields, warnings: storeWarnings(a, networkDefault), networks, networkDefault, templateNetwork: tpl, suggestedName: name, appdataDir: AD(), sharesDir: '/tank', stacksDir: '/opt/stacks',
       installed: storeInstalled(a), appdataMissing: false, folders: bkFolders() };
   }
@@ -1319,7 +1331,7 @@
     if (apps.some((x) => x.name === name)) throw err('An app named ' + name + ' already exists. Choose another name.', 409);
     const fields = a.fields().map((f) => (f.key in (body.values || {}) ? { ...f, value: String(body.values[f.key]) } : f));
     const tpl = a.network || 'bridge';
-    const network = body.network || (tpl === 'host' || tpl === 'none' ? tpl : 'bridge');
+    const network = body.network || 'host';
     if (!['bridge', 'host', 'none'].includes(network) && !dnets.some((n) => n.name === network)) throw err('The network ' + network + ' does not exist. Create it in Settings → Docker networks or choose another network.');
     if (body.ip && ['bridge', 'host', 'none'].includes(network)) throw err('A fixed IP address only works in a custom Docker network.');
     const noPorts = network === 'host' || network === 'none' || ownIpNet(network);
@@ -1342,6 +1354,13 @@
     for (const p of extraPorts) {
       const clash = apps.find((x) => x.ports.some((q) => q.public === p.public));
       if (clash) throw err('Port ' + p.public + ' is already used by ' + clash.name + '. Choose another port.', 409);
+    }
+    if (network === 'host') {
+      const taken = ownTcp(fields).find(hostTaken);
+      if (taken) throw err('Port ' + taken + ' is already used by ' + hostTaken(taken) + '. Change the port under Customize, or choose another network.', 409);
+      // The app listens on its own port: the template's WebUI port, or the web port among its ports.
+      const tpl = a.webui && (a.webui.match(/\[PORT:(\d+)\]/) || [])[1], own = ownTcp(fields);
+      webPort = tpl ? Number(tpl) : own.find((p) => WEB_PORTS.includes(p)) || (own.length === 1 ? own[0] : null);
     }
     setAppNet({ name: '__check' }, network, String(body.ip || '').trim()); // checks the address
     const own = appNet.__check; delete appNet.__check;
@@ -1415,7 +1434,7 @@
       const tplPort = j.a.webui && (j.a.webui.match(/\[PORT:(\d+)\]/) || [])[1];
       apps.push({ id: 'demo:' + j.name, name: j.name, image: /:[^/]+$/.test(j.a.image) ? j.a.image : j.a.image + ':latest', state: 'RUNNING', status: 'Up Less than a second', autoStart: true,
         icon: j.a.icon, webui: ownIp ? 'http://' + j.own.ip + (tplPort ? ':' + tplPort : '') + '/' : j.webPort ? 'http://[IP]:' + j.webPort + '/' : null, ports, compose: j.name, canUpdate: true, update: null,
-        storeId: j.a.id, custom: !!j.custom,
+        storeId: j.a.id, custom: !!j.custom, hostPorts: j.network === 'host' ? ownTcp(j.fields) : [],
         dataDirs: [...new Set(j.fields.filter((f) => f.type === 'Path' && f.value.startsWith(AD() + '/')).map((f) => f.value.split('/').slice(0, 4).join('/')))] });
       apps.sort((x, y) => x.name.localeCompare(y.name));
     }
@@ -1447,6 +1466,7 @@
     const base = n.repo.split('/').pop().replace(/[^a-z0-9_-]+/g, '-');
     let name = base; for (let i = 2; apps.some((a) => a.name === name); i++) name = base + '-' + i;
     const used = new Set(apps.flatMap((a) => a.ports.map((p) => p.public + '/' + p.type)));
+    const hostFree = !info.ports.some((k) => k.endsWith('/tcp') && hostTaken(Number(k.split('/')[0])));
     const ports = info.ports.map((k) => {
       const [port, proto] = k.split('/'); let host = Number(port);
       while (used.has(host + '/' + proto.toUpperCase())) host++;
@@ -1461,7 +1481,7 @@
       webui: ports[0] ? 'http://[IP]:[PORT:' + ports[0].container + ']/' : '', icon: ICON(base) || '',
       storeMatch: st ? { id: st.id, name: st.name } : null,
       warnings: ports.length ? [] : ['The image reports no ports. If the app has a web interface, add a port yourself.'],
-      networks: dnets.filter((x) => !x.builtin).map((x) => ({ name: x.name, driver: x.driver, subnet: x.subnet })), networkDefault: 'bridge',
+      networks: dnets.filter((x) => !x.builtin).map((x) => ({ name: x.name, driver: x.driver, subnet: x.subnet })), networkDefault: hostFree ? 'host' : 'bridge',
       appdataDir: AD(), stacksDir: '/opt/stacks', appdataMissing: false, folders: bkFolders(),
     };
   }
@@ -1871,6 +1891,25 @@
   // Disk bays: 8 bays (the four HDDs of tank, three free disks, one empty), 2 M.2 slots with the NVMes of fast and 2 slots of 2.5" (one SSD).
   let bays = { count: 8, columns: 8, m2: 2, ssd: 2, slots: Object.fromEntries([['sda', 1], ['sdb', 2], ['sdc', 3], ['sdd', 4], ['sde', 5], ['sdf', 6], ['sdg', 7],
     ['nvme0n1', 'm1'], ['nvme1n1', 'm2'], ['sdi', 's1']].map(([n, id]) => [id, { key: 's:DEMO' + n.toUpperCase(), label: 'DEMO' + n.toUpperCase() }])) };
+  // Bay 8 still remembers a disk that is no longer in the machine, so the dashboard shows the red warning.
+  bays.slots['8'] = { key: 's:WD-WCC4N7VY1A2B', label: 'WDC WD20EFZX' };
+  function demoAlerts() {
+    const bayName = (id) => { const m = String(id).match(/^([ms]?)(\d+)$/); if (!m) return String(id); if (m[1] === 'm') return 'M.2 ' + m[2]; if (m[1] === 's') return '2.5" ' + m[2]; return m[2]; };
+    const present = new Set(disks.map((d) => d.key));
+    const alerts = [];
+    for (const d of disks) {
+      const sec = d.sectors || {};
+      const badState = d.state && d.state !== 'ONLINE';
+      if (!badState && d.smartOk !== false && !(sec.pending > 0) && !(sec.uncorrectable > 0)) continue;
+      const slot = Object.entries(bays.slots).find(([, v]) => v && v.key === d.key);
+      alerts.push({ kind: badState && !['FAULTED', 'DEGRADED', 'OFFLINE'].includes(d.state) ? 'missing' : badState ? 'failing' : 'unhealthy', pool: d.pool || null, name: d.name, serial: d.serial, model: d.model, bay: slot ? bayName(slot[0]) : null, state: d.state || null });
+    }
+    for (const [id, v] of Object.entries(bays.slots)) {
+      if (!v || present.has(v.key)) continue;
+      alerts.push({ kind: 'missing', pool: null, name: null, serial: String(v.key).startsWith('s:') ? v.key.slice(2) : null, model: v.label || null, bay: bayName(id), state: null });
+    }
+    return alerts;
+  }
   function saveBays(b) {
     const count = Number(b.count), columns = Number(b.columns), m2 = Number(b.m2 || 0), ssd = Number(b.ssd || 0);
     if (!Number.isInteger(count) || count < 0 || count > 60) throw err('Choose between 0 and 60 bays.');
@@ -1889,7 +1928,7 @@
   }
   function storageSummary() {
     const total = pools.reduce((s, p) => s + p.total, 0), used = pools.reduce((s, p) => s + p.used, 0);
-    return { health: 'ONLINE', total, used, free: total - used, pools: pools.length };
+    return { health: 'ONLINE', total, used, free: total - used, pools: pools.length, alerts: demoAlerts() };
   }
 
   /* ---- AI */
@@ -2170,7 +2209,7 @@
   async function get(path) {
     await wait(rnd(120, 300));
     { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
-    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: demoAiCfg().provider === 'ollama', language: demoLang(), clock: demoClock(), port: demoWebPort(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: demoAiCfg().provider === 'ollama', language: demoLang(), clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
     if (path === '/api/remote') return demoRemoteView();
     if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
@@ -2189,7 +2228,7 @@
       return { running, lines: copy(lines), last: (j.history || [])[0] || null };
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
-    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
+    if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), experience: demoExperience(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
     if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
@@ -2321,7 +2360,13 @@
     if (path === '/api/settings' && body.clock != null) {
       if (!['auto', '24', '12'].includes(String(body.clock))) throw err('Choose a time format: automatic, 24-hour or 12-hour.');
       try { localStorage.setItem('tb-clock', String(body.clock)); } catch (e) { /* private window */ }
-      return { language: demoLang(), clock: String(body.clock), ...demoSecurity };
+      return { language: demoLang(), clock: String(body.clock), experience: demoExperience(), ...demoSecurity };
+    }
+    if (path === '/api/settings' && body.experience != null) {
+      const v = String(body.experience);
+      if (!['beginner', 'expert'].includes(v)) throw err('Choose beginner or expert.');
+      try { localStorage.setItem('tb-experience', v); } catch (e) { /* private window */ }
+      return { language: demoLang(), clock: demoClock(), experience: v, port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
     }
     if (path === '/api/settings' && body.language == null) {
       // In the demo there is no password (like the server without APP_PASSWORD): making things less strict is allowed without one.

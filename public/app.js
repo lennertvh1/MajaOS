@@ -165,6 +165,21 @@
     store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
     view: (() => { try { return localStorage.getItem('tb-app-view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })(), // per device
     layout: { items: [] }, shortcuts: [], placing: false, folder: null };
+  const EXPERIENCE_LEVELS = new Set(['beginner', 'expert']);
+  function experienceLevel() {
+    let v = S.config && S.config.experience;
+    if (v === 'standard') v = 'beginner';
+    return EXPERIENCE_LEVELS.has(v) ? v : 'beginner';
+  }
+  function applyExperienceLevel() { document.documentElement.dataset.experience = experienceLevel(); }
+  function experienceChoiceHtml(selected) {
+    let sel = selected;
+    if (sel === 'standard') sel = 'beginner';
+    const cur = EXPERIENCE_LEVELS.has(sel) ? sel : experienceLevel();
+    return [['beginner', t('Beginner'), t('Fewer questions when installing apps; storage and advanced options stay simple.')],
+      ['expert', t('Expert'), t('Full options everywhere, including ports, networks, RAID layouts and compose files.')]]
+      .map(([v, title, desc]) => `<label class="choice-card"><input type="radio" name="experience" value="${v}"${v === cur ? ' checked' : ''}><span><b>${esc(title)}</b><small class="muted">${esc(desc)}</small></span></label>`).join('');
+  }
 
   /* ------------------------------------------------------------ notifications */
   function toast(msg, bad) {
@@ -227,7 +242,7 @@
     if (!s || !s.pools) {
       $('#storeFree').textContent = '–'; $('#storeBar').style.width = '0';
       $('#storeLine').textContent = t(s ? 'No ZFS pool yet. Create one (see README).' : 'ZFS is not reachable.');
-      st.textContent = ''; st.className = 'pill'; return;
+      st.textContent = ''; st.className = 'pill'; renderDiskAlerts(); return;
     }
     const pct = s.total ? (s.used / s.total) * 100 : 0;
     $('#storeFree').textContent = bytes(s.free);
@@ -243,7 +258,32 @@
     if (s.pools) extra.push([t('Pools'), String(s.pools)]);
     const factsEl = $('#storeFacts');
     if (factsEl) factsEl.innerHTML = extra.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+    renderDiskAlerts();
   }
+  function diskAlertView(a) {
+    const name = a.name || a.serial || '';
+    const title = a.kind === 'missing'
+      ? (a.bay ? t('A disk was removed from bay {bay}.', { bay: a.bay }) : t('A disk in {pool} was removed.', { pool: a.pool || '' }))
+      : a.kind === 'failing'
+        ? (a.bay ? t('The disk in bay {bay} is failing.', { bay: a.bay }) : t('Disk {name} in {pool} is failing.', { name, pool: a.pool || '' }))
+        : (a.bay ? t('The disk in bay {bay} is no longer healthy.', { bay: a.bay }) : t('Disk {name} in {pool} is no longer healthy.', { name, pool: a.pool || '' }));
+    const bits = [];
+    if (a.model) bits.push(a.model);
+    if (a.serial) bits.push(t('Serial {serial}', { serial: a.serial }));
+    if (a.pool) bits.push(a.pool);
+    if (a.name && a.bay) bits.push(a.name);
+    return { title, detail: bits.filter(Boolean).join(' · ') };
+  }
+  function renderDiskAlerts() {
+    const box = $('#diskAlerts'); if (!box) return;
+    const list = (S.overview && S.overview.storage && S.overview.storage.alerts) || [];
+    box.hidden = !list.length;
+    box.innerHTML = list.map((a) => {
+      const v = diskAlertView(a);
+      return `<button type="button" class="disk-alert"><b>${esc(v.title)}</b>${v.detail ? `<span>${esc(v.detail)}</span>` : ''}</button>`;
+    }).join('');
+  }
+  $('#diskAlerts').addEventListener('click', () => storageWindow());
   function repairLine(r) {
     if (!r) return '';
     if (r.state === 'rebuilding') return t('Rebuilding {pool}: {pct}%', { pool: r.pool, pct: nf0.format(r.progress || 0) });
@@ -1886,6 +1926,7 @@
     const model = c.form ? JSON.parse(JSON.stringify(c.form)) : null;
     let mode = c.form ? 'form' : 'text';
     if (model) composeFormMount($('#cfForm', body), model, c.dockerNetworks || []);
+    if (experienceLevel() === 'expert' && c.form) { body.classList.add('expert-compose'); $('#cfText', body).hidden = false; }
     const toggle = $('#cfToggle', body);
     if (toggle) toggle.addEventListener('click', () => {
       mode = mode === 'form' ? 'text' : 'form';
@@ -2149,9 +2190,10 @@
         </div>
         <p class="small muted" style="margin-top:6px">${t('A test checks the disk while it keeps working normally. The long test takes hours.')}</p>
         ${i.attributes.length ? `<details class="adv dp-attrs"><summary>${t('All SMART values ({n})', { n: i.attributes.length })}</summary>
-          <table class="attr-table"><thead><tr><th>ID</th><th>${t('Name')}</th><th>${t('Value')}</th><th>${t('Threshold')}</th><th>Raw</th></tr></thead><tbody>
-          ${i.attributes.map((a) => `<tr class="${a.failing ? 'temp-bad' : ''}"><td>${a.id}</td><td>${esc(a.name)}</td><td>${a.value}</td><td>${a.thresh}</td><td>${esc(a.raw)}</td></tr>`).join('')}
-          </tbody></table></details>` : ''}`;
+          <ul class="attr-list">${i.attributes.map((a) => `<li class="${a.failing ? 'temp-bad' : ''}">
+            <span class="attr-name"><span class="muted">${a.id}</span> ${esc(a.name)}</span>
+            <span class="attr-vals"><span><i>${t('Value')}</i> ${esc(a.value)}</span><span><i>${t('Threshold')}</i> ${esc(a.thresh)}</span><span><i>Raw</i> ${esc(a.raw)}</span></span>
+          </li>`).join('')}</ul></details>` : ''}`;
     }
     let testTimer = null;
     async function loadDisk(wake = false, quiet = false) {
@@ -2170,7 +2212,8 @@
       clearTimeout(testTimer);
       sel = sel && sel.key === key ? null : { key, info: null, loading: false, error: null };
       $$('[data-bay]', el).forEach((b) => { if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(!!(sel && cfg.slots[b.dataset.bay] && cfg.slots[b.dataset.bay].key === sel.key))); });
-      if (sel) loadDisk(); else renderPanel();
+      if (sel) { loadDisk(); const box = $('#diskPanel', el); if (box) box.scrollIntoView({ block: 'nearest' }); }
+      else renderPanel();
     }
 
     // Labels on a drawer: the pool (each pool its own colour, with the role if it isn't a plain data disk) and the temperature.
@@ -2260,8 +2303,9 @@
           <div class="bay-grid" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
           ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
           ${cfg.m2 ? `<div class="m2-row">${Array.from({ length: cfg.m2 }, (_, i) => m2Card(i + 1)).join('')}</div>` : ''}
-        </div>${edit ? '' : '<div class="disk-panel" id="diskPanel" aria-live="polite" hidden></div>'}</div>
-        ${edit ? '' : `<p class="muted small" id="bayHint" style="margin-top:8px">${t('Click a bay to see the disk\'s details: hours, SMART, temperature and self-tests.')}</p>`}
+        </div></div>
+        ${edit ? '' : '<div class="disk-panel" id="diskPanel" aria-live="polite" hidden></div>'}
+        ${edit ? '' : `<p class="muted small" id="bayHint">${t('Click a bay to see the disk\'s details: hours, SMART, temperature and self-tests.')}</p>`}
         ${edit ? `<div class="bay-pool${picked && bayOf(picked) ? ' droppable' : ''}" data-unplace>
             <span class="muted small">${unplaced.length ? t('Not in a bay yet (drag a disk here to take it out of its bay):') : t('All disks are in a bay. Drag one here to take it out of its bay.')}</span>
             <div class="bay-chips">${unplaced.map((d) => `<button type="button" class="bay-chip ${bayState(d)}${picked === d.key ? ' picked' : ''}" draggable="true" data-key="${esc(d.key)}">
@@ -2361,6 +2405,67 @@
     return { raw, usable: Math.max(0, usable - slop), redundancy: Math.max(0, raw - usable - unused), unused, failures };
   }
   const suggestLayout = (n) => (n <= 1 ? 'stripe' : n === 2 ? 'mirror' : n <= 5 ? 'raidz1' : 'raidz2');
+  // Plain-language pool layouts for beginners (keys are translation keys for title and description).
+  const BEGINNER_POOL_LAYOUT = {
+    stripe: ['Maximum space', 'Uses all disk space. If that disk breaks, you can lose everything on it.'],
+    mirror: ['Safe copy on two disks', 'Both disks hold the same files. One can fail and your data is still there. You only get the space of one disk.'],
+    raidz1: ['Protected (good for most homes)', 'Spreads your files across the disks. Usually one disk can fail without losing your photos and apps.'],
+    raidz2: ['Extra protection', 'Two disks can fail before your files are at risk. Good when you have many disks or very important data.'],
+  };
+  function beginnerPoolLayoutChoices(n) {
+    if (n < 1) return [];
+    const rec = suggestLayout(n);
+    const keys = [];
+    const add = (key) => {
+      const L = POOL_LAYOUTS.find((x) => x[0] === key);
+      if (!L || n < L[2] || keys.includes(key)) return;
+      keys.push(key);
+    };
+    add(rec);
+    if (n >= 4) add('raidz2');
+    if (n >= 3) add('raidz1');
+    if (n >= 2) add('mirror');
+    if (n > 1) add('stripe');
+    const out = [];
+    for (const key of keys) {
+      if (out.length >= 3) break;
+      out.push({ key, recommended: key === rec });
+    }
+    return out;
+  }
+  function beginnerPoolLayoutCopy(key, recommended) {
+    const pair = BEGINNER_POOL_LAYOUT[key];
+    if (!pair) return { title: t(POOL_LAYOUTS.find((x) => x[0] === key)[1]), desc: '' };
+    const title = recommended ? t('Recommended for you') : t(pair[0]);
+    const desc = t(pair[1]) + (recommended ? ' ' + t('This is what we suggest for the disks you selected.') : '');
+    return { title, desc };
+  }
+  function beginnerPoolSafetyLine(c, diskCount) {
+    if (!c.failures) return t('If this disk stops working, you can lose everything on it. Back up important files elsewhere.');
+    if (c.failures === 1) return t('If one disk stops working, your files on this pool should still be OK.');
+    return t('If up to {n} disks stop working, your files on this pool should still be OK.', { n: c.failures });
+  }
+
+  const POOL_DISK_SVG_HDD = '<svg viewBox="0 0 72 96" class="pool-disk-art" aria-hidden="true"><rect x="6" y="10" width="60" height="76" rx="8" fill="var(--glass)" stroke="currentColor" stroke-opacity=".18"/><rect x="14" y="18" width="44" height="52" rx="4" fill="currentColor" fill-opacity=".05"/><path d="M16 70h40" stroke="currentColor" stroke-opacity=".12"/><circle cx="54" cy="78" r="4" fill="var(--accent)" opacity=".5"/></svg>';
+  const POOL_DISK_SVG_SSD = '<svg viewBox="0 0 72 72" class="pool-disk-art pool-disk-art-ssd" aria-hidden="true"><rect x="8" y="14" width="56" height="44" rx="6" fill="var(--glass)" stroke="currentColor" stroke-opacity=".18"/><rect x="14" y="20" width="44" height="32" rx="3" fill="currentColor" fill-opacity=".06"/></svg>';
+  const POOL_DISK_SVG_NVME = '<svg viewBox="0 0 72 48" class="pool-disk-art pool-disk-art-nvme" aria-hidden="true"><rect x="10" y="8" width="52" height="32" rx="4" fill="var(--glass)" stroke="currentColor" stroke-opacity=".18"/><rect x="16" y="14" width="20" height="20" rx="2" fill="currentColor" fill-opacity=".08"/><path d="M42 18h14v4H42zM42 26h10v2H42z" fill="currentColor" fill-opacity=".15"/></svg>';
+  function poolDiskArt(d) {
+    if (d.transport === 'nvme') return POOL_DISK_SVG_NVME;
+    return d.rotational ? POOL_DISK_SVG_HDD : POOL_DISK_SVG_SSD;
+  }
+  function poolSpaceBarHtml(c, beginner) {
+    const pct = (v) => (c.raw ? Math.max(0, (v / c.raw) * 100) : 0);
+    const wU = pct(c.usable), wR = pct(c.redundancy), wX = pct(c.unused);
+    const fileLab = beginner ? t('Your files') : t('Usable');
+    const safeLab = beginner ? t('Safety reserve') : t('Protection');
+    const unusedLab = t('Unused');
+    return `<div class="pool-bar" role="img" aria-hidden="true"><span class="u" style="width:${wU}%"></span><span class="r" style="width:${wR}%"></span>${wX > 0.5 ? `<span class="x" style="width:${wX}%"></span>` : ''}</div>
+      <ul class="pool-bar-legend">
+        <li><i class="u"></i><span>${esc(fileLab)}</span><b>${esc(bytes(c.usable))}</b></li>
+        ${c.redundancy > 1e6 ? `<li><i class="r"></i><span>${esc(safeLab)}</span><b>${esc(bytes(c.redundancy))}</b></li>` : ''}
+        ${c.unused > 1e9 ? `<li><i class="x"></i><span>${esc(unusedLab)}</span><b>${esc(bytes(c.unused))}</b></li>` : ''}
+      </ul>`;
+  }
 
   async function poolCreateWindow(bays) {
     openWindow(t('Create pool'), `<p class="lead">${t('Looking for disks…')}</p>`);
@@ -2372,32 +2477,68 @@
   // Form to create a pool: in the Storage window and right in the welcome wizard (inline: without its own buttons,
   // the wizard calls submit() and hears through onPick whether disks were chosen).
   function poolForm(body, o, bays, { inline = false, onCreated = () => {}, onBack = null, onPick = () => {} } = {}) {
+    const poolBeginner = experienceLevel() === 'beginner';
+    const wiz = inline;
     const bayOfDisk = (d) => { const k = d.serial ? 's:' + d.serial : 'n:' + d.name; return Object.keys((bays && bays.slots) || {}).find((x) => bays.slots[x].key === k) || null; };
     const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
     let name = ['tank', 'fast', 'data', 'storage'].find((n) => !o.pools.includes(n)) || 'data' + (o.pools.length + 1);
     const picked = new Set(); let layout = 'stripe', chosenByUser = false;
-    body.innerHTML = `
-      <form class="form" id="poolForm" novalidate>
+    const layoutLabel = poolBeginner ? t('How should your files be protected?') : t('Layout');
+    const layoutIntro = poolBeginner && !wiz ? `<p class="muted small pool-beginner-intro">${t('When you use more than one disk, HomeBaseOS can keep your photos, films and app data safe if one disk stops working. Not sure? Choose Recommended.')}</p>` : '';
+    const compressionFld = poolBeginner ? '<input type="hidden" name="compression" value="lz4">' : `<label class="fld"><span>${t('Compression')}</span><select class="field" name="compression">
+            <option value="lz4">${t('lz4 (recommended: fast and saves space)')}</option><option value="zstd">${t('zstd (saves more, a bit slower)')}</option><option value="off">${t('Off')}</option></select></label>`;
+    const foldersCheck = `<label class="check${wiz ? ' check-compact' : ''}"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
+          ${wiz ? '' : `<span class="muted small">${t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.')}</span>`}</span></label>`;
+    body.innerHTML = wiz ? `
+      <form class="form pool-form-wizard${poolBeginner ? ' pool-form-beginner' : ''}" id="poolForm" novalidate>
+        <p class="muted small pool-wizard-hint">${t('Tap the disks you want to use together.')}</p>
+        <fieldset class="fld pool-disks-field"><span>${t('Your disks')}</span><div class="pool-disk-tiles" id="poolDisks"></div></fieldset>
+        <div class="pool-wizard-panel" id="poolWizardPanel" hidden>
+          <div class="pool-sum pool-sum-compact" id="poolSum" aria-live="polite"></div>
+          <fieldset class="fld pool-layout-field" id="poolLayoutField"><span>${layoutLabel}</span>
+            <div class="layout-grid${poolBeginner ? ' layout-grid-simple layout-grid-wizard' : ' layout-grid-wizard'}" id="poolLayouts" role="radiogroup" aria-label="${layoutLabel}"></div></fieldset>
+          <label class="fld pool-wizard-name"><span>${t('Pool name')}</span><input class="field" name="name" value="${esc(name)}" maxlength="64" autocomplete="off" spellcheck="false"></label>
+          ${poolBeginner ? '<input type="hidden" name="compression" value="lz4">' : `<details class="pool-wizard-more"><summary>${t('More options')}</summary>${compressionFld}</details>`}
+          ${foldersCheck}
+        </div>
+        <p class="form-error" role="alert"></p>
+      </form>` : `
+      <form class="form${poolBeginner ? ' pool-form-beginner' : ''}" id="poolForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('Pool name')}</span><input class="field" name="name" value="${esc(name)}" maxlength="64" autocomplete="off" spellcheck="false">
-            <small>${t('For example tank for the hard drives and fast for the SSDs. The pool is mounted at /name.')}</small></label>
-          <label class="fld"><span>${t('Compression')}</span><select class="field" name="compression">
-            <option value="lz4">${t('lz4 (recommended: fast and saves space)')}</option><option value="zstd">${t('zstd (saves more, a bit slower)')}</option><option value="off">${t('Off')}</option></select></label>
+            <small>${poolBeginner ? t('A short name for this storage, e.g. tank for your hard drives.') : t('For example tank for the hard drives and fast for the SSDs. The pool is mounted at /name.')}</small></label>
+          ${compressionFld}
         </div>
         <fieldset class="fld"><span>${t('Disks')}</span><div class="dev-list" id="poolDisks"></div></fieldset>
-        <fieldset class="fld"><span>${t('Layout')}</span><div class="layout-grid" id="poolLayouts" role="radiogroup" aria-label="${t('Layout')}"></div></fieldset>
+        <fieldset class="fld" id="poolLayoutField"><span>${layoutLabel}</span>${layoutIntro}
+          <div class="layout-grid${poolBeginner ? ' layout-grid-simple' : ''}" id="poolLayouts" role="radiogroup" aria-label="${layoutLabel}"></div></fieldset>
         <div class="pool-sum" id="poolSum" aria-live="polite"></div>
-        <label class="check"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
-          <span class="muted small">${t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.')}</span></span></label>
+        ${foldersCheck}
         <p class="form-error" role="alert"></p>
-        ${inline ? '' : `<div class="btn-row"><button class="btn primary" type="submit">${t('Create pool')}</button>${onBack ? `<button class="btn" type="button" data-pool-back>${t('Back to storage')}</button>` : ''}</div>`}
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Create pool')}</button>${onBack ? `<button class="btn" type="button" data-pool-back>${t('Back to storage')}</button>` : ''}</div>
       </form>`;
     const form = $('#poolForm', body);
     const sel = () => o.disks.filter((d) => picked.has(d.name));
     const drawDisks = () => {
       // Only free disks: what is in a pool or carries the system can't be chosen anyway.
       const free = o.disks.filter((d) => d.available);
-      $('#poolDisks', form).innerHTML = free.map((d) => {
+      const box = $('#poolDisks', form);
+      if (wiz) {
+        box.innerHTML = free.map((d) => {
+          const on = picked.has(d.name);
+          const b = bayOfDisk(d);
+          const bayLbl = b ? (b.startsWith('m') ? t('M.2 slot {n}', { n: b.slice(1) }) : b.startsWith('s') ? t('2.5" slot {n}', { n: b.slice(1) }) : t('bay {n}', { n: b })) : '';
+          return `<button type="button" class="pool-disk-tile${on ? ' on' : ''}" data-pdisk-tile="${esc(d.name)}" aria-pressed="${on ? 'true' : 'false'}">
+            ${poolDiskArt(d)}
+            <span class="pool-disk-size">${esc(bytes(d.size))}</span>
+            <span class="pool-disk-kind">${esc(kind(d))}</span>
+            <span class="pool-disk-model muted small">${esc(d.model || d.name)}</span>
+            ${bayLbl ? `<span class="pool-disk-bay muted small">${esc(bayLbl)}</span>` : ''}
+            ${d.warn && on ? `<span class="pool-disk-warn small temp-warn">${esc(tr(d.warn))}</span>` : ''}</button>`;
+        }).join('') || `<p class="muted">${t('There are no free disks. Every disk is already in a pool or holds the system.')}</p>`;
+        return;
+      }
+      box.innerHTML = free.map((d) => {
         const b = bayOfDisk(d);
         return `<label class="check dev"><input type="checkbox" data-pdisk="${esc(d.name)}"${picked.has(d.name) ? ' checked' : ''}>
           <span><b>${esc(d.name)}</b> <span class="muted small">${esc([d.model, bytes(d.size), kind(d), b ? (b.startsWith('m') ? t('M.2 slot {n}', { n: b.slice(1) }) : b.startsWith('s') ? t('2.5" slot {n}', { n: b.slice(1) }) : t('bay {n}', { n: b })) : null].filter(Boolean).join(' · '))}</span>
@@ -2406,7 +2547,43 @@
     };
     const drawLayouts = () => {
       const n = picked.size;
-      $('#poolLayouts', form).innerHTML = POOL_LAYOUTS.map(([k, label, min, help]) => {
+      const box = $('#poolLayouts', form);
+      if (poolBeginner) {
+        if (!n) {
+          box.innerHTML = `<p class="muted">${t('First tick the disks above. Then choose how safe your files should be.')}</p>`;
+          return;
+        }
+        const choices = beginnerPoolLayoutChoices(n);
+        const rec = choices.find((x) => x.recommended);
+        if (rec && !chosenByUser && layout !== rec.key) layout = rec.key;
+        if (choices.length && !choices.some((x) => x.key === layout)) layout = rec ? rec.key : choices[0].key;
+        if (n === 1) {
+          layout = 'stripe';
+          box.innerHTML = `<p class="muted">${t('With one disk there is no backup inside the server. Copy important files elsewhere (e.g. via Backups).')}</p>`;
+          return;
+        }
+        const compact = wiz;
+        box.innerHTML = choices.map(({ key, recommended }) => {
+          const { title, desc } = beginnerPoolLayoutCopy(key, recommended);
+          if (compact) {
+            return `<label class="pool-layout-chip${layout === key ? ' on' : ''}" title="${esc(desc)}"><input type="radio" name="layout" value="${key}"${layout === key ? ' checked' : ''}>
+              <span>${esc(title)}${recommended ? ` <span class="pill ok">${t('Recommended')}</span>` : ''}</span></label>`;
+          }
+          return `<label class="layout layout-simple${layout === key ? ' on' : ''}"><input type="radio" name="layout" value="${key}"${layout === key ? ' checked' : ''}>
+            <span class="layout-simple-head"><b>${esc(title)}</b>${recommended ? `<span class="pill ok">${t('Recommended')}</span>` : ''}</span>
+            <span class="small muted">${esc(desc)}</span></label>`;
+        }).join('');
+        return;
+      }
+      if (wiz) {
+        box.innerHTML = `<div class="pool-layout-chips">${POOL_LAYOUTS.map(([k, label, min, help]) => {
+          const short = n < min ? min - n : 0, odd = k === 'mirrors' && n >= min && n % 2;
+          if (short || odd) return '';
+          return `<label class="pool-layout-chip${layout === k ? ' on' : ''}" title="${esc(t(help))}"><input type="radio" name="layout" value="${k}"${layout === k ? ' checked' : ''}><span>${esc(t(label))}</span></label>`;
+        }).join('')}</div>`;
+        return;
+      }
+      box.innerHTML = POOL_LAYOUTS.map(([k, label, min, help]) => {
         const short = n < min ? min - n : 0, odd = k === 'mirrors' && n >= min && n % 2;
         return `<label class="layout${layout === k ? ' on' : ''}${short || odd ? ' short' : ''}"><input type="radio" name="layout" value="${k}"${layout === k ? ' checked' : ''}>
           <b>${t(label)}</b><span class="small muted">${t(help)}</span>
@@ -2425,7 +2602,34 @@
       if (layout === 'stripe' && d.length > 1) warns.push(t('No protection: if one disk fails, you lose the whole pool.'));
       if (c.unused > 1e9) warns.push(t('{size} stays unused: with this layout, each disk only counts as much as the smallest one.', { size: bytes(c.unused) }));
       if (d.some((x) => x.rotational) && d.some((x) => !x.rotational)) warns.push(t('You are mixing hard drives and SSDs: the pool is as slow as the hard drives. Better make two pools.'));
-      if (layout === 'raidz1' && d.length >= 6) warns.push(t('With 6 or more disks RAID-Z2 is safer: while a disk is being rebuilt, another one may still fail.'));
+      if (!poolBeginner && layout === 'raidz1' && d.length >= 6) warns.push(t('With 6 or more disks RAID-Z2 is safer: while a disk is being rebuilt, another one may still fail.'));
+      if (poolBeginner) {
+        if (layout === 'stripe' && d.length > 1) warns.push(t('If one disk stops working, you can lose everything on this storage.'));
+        if (d.some((x) => x.rotational) && d.some((x) => !x.rotational)) warns.push(t('You mixed fast SSDs and slow hard drives in one pool. Everything will be as slow as the hard drives. Two separate pools work better.'));
+        if (layout === 'raidz1' && d.length >= 6) warns.push(t('With this many disks, Extra protection is often a better choice. You can switch to it above.'));
+        if (wiz) {
+          box.innerHTML = `
+            <div class="pool-space-head"><b>${esc(bytes(c.usable))}</b><span class="muted">${t('for your files (approximately)')}</span></div>
+            ${poolSpaceBarHtml(c, true)}
+            <p class="pool-space-note ${c.failures ? 'temp-ok' : 'temp-warn'}">${esc(beginnerPoolSafetyLine(c, d.length))}</p>
+            ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}`;
+          return;
+        }
+        box.innerHTML = `
+          <div class="pool-big"><b>${bytes(c.usable)}</b> <span>${t('room for your files (approximately)')}</span></div>
+          <p class="${c.failures ? 'temp-ok' : 'temp-warn'}">${esc(beginnerPoolSafetyLine(c, d.length))}</p>
+          ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}
+          <p class="small muted">${t('HomeBaseOS also turns on space saving (compression) by default.')}</p>`;
+        return;
+      }
+      if (wiz) {
+        box.innerHTML = `
+          <div class="pool-space-head"><b>${esc(bytes(c.usable))}</b><span class="muted">${t('usable (approximately)')}</span></div>
+          ${poolSpaceBarHtml(c, false)}
+          <p class="pool-space-note ${c.failures ? 'temp-ok' : 'temp-warn'}">${c.failures ? esc(t(c.failures === 1 ? '{n} disk may fail without losing your data.' : '{n} disks may fail without losing your data.', { n: c.failures })) : esc(t('No protection.'))}</p>
+          ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}`;
+        return;
+      }
       box.innerHTML = `
         <div class="pool-big"><b>${bytes(c.usable)}</b> <span>${t('usable (approximately)')}</span></div>
         <div class="pool-bar" aria-hidden="true"><span class="u" style="width:${pct(c.usable)}%"></span><span class="r" style="width:${pct(c.redundancy)}%"></span><span class="x" style="width:${pct(c.unused)}%"></span></div>
@@ -2440,14 +2644,29 @@
         ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}
         <p class="small muted">${t('ZFS keeps about 3% for itself; compression often gives you more back.')}</p>`;
     };
-    const drawAll = () => { drawDisks(); drawLayouts(); drawSum(); };
+    const syncWizardPanel = () => {
+      const panel = $('#poolWizardPanel', form);
+      if (panel) panel.hidden = picked.size === 0;
+    };
+    const pickDisk = (dn, on) => {
+      if (on) picked.add(dn); else picked.delete(dn);
+      if (!chosenByUser) layout = suggestLayout(picked.size);
+      drawAll(); onPick(picked.size > 0);
+    };
+    const drawAll = () => { drawDisks(); syncWizardPanel(); drawLayouts(); drawSum(); };
     drawAll();
+    form.addEventListener('click', (e) => {
+      const tile = e.target.closest('[data-pdisk-tile]');
+      if (!tile) return;
+      e.preventDefault();
+      const dn = tile.dataset.pdiskTile;
+      pickDisk(dn, !picked.has(dn));
+    });
     form.addEventListener('change', (e) => {
       const tg = e.target;
       if (tg.dataset.pdisk) {
-        if (tg.checked) picked.add(tg.dataset.pdisk); else picked.delete(tg.dataset.pdisk);
-        if (!chosenByUser) layout = suggestLayout(picked.size);
-        drawAll(); onPick(picked.size > 0); return;
+        pickDisk(tg.dataset.pdisk, tg.checked);
+        return;
       }
       if (tg.name === 'layout') { layout = tg.value; chosenByUser = true; drawLayouts(); drawSum(); }
     });
@@ -3325,6 +3544,29 @@
   const advToggleHtml = () => `<label class="check adv-switch"><input type="checkbox" name="__adv">
       <span><b>${t('Advanced')}</b> <span class="muted small">${t('Set every option yourself: image, restart, network, and add your own ports, folders, variables, devices and labels. Or edit the compose file as code.')}</span></span></label>`;
 
+  function storeInstallFormInner(d, { basic, adv, ask, rest }) {
+    const exp = experienceLevel();
+    const core = `
+        <label class="fld"><span>${t('Name')} <em class="req">*</em></span>
+          <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
+          <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
+        ${dataDirHtml(d, d.suggestedName)}
+        ${advToggleHtml()}
+        <div class="form" data-basic>
+        ${storeNetHtml(d)}
+        ${storeSections(exp === 'expert' ? basic : rest, d)}
+        <div class="cf-list" id="storeExtra"></div>
+        <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Port')}</button></div>
+        ${adv.length ? `<details class="adv" data-more${exp === 'expert' ? ' open' : ''}><summary>${t('More settings ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
+        </div>
+        <div data-advanced hidden></div>`;
+    if (exp === 'expert') return core;
+    const askBlock = ask.length ? `<div class="form" data-ask><p class="lead">${t('This app needs a bit of information:')}</p>${ask.map((f) => storeFieldHtml(f, d)).join('')}</div>` : '';
+    return `${askBlock}<p class="muted" data-install-note></p>
+        <details class="adv" data-custom><summary>${t('Customize')} <span class="muted small">${t('Name, folder, network, ports and more')}</span></summary>
+        <div class="form">${core}</div></details>`;
+  }
+
   // The full container form (like in an app's settings) or the code. The draft goes back and forth
   // through the server (/api/apps/draft), so fields and code are always the same file and nothing gets lost.
   async function advancedEditor(box, name, start) {
@@ -3398,6 +3640,10 @@
     // Always show required fields without a value, even if the template calls them "advanced".
     const basic = d.fields.filter((f) => !f.advanced || (f.required && !f.value));
     const adv = d.fields.filter((f) => !basic.includes(f));
+    // Simple by default, like an app store: only ask for what has no default (a folder or a password the app can't guess).
+    // Name, data folder, network, ports and the other fields wait under Customize.
+    const ask = basic.filter((f) => f.required && !String(f.value).trim() && f.type !== 'Device');
+    const rest = basic.filter((f) => !ask.includes(f));
     const links = [d.project && `<a href="${esc(d.project)}" target="_blank" rel="noopener">${t('Website')}</a>`,
       d.support && `<a href="${esc(d.support)}" target="_blank" rel="noopener">${t('Support')}</a>`].filter(Boolean).join(' · ');
     const body = $('#winBody');
@@ -3412,19 +3658,7 @@
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
       ${d.appdataMissing ? `<p class="lead temp-bad">${t('There is no folder for app data yet ({dir}). Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Open Settings → Storage')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
-        <label class="fld"><span>${t('Name')} <em class="req">*</em></span>
-          <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
-          <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
-        ${dataDirHtml(d, d.suggestedName)}
-        ${advToggleHtml()}
-        <div class="form" data-basic>
-        ${storeNetHtml(d)}
-        ${storeSections(basic, d)}
-        <div class="cf-list" id="storeExtra"></div>
-        <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Port')}</button></div>
-        ${adv.length ? `<details class="adv"><summary>${t('More settings ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
-        </div>
-        <div data-advanced hidden></div>
+        ${storeInstallFormInner(d, { basic, adv, ask, rest })}
         <p class="muted small">${t('Image: {image}. HomeBaseOS turns it into a compose file that you can later open in Dockge too.', { image: esc(d.image) })}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Install')}</button>
@@ -3432,6 +3666,7 @@
       </form>
       ${jobHtml()}`;
     const form = $('#storeForm', body);
+    if (experienceLevel() === 'expert') { const note = $('[data-install-note]', form); if (note) note.hidden = true; }
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
       // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared homebase network).
@@ -3488,6 +3723,15 @@
       lastName = n;
     });
     form.elements.__datadir.addEventListener('input', (e) => moveData(e.target.value.trim().replace(/(.)\/+$/, '$1')));
+    // The one-line summary of where the app goes, so you can install without opening Customize.
+    const note = $('[data-install-note]', form);
+    const drawNote = () => {
+      if (!note || note.hidden) return;
+      const dir = form.elements.__datadir.value.trim(), v = form.elements.__network.value;
+      note.textContent = v === 'host' ? t('Installs in {dir} and uses the server\'s network. Change this under Customize.', { dir })
+        : t('Installs in {dir} on the network {network}. Change this under Customize.', { dir, network: form.elements.__network.selectedOptions[0].textContent });
+    };
+    if (note) { form.addEventListener('input', drawNote); form.elements.__network.addEventListener('change', drawNote); drawNote(); }
     // What the simple form would install now (also the starting point for Advanced).
     const basicBody = () => {
       const values = {};
@@ -3511,12 +3755,14 @@
       if (!on) {
         if (!(await ask(t('Back to the simple fields? What you changed under Advanced will be lost.'), t('Back')))) { e.target.checked = true; return; }
         editor = null; box.hidden = true; box.innerHTML = ''; $('[data-basic]', form).hidden = false; form.elements.__name.readOnly = false; $('[data-datadir]', form).hidden = false;
+        const askBox = $('[data-ask]', form); if (askBox) askBox.hidden = false;
         return;
       }
       try {
         const b = basicBody();
         editor = await advancedEditor(box, b.name, { store: d.id, ...b });
         box.hidden = false; $('[data-basic]', form).hidden = true; form.elements.__name.readOnly = true;
+        const askBox = $('[data-ask]', form); if (askBox) askBox.hidden = true;
       } catch (ex) { e.target.checked = false; box.hidden = true; err.textContent = ex.message; }
     });
     form.addEventListener('advmode', (e) => { $('[data-datadir]', form).hidden = e.detail === 'code'; });
@@ -3585,6 +3831,9 @@
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
       ${d.appdataMissing ? `<p class="lead temp-bad">${t('There is no folder for app data yet ({dir}). Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Open Settings → Storage')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
+        ${experienceLevel() === 'expert' ? '' : `<p class="muted" data-install-note></p>
+        <details class="adv" data-custom><summary>${t('Customize')} <span class="muted small">${t('Name, folder, network, ports and more')}</span></summary>
+        <div class="form">`}
         <div class="fld-row">
           <label class="fld"><span>${t('Name')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.name)}">
             <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
@@ -3597,8 +3846,9 @@
           <button type="button" role="radio" aria-checked="true" data-cmode="fields">${t('Fields')}</button>
           <button type="button" role="radio" aria-checked="false" data-cmode="code">${t('Code')}</button></div></div>
         <div id="customCf"></div>
-        <div data-ccode hidden><textarea class="field code" rows="22" spellcheck="false" aria-label="${t('Compose file')}"></textarea>
+        <div data-ccode${experienceLevel() === 'expert' ? '' : ' hidden'}><textarea class="field code" rows="22" spellcheck="false" aria-label="${t('Compose file')}"></textarea>
           <small class="muted">${t('Exactly this file is installed. Docker Compose checks it first.')}</small></div>
+        ${experienceLevel() === 'expert' ? '' : '</div></details>'}
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Install')}</button>
           <button class="btn" type="button" data-close>${t('Cancel')}</button></div>
@@ -3623,6 +3873,15 @@
       lastName = n;
     });
     form.elements.__datadir.addEventListener('input', (e) => moveData(e.target.value.trim().replace(/(.)\/+$/, '$1')));
+    // The one-line summary of where the app goes, so you can install without opening Customize.
+    const note = $('[data-install-note]', form);
+    const drawNote = () => {
+      if (!note) return;
+      const dir = form.elements.__datadir.value.trim();
+      note.textContent = f.network === 'host' ? t('Installs in {dir} and uses the server\'s network. Change this under Customize.', { dir })
+        : t('Installs in {dir} on the network {network}. Change this under Customize.', { dir, network: f.network || t('Default (bridge)') });
+    };
+    if (note) { form.addEventListener('input', drawNote); form.addEventListener('change', drawNote); drawNote(); }
     const customBody = () => ({
       image: f.image, restart: f.restart, privileged: f.privileged, network: f.network || 'bridge', ip: (f.ip || '').trim(),
       ports: f.ports, volumes: f.volumes, env: f.env, devices: f.devices, labels: f.labels,
@@ -3665,7 +3924,6 @@
       $('#customImgForm', body).hidden = true;
       followJob(r.job, prettyName(name), body, null);
     });
-    form.elements.__name.focus();
   }
   $('#customAppBtn').addEventListener('click', () => customAppWindow());
 
@@ -3777,6 +4035,17 @@
     if (pop.open && popKindNow === 'store' && S.store) applyStore(S.store);
     if (pop.open && popKindNow === 'files') renderFiles();
   }
+  // Wizard language: save when possible, switch dictionary, redraw the open step (no full page reload).
+  async function onbSetLanguage(lang) {
+    if (!LANGS[lang] || lang === LANG) return;
+    if (!ONB.setup) {
+      try { await api.post('/api/settings', { language: lang }); }
+      catch (e) { throw new Error(t('Saving the language failed: {error}', { error: e.message })); }
+    }
+    if (S.config) S.config.language = lang;
+    setLang(lang);
+    applyLanguage();
+  }
 
   function generalPane(el) {
     const theme = themeNow(), clock = S.config.clock || 'auto';
@@ -3785,6 +4054,9 @@
       <h2 class="pane-title">${t('Language')}</h2>
       <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
       ${langSelect()}
+      <h2 class="pane-title">${t('Experience level')}</h2>
+      <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
+      <div class="experience-choices" role="radiogroup" aria-label="${t('Experience level')}">${experienceChoiceHtml(S.config.experience)}</div>
       <h2 class="pane-title">${t('Theme')}</h2>
       <p class="muted small">${t('Applies to this device only.')}</p>
       <div class="choice-row" role="radiogroup" aria-label="${t('Theme')}">${[['auto', t('Automatic')], ['light', t('Light (morning mist)')], ['dark', t('Dark (evening)')]].map(([k, name]) => `
@@ -3822,6 +4094,15 @@
     });
     el.onchange = async (e) => {
       if (e.target.name === 'theme') { setTheme(e.target.value); return; }
+      if (e.target.name === 'experience') {
+        try {
+          const r = await api.post('/api/settings', { experience: e.target.value });
+          S.config.experience = r.experience || e.target.value;
+          applyExperienceLevel();
+          toast(t('Experience level saved.'));
+        } catch (ex) { toast(ex.message, true); }
+        return;
+      }
       if (e.target.name === 'clock') {
         try {
           const r = await api.post('/api/settings', { clock: e.target.value });
@@ -6832,6 +7113,8 @@ sudo ./install.sh</pre></div>`}` : '') +
   function route() {
     const inSettings = settingsHash();
     const view = currentView();
+    const popKind = popKindOf(location.hash);
+    if (S.folder && (view !== 'home' || popKind || inSettings)) closeFolder();
     $('#desk').hidden = view !== 'home';
     $('#vmPage').hidden = view !== 'vms';
     $$('.nav-btn[data-open]').forEach((b) => {
@@ -6843,7 +7126,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const pageChanged = location.hash !== pageHash || !pageLoaded;
     pageHash = location.hash; pageLoaded = true;
     if (setWin.open) closeSettings();
-    const kind = popKindOf(location.hash);
+    const kind = popKind;
     if (kind !== popKindNow && win.open) win.close();
     if (view === 'vms') { closePop(); if (pageChanged) { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); } return; }
     if (kind === 'store') { showPop('store'); popKindNow = kind; loadStore(); return; }
@@ -6896,6 +7179,7 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   let timers = [];
   function startDesk() {
+    applyExperienceLevel();
     showDesk();
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
@@ -6919,9 +7203,14 @@ sudo ./install.sh</pre></div>`}` : '') +
   function collectNotes() {
     const out = [];
     const s = S.overview && S.overview.storage;
+    const diskNotes = (s && s.alerts) || [];
+    diskNotes.forEach((a, i) => {
+      const v = diskAlertView(a);
+      out.push({ id: 'disk:' + (a.serial || a.name || a.bay || i), level: 'bad', title: v.title, detail: v.detail, go: () => storageWindow() });
+    });
     const fix = s && s.repair && repairLine(s.repair);
-    if (fix) out.push({ id: 'repair', level: s.repair.state === 'rebuilding' || s.repair.state === 'replacing' ? 'warn' : 'bad', title: fix, detail: t('Storage'), go: () => storageWindow() });
-    else if (s && s.pools && s.health && s.health !== 'ONLINE') {
+    if (!diskNotes.length && fix) out.push({ id: 'repair', level: s.repair.state === 'rebuilding' || s.repair.state === 'replacing' ? 'warn' : 'bad', title: fix, detail: t('Storage'), go: () => storageWindow() });
+    else if (!diskNotes.length && s && s.pools && s.health && s.health !== 'ONLINE') {
       const [label] = poolHealth(s.health);
       out.push({ id: 'pool', level: s.health === 'DEGRADED' ? 'warn' : 'bad', title: t('Storage is {state}', { state: label }), detail: t('Storage'), go: () => storageWindow() });
     }
@@ -7280,7 +7569,7 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* ------------------------------------------------------------ welcome wizard (first time: create an account; afterwards after the first sign-in) */
   const onbWin = $('#onbWin');
-  const ONB = { steps: [], i: 0, dir: 1, data: null, setup: false, pool: null };
+  const ONB = { steps: [], i: 0, dir: 1, data: null, setup: false, pool: null, experience: 'beginner' };
   const HOUSE = '<svg viewBox="0 0 32 32"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>';
   const hero = (svg, line) => `<div class="onb-hero${line ? ' line' : ''}" aria-hidden="true">${svg}</div>`;
   const LOCK = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>';
@@ -7319,7 +7608,9 @@ sudo ./install.sh</pre></div>`}` : '') +
         const val = (n) => $(`input[name="${n}"]`, el).value;
         if (val('password').length < 10) throw new Error(t('Choose a password of at least 10 characters.'));
         if (val('password') !== val('repeat')) throw new Error(t('The two passwords do not match.'));
-        const r = await api.post('/api/setup', { user: val('user'), password: val('password'), repeat: val('repeat'), language: LANG });
+        const r = await api.post('/api/setup', { user: val('user'), password: val('password'), repeat: val('repeat'), language: LANG, experience: ONB.experience || 'beginner' });
+        S.config.experience = ONB.experience || 'beginner';
+        applyExperienceLevel();
         ONB.setup = false;
         S.config = { ...S.config, setup: false, passwordEnabled: true, needsLogin: false, loginUser: true };
         ONB.data = await api.get('/api/onboarding');
@@ -7365,15 +7656,35 @@ sudo ./install.sh</pre></div>`}` : '') +
             <h2 class="pane-title">${t('Theme')}</h2>
             <div class="choice-row" role="radiogroup" aria-label="${t('Theme')}">${[['auto', t('Automatic')], ['light', t('Light (morning mist)')], ['dark', t('Dark (evening)')]].map(([k, name]) => `
               <label class="choice"><input type="radio" name="theme" value="${k}"${k === themeNow() ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>`;
-          el.onchange = (e) => { if (e.target.name === 'theme') setTheme(e.target.value); };
+          el.onchange = async (e) => {
+            if (e.target.name === 'theme') { setTheme(e.target.value); return; }
+            if (e.target.name !== 'lang') return;
+            const sel = e.target, prev = LANG;
+            try { await onbSetLanguage(sel.value); }
+            catch (err) { toast(err.message, true); sel.value = prev; }
+          };
         },
         async next(el) {
-          const lang = $('select[name="lang"]', el).value;
-          if (lang === LANG) return true;
-          // Without an account it is not on the server yet: the language goes along when the account is created.
-          if (!ONB.setup) await api.post('/api/settings', { language: lang });
-          if (S.config) S.config.language = lang;
-          setLang(lang);
+          try { await onbSetLanguage($('select[name="lang"]', el).value); }
+          catch (e) { throw e; }
+          return true;
+        },
+        focus: false },
+      { id: 'experience', skip: true,
+        render(el) {
+          el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="19" cy="17" r="3"/></svg>', true) +
+            `<h1 id="onbTitle">${t('How do you want to use HomeBaseOS?')}</h1>
+            <p class="lead">${t('Choose how much detail HomeBaseOS shows. You can change this later in Settings → General.')}</p>
+            <div class="experience-choices" role="radiogroup" aria-label="${t('Experience level')}">${experienceChoiceHtml(ONB.experience || S.config.experience)}</div>`;
+        },
+        async next(el) {
+          const v = $('input[name="experience"]:checked', el).value;
+          ONB.experience = v;
+          if (!ONB.setup) {
+            const r = await api.post('/api/settings', { experience: v });
+            S.config.experience = r.experience || v;
+          } else S.config.experience = v;
+          applyExperienceLevel();
           return true;
         },
         focus: false },
@@ -7415,7 +7726,7 @@ sudo ./install.sh</pre></div>`}` : '') +
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>', true) +
             `<h1 id="onbTitle">${t('Storage')}</h1>
             <p class="lead">${pools.length ? t('HomeBaseOS found these storage pools. Your apps, VMs and shared folders go there.')
-              : t('A pool combines your disks into one large, protected storage (ZFS). Your apps, VMs and shared folders go there. Tick the disks and click Create pool, or skip this step.')}</p>
+              : t('Tap the disks you want to use together, then choose how to protect your files. Or skip this step for now.')}</p>
             ${pools.length ? `<ul class="onb-list">${pools.map((x) => `<li><span class="ok-mark">✓</span><span class="grow"><b>${esc(x.name)}</b></span>
               <span class="muted small">${x.total ? esc(bytes(x.total)) : ''}</span><span class="pill ${x.health === 'ONLINE' ? 'ok' : 'warn'}">${esc(tr(x.health || ''))}</span></li>`).join('')}</ul>
               ${d().appdata ? `<p class="muted small">${t('App data: {dir}', { dir: `<code>${esc(d().appdata)}</code>` })}</p>` : ''}` : ''}
@@ -7475,6 +7786,7 @@ sudo ./install.sh</pre></div>`}` : '') +
               ${row(d().pools.length > 0, t('Storage'), d().pools.length ? d().pools.map((x) => x.name).join(', ') : t('No pool yet'))}
               ${row(!!d().appdata, t('App data'), d().appdata || t('No place yet'))}
               ${row(d().mfa, t('Two-step verification'), d().mfa ? t('On') : t('Off'))}
+              ${row(true, t('Experience level'), experienceLevel() === 'expert' ? t('Expert') : t('Beginner'))}
             </ul>
             <h2 class="pane-title">${t('What\'s next?')}</h2>
             <div class="onb-next-links">
@@ -7494,6 +7806,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   async function openOnboarding(startAt = 0) {
     ONB.setup = !!S.config.setup;
+    ONB.experience = (S.config && S.config.experience) || ONB.experience || 'beginner';
     // Without an account the server reveals nothing yet: the data comes after the "account" step.
     if (ONB.setup) ONB.data = null;
     else { try { ONB.data = await api.get('/api/onboarding'); } catch (e) { toast(e.message, true); return; } }
@@ -7501,7 +7814,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     let resume = null;
     try { resume = sessionStorage.getItem('tb-onb-step'); sessionStorage.removeItem('tb-onb-step'); } catch (e) { /* private window */ }
     ONB.i = Math.min(ONB.steps.length - 1, resume != null ? Number(resume) || 0 : startAt);
-    if (ONB.setup) ONB.i = Math.min(ONB.i, 1); // the account first
+    if (ONB.setup) ONB.i = Math.min(ONB.i, 2); // welcome and experience before the account
     ONB.dir = 1;
     document.body.classList.add('onb-open'); // only the wizard, without the dashboard behind it
     if (!onbWin.open) onbWin.showModal();
@@ -7515,7 +7828,10 @@ sudo ./install.sh</pre></div>`}` : '') +
     body.scrollTop = 0;
     const el = $('.onb-step', body);
     $('#onbBack').style.visibility = ONB.i === 0 ? 'hidden' : '';
+    $('#onbBack').textContent = t('Previous');
     $('#onbSkip').hidden = !st.skip;
+    $('#onbSkip').textContent = t('Skip');
+    $('#onbLater').textContent = t('Set up later');
     $('#onbNext').textContent = st.nextLabel || t('Next');
     // Without an account you can't postpone the wizard: without an account you get in nowhere.
     $('#onbLater').hidden = ONB.i === ONB.steps.length - 1 || ONB.setup;
@@ -7554,11 +7870,15 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } }
   function demoClock() { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } }
+  function demoExperience() {
+    try { const v = localStorage.getItem('tb-experience'); return EXPERIENCE_LEVELS.has(v) ? v : 'beginner'; } catch (e) { return 'beginner'; }
+  }
   function demoWebPort() { try { const n = Number(localStorage.getItem('tb-port')); if (Number.isInteger(n) && n >= 1 && n <= 65535) return n; } catch (e) { /* private window */ } return 80; }
   // The demo starts like a new server: first create an account (until the wizard has been finished once).
   function useDemo() {
     api = translatedApi(window.HomeBaseOSDemo);
-    S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), port: demoWebPort(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
+    S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
+    applyExperienceLevel();
     startDesk();
   }
 
@@ -7599,6 +7919,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const open = e.target.closest('[data-open]');
     if (open) {
       if (open.dataset.open === 'ai' && S.ai && S.ai.enabled === false) return;
+      closeFolder();
       ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
       return;
     }
@@ -7729,6 +8050,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     let cfg;
     try { cfg = await realApi.get('/api/config'); } catch (e) { return useDemo(); } // no server: static demo
     S.config = cfg;
+    applyExperienceLevel();
     if (cfg.demo) return useDemo(); // in the demo the browser keeps the language itself
     // No account yet: only the welcome wizard (you choose the language there; the server's applies only afterwards).
     if (cfg.setup) { setChrome(false); return openOnboarding(0); }
