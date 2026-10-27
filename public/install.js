@@ -11,10 +11,22 @@
     const d = DICTS[LANG];
     return fill(d && d[s] != null ? d[s] : s, vars);
   }
-  function setLang(code) {
+  const langLoads = {};
+  async function setLang(code) {
     LANG = LANGS[code] ? code : 'en';
     document.documentElement.lang = LANG;
     try { localStorage.setItem('tb-lang', LANG); } catch (e) { /* private window */ }
+    if (LANG === 'en' || DICTS[LANG]) return;
+    if (!langLoads[LANG]) {
+      langLoads[LANG] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'lang/' + LANG + '.js';
+        s.onload = () => { delete langLoads[LANG]; resolve(); };
+        s.onerror = () => { delete langLoads[LANG]; reject(new Error('Could not load the language.')); };
+        document.head.appendChild(s);
+      });
+    }
+    await langLoads[LANG];
   }
 
   const MARK = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>';
@@ -46,6 +58,7 @@
     const root = $('#inst');
     if (state.unavailable) {
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Install HomeBaseOS'))}</h1><p class="lead">${esc(t('This page is the installer. Start the computer from the HomeBaseOS USB stick to use it.'))}</p></section>`;
+      uiReady();
       return;
     }
     if (state.step === 'lang') {
@@ -96,11 +109,14 @@
         <p class="inst-error" role="alert">${esc(failed ? '' : state.error)}</p>
         ${failed ? actions(btn(t('Try again'), 'data-go="disk"', true)) : (state.step === 'done' ? actions(btn(t('Restart'), 'data-go="reboot"', true)) : '')}</section>`;
     }
+    uiReady();
   }
 
   // The boot logo stays up until this screen has been painted. One ping is enough.
   function uiReady() {
-    if (uiReady.sent || !state.installer || state.step !== 'lang') return;
+    if (uiReady.sent || !state.installer) return;
+    const root = $('#inst');
+    if (!root || !root.firstElementChild) return;
     uiReady.sent = true;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       fetch('/api/install/ui-ready', { method: 'POST' }).catch(() => {});
@@ -172,7 +188,7 @@
 
   $('#inst').addEventListener('click', (e) => {
     const lang = e.target.closest('[data-lang]');
-    if (lang) { setLang(lang.dataset.lang); draw(); return; }
+    if (lang) { void setLang(lang.dataset.lang).then(draw).catch((err) => { state.error = err.message; draw(); }); return; }
     const disk = e.target.closest('[data-disk]');
     if (disk && !disk.disabled) { state.disk = disk.dataset.disk; state.error = ''; draw(); return; }
     const goBtn = e.target.closest('[data-go]');
@@ -207,7 +223,7 @@
       api = window.HomeBaseOSDemo;
     } else if (cfg.installer) { api = realApi(); state.installer = true; }
     else { state.unavailable = true; draw(); return; }
-    try { setLang(localStorage.getItem('tb-lang') || 'en'); } catch (e) { setLang('en'); }
+    try { await setLang(localStorage.getItem('tb-lang') || 'en'); } catch (e) { await setLang('en'); }
     draw();
   }
   boot();
