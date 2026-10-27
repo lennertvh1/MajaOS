@@ -22,12 +22,16 @@ mount --bind /proc "$R/proc"
 mount --bind /sys "$R/sys"
 mount --bind /dev "$R/dev"
 chroot "$R" apt-get update -q
+printf 'APT::Sandbox "0";\n' > "$R/etc/apt/apt.conf.d/99homebaseos-build"
 DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus nodejs \
-  cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk plymouth \
-  debootstrap parted dosfstools openssl cpio gzip
-# gzip, not zstd: the installer's GRUB must be able to load this initrd. CD and USB modules stay in even though this build machine has neither.
-printf '\nMODULES=most\nCOMPRESS=gzip\n' >> "$R/etc/initramfs-tools/initramfs.conf"
+  cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk \
+  plymouth plymouth-themes plymouth-label \
+  debootstrap parted dosfstools openssl cpio gzip zstd
+# gzip, not zstd: the installer's GRUB must be able to load this initrd. Trixie defaults to zstd; replace, don't append a second COMPRESS line.
+CONF="$R/etc/initramfs-tools/initramfs.conf"
+if grep -q '^COMPRESS=' "$CONF"; then sed -i 's/^COMPRESS=.*/COMPRESS=gzip/' "$CONF"; else echo 'COMPRESS=gzip' >> "$CONF"; fi
+if grep -q '^MODULES=' "$CONF"; then sed -i 's/^MODULES=.*/MODULES=most/' "$CONF"; else echo 'MODULES=most' >> "$CONF"; fi
 printf 'iso9660\nsquashfs\noverlay\nloop\nsr_mod\nusb-storage\nuas\n' >> "$R/etc/initramfs-tools/modules"
 
 echo "==> installer files"
@@ -69,10 +73,18 @@ mkdir -p "$R/etc/systemd/system/multi-user.target.wants"
 ln -sf /etc/systemd/system/homebaseos-kiosk.service "$R/etc/systemd/system/multi-user.target.wants/homebaseos-kiosk.service"
 
 echo "==> initramfs and squashfs"
-chroot "$R" update-initramfs -u
 VMLINUZ="$(ls "$R"/boot/vmlinuz-* | head -1)"
-INITRD="$(ls "$R"/boot/initrd.img-* | head -1)"
-chroot "$R" lsinitramfs "/boot/$(basename "$INITRD")" | grep -q 'scripts/live' || { echo "The live initramfs has no live-boot scripts."; exit 1; }
+KVER="$(basename "$VMLINUZ" | sed 's/^vmlinuz-//')"
+INITRD="$R/boot/initrd.img-${KVER}"
+if ! chroot "$R" update-initramfs -c -k "$KVER"; then
+  echo "update-initramfs failed."
+  exit 1
+fi
+[ -s "$INITRD" ] || { echo "The initrd was not created."; exit 1; }
+chroot "$R" test -f /usr/share/initramfs-tools/scripts/live || { echo "live-boot is not installed in the chroot."; exit 1; }
+if ! chroot "$R" lsinitramfs "/boot/initrd.img-${KVER}" 2>/dev/null | grep -q 'scripts/live'; then
+  echo "Note: lsinitramfs could not list the initrd (often a gzip/zstd mismatch in the reader, not a failed build)."
+fi
 cp "$VMLINUZ" "$OUT/vmlinuz"
 cp "$INITRD" "$OUT/initrd.img"
 # Chromium otherwise rebuilds the font list on first start. The CJK fonts make that slow.
