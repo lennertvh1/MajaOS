@@ -48,11 +48,11 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.doesNotMatch(live, /chromium/);
   assert.match(read('plymouth/homebaseos.script'), /bar.png/);
   assert.match(kiosk, /retain-splash/);
-  assert.match(kiosk, /ui-ready/);
-  assert.match(kiosk, /hide_splash_when_ready/);
+  assert.match(kiosk, /kiosk=1/);
   assert.match(kiosk, /open_screen pixman/);
   assert.match(kiosk, /--platform=wl/);
-  assert.match(read('serve.js'), /ui-ready/);
+  assert.match(live, /PAMName=login/);
+  assert.match(live, /TTYPath=\/dev\/tty1/);
   assert.doesNotMatch(live, /TTYReset=yes/);
   assert.match(live, /Type=simple/);
   assert.match(live, /-comp zstd/);

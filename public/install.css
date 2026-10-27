@@ -34,3 +34,5 @@
 .inst details { margin-top: 12px; color: var(--muted); font-size: .9rem; }
 .inst pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; margin: 8px 0 0; }
 @media (max-width: 520px) { .lang-grid { grid-template-columns: 1fr; } .inst-card { padding: 22px 16px; } }
+/* Software rendering on the USB stick: a blurred card makes every click slow. */
+.kiosk .inst-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--glass-strong); }

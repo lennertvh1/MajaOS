@@ -24,7 +24,7 @@ mount --bind /dev "$R/dev"
 chroot "$R" apt-get update -q
 printf 'APT::Sandbox "0";\n' > "$R/etc/apt/apt.conf.d/99homebaseos-build"
 DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
-  linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus nodejs \
+  linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus libpam-systemd nodejs \
   cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk \
   plymouth plymouth-themes plymouth-label \
   debootstrap parted dosfstools openssl cpio gzip zstd
@@ -51,6 +51,9 @@ printf '[Daemon]\nTheme=homebaseos\nShowDelay=0\n' > "$R/etc/plymouth/plymouthd.
 chroot "$R" plymouth-set-default-theme homebaseos || ln -sf homebaseos/homebaseos.plymouth "$R/usr/share/plymouth/themes/default.plymouth"
 chroot "$R" systemctl mask plymouth-quit.service plymouth-quit-wait.service || true
 chroot "$R" systemctl mask getty@tty1.service || true
+# Ctrl+Alt+F2 opens a root shell, to read /tmp/homebaseos-installer.log when the screen misbehaves.
+mkdir -p "$R/etc/systemd/system/getty@tty2.service.d"
+printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %%I $TERM\n' > "$R/etc/systemd/system/getty@tty2.service.d/autologin.conf"
 
 cat > "$R/etc/systemd/system/homebaseos-kiosk.service" <<'EOF'
 [Unit]
@@ -60,6 +63,13 @@ Wants=systemd-logind.service
 [Service]
 ExecStart=/opt/homebaseos-installer/iso/kiosk.sh
 Type=simple
+# A logind session on tty1: without it cage gets the screen but no mouse or keyboard.
+# No TTYReset or TTYVHangup: those clear the boot logo.
+User=root
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+UtmpIdentifier=tty1
 StandardOutput=journal
 StandardError=journal
 Environment=XDG_RUNTIME_DIR=/run/user/0

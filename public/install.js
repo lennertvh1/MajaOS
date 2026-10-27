@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
+  // The USB stick draws this page with software rendering: no blur there (iso/kiosk.sh).
+  if (/[?&]kiosk=1\b/.test(location.search)) document.documentElement.classList.add('kiosk');
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const LANGS = window.TB_LANGS || { en: { name: 'English', locale: 'en-GB' } };
   const DICTS = window.TB_LANG || {};
@@ -58,7 +60,6 @@
     const root = $('#inst');
     if (state.unavailable) {
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Install HomeBaseOS'))}</h1><p class="lead">${esc(t('This page is the installer. Start the computer from the HomeBaseOS USB stick to use it.'))}</p></section>`;
-      uiReady();
       return;
     }
     if (state.step === 'lang') {
@@ -66,7 +67,6 @@
         `<button type="button" data-lang="${esc(code)}" aria-pressed="${code === LANG ? 'true' : 'false'}">${esc(info.name)}</button>`).join('');
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Choose your language'))}</h1><div class="lang-grid">${items}</div>
         ${actions(btn(t('Continue'), 'data-go="welcome"', true))}</section>`;
-      uiReady();
       return;
     }
     if (state.step === 'welcome') {
@@ -109,18 +109,6 @@
         <p class="inst-error" role="alert">${esc(failed ? '' : state.error)}</p>
         ${failed ? actions(btn(t('Try again'), 'data-go="disk"', true)) : (state.step === 'done' ? actions(btn(t('Restart'), 'data-go="reboot"', true)) : '')}</section>`;
     }
-    uiReady();
-  }
-
-  // The boot logo stays up until this screen has been painted. One ping is enough.
-  function uiReady() {
-    if (uiReady.sent || !state.installer) return;
-    const root = $('#inst');
-    if (!root || !root.firstElementChild) return;
-    uiReady.sent = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      fetch('/api/install/ui-ready', { method: 'POST' }).catch(() => {});
-    }));
   }
 
   // Later polls only change the text and the bar. Rebuilding the card closed Details on every tick.

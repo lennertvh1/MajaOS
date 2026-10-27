@@ -79,11 +79,6 @@ const server = http.createServer(async (req, res) => {
       child.on('exit', () => { child = null; });
       return send(res, 200, { started: true });
     }
-    if (url.pathname === '/api/install/ui-ready' && req.method === 'POST') {
-      fs.mkdirSync(DIR, { recursive: true });
-      fs.writeFileSync(path.join(DIR, 'ui-ready'), '1');
-      return send(res, 200, { ok: true });
-    }
     if (url.pathname === '/api/install/reboot' && req.method === 'POST') {
       spawn('systemctl', ['reboot'], { detached: true, stdio: 'ignore' }).unref();
       return send(res, 200, { ok: true });
