@@ -1,7 +1,8 @@
 Window.SetBackgroundTopColor(0.063, 0.102, 0.200);
 Window.SetBackgroundBottomColor(0.063, 0.102, 0.200);
 
-logo.image = Image("logo.png");
+# 256 px is too big on a small VM screen.
+logo.image = Image("logo.png").Scale(128, 128);
 logo.sprite = Sprite(logo.image);
 
 # Keeps moving until Cog replaces this screen. It never quite finishes on its own.

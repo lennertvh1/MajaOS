@@ -24,11 +24,13 @@ fi
 
 # pixman first: works in VMs without GPU passthrough; gles2 when a GPU is available.
 open_screen() {
-  WLR_RENDERER="$1" cage -s -- cog --platform=wl --bg-color='#101a33' --doc-viewer \
+  WLR_RENDERER="$1" cage -s -D -- cog --platform=wl --bg-color='#101a33' --doc-viewer \
     --webprocess-failure=restart "$url" >>/tmp/homebaseos-installer.log 2>&1
 }
 
 if command -v cage >/dev/null && command -v cog >/dev/null; then
+  # For when the mouse or keyboard does nothing: what the kernel sees, and whether this runs in a session.
+  { echo "== input devices"; grep -E '^(N|H):' /proc/bus/input/devices; echo "== sessions"; loginctl list-sessions --no-pager; } >>/tmp/homebaseos-installer.log 2>&1
   # cage needs the screen. --retain-splash leaves the logo on it until the page paints over it.
   plymouth quit --retain-splash 2>/dev/null || true
   open_screen pixman || open_screen gles2 || true
