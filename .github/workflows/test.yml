@@ -1,6 +1,6 @@
 # Checks every push to dev and main, and every pull request: syntax of all JavaScript and shell scripts, and the tests.
-# On dev a test ISO is built as well (an artifact to download from the run, kept 14 days; never a release):
-# the same --live image as a release, for every push that changes the installer, or by hand (Actions > Test > Run workflow).
+# On dev, pushes that touch the installer run a live ISO build as a smoke test (no upload — ISOs are huge and eat Actions artifact quota).
+# To download a test ISO: Actions > Test > Run workflow (branch dev, "Also build a test ISO" on). Upload is only on manual runs (7 days).
 # Test servers follow the dev branch through Settings > Software update > Development.
 name: Test
 
@@ -43,7 +43,7 @@ jobs:
         id: changed
         if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
         run: |
-          if git diff --name-only HEAD~1 HEAD | grep -qE '^(iso/|install\.sh|deploy/)'; then echo "iso=true" >> "$GITHUB_OUTPUT"; fi
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^(iso/|install\.sh|deploy/|public/install\.(html|js))'; then echo "iso=true" >> "$GITHUB_OUTPUT"; fi
 
     outputs:
       iso: ${{ steps.changed.outputs.iso == 'true' || (github.event_name == 'workflow_dispatch' && inputs.iso) }}
@@ -70,8 +70,15 @@ jobs:
         run: sudo ./iso/build-iso.sh --live --out dist
 
       - name: Upload as an artifact
+        if: github.event_name == 'workflow_dispatch' && inputs.iso
         uses: actions/upload-artifact@v5
         with:
           name: homebaseos-test-iso-${{ github.sha }}
           path: dist/*
-          retention-days: 14
+          retention-days: 7
+
+      - name: ISO built (no upload on push)
+        if: github.event_name == 'push'
+        run: |
+          ls -lh dist/
+          echo "Push builds verify the ISO only. To download: Actions → Test → Run workflow on dev with a free artifact quota."
