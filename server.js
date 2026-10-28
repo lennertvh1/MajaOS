@@ -137,7 +137,7 @@ function sendJson(res, status, obj) {
 
 async function readBody(req, limit = 1e6) {
   const chunks = []; let size = 0;
-  for await (const c of req) { size += c.length; if (size > limit) throw new Error('Request too large'); chunks.push(c); }
+  for await (const c of req) { size += c.length; if (size > limit) { const e = new Error('Request too large'); e.status = 413; throw e; } chunks.push(c); }
   const text = Buffer.concat(chunks).toString('utf8');
   if (!text) return {};
   try { return JSON.parse(text); } catch { const e = new Error('Invalid JSON'); e.status = 400; throw e; }
@@ -146,17 +146,23 @@ async function readBody(req, limit = 1e6) {
 /* ---------------------------------------------------------------- auth */
 
 function sign(value) { return crypto.createHmac('sha256', CFG.secret).update(value).digest('hex'); }
-function makeToken() { const v = 'ok.' + Date.now(); return v + '.' + sign(v); }
-function validToken(tok) {
-  if (!tok) return false;
+const SESSION_MS = 30 * 24 * 3600 * 1000;
+// ok.<issued>.<id>.<signature>: the id lets Sign out refuse this one cookie afterwards.
+function makeToken() { const v = 'ok.' + Date.now() + '.' + crypto.randomBytes(9).toString('base64url'); return v + '.' + sign(v); }
+function readToken(tok) {
+  if (!tok) return null;
   const i = tok.lastIndexOf('.');
-  if (i < 0) return false;
+  if (i < 0) return null;
   const v = tok.slice(0, i), s = tok.slice(i + 1);
   const expected = sign(v);
-  if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return false;
-  const issued = Number(v.split('.')[1]);
-  // Valid for 30 days, and not from before two-step verification was turned on.
-  return Date.now() - issued < 30 * 24 * 3600 * 1000 && issued >= auth.sessionsAfter();
+  if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return null;
+  const [, issued, id] = v.split('.');
+  return { issued: Number(issued), id: id || '' };
+}
+function validToken(tok) {
+  const t = readToken(tok);
+  // Valid for 30 days, not from before the last password change or two-step verification, and not signed out.
+  return !!t && Date.now() - t.issued < SESSION_MS && t.issued >= auth.sessionsAfter() && !auth.isRevoked(t.id);
 }
 function cookies(req) {
   const out = {};
@@ -178,8 +184,10 @@ function checkPassword(pw) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 // Without "Stay signed in" the cookie disappears when the browser closes.
+// Secure when the browser came over https (directly, or through a reverse proxy that says so).
+const viaHttps = (req) => !!(req.socket.encrypted || /^https$/i.test(String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()));
 function setSession(res, remember) {
-  res.setHeader('Set-Cookie', `tb_session=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/` + (remember === false ? '' : '; Max-Age=2592000'));
+  res.setHeader('Set-Cookie', `tb_session=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/` + (remember === false ? '' : '; Max-Age=2592000') + (viaHttps(res.req) ? '; Secure' : ''));
 }
 const slow = () => new Promise((r) => setTimeout(r, 800)); // slow down guessing
 const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
@@ -223,7 +231,7 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       demo: CFG.demo, passwordEnabled: passwordEnabled(), needsLogin: passwordEnabled() && !isAuthed(req), ollama: ai.effective().provider === 'ollama',
       setup: needsSetup(), // no account yet: the welcome wizard creates one
-      loginUser: !!auth.userName(), // sign in with a user name (older accounts don't have one)
+      loginUser: true, // always a user name; older installs keep the one typed at their first sign-in
       language: settings.getSettings().language, clock: settings.getSettings().clock, experience: settings.getSettings().experience, port: settings.listenPort(),
       terminal: settings.getSettings().terminal, terminalPassword: settings.getSettings().terminalPassword && passwordEnabled(),
       onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // show the welcome wizard
@@ -248,7 +256,8 @@ async function handleApi(req, res, url) {
     if (auth.lockedFor(ip)) return sendJson(res, 429, { error: 'Too many wrong attempts. Wait 5 minutes and try again.' });
     if (p === '/api/login') {
       if (needsSetup()) return sendJson(res, 409, { error: 'There is no account yet. Create one first.', setup: true });
-      if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: auth.userName() ? 'Wrong user name or password' : 'Wrong password' }); }
+      if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
+      auth.claimUser(body.user);
       if (auth.mfaEnabled()) return sendJson(res, 200, { mfa: true, pending: auth.newPending() });
     } else {
       const r = auth.usePending(body.pending, body.code);
@@ -261,6 +270,8 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true });
   }
   if (p === '/api/logout' && method === 'POST') {
+    const t = readToken(cookies(req).tb_session);
+    if (t) auth.revoke(t.id, t.issued + SESSION_MS);
     res.setHeader('Set-Cookie', 'tb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return sendJson(res, 200, { ok: true });
   }
@@ -644,7 +655,11 @@ function serveStatic(req, res, url) {
     // The browser checks each time whether the file changed (304 if it is the same),
     // so a new version of HomeBaseOS shows up right after a normal refresh.
     const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
-    const headers = { 'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
+    // No other site may show these pages in a frame (clickjacking). The console window is the same origin.
+    const headers = {
+      'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
+      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'",
+    };
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
     fs.readFile(file, (err, buf) => {
       if (err) { res.writeHead(404); return res.end('Not found'); }
@@ -678,6 +693,7 @@ function onRequest(req, res) {
     return url.pathname.startsWith('/api/') ? handleApi(req, res, url) : serveStatic(req, res, url);
   }).catch((e) => {
     const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 502;
+    if (status === 413 && !res.headersSent) res.setHeader('Connection', 'close'); // the rest of the body is not read
     if (!res.headersSent) sendJson(res, status, { ...(e.data || {}), error: e.message || 'Unknown error' });
     else res.end();
   });

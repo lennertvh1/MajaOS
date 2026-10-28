@@ -182,3 +182,43 @@ test('creating an account the first time (user name + password)', () => {
   assert.equal(auth.userName(), 'lennert');
   assert.equal(auth.verifyPassword('another long password here'), true);
 });
+
+test('older installs without a user name keep the one typed at the first sign-in', () => {
+  fs.rmSync(path.join(process.env.DATA_DIR, 'auth.json'), { force: true });
+  auth._reset();
+  auth.setPassword('correct horse battery staple');
+  assert.equal(auth.userName(), null);
+  assert.equal(auth.checkUser(''), false); // a user name is always needed
+  assert.equal(auth.checkUser('1x'), false);
+  assert.equal(auth.checkUser('Freddy'), true);
+  auth.claimUser('Freddy');
+  assert.equal(auth.userName(), 'freddy');
+  assert.equal(auth.checkUser('someone'), false);
+  auth.claimUser('someone'); // only the first one counts
+  assert.equal(auth.userName(), 'freddy');
+});
+
+test('IPv6 is blocked per /64, and an attack from many addresses blocks everyone', () => {
+  auth._reset();
+  const t0 = 1e12;
+  assert.equal(auth.ipKey('2001:db8:1:2::9'), auth.ipKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
+  assert.notEqual(auth.ipKey('2001:db8:1:2::9'), auth.ipKey('2001:db8:1:3::9'));
+  for (let i = 0; i < 10; i++) auth.failed('2001:db8:1:2::' + (i + 1).toString(16), t0 + i);
+  assert.equal(auth.lockedFor('2001:db8:1:2::ffff', t0 + 20), 300);
+  assert.equal(auth.lockedFor('2001:db8:1:3::1', t0 + 20), 0);
+  auth._reset();
+  for (let i = 0; i < 100; i++) auth.failed('10.1.' + Math.floor(i / 9) + '.' + (i % 9), t0 + i);
+  assert.equal(auth.lockedFor('192.168.1.10', t0 + 200), 300);
+  auth._reset();
+});
+
+test('a signed out session stays refused, also after a restart', () => {
+  auth._reset();
+  auth.revoke('abc', Date.now() + 60000);
+  auth.revoke('old', Date.now() - 1);
+  assert.equal(auth.isRevoked('abc'), true);
+  assert.equal(auth.isRevoked('old'), false);
+  assert.equal(auth.isRevoked(''), false);
+  auth._reset(); // reads auth.json again
+  assert.equal(auth.isRevoked('abc'), true);
+});

@@ -7981,9 +7981,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (two) setRecoveryMode(false);
     else {
       mfaPending = null; $('#pw').value = '';
-      const withUser = !!(S.config && S.config.loginUser);
-      $('#userLabel').hidden = !withUser; $('#user').hidden = !withUser; $('#user').required = withUser;
-      (withUser && !$('#user').value ? $('#user') : $('#pw')).focus();
+      (!$('#user').value ? $('#user') : $('#pw')).focus();
     }
   }
   function setRecoveryMode(on) {

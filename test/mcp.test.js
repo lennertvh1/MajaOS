@@ -88,7 +88,7 @@ test('the connector address signs in with PKCE and then answers MCP', async () =
     checkPassword: (pw) => pw === 'secret', passwordEnabled: () => true, needsSetup: () => false,
     language: () => 'en', clientIp: () => '1.2.3.4', slow: async () => {},
     auth: {
-      userName: () => 'admin', checkUser: (name) => name === 'admin', lockedFor: () => false,
+      userName: () => 'admin', checkUser: (name) => name === 'admin', claimUser() {}, sessionsAfter: () => 0, lockedFor: () => false,
       failed() {}, succeeded() {}, mfaEnabled: () => false, newPending: () => 'pend', usePending: () => ({ result: 'ok' }),
     },
   };
