@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Installs the newest commit of a branch (default dev) on this server and switches Software update to that channel.
+# Installs the newest commit of a branch (default dev), or a release tag, on this server and switches Software update along.
 # For a test server: run it once to get onto the dev channel; after that "Update now" follows the branch by itself.
 # Usage:  sudo bash install-branch.sh [branch]        (main = back to official releases)
+#         sudo bash install-branch.sh v0.1.0-beta.1   (a release: then the Beta channel, or Stable for vX.Y.Z)
 #         From the MajaOS terminal (already root): bash /opt/majaos/deploy/install-branch.sh dev
+# Also works on a server from before the rename (HomeBaseOS): install.sh moves it to MajaOS.
 # Uses UPDATE_REPO and UPDATE_TOKEN from /etc/majaos/majaos.env.
 set -euo pipefail
 BRANCH="${1:-dev}"
@@ -16,15 +18,20 @@ if [ -z "${HB_DETACHED:-}" ] && command -v systemd-run >/dev/null 2>&1; then
   exec systemd-run --quiet --collect --pipe --wait --unit="majaos-branch-$(date +%s)" -E HB_DETACHED=1 \
     /bin/bash "$(readlink -f "$0")" "$BRANCH"
 fi
-[ -f "$ENV" ] || { echo "$ENV is missing: install MajaOS first."; exit 1; }
+# A HomeBaseOS server still has its settings under the old name until install.sh below renames it.
+READ_ENV="$ENV"; [ -f "$READ_ENV" ] || READ_ENV=/etc/homebaseos/homebaseos.env
+[ -f "$READ_ENV" ] || { echo "$ENV is missing: install MajaOS first."; exit 1; }
 [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid branch name: $BRANCH"; exit 1; }
-REPO="$(sed -n 's/^UPDATE_REPO=//p' "$ENV" | tail -1)"; REPO="${REPO:-lennertvh1/MajaOS}"
-TOKEN="$(sed -n 's/^UPDATE_TOKEN=//p' "$ENV" | tail -1)"
+REPO="$(sed -n 's/^UPDATE_REPO=//p' "$READ_ENV" | tail -1)"; REPO="${REPO:-lennertvh1/MajaOS}"
+[ "$REPO" = lennertvh1/homebaseos ] && REPO=lennertvh1/MajaOS  # the repository was renamed too
+TOKEN="$(sed -n 's/^UPDATE_TOKEN=//p' "$READ_ENV" | tail -1)"
+# A tag like v0.1.0 or v0.1.0-beta.1 is a release, not a branch to follow.
+RELEASE=0; [[ "$BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]] && RELEASE=1
 AUTH=(); [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
 
 echo "==> Newest commit of $BRANCH in $REPO"
 SHA="$(curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" "https://api.github.com/repos/$REPO/commits/$BRANCH")" \
-  || { echo "The branch can't be read. Is UPDATE_TOKEN set in $ENV (private repository)?"; exit 1; }
+  || { echo "$BRANCH can't be read in $REPO. Is UPDATE_TOKEN set in $READ_ENV (private repository)?"; exit 1; }
 echo "    $SHA"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -35,8 +42,11 @@ echo "==> Installing (install.sh)"
 ARGS=(); command -v nvidia-smi >/dev/null 2>&1 && ARGS+=(--nvidia)
 bash "$TMP/install.sh" "${ARGS[@]}"
 
-# Remember which commit this is, and the update channel: dev follows the branch, main = official releases (stable).
-if [ "$BRANCH" = main ]; then
+# Remember which commit this is, and the update channel: dev follows the branch, main = official releases (stable),
+# a release tag = beta (pre-release) or stable.
+if [ "$RELEASE" = 1 ]; then
+  rm -f /opt/majaos/build.json; CHANNEL=stable; [[ "$BRANCH" == *-* ]] && CHANNEL=beta
+elif [ "$BRANCH" = main ]; then
   rm -f /opt/majaos/build.json; CHANNEL=stable
 else
   printf '{\n  "branch": "%s",\n  "commit": "%s",\n  "date": "%s"\n}\n' "$BRANCH" "$SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /opt/majaos/build.json
