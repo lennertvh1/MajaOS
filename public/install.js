@@ -80,7 +80,7 @@
     }
     if (state.step === 'network') {
       const n = state.net, f = form();
-      const head = `<section class="inst-card">${brand()}<h1>${esc(t('Network'))}</h1>
+      const head = `<section class="inst-card wide">${brand()}<h1>${esc(t('Network'))}</h1>
         <p class="lead">${esc(t('MajaOS needs the internet to install. Choose a network card and how it gets its address.'))}</p>`;
       if (!n || (n.cards.length && !f)) {
         root.innerHTML = head + `<p class="lead">${esc(state.error || t('Looking for network cards…'))}</p>
@@ -91,18 +91,19 @@
         const cf = state.netForms[c.name];
         return cf.mode === 'off' ? t('Not used') : cf.mode === 'static' ? t('Fixed address') : t('DHCP');
       };
-      const cards = n.cards.length ? n.cards.map((c) => `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
-          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span data-card-info>${cardInfo(c)}</span></span>
-          <span class="net-mode">${esc(summary(c))}</span></button>`).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
+      // Side by side as tiles, so the details fit and choosing a fixed address needs no scrolling.
+      const cards = n.cards.length ? `<div class="net-grid">${n.cards.map((c) => `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
+          <span class="net-top"><span class="disk-ico">${NET}</span><b>${esc(c.name)}</b><span class="net-mode">${esc(summary(c))}</span></span>
+          <span class="net-lines" data-card-info>${cardInfo(c)}</span></button>`).join('')}</div>` : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
       const shown = shownErrors(state.netSel);
       const field = (name, label, hint) => `<label class="inst-field"><span>${esc(label)}</span>
         <input class="field" name="${name}" value="${esc(f[name])}" placeholder="${esc(hint)}" autocomplete="off" spellcheck="false" inputmode="decimal"${shown[name] ? ' aria-invalid="true"' : ''}>
         <span class="inst-field-err" data-err="${name}">${esc(shown[name] ? t(shown[name]) : '')}</span></label>`;
-      const fixed = f && f.mode === 'static' ? `<div class="inst-fields">
-          ${field('address', t('IP address'), t('For example 192.168.1.10/24'))}
-          ${field('gateway', t('Gateway'), t('Usually your router, for example 192.168.1.1'))}
-          ${field('dns', t('DNS servers'), t('For example 1.1.1.1 9.9.9.9'))}
+      const fixed = f && f.mode === 'static' ? `<div class="inst-fields three">
+          ${field('address', t('IP address'), '192.168.1.10/24')}
+          ${field('gateway', t('Gateway'), '192.168.1.1')}
+          ${field('dns', t('DNS servers'), '1.1.1.1 9.9.9.9')}
           <p class="inst-hint">${esc(t('Leave the gateway empty on a card without internet, for example a direct cable to another computer.'))}</p></div>` : '';
       const status = state.netBusy ? t('Connecting…') : n.online ? t('Connected to the internet.') : t('No internet connection yet.');
       root.innerHTML = head + cards + (n.cards.length ? `
@@ -202,13 +203,16 @@
   }
   // The line under a card's name: cable, MAC, address and speed. With a fixed address it shows the address being
   // typed (red while it isn't valid); with DHCP the address the card has now.
+  // Three short lines on a tile: cable and speed, the address, the MAC address.
   function cardInfo(c) {
     const f = state.netForms[c.name] || { mode: 'dhcp' };
-    const link = `<span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>`;
-    let addr = '';
-    if (f.mode === 'static' && f.address.trim()) addr = `<span class="net-addr${netErrors(f).address ? ' bad' : ''}">${esc(f.address.trim())}</span>`;
-    else if (f.mode === 'dhcp' && c.address) addr = esc(c.address);
-    return [link, esc(c.mac), addr, esc(speedText(c.speed))].filter(Boolean).join(' · ');
+    const speed = speedText(c.speed);
+    let addr = `<span class="net-faint">${esc(t('No address yet'))}</span>`;
+    if (f.mode === 'off') addr = `<span class="net-faint">${esc(t('Not used'))}</span>`;
+    else if (f.mode === 'static' && f.address.trim()) addr = `<span class="net-addr${netErrors(f).address ? ' bad' : ''}">${esc(f.address.trim())}</span>`;
+    else if (f.mode === 'dhcp' && c.address) addr = `<span class="net-addr">${esc(c.address)}</span>`;
+    return `<span><span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>${speed ? ' · ' + esc(speed) : ''}</span>
+      <span>${addr}</span><span class="net-faint">${esc(c.mac)}</span>`;
   }
   // The same checks as installer.validateCards on the server, so a mistake shows while typing.
   const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;

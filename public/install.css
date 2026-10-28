@@ -30,29 +30,39 @@
 .inst-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; color: var(--muted); }
 .inst-check input { margin-top: 3px; accent-color: var(--accent); }
 .inst .btn[disabled] { cursor: not-allowed; }
-/* Network cards: a grey socket without a cable, a green socket with a green dot with one.
-   The border of the card itself only means "selected" (accent). */
-.net-card .disk-ico { position: relative; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+/* Network step: a wider card, the network cards as tiles side by side. */
+.inst-card.wide { width: min(760px, 100%); }
+.net-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.net-card.disk { flex-direction: column; align-items: stretch; gap: 8px; margin: 0; padding: 12px; }
+.net-top { display: flex; align-items: center; gap: 10px; }
+.net-top b { flex: 1; min-width: 0; color: var(--text); font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-lines { display: grid; gap: 2px; font-size: .85rem; }
+.net-lines > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.net-faint { color: var(--faint); }
+.net-addr { color: var(--text); font-variant-numeric: tabular-nums; }
+.net-addr.bad { color: var(--bad); }
+.net-mode { flex: none; font-size: .78rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); }
+/* A grey socket without a cable, a green socket with a green dot with one. The tile's border only means "selected". */
+.net-card .disk-ico { position: relative; width: 32px; height: 32px; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
 .net-card.up .disk-ico { color: var(--link-up); background: color-mix(in srgb, var(--link-up) 16%, transparent); }
 .net-card.up .disk-ico::after {
-  content: ""; position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%;
+  content: ""; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
   background: var(--link-up); box-shadow: 0 0 0 2px var(--glass-strong);
 }
 .net-card .net-link { color: var(--muted); }
 .net-card.up .net-link { color: var(--link-up); font-weight: 600; }
-.net-card .net-text { flex: 1; min-width: 0; }
-.net-mode { flex: none; font-size: .8rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); }
-.inst-sub { font-size: 1rem; font-weight: 650; margin: 14px 0 6px; }
-.inst-field-err { color: var(--bad); font-size: .85rem; min-height: 0; }
-.inst-field-err:empty { display: none; }
-.inst-field .field[aria-invalid="true"] { border-color: var(--bad); }
-.net-addr.bad { color: var(--bad); }
-.inst-hint { color: var(--muted); font-size: .85rem; }
+.inst-fields.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 620px) { .inst-fields.three { grid-template-columns: 1fr; } }
 .inst-seg { display: flex; width: 100%; margin: 6px 0 4px; }
 .inst-seg button { flex: 1; font: inherit; cursor: pointer; }
-.inst-fields { display: grid; gap: 10px; margin-top: 12px; }
+.inst-fields { display: grid; gap: 10px; margin-top: 12px; align-items: start; }
 .inst-field { display: grid; gap: 4px; color: var(--muted); font-size: .9rem; }
 .inst-field .field { width: 100%; color: var(--text); font-family: inherit; }
+.inst .inst-sub { font-size: 1rem; font-weight: 650; letter-spacing: 0; margin: 18px 0 8px; }
+.inst-hint { grid-column: 1 / -1; color: var(--muted); font-size: .85rem; }
+.inst-field-err { color: var(--bad); font-size: .85rem; }
+.inst-field-err:empty { display: none; }
+.inst-field .field[aria-invalid="true"] { border-color: var(--bad); }
 .inst-net { color: var(--muted); margin-top: 12px; }
 .inst-net.ok { color: var(--ok); }
 .inst-error { color: var(--bad); min-height: 1.3em; margin-top: 10px; }
