@@ -25,7 +25,7 @@ MajaOS turns a fresh **Debian 13** machine into a home server you manage from th
 | **Virtual machines** | KVM / libvirt | Create Linux, Windows 11 or Home Assistant OS VMs, console in the browser, USB and PCI passthrough, snapshots, start on boot with a delay |
 | **Shared folders** | Samba | Users and groups with rights per folder, Time Machine, Windows *Previous Versions* from hourly ZFS snapshots |
 | **Backups** | rclone, Kopia | Your PCs and Macs to the server, the server to Google Drive, OneDrive, Dropbox, S3 or another NAS, apps and VMs to a folder |
-| **AI** | Ollama | Download and run local models on your GPU, and a chat that can manage the server |
+| **AI** | Ollama, LM Studio, llama.cpp, LocalAI or Claude | A chat that checks and manages the server for you, with a local model on your own GPU or with Claude; and an MCP address so Claude Desktop, Cursor or VS Code can do the same |
 
 And around it: two-step sign-in, HTTPS out of the box, network and Docker network settings with automatic rollback, Debian and MajaOS updates from the dashboard, a root terminal (off unless you want it), light and dark themes, and ten interface languages.
 

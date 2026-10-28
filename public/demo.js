@@ -273,7 +273,7 @@
     if (action === 'setup') {
       if (mfa.enabled) throw err('Two-step verification is already on. Turn it off first to link again.', 409);
       mfa.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
-      return { secret: mfa.setup, uri: `otpauth://totp/MajaOS:freddy?secret=${mfa.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30` };
+      return { secret: mfa.setup, uri: `otpauth://totp/MajaOS:demo?secret=${mfa.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30` };
     }
     if (!(await mfaCheck(body.code)).ok) { await wait(800); throw err('That code is not correct.', 401); }
     if (action === 'disable') { Object.assign(mfa, { enabled: false, secret: null, recovery: [], lastCounter: -1, since: null }); return { ok: true }; }
@@ -299,7 +299,7 @@
     };
   }
   const net = {
-    hostname: 'freddy', manager: 'ifupdown', editable: true, physical: ['enp5s0'], dns: ['192.168.1.1', '1.1.1.1'], resolvManaged: false, pending: null,
+    hostname: 'demo', manager: 'ifupdown', editable: true, physical: ['enp5s0'], dns: ['192.168.1.1', '1.1.1.1'], resolvManaged: false, pending: null,
     links: [
       { name: 'enp5s0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'ethernet', master: 'br0', ipv4: [], ipv6: [], gateway: null, speed: 2500 },
       { name: 'br0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'bridge', master: null, ipv4: [{ address: '192.168.1.10/24', dynamic: false }], ipv6: [], gateway: '192.168.1.1', speed: null },
@@ -919,14 +919,14 @@
       { key: 'user', label: 'User', type: 'text', required: true },
       { key: 'pass', label: 'Password', type: 'password', required: true }] },
   };
-  const bkRemotes = [{ name: 'google', type: 'drive', detail: '' }, { name: 'nas-mum', type: 'sftp', detail: 'freddy@nas-mum.home.arpa' }];
+  const bkRemotes = [{ name: 'google', type: 'drive', detail: '' }, { name: 'nas-mum', type: 'sftp', detail: 'demo@nas-mum.home.arpa' }];
   const bkResult = (hoursAgo, mins, files, size, extra = {}) => ({ kind: 'backup', dryRun: false, scheduled: true, started: Date.now() - hoursAgo * HOUR,
     ended: Date.now() - hoursAgo * HOUR + mins * 60000, state: 'ok', bytes: size, files, checks: 1840, deletes: 0, errors: 0, error: null, ...extra });
   const bkJobs = [
-    { id: 'a1b2c3d4', name: 'Photos to Google Drive', direction: 'push', mode: 'copy', remote: 'google', remotePath: 'Backups/Freddy/photos', localPath: '/tank/photos',
+    { id: 'a1b2c3d4', name: 'Photos to Google Drive', direction: 'push', mode: 'copy', remote: 'google', remotePath: 'Backups/Demo/photos', localPath: '/tank/photos',
       encrypt: false, versions: false, keepDays: 30, schedule: { every: 'daily', time: '02:00', day: 0 }, excludes: ['.DS_Store'], bwlimit: '',
       created: Date.now() - 40 * 86400000, lastScheduled: Date.now() - 7 * HOUR, lastRun: bkResult(7, 12, 34, 210 * MB) },
-    { id: 'b2c3d4e5', name: "Documents to Mum's NAS", direction: 'push', mode: 'sync', remote: 'nas-mum', remotePath: 'backup-freddy', localPath: '/tank/documents',
+    { id: 'b2c3d4e5', name: "Documents to Mum's NAS", direction: 'push', mode: 'sync', remote: 'nas-mum', remotePath: 'backup-demo', localPath: '/tank/documents',
       encrypt: true, versions: true, keepDays: 90, schedule: { every: 'weekly', time: '03:30', day: 0 }, excludes: [], bwlimit: '5M',
       created: Date.now() - 60 * 86400000, lastScheduled: Date.now() - 5 * 86400000, lastRun: bkResult(5 * 24, 4, 112, 380 * MB, { deletes: 3 }) },
     { id: 'c3d4e5f6', name: 'Keep Google Drive at home', direction: 'pull', mode: 'copy', remote: 'google', remotePath: '', localPath: '/tank/backups/google-drive',
@@ -943,7 +943,7 @@
       used: 186 * GB, lastChange: Date.now() - 50 * 60000, snapshots: 212, folders: ['C:\\Users\\tom'] },
   ];
   // Backup app (Kopia) on the NAS: turned on, with one PC.
-  const demoKopia = { installed: true, version: '0.19.0', enabled: true, running: true, port: 51515, hostname: 'Freddy', addresses: ['192.168.1.10'],
+  const demoKopia = { installed: true, version: '0.19.0', enabled: true, running: true, port: 51515, hostname: 'Demo', addresses: ['192.168.1.10'],
     fingerprint: '3f9a1c0be47d52a86e0f1b93c4d7a2e5f60b8c1d9e2a3b4c5d6e7f8091a2b3c4', pool: 'tank', path: '/tank/backups/kopia', used: 141 * GB,
     appUrl: 'https://github.com/lennertvh1/kopia/releases/latest' };
   const demoCode = () => { const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const c = Array.from({ length: 8 }, () => abc[Math.floor(Math.random() * abc.length)]).join(''); return c.slice(0, 4) + '-' + c.slice(4); };
@@ -1130,7 +1130,7 @@
   }
   function bkBrowse(name, p) {
     if (!bkRemotes.some((r) => r.name === name)) throw err('This connection doesn\'t exist (anymore).', 404);
-    const tree = { '': ['Backups', 'Documents', 'Photos', 'Shared'], Backups: ['Freddy', 'Laptop'], 'Backups/Freddy': ['photos'], Documents: ['Taxes', 'House'], backup: [] };
+    const tree = { '': ['Backups', 'Documents', 'Photos', 'Shared'], Backups: ['Demo', 'Laptop'], 'Backups/Demo': ['photos'], Documents: ['Taxes', 'House'], backup: [] };
     const clean = String(p || '').replace(/^\/+|\/+$/g, '');
     return { path: clean, dirs: tree[clean] || [] };
   }
@@ -1730,7 +1730,7 @@
   /* ---- storage: ZFS */
   const disk = (name, model, size, rot, tran, temp, pool, vdev, role = 'data') => ({
     id: name, key: 's:DEMO' + name.toUpperCase(), name, model, serial: 'DEMO' + name.toUpperCase(), size, rotational: rot, transport: tran, temp, smartOk: true,
-    sectors: rot ? { reallocated: name === 'sdd' ? 8 : 0, pending: 0, uncorrectable: 0 } : null,
+    sectors: rot ? { reallocated: 0, pending: 0, uncorrectable: 0 } : null,
     pool, role, vdev, state: pool ? 'ONLINE' : null, errors: 0,
   });
   const disks = [
@@ -1748,7 +1748,7 @@
   ];
   // What lib/zpool.js poolOptions() returns (the system disk sdh is not among Storage's disks).
   const SYS_DISK = { name: 'sdh', size: 240e9, model: 'KINGSTON SA400S37240G', serial: 'DEMOSDH', rotational: false, transport: 'sata', byId: '/dev/disk/by-id/ata-KINGSTON_SA400S37240G_DEMOSDH', available: false, reason: 'System disk (Debian is on it)', warn: null };
-  // Details of a disk, as lib/disks.js parseSmart() gives them. sdc is asleep, sdd has a few reallocated sectors.
+  // Details of a disk, as lib/disks.js parseSmart() gives them. sdc is asleep; all disks are healthy.
   const smartState = {};
   function demoDisk(name, wake) {
     const d = disks.find((x) => x.name === name);
@@ -1767,16 +1767,16 @@
       { type: nv ? 'Extended' : 'Extended offline', passed: true, result: 'ok', text: 'Completed without error', hours: hours - 900 }] : [];
     const tests = st.tests.map((x) => ({ ...x, hours })).concat(baseTests);
     const attrs = hdd ? [[1, 'Raw_Read_Error_Rate', 200, 51, 0], [3, 'Spin_Up_Time', 172, 21, 4258], [4, 'Start_Stop_Count', 100, 0, 1204],
-      [5, 'Reallocated_Sector_Ct', 200, 140, name === 'sdd' ? 8 : 0], [9, 'Power_On_Hours', 50, 0, hours], [12, 'Power_Cycle_Count', 100, 0, 87],
+      [5, 'Reallocated_Sector_Ct', 200, 140, 0], [9, 'Power_On_Hours', 50, 0, hours], [12, 'Power_Cycle_Count', 100, 0, 87],
       [194, 'Temperature_Celsius', 116, 0, d.temp || 30], [197, 'Current_Pending_Sector', 200, 0, 0], [198, 'Offline_Uncorrectable', 100, 0, 0],
-      [199, 'UDMA_CRC_Error_Count', 200, 0, name === 'sdb' ? 3 : 0]] : [];
+      [199, 'UDMA_CRC_Error_Count', 200, 0, 0]] : [];
     return {
       name, transport: d.transport, rotational: d.rotational, sleeping: false,
       model: d.model + (hdd ? '-68AWUN0' : nv ? ' 500GB' : ' 1TB'), family: hdd ? (/ST4000/.test(d.model) ? 'Seagate IronWolf' : 'Western Digital Red') : 'Samsung based SSDs',
       serial: d.serial, firmware: hdd ? '81.00B81' : '3B4QFXO7', size: d.size, rpm: hdd ? (/ST4000/.test(d.model) ? 5900 : 5400) : null,
       formFactor: hdd ? '3.5 inches' : nv ? 'M.2' : '2.5 inches', link: nv ? null : '6.0 Gb/s', smartOk: true, temp: d.temp,
       powerOnHours: hours, powerCycles: 40 + (seed % 60),
-      watch: nv ? { mediaErrors: 0, criticalWarning: 0 } : { reallocated: name === 'sdd' ? 8 : 0, pending: 0, uncorrectable: 0, crcErrors: name === 'sdb' ? 3 : 0 },
+      watch: nv ? { mediaErrors: 0, criticalWarning: 0 } : { reallocated: 0, pending: 0, uncorrectable: 0, crcErrors: 0 },
       nvme: nv ? { percentUsed: name === 'nvme0n1' ? 4 : 3, spare: 100, spareThreshold: 10, written: (name === 'nvme0n1' ? 18.4 : 17.9) * 1e12, unsafeShutdowns: 12 } : null,
       errorLog: 0, testRunning: st.running ? { remaining: Math.min(90, Math.max(10, Math.round(((st.running.until - Date.now()) / st.running.total) * 10) * 10)) } : null,
       testMinutes: hdd ? { short: 2, long: /ST4000/.test(d.model) ? 412 : 252 } : null, tests,
@@ -1888,11 +1888,9 @@
     ['tank/media', 2.1 * TB, 1.0], ['tank/photos', 610 * GB, 1.01], ['tank/documents', 84 * GB, 1.42], ['tank/backups', 420 * GB, 1.18],
     ['tank/isos', 12 * GB, 1.0], ['tank/vms', 96 * GB, 1.31], ['fast/appdata', 162 * GB, 1.65], ['fast/docker', 28 * GB, 1.52],
   ].map(([name, used, compress]) => ({ name, used, free: name.startsWith('tank') ? 2.05 * TB : 271 * GB, mountpoint: '/' + name, compress }));
-  // Disk bays: 8 bays (the four HDDs of tank, three free disks, one empty), 2 M.2 slots with the NVMes of fast and 2 slots of 2.5" (one SSD).
+  // Disk bays: 8 bays (the four HDDs of tank, three free disks, one empty; all healthy), 2 M.2 slots with the NVMes of fast and 2 slots of 2.5" (one SSD).
   let bays = { count: 8, columns: 8, m2: 2, ssd: 2, slots: Object.fromEntries([['sda', 1], ['sdb', 2], ['sdc', 3], ['sdd', 4], ['sde', 5], ['sdf', 6], ['sdg', 7],
     ['nvme0n1', 'm1'], ['nvme1n1', 'm2'], ['sdi', 's1']].map(([n, id]) => [id, { key: 's:DEMO' + n.toUpperCase(), label: 'DEMO' + n.toUpperCase() }])) };
-  // Bay 8 still remembers a disk that is no longer in the machine, so the dashboard shows the red warning.
-  bays.slots['8'] = { key: 's:WD-WCC4N7VY1A2B', label: 'WDC WD20EFZX' };
   function demoAlerts() {
     const bayName = (id) => { const m = String(id).match(/^([ms]?)(\d+)$/); if (!m) return String(id); if (m[1] === 'm') return 'M.2 ' + m[2]; if (m[1] === 's') return '2.5" ' + m[2]; return m[2]; };
     const present = new Set(disks.map((d) => d.key));
@@ -2004,7 +2002,7 @@
   function overview() {
     const used = rnd(15.2, 16.6) * GB;
     return {
-      hostname: 'Freddy', uptime: Math.round((Date.now() - bootTime) / 1000), version: 'Debian GNU/Linux 13 (trixie)',
+      hostname: 'Demo', uptime: Math.round((Date.now() - bootTime) / 1000), version: 'Debian GNU/Linux 13 (trixie)',
       cpu: { brand: 'AMD Ryzen 7 5700X 8-Core Processor', cores: 8, threads: 16, percent: Math.round(rnd(6, 22)) },
       memory: { total: 32 * GB, used, zfsCache: 6 * GB, percent: Math.round((used / (32 * GB)) * 1000) / 10 },
       storage: storageSummary(), gpu: gpu(),
@@ -2191,7 +2189,7 @@
   function demoRemoteSet(body) {
     const cur = { mode: 'off', url: '', address: '', hasToken: false, ...demoRemote() };
     if (body.mode === 'off') { demoRemoteSave({ ...cur, mode: 'off', url: '' }); return demoRemoteView(); }
-    if (body.mode === 'quick') { demoRemoteSave({ ...cur, mode: 'quick', url: 'https://freddy.trycloudflare.com' }); return demoRemoteView(); }
+    if (body.mode === 'quick') { demoRemoteSave({ ...cur, mode: 'quick', url: 'https://demo.trycloudflare.com' }); return demoRemoteView(); }
     if (body.mode === 'token') {
       let origin = String(body.address || '').trim();
       if (!origin) throw err('Type an address like https://home.example.com.');
@@ -2232,7 +2230,7 @@
     // HTTPS with the server's own certificate (lib/tls.js). The demo has none to download.
     if (path === '/api/tls') {
       return { enabled: demoSecurity.https !== false, port: demoSecurity.https !== false ? 443 : 0, listening: demoSecurity.https !== false, kind: 'own',
-        names: ['localhost', 'freddy', 'freddy.local', '127.0.0.1', '192.168.1.10'], expires: new Date(Date.now() + 380 * 864e5).toISOString(),
+        names: ['localhost', 'demo', 'demo.local', '127.0.0.1', '192.168.1.10'], expires: new Date(Date.now() + 380 * 864e5).toISOString(),
         caFingerprint: '6D:CE:C0:A0:7B:0E:D7:79:57:5F:1E:AE:D9:21:14:10:2A:74:8D:75:4E:1B:12:90:65:49:67:5E:A2:7F:EE:AB', caExpires: new Date(Date.now() + 3650 * 864e5).toISOString() };
     }
     if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false };
