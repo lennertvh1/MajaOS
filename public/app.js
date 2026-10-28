@@ -6769,6 +6769,8 @@
           ${r.dev ? ` <span class="pill warn">${t('Development')}</span>` : r.prerelease ? ` <span class="pill warn">${t('Beta')}</span>` : ''}</h3>
           <span class="muted small">${esc(longDate(r.published))}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">${t('On GitHub')}</a>` : ''}</span></div>
         <div class="md">${r.notes.trim() ? mdToHtml(r.notes) : `<p class="muted">${t('No release notes for this version.')}</p>`}</div></article>`;
+    // The installed version's notes are always shown; the older ones stay folded.
+    const older = u.history.filter((r) => !u.installed || r.version !== u.installed.version);
     const card = u.updateAvailable ? `
       <div class="upd-card new">${mark}<div class="upd-text"><b>${t('MajaOS {version} is available', { version: esc(u.latest.version) })}</b>
         <div class="muted small">${t('You have version {current}.', { current: esc(cur) })} ${u.newer.length > 1 ? t('There are {n} new versions.', { n: u.newer.length }) : ''}</div>
@@ -6788,7 +6790,8 @@
           <pre>cd ~/majaos
 git pull
 sudo ./install.sh</pre></div>`}` : '') +
-      (u.history.length ? `<details class="upd-older"${u.updateAvailable ? '' : ' open'}><summary>${u.updateAvailable ? t('Earlier versions') : t('Release notes')}</summary>${u.history.map(notes).join('')}</details>` : '') + `
+      (u.installed ? `<h2 class="pane-title">${t('Installed version')}</h2>${notes(u.installed)}` : '') +
+      (older.length ? `<details class="upd-older"><summary>${t('Earlier versions')}</summary>${older.map(notes).join('')}</details>` : '') + `
       <section id="debianBox" class="debian-box"><h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted">${t('Loading…')}</p></section>
       <h2 class="pane-title">${t('Settings')}</h2>
       <div class="form">

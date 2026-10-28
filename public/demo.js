@@ -97,7 +97,7 @@
       url: 'https://github.com/lennertvh1/MajaOS/commit/' + DEV_HEAD.sha, published: DEV_HEAD.date };
     const updateAvailable = !upd.build || upd.build.commit !== DEV_HEAD.sha;
     return { repo: 'lennertvh1/MajaOS', token: true, auto: upd.auto, channel: 'dev', branch: 'dev', checked: upd.checked, error: null, current: cur, build: upd.build || null,
-      latest, updateAvailable, newer: updateAvailable ? [latest] : [], installed: updateAvailable ? null : latest, history: [],
+      latest, updateAvailable, newer: updateAvailable ? [latest] : [], installed: updateAvailable ? demoReleases.find((r) => r.version === cur) || null : latest, history: [],
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
   // Debian itself, like lib/debian.js: four updates waiting (two security), automatic updates on, apt simulated (~8 s).
@@ -143,7 +143,7 @@
     const list = demoReleases.filter((r) => upd.channel === 'beta' || !r.prerelease), cur = upd.current || '0.2.0';
     const i = Math.max(0, list.findIndex((r) => r.version === cur)), newer = list.slice(0, i);
     return { repo: 'lennertvh1/MajaOS', token: true, auto: upd.auto, channel: upd.channel, checked: upd.checked, error: null, current: cur,
-      build: upd.build || null, latest: list[0], updateAvailable: newer.length > 0, newer, installed: list[i] || null, history: list.slice(i),
+      build: upd.build || null, latest: list[0], updateAvailable: newer.length > 0, newer, installed: demoReleases.find((r) => r.version === cur) || null, history: list.slice(i),
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
   // Update now, simulated: the same steps as lib/updater.js + lib/update-helper.sh, with a restart during which the server is briefly gone.

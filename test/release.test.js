@@ -54,6 +54,13 @@ test('summary against the installed version', () => {
   assert.equal(rel.summarize(rel.normalizeReleases(GH), '0.3.1').updateAvailable, false);
 });
 
+test('the installed pre-release keeps its notes on the stable channel', () => {
+  const all = rel.normalizeReleases(GH, { beta: true });
+  const s = rel.summarize(rel.normalizeReleases(GH), '0.4.0-beta.1', all);
+  assert.equal(s.installed.version, '0.4.0-beta.1');
+  assert.equal(s.updateAvailable, false);
+});
+
 test('status without having checked', () => {
   const s = rel.status();
   assert.equal(s.checked, null);
