@@ -1,0 +1,20 @@
+name: Idea
+description: Something MajaOS should do, or do differently.
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the situation, not only the solution. Why do you need it?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could MajaOS help?
+  - type: textarea
+    id: elsewhere
+    attributes:
+      label: Seen it elsewhere?
+      description: How Unraid, TrueNAS, ZimaOS, HexOS or another system does it, with a screenshot if you have one.
