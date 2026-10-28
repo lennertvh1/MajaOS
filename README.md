@@ -60,7 +60,7 @@ Open <http://localhost:8080>. The demo starts like a new server with the welcome
 
 You need a 64-bit PC (UEFI, Secure Boot off) with an internet connection, and a disk MajaOS may erase for the system. Your data disks are separate.
 
-1. Download `majaos-<version>-amd64.iso` from the [latest release](https://github.com/lennertvh1/MajaOS/releases), or [build a test ISO](#build-a-test-iso) with the newest changes.
+1. Download `majaos-<version>-amd64.iso` from the newest [pre-release](https://github.com/lennertvh1/MajaOS/releases), or [build a test ISO](#build-a-test-iso) with the newest changes.
 2. Write it to a USB stick with [balenaEtcher](https://etcher.balena.io) and boot from it.
 3. Pick your language and the disk, tick the NVIDIA driver if you have such a card, and choose **Erase and install**.
 4. After the restart MajaOS sets itself up (5 to 15 minutes). The address appears on the server's screen. Open it in a browser and create your account.
