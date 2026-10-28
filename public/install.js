@@ -92,9 +92,9 @@
         return cf.mode === 'off' ? t('Not used') : cf.mode === 'static' ? t('Fixed address') : t('DHCP');
       };
       const cards = n.cards.length ? n.cards.map((c) => {
-        const info = [c.mac, c.connected ? t('Connected') : t('No cable'), c.address, speedText(c.speed)].filter(Boolean).join(' · ');
+        const info = [c.mac, c.address, speedText(c.speed)].filter(Boolean).join(' · ');
         return `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
-          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span>${esc(info)}</span></span>
+          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span><span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>${info ? ' · ' + esc(info) : ''}</span></span>
           <span class="net-mode">${esc(summary(c))}</span></button>`;
       }).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
@@ -199,7 +199,13 @@
       state.netForms[c.name] = cf ? { mode: cf.mode, address: cf.address || '', gateway: cf.gateway || '', dns: (cf.dns || []).join(' ') }
         : { mode: 'dhcp', address: '', gateway: '', dns: '' };
     }
-    if (!n.cards.some((c) => c.name === state.netSel)) state.netSel = n.cards[0] ? n.cards[0].name : null;
+    if (!n.cards.some((c) => c.name === state.netSel)) state.netSel = bestCard();
+  }
+  // The card to show first: the one with the internet, else one with a cable, else the first.
+  function bestCard() {
+    const list = state.net ? state.net.cards : [];
+    const c = list.find((x) => x.gateway) || list.find((x) => x.connected) || list[0];
+    return c ? c.name : null;
   }
   async function loadNetwork() {
     state.error = '';
@@ -219,8 +225,8 @@
       const before = JSON.stringify([state.net.cards, state.net.online, state.netSel]);
       state.net = n;
       syncForms();
-      // Not picked yet: follow the card that has the internet (the server puts it first).
-      if (!state.netPicked && n.cards[0]) state.netSel = n.cards[0].name;
+      // Not picked yet: follow the card that has the internet. The list itself keeps its order.
+      if (!state.netPicked) state.netSel = bestCard();
       if (form() && form().mode === 'static') prefill(); // only fills fields that are still empty
       if (JSON.stringify([n.cards, n.online, state.netSel]) === before && !$('#inst input[name="address"][value=""]')) return;
       redrawKeepingFocus();

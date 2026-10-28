@@ -68,7 +68,7 @@ test('the language menu and the dictionaries offer the same languages', () => {
   }
 });
 
-test('network step: physical cards, the one with the default route first', () => {
+test('network step: physical cards, always in the order of their names', () => {
   const addrs = [
     { ifname: 'lo', flags: ['LOOPBACK', 'UP', 'LOWER_UP'], address: '00:00:00:00:00:00', addr_info: [{ family: 'inet', local: '127.0.0.1', prefixlen: 8 }] },
     { ifname: 'enp6s0', flags: ['NO-CARRIER', 'BROADCAST', 'UP'], address: 'a8:a1:59:3c:72:11', addr_info: [] },

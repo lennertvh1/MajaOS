@@ -30,9 +30,16 @@
 .inst-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; color: var(--muted); }
 .inst-check input { margin-top: 3px; accent-color: var(--accent); }
 .inst .btn[disabled] { cursor: not-allowed; }
-/* Network cards: grey without a cable, a green outline with one. */
-.net-card .disk-ico { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
-.net-card.up .disk-ico { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); box-shadow: inset 0 0 0 1.5px var(--ok); }
+/* Network cards: a grey socket without a cable, a green socket with a green dot with one.
+   The border of the card itself only means "selected" (accent). */
+.net-card .disk-ico { position: relative; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.net-card.up .disk-ico { color: var(--link-up); background: color-mix(in srgb, var(--link-up) 16%, transparent); }
+.net-card.up .disk-ico::after {
+  content: ""; position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--link-up); box-shadow: 0 0 0 2px var(--glass-strong);
+}
+.net-card .net-link { color: var(--muted); }
+.net-card.up .net-link { color: var(--link-up); font-weight: 600; }
 .net-card .net-text { flex: 1; min-width: 0; }
 .net-mode { flex: none; font-size: .8rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); }
 .inst-sub { font-size: 1rem; font-weight: 650; margin: 14px 0 6px; }
