@@ -36,7 +36,7 @@
   // A network socket (RJ45) seen from the front: the body with the latch below and four contacts.
   const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10h-4v3H8v-3H4z"/><path d="M8.5 8v3M11 8v3M13 8v3M15.5 8v3"/></svg>';
   const state = { step: 'lang', disks: [], disk: null, nvidia: false, error: '', job: null, timer: null, unavailable: false,
-    net: null, netForms: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null };
+    net: null, netForms: {}, netSeen: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null };
   let api = null;
 
   function bytes(n) {
@@ -91,15 +91,14 @@
         const cf = state.netForms[c.name];
         return cf.mode === 'off' ? t('Not used') : cf.mode === 'static' ? t('Fixed address') : t('DHCP');
       };
-      const cards = n.cards.length ? n.cards.map((c) => {
-        const info = [c.mac, c.address, speedText(c.speed)].filter(Boolean).join(' · ');
-        return `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
-          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span><span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>${info ? ' · ' + esc(info) : ''}</span></span>
-          <span class="net-mode">${esc(summary(c))}</span></button>`;
-      }).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
+      const cards = n.cards.length ? n.cards.map((c) => `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
+          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span data-card-info>${cardInfo(c)}</span></span>
+          <span class="net-mode">${esc(summary(c))}</span></button>`).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
+      const shown = shownErrors(state.netSel);
       const field = (name, label, hint) => `<label class="inst-field"><span>${esc(label)}</span>
-        <input class="field" name="${name}" value="${esc(f[name])}" placeholder="${esc(hint)}" autocomplete="off" spellcheck="false" inputmode="decimal"></label>`;
+        <input class="field" name="${name}" value="${esc(f[name])}" placeholder="${esc(hint)}" autocomplete="off" spellcheck="false" inputmode="decimal"${shown[name] ? ' aria-invalid="true"' : ''}>
+        <span class="inst-field-err" data-err="${name}">${esc(shown[name] ? t(shown[name]) : '')}</span></label>`;
       const fixed = f && f.mode === 'static' ? `<div class="inst-fields">
           ${field('address', t('IP address'), t('For example 192.168.1.10/24'))}
           ${field('gateway', t('Gateway'), t('Usually your router, for example 192.168.1.1'))}
@@ -201,6 +200,56 @@
     }
     if (!n.cards.some((c) => c.name === state.netSel)) state.netSel = bestCard();
   }
+  // The line under a card's name: cable, MAC, address and speed. With a fixed address it shows the address being
+  // typed (red while it isn't valid); with DHCP the address the card has now.
+  function cardInfo(c) {
+    const f = state.netForms[c.name] || { mode: 'dhcp' };
+    const link = `<span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>`;
+    let addr = '';
+    if (f.mode === 'static' && f.address.trim()) addr = `<span class="net-addr${netErrors(f).address ? ' bad' : ''}">${esc(f.address.trim())}</span>`;
+    else if (f.mode === 'dhcp' && c.address) addr = esc(c.address);
+    return [link, esc(c.mac), addr, esc(speedText(c.speed))].filter(Boolean).join(' · ');
+  }
+  // The same checks as installer.validateCards on the server, so a mistake shows while typing.
+  const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  function sameNet(a, b, prefix) {
+    const n = (ip) => ip.split('.').reduce((x, o) => (x << 8) + Number(o), 0) >>> 0;
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    return (n(a) & mask) === (n(b) & mask);
+  }
+  function netErrors(f) {
+    const e = {};
+    if (!f || f.mode !== 'static') return e;
+    const parts = String(f.address || '').trim().split('/');
+    const prefix = Number(parts[1]);
+    const okAddr = parts.length === 2 && IPV4.test(parts[0]) && /^\d{1,2}$/.test(parts[1]) && prefix >= 8 && prefix <= 32;
+    if (!okAddr) e.address = 'Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.';
+    const gw = String(f.gateway || '').trim();
+    if (gw && !IPV4.test(gw)) e.gateway = 'Fill in the gateway, usually your router\'s address (e.g. 192.168.1.1).';
+    else if (gw && okAddr && !sameNet(parts[0], gw, prefix)) e.gateway = 'The gateway is not in the same network as the IP address.';
+    const dns = String(f.dns || '').trim().split(/[\s,]+/).filter(Boolean);
+    if (dns.some((d) => !IPV4.test(d) && !/^[0-9a-f:]+$/i.test(d))) e.dns = 'Fill in valid DNS addresses, separated by spaces.';
+    else if (gw && !dns.length) e.dns = 'Fill in at least one DNS server, e.g. your router or 1.1.1.1.';
+    return e;
+  }
+  // Messages show for a field once you leave it, or for all fields after Continue; never halfway through typing.
+  function shownErrors(name) {
+    const e = netErrors(state.netForms[name]), seen = state.netSeen[name] || {}, out = {};
+    for (const k of Object.keys(e)) if (seen.all || seen[k]) out[k] = e[k];
+    return out;
+  }
+  // While typing: only the card line and a message that is already there change, the field keeps its focus.
+  function paintNet() {
+    const c = cardOf(state.netSel), info = c && $(`#inst [data-card="${c.name}"] [data-card-info]`);
+    if (info) info.innerHTML = cardInfo(c);
+    const shown = shownErrors(state.netSel);
+    for (const el of document.querySelectorAll('#inst [data-err]')) {
+      const k = el.dataset.err, input = $(`#inst input[name="${k}"]`);
+      el.textContent = shown[k] ? t(shown[k]) : '';
+      if (input) { if (shown[k]) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); }
+    }
+  }
+
   // The card to show first: the one with the internet, else one with a cable, else the first.
   function bestCard() {
     const list = state.net ? state.net.cards : [];
@@ -254,6 +303,12 @@
   // Continue on the network step: nothing to change when every card stays on DHCP and the internet already works.
   async function applyNetwork() {
     const list = state.net.cards.map((c) => ({ interface: c.name, ...state.netForms[c.name] }));
+    // A mistake in a field: show it on that card instead of asking the server.
+    const wrong = state.net.cards.find((c) => Object.keys(netErrors(state.netForms[c.name])).length);
+    if (wrong) {
+      state.netSeen[wrong.name] = { all: true };
+      state.netSel = wrong.name; state.error = t('Check the settings of {name}.', { name: wrong.name }); draw(); return;
+    }
     if (list.every((c) => c.mode === 'dhcp') && state.net.online && !state.net.chosen) { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
     state.netBusy = true; state.error = ''; draw();
     try {
@@ -322,7 +377,19 @@
 
   $('#inst').addEventListener('input', (e) => {
     const f = state.step === 'network' && form();
-    if (f && e.target.name in f) f[e.target.name] = e.target.value;
+    if (!f || !(e.target.name in f)) return;
+    f[e.target.name] = e.target.value;
+    // The general message goes away once this card is right again.
+    if (state.error && !Object.keys(netErrors(f)).length) { state.error = ''; const box = $('#inst .inst-error'); if (box) box.textContent = ''; }
+    paintNet();
+  });
+  // Leaving a field shows what is wrong with it.
+  $('#inst').addEventListener('focusout', (e) => {
+    const f = state.step === 'network' && form();
+    if (!f || !(e.target.name in f)) return;
+    const seen = state.netSeen[state.netSel] = state.netSeen[state.netSel] || {};
+    seen[e.target.name] = true;
+    paintNet();
   });
 
   // Cog on the USB stick (WPE WebKit 2.48) sends mousedown and mouseup but never click. Make the click ourselves

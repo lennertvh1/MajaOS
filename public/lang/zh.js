@@ -2298,6 +2298,7 @@ window.TB_LANG.zh = {
   "Fill in valid DNS addresses, separated by spaces.": "请填写有效的 DNS 地址，用空格分隔。",
   "Only one network card can have a gateway. Leave it empty on the others.": "只有一个网卡可以设置网关。其他网卡请留空。",
   "One network card needs DHCP or a gateway, otherwise there is no internet.": "必须有一个网卡使用 DHCP 或设置网关，否则无法上网。",
+  "Check the settings of {name}.": "请检查 {name} 的设置。",
   "Choose a disk.": "请选择一块磁盘。",
   "This disk is the installer. Choose another disk.": "这是安装盘。请选择另一块磁盘。",
   "Type the disk name to confirm.": "输入磁盘名称以确认。",

@@ -43,6 +43,10 @@
 .net-card .net-text { flex: 1; min-width: 0; }
 .net-mode { flex: none; font-size: .8rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); }
 .inst-sub { font-size: 1rem; font-weight: 650; margin: 14px 0 6px; }
+.inst-field-err { color: var(--bad); font-size: .85rem; min-height: 0; }
+.inst-field-err:empty { display: none; }
+.inst-field .field[aria-invalid="true"] { border-color: var(--bad); }
+.net-addr.bad { color: var(--bad); }
 .inst-hint { color: var(--muted); font-size: .85rem; }
 .inst-seg { display: flex; width: 100%; margin: 6px 0 4px; }
 .inst-seg button { flex: 1; font: inherit; cursor: pointer; }

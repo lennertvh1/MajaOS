@@ -2302,6 +2302,7 @@ window.TB_LANG.nl = {
   "Fill in valid DNS addresses, separated by spaces.": "Vul geldige DNS-adressen in, gescheiden door spaties.",
   "Only one network card can have a gateway. Leave it empty on the others.": "Maar één netwerkkaart kan een gateway hebben. Laat hem leeg bij de andere.",
   "One network card needs DHCP or a gateway, otherwise there is no internet.": "Eén netwerkkaart heeft DHCP of een gateway nodig, anders is er geen internet.",
+  "Check the settings of {name}.": "Controleer de instellingen van {name}.",
   "Choose a disk.": "Kies een schijf.",
   "This disk is the installer. Choose another disk.": "Dit is de schijf van het installatieprogramma. Kies een andere schijf.",
   "Type the disk name to confirm.": "Typ de schijfnaam om te bevestigen.",

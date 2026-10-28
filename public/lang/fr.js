@@ -2298,6 +2298,7 @@ window.TB_LANG.fr = {
   "Fill in valid DNS addresses, separated by spaces.": "Indiquez des adresses DNS valides, séparées par des espaces.",
   "Only one network card can have a gateway. Leave it empty on the others.": "Une seule carte réseau peut avoir une passerelle. Laissez-la vide sur les autres.",
   "One network card needs DHCP or a gateway, otherwise there is no internet.": "Une carte réseau doit utiliser DHCP ou avoir une passerelle, sinon il n'y a pas d'Internet.",
+  "Check the settings of {name}.": "Vérifiez les réglages de {name}.",
   "Choose a disk.": "Choisissez un disque.",
   "This disk is the installer. Choose another disk.": "Ce disque est celui du programme d'installation. Choisissez un autre disque.",
   "Type the disk name to confirm.": "Tapez le nom du disque pour confirmer.",

@@ -2298,6 +2298,7 @@ window.TB_LANG.ja = {
   "Fill in valid DNS addresses, separated by spaces.": "有効な DNS アドレスをスペースで区切って入力してください。",
   "Only one network card can have a gateway. Leave it empty on the others.": "ゲートウェイを設定できるネットワークカードは 1 つだけです。ほかのカードでは空欄にしてください。",
   "One network card needs DHCP or a gateway, otherwise there is no internet.": "DHCP またはゲートウェイを使うネットワークカードが 1 つ必要です。ないとインターネットに接続できません。",
+  "Check the settings of {name}.": "{name} の設定を確認してください。",
   "Choose a disk.": "ディスクを選んでください。",
   "This disk is the installer. Choose another disk.": "これはインストーラーのディスクです。別のディスクを選んでください。",
   "Type the disk name to confirm.": "確認のためディスク名を入力してください。",
