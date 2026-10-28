@@ -874,6 +874,13 @@ select.field { padding-right: 8px; }
 /* ---- welcome wizard */
 .window.onboard { width: min(720px, calc(100vw - 24px)); height: min(700px, 92vh, 92dvh); max-height: none; }
 /* The wizard stands alone on the background, without the dashboard behind it. */
+/* "The server can't be reached": a bar at the top, above everything. */
+.conn-lost {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 14px;
+  background: var(--glass-strong); border: 1px solid var(--bad); color: var(--text); box-shadow: var(--shade);
+}
+.conn-lost[hidden] { display: none; }
 /* Until boot() knows whether the welcome wizard or the sign-in comes first, and while the wizard is open: no dashboard. */
 body.onb-open .shell, body.booting .shell { visibility: hidden; }
 .window.onboard::backdrop { background: transparent; backdrop-filter: none; }

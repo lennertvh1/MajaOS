@@ -543,9 +543,10 @@ async function handleApi(req, res, url) {
   if (p === '/api/network/revert' && method === 'POST') return sendJson(res, 200, await network.revertNetwork());
   if (p === '/api/network/hostname' && method === 'POST') {
     const r = await network.setHostname((await readBody(req)).hostname);
-    refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)); // the new name in the certificate
+    // The new name in the certificate. The browser then has to reload (and may ask about the certificate once more).
+    const certRenewed = await refreshHttps().catch((e) => { console.error('HTTPS certificate: ' + e.message); return false; });
     refreshIssue(); // and <name>.local on the server's screen
-    return sendJson(res, 200, r);
+    return sendJson(res, 200, { ...r, certRenewed: !!certRenewed && !!req.socket.encrypted });
   }
 
   if (p === '/api/docker-networks' && method === 'GET') return sendJson(res, 200, await dockernet.listNetworks());
@@ -728,15 +729,22 @@ async function startHttps() {
   return port;
 }
 // A new host name or address needs a new certificate: swap it in without restarting.
+// Idle keep-alive connections still carry the old certificate: close them, so the browser's next request makes a new
+// connection with the new one (a mix of both made fetches fail with "Failed to fetch" until a reload). Returns renewed.
 async function refreshHttps() {
-  if (!secure) return;
+  if (!secure) return false;
   const r = await tlsCert.ensure();
-  if (r.renewed) { secure.setSecureContext({ key: r.key, cert: r.cert }); console.log(`New HTTPS certificate (${r.reason}).`); }
+  if (!r.renewed) return false;
+  secure.setSecureContext({ key: r.key, cert: r.cert });
+  console.log(`New HTTPS certificate (${r.reason}).`);
+  const s = secure;
+  setTimeout(() => { if (s.closeIdleConnections) s.closeIdleConnections(); }, 1500);
+  return true;
 }
 
 // The server's own screen: the logo with the address (lib/issue.js). After every change of what it says.
 function refreshIssue() {
-  if (CFG.demo) return;
+  if (CFG.demo || (process.getuid && process.getuid() !== 0)) return; // only the real server (root) owns the screen
   issue.write({ https: settings.httpsPort() > 0, httpsPort: settings.httpsPort(), port: CFG.port, setup: needsSetup(), hostname: os.hostname(), mdns: issue.hasMdns() })
     .catch((e) => console.error('Screen text: ' + e.message));
 }

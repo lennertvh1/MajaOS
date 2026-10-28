@@ -101,13 +101,29 @@
   function webuiUrl(tpl) { return tpl ? tpl.replace(/\[IP\]/g, location.hostname || 'localhost') : null; }
 
   /* ------------------------------------------------------------ API */
+  // The server can't be reached (it restarts, the network changed, or its certificate changed and the browser refuses
+  // the new connections): after a second check, a bar with Reload instead of "Failed to fetch" everywhere.
+  let lostCheck = null;
+  function connectionLost() {
+    if (lostCheck) return;
+    lostCheck = setTimeout(async () => {
+      try { await fetch('/api/config', { credentials: 'same-origin', cache: 'no-store' }); }
+      catch (e) { const bar = document.getElementById('connLost'); if (bar) bar.hidden = false; }
+      lostCheck = null;
+    }, 1500);
+  }
+  function connectionBack() { const bar = document.getElementById('connLost'); if (bar && !bar.hidden) bar.hidden = true; }
   const realApi = {
     async req(method, path, body) {
-      const res = await fetch(path, {
-        method, credentials: 'same-origin',
-        headers: body ? { 'Content-Type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      let res;
+      try {
+        res = await fetch(path, {
+          method, credentials: 'same-origin',
+          headers: body ? { 'Content-Type': 'application/json' } : {},
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch (e) { connectionLost(); throw e; }
+      connectionBack();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
       return data;
@@ -4565,7 +4581,12 @@
     hostForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = $('button', hostForm); btn.disabled = true;
-      try { const r = await api.post('/api/network/hostname', { hostname: hostForm.elements.hostname.value }); toast(t('The hostname is now {name}.', { name: r.hostname })); loadOverview().catch(() => {}); }
+      try {
+        const r = await api.post('/api/network/hostname', { hostname: hostForm.elements.hostname.value });
+        toast(t('The hostname is now {name}.', { name: r.hostname })); loadOverview().catch(() => {});
+        // The certificate has the new name: reload, so the browser doesn't mix the old and the new one.
+        if (r.certRenewed) { toast(t('The certificate now has the new name. The page reloads.')); setTimeout(() => location.reload(), 2000); }
+      }
       catch (ex) { toast(ex.message, true); }
       btn.disabled = false;
     });
@@ -7838,8 +7859,16 @@ sudo ./install.sh</pre></div>`}` : '') +
           const hn = $('input[name="hostname"]', el), tz = $('select[name="timezone"]', el);
           if (!hn) return true; // still loading
           const name = hn.value.trim().toLowerCase();
-          if (name !== d().hostname) { const r = await api.post('/api/network/hostname', { hostname: name }); d().hostname = r.hostname; loadOverview().catch(() => {}); }
           if (tz.value !== d().timezone) { await api.post('/api/datetime', { timezone: tz.value }); d().timezone = tz.value; }
+          if (name !== d().hostname) {
+            const r = await api.post('/api/network/hostname', { hostname: name }); d().hostname = r.hostname; loadOverview().catch(() => {});
+            // A new certificate with the new name: reload now and go on at the next step (the browser may ask once more).
+            if (r.certRenewed) {
+              try { sessionStorage.setItem('tb-onb-step', String(ONB.i + 1)); } catch (e) { /* private window: starts at the first step */ }
+              location.reload();
+              return false;
+            }
+          }
           return true;
         } },
       { id: 'storage', skip: true,
@@ -8181,6 +8210,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (cfg.needsLogin) return showLogin();
     startDesk();
   }
+  $('#connLost button').addEventListener('click', () => location.reload());
   tickClock(); setInterval(tickClock, 1000 * 15);
   // The dashboard stays hidden (body.booting) until boot() has chosen: wizard, sign-in or dashboard.
   // The wizard hides it itself before this runs, so nothing flashes.
