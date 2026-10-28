@@ -80,7 +80,8 @@
     }
     if (state.step === 'network') {
       const n = state.net, f = form();
-      const head = `<section class="inst-card wide">${brand()}<h1>${esc(t('Network'))}</h1>
+      // From 4 cards on: an even wider window with 4 tiles per row and no MAC line, so it still fits without scrolling.
+      const head = `<section class="inst-card wide${n && n.cards.length >= 4 ? ' many' : ''}">${brand()}<h1>${esc(t('Network'))}</h1>
         <p class="lead">${esc(t('MajaOS needs the internet to install. Choose a network card and how it gets its address.'))}</p>`;
       if (!n || (n.cards.length && !f)) {
         root.innerHTML = head + `<p class="lead">${esc(state.error || t('Looking for network cards…'))}</p>
@@ -92,7 +93,7 @@
         return cf.mode === 'off' ? t('Not used') : cf.mode === 'static' ? t('Fixed address') : t('DHCP');
       };
       // Side by side as tiles, so the details fit and choosing a fixed address needs no scrolling.
-      const cards = n.cards.length ? `<div class="net-grid">${n.cards.map((c) => `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
+      const cards = n.cards.length ? `<div class="net-grid">${n.cards.map((c) => `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" title="${esc(c.mac)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
           <span class="net-top"><span class="disk-ico">${NET}</span><b>${esc(c.name)}</b><span class="net-mode">${esc(summary(c))}</span></span>
           <span class="net-lines" data-card-info>${cardInfo(c)}</span></button>`).join('')}</div>` : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
@@ -212,7 +213,7 @@
     else if (f.mode === 'static' && f.address.trim()) addr = `<span class="net-addr${netErrors(f).address ? ' bad' : ''}">${esc(f.address.trim())}</span>`;
     else if (f.mode === 'dhcp' && c.address) addr = `<span class="net-addr">${esc(c.address)}</span>`;
     return `<span><span class="net-link">${esc(c.connected ? t('Connected') : t('No cable'))}</span>${speed ? ' · ' + esc(speed) : ''}</span>
-      <span>${addr}</span><span class="net-faint">${esc(c.mac)}</span>`;
+      <span>${addr}</span><span class="net-faint net-mac">${esc(c.mac)}</span>`;
   }
   // The same checks as installer.validateCards on the server, so a mistake shows while typing.
   const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;

@@ -2154,6 +2154,14 @@
     { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 },
     { name: 'enp6s0', mac: 'a8:a1:59:3c:72:11', connected: false, address: '', dynamic: false, gateway: '', speed: null },
   ];
+  // install.html?cards=5 shows that many network cards, to see how the step looks with more of them.
+  {
+    const want = Math.min(8, Number((/[?&]cards=(\d+)/.exec(location.search) || [])[1]) || 0);
+    for (let i = instCards.length; i < want; i++) {
+      instCards.push({ name: `enp${5 + i}s0`, mac: `a8:a1:59:3c:72:${(16 + i).toString(16)}`, connected: i % 2 === 0,
+        address: i % 2 === 0 ? `10.10.${i}.2/24` : '', dynamic: i % 2 === 0, gateway: '', speed: i % 2 === 0 ? 10000 : null });
+    }
+  }
   let instChosen = null, instNetSince = 0;
   // A cable in the second card a few seconds after the step opens, and its DHCP address a little later.
   function instCardsNow() {
