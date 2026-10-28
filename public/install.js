@@ -183,6 +183,22 @@
     if (goBtn) go(goBtn.dataset.go);
   });
 
+  // Cog on the USB stick (WPE WebKit 2.48) sends mousedown and mouseup but never click. Make the click ourselves
+  // when the browser didn't: the click event, if any, comes right after pointerup in the same task.
+  let pressed = null;
+  document.addEventListener('pointerdown', (e) => { pressed = e.button === 0 ? e.target : null; }, true);
+  document.addEventListener('pointerup', (e) => {
+    const el = pressed; pressed = null;
+    if (!el || e.button !== 0 || el !== e.target) return;
+    let clicked = false;
+    const seen = () => { clicked = true; };
+    document.addEventListener('click', seen, true);
+    setTimeout(() => {
+      document.removeEventListener('click', seen, true);
+      if (!clicked && el.isConnected) el.click();
+    }, 0);
+  }, true);
+
   function realApi() {
     async function call(method, path, body) {
       const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
