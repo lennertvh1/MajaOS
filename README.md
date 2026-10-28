@@ -19,7 +19,7 @@ Storage, apps, virtual machines and backups on plain Debian, without the command
 
 ## What it is
 
-MajaOS turns a fresh **Debian 13** machine into a home server you manage from the browser, in the spirit of ZimaOS, HexOS and Unraid. It sits on top of proven open-source building blocks and doesn't hide them:
+MajaOS turns a fresh **Debian 13** machine into a home server you manage from the browser. It sits on top of proven open-source building blocks and doesn't hide them:
 
 | | Built on | What you do in MajaOS |
 |---|---|---|
