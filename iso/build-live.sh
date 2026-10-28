@@ -48,7 +48,9 @@ cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
 
 # dhcpcd must not rename the computer to what the router hands out (option host_name, hook 30-hostname).
-echo 'nohook hostname' >> "$R/etc/dhcpcd.conf"
+# Faster when a cable goes in: no random wait before it starts (nodelay), no 5 s check whether the address is
+# free (noarp), and no 169.254.x.x address while it waits for the router (noipv4ll).
+printf 'nohook hostname\nnodelay\nnoarp\nnoipv4ll\n' >> "$R/etc/dhcpcd.conf"
 
 # Logo on a quiet boot. Plymouth keeps it until Cog is ready to draw. A login prompt would wipe it.
 THEME="$R/usr/share/plymouth/themes/majaos"

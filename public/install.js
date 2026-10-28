@@ -262,7 +262,7 @@
     catch (e) { state.net = null; state.error = t(e.message); return; }
     syncForms();
   }
-  // While the step is open: a cable plugged in, or an address that comes later, shows up by itself.
+  // While the step is open: a cable plugged in, or an address that comes later, shows up by itself (every 1.5 s).
   function watchNetwork() {
     if (state.netTimer) clearInterval(state.netTimer);
     state.netTimer = setInterval(async () => {
@@ -279,7 +279,7 @@
       if (form() && form().mode === 'static') prefill(); // only fills fields that are still empty
       if (JSON.stringify([n.cards, n.online, state.netSel]) === before && !$('#inst input[name="address"][value=""]')) return;
       redrawKeepingFocus();
-    }, 3000);
+    }, 1500);
   }
   // Redrawing replaces the inputs: keep the one being typed in, with its cursor.
   function redrawKeepingFocus() {

@@ -75,26 +75,46 @@ async function cards() {
   const [addrs, routes] = await Promise.all([run('ip', ['-j', 'addr'], { timeout: 4000 }), run('ip', ['-j', 'route'], { timeout: 4000 })]);
   return installer.parseCards(JSON.parse(addrs || '[]'), JSON.parse(routes || '[]'), names, speeds);
 }
-// live-boot only asks DHCP for cards that had a cable at the start, and dhcpcd falls back to 169.254.x.x.
-// A card with a cable but without a real address: ask again (in the background, at most every 20 s), without that fallback.
+// live-boot only asks DHCP for cards that had a cable at the start. A card with a cable but without an address and
+// without a dhcpcd of its own gets one (once): never stop a dhcpcd that is busy, it reacts to the cable by itself and
+// restarting it only makes DHCP take longer (a switch port with spanning tree alone can take 30 s).
+function dhcpcdRunning(name) {
+  try {
+    return fs.readdirSync('/proc').some((pid) => {
+      if (!/^\d+$/.test(pid)) return false;
+      try {
+        // dhcpcd renames itself to "dhcpcd: enp5s0 [ip4] [ip6]"; started by hand it is "dhcpcd -4 … enp5s0".
+        const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim();
+        return /^(\S*\/)?dhcpcd[:\s]/.test(cmd) && cmd.split(/[\s:]+/).includes(name);
+      } catch { return false; }
+    });
+  } catch { return false; }
+}
 const asked = {};
 function askDhcp(list) {
   for (const c of list) {
     const own = chosen && chosen.find((x) => x.interface === c.name);
     if (!c.connected || c.address || (own && own.mode !== 'dhcp')) continue;
-    if (Date.now() - (asked[c.name] || 0) < 20000) continue;
+    if (dhcpcdRunning(c.name) || Date.now() - (asked[c.name] || 0) < 60000) continue;
     asked[c.name] = Date.now();
-    quiet('dhcpcd', ['-x', c.name])
-      .then(() => quiet('ip', ['-4', 'addr', 'flush', 'dev', c.name]))
-      .then(() => quiet('dhcpcd', ['-4', '--noipv4ll', '-b', c.name], 10000));
+    // A 169.254.x.x address from before goes away; the rest of the card stays as it is.
+    quiet('ip', ['-4', 'addr', 'flush', 'dev', c.name, 'scope', 'link'])
+      .then(() => quiet('dhcpcd', ['-4', '--noipv4ll', '--noarp', '-b', c.name], 10000));
   }
 }
 // A real connection to the Debian mirror: a DNS answer alone also comes with a wrong gateway (the router is in the same network).
+let onlineCache = { at: 0, ok: false };
+async function onlineSoon() {
+  if (Date.now() - onlineCache.at < 4000) return onlineCache.ok;
+  const ok = await online();
+  onlineCache = { at: Date.now(), ok };
+  return ok;
+}
 function online() {
   return new Promise((resolve) => {
     let done = false;
     const end = (ok) => { if (!done) { done = true; clearTimeout(timer); resolve(ok); } };
-    const timer = setTimeout(() => { sock.destroy(); end(false); }, 5000);
+    const timer = setTimeout(() => { sock.destroy(); end(false); }, 3000);
     const sock = net.connect({ host: 'deb.debian.org', port: 80 }, () => { sock.destroy(); end(true); });
     sock.on('error', () => end(false));
   });
@@ -120,7 +140,7 @@ async function applyLive(list, now) {
     await quiet('ip', ['link', 'set', dev, 'up']);
     if (cfg.mode === 'dhcp') {
       // Without a cable there is no point in waiting: dhcpcd keeps trying in the background.
-      await quiet('dhcpcd', live && live.connected ? ['-4', '--noipv4ll', '-w', '-t', '20', dev] : ['-4', '--noipv4ll', '-b', dev], 25000);
+      await quiet('dhcpcd', live && live.connected ? ['-4', '--noipv4ll', '--noarp', '-w', '-t', '20', dev] : ['-4', '--noipv4ll', '--noarp', '-b', dev], 25000);
       continue;
     }
     await run('ip', ['addr', 'add', cfg.address, 'dev', dev], { timeout: 5000 });
@@ -141,8 +161,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/install/disks' && req.method === 'GET') return send(res, 200, await disks());
     if (url.pathname === '/api/install/progress' && req.method === 'GET') return send(res, 200, { ...status(), language: installLang });
     if (url.pathname === '/api/install/network' && req.method === 'GET') {
-      const [list, ok] = await Promise.all([cards(), online()]);
+      // DHCP first: the internet check can take seconds while there is none yet.
+      const list = await cards();
       askDhcp(list);
+      const ok = await onlineSoon();
       return send(res, 200, { cards: list, online: ok, dns: nameservers(), chosen });
     }
     if (url.pathname === '/api/install/network' && req.method === 'POST') {
