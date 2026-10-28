@@ -7908,9 +7908,11 @@ sudo ./install.sh</pre></div>`}` : '') +
   async function openOnboarding(startAt = 0) {
     ONB.setup = !!S.config.setup;
     ONB.experience = (S.config && S.config.experience) || ONB.experience || 'beginner';
+    // Hide the dashboard right away, not after the data below: otherwise it flashes before the wizard.
+    document.body.classList.add('onb-open');
     // Without an account the server reveals nothing yet: the data comes after the "account" step.
     if (ONB.setup) ONB.data = null;
-    else { try { ONB.data = await api.get('/api/onboarding'); } catch (e) { toast(e.message, true); return; } }
+    else { try { ONB.data = await api.get('/api/onboarding'); } catch (e) { document.body.classList.remove('onb-open'); toast(e.message, true); return; } }
     ONB.steps = onbSteps();
     let resume = null;
     try { resume = sessionStorage.getItem('tb-onb-step'); sessionStorage.removeItem('tb-onb-step'); } catch (e) { /* private window */ }
@@ -8158,5 +8160,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     startDesk();
   }
   tickClock(); setInterval(tickClock, 1000 * 15);
-  boot();
+  // The dashboard stays hidden (body.booting) until boot() has chosen: wizard, sign-in or dashboard.
+  // The wizard hides it itself before this runs, so nothing flashes.
+  boot().finally(() => document.body.classList.remove('booting'));
 })();

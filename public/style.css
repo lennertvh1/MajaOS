@@ -874,7 +874,8 @@ select.field { padding-right: 8px; }
 /* ---- welcome wizard */
 .window.onboard { width: min(720px, calc(100vw - 24px)); height: min(700px, 92vh, 92dvh); max-height: none; }
 /* The wizard stands alone on the background, without the dashboard behind it. */
-body.onb-open .shell { visibility: hidden; }
+/* Until boot() knows whether the welcome wizard or the sign-in comes first, and while the wizard is open: no dashboard. */
+body.onb-open .shell, body.booting .shell { visibility: hidden; }
 .window.onboard::backdrop { background: transparent; backdrop-filter: none; }
 .onb-pool { margin-top: 6px; }
 .onb-pool .form { max-width: none; }
