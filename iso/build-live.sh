@@ -1,5 +1,5 @@
 #!/bin/bash
-# A small Debian live system whose only job is the HomeBaseOS installer screen.
+# A small Debian live system whose only job is the MajaOS installer screen.
 # Needs root, debootstrap and squashfs-tools. build-iso.sh calls this with --live.
 #   ./iso/build-live.sh /path/to/output
 set -euo pipefail
@@ -18,14 +18,14 @@ mkdir -p "$OUT"
 echo "==> debootstrap Debian 13 (trixie), amd64"
 debootstrap --arch=amd64 trixie "$R" http://deb.debian.org/debian
 # debootstrap copies the name of the build machine; the live system gets its own.
-echo homebaseos-installer > "$R/etc/hostname"
-printf '127.0.0.1\tlocalhost\n127.0.1.1\thomebaseos-installer\n' > "$R/etc/hosts"
+echo majaos-installer > "$R/etc/hostname"
+printf '127.0.0.1\tlocalhost\n127.0.1.1\tmajaos-installer\n' > "$R/etc/hosts"
 printf 'deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\ndeb http://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n' > "$R/etc/apt/sources.list"
 mount --bind /proc "$R/proc"
 mount --bind /sys "$R/sys"
 mount --bind /dev "$R/dev"
 chroot "$R" apt-get update -q
-printf 'APT::Sandbox "0";\n' > "$R/etc/apt/apt.conf.d/99homebaseos-build"
+printf 'APT::Sandbox "0";\n' > "$R/etc/apt/apt.conf.d/99majaos-build"
 DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus libpam-systemd nodejs \
   cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk \
@@ -38,7 +38,7 @@ if grep -q '^MODULES=' "$CONF"; then sed -i 's/^MODULES=.*/MODULES=most/' "$CONF
 printf 'iso9660\nsquashfs\noverlay\nloop\nsr_mod\nusb-storage\nuas\n' >> "$R/etc/initramfs-tools/modules"
 
 echo "==> installer files"
-APP="$R/opt/homebaseos-installer"
+APP="$R/opt/majaos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
 cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
 cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
@@ -47,14 +47,14 @@ cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
 
 # Logo on a quiet boot. Plymouth keeps it until Cog is ready to draw. A login prompt would wipe it.
-THEME="$R/usr/share/plymouth/themes/homebaseos"
+THEME="$R/usr/share/plymouth/themes/majaos"
 mkdir -p "$THEME" "$R/etc/plymouth"
-cp "$HERE/plymouth/homebaseos.plymouth" "$HERE/plymouth/homebaseos.script" "$HERE/plymouth/logo.png" "$HERE/plymouth/bar.png" "$THEME/"
-printf '[Daemon]\nTheme=homebaseos\nShowDelay=0\n' > "$R/etc/plymouth/plymouthd.conf"
-chroot "$R" plymouth-set-default-theme homebaseos || ln -sf homebaseos/homebaseos.plymouth "$R/usr/share/plymouth/themes/default.plymouth"
+cp "$HERE/plymouth/majaos.plymouth" "$HERE/plymouth/majaos.script" "$HERE/plymouth/logo.png" "$HERE/plymouth/bar.png" "$THEME/"
+printf '[Daemon]\nTheme=majaos\nShowDelay=0\n' > "$R/etc/plymouth/plymouthd.conf"
+chroot "$R" plymouth-set-default-theme majaos || ln -sf majaos/majaos.plymouth "$R/usr/share/plymouth/themes/default.plymouth"
 chroot "$R" systemctl mask plymouth-quit.service plymouth-quit-wait.service || true
 chroot "$R" systemctl mask getty@tty1.service || true
-# Ctrl+Alt+F2 opens a root shell, to read /tmp/homebaseos-installer.log when the screen misbehaves.
+# Ctrl+Alt+F2 opens a root shell, to read /tmp/majaos-installer.log when the screen misbehaves.
 mkdir -p "$R/etc/systemd/system/getty@tty2.service.d"
 printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %%I $TERM\n' > "$R/etc/systemd/system/getty@tty2.service.d/autologin.conf"
 # The same on the serial port, for when the screen takes no keys at all: on Unraid or libvirt, virsh console <vm>.
@@ -62,13 +62,13 @@ mkdir -p "$R/etc/systemd/system/serial-getty@ttyS0.service.d" "$R/etc/systemd/sy
 printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 %%I $TERM\n' > "$R/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
 ln -sf /lib/systemd/system/serial-getty@.service "$R/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service"
 
-cat > "$R/etc/systemd/system/homebaseos-kiosk.service" <<'EOF'
+cat > "$R/etc/systemd/system/majaos-kiosk.service" <<'EOF'
 [Unit]
-Description=HomeBaseOS installer
+Description=MajaOS installer
 After=systemd-logind.service plymouth-start.service
 Wants=systemd-logind.service
 [Service]
-ExecStart=/opt/homebaseos-installer/iso/kiosk.sh
+ExecStart=/opt/majaos-installer/iso/kiosk.sh
 Type=simple
 # A logind session on tty1: without it cage gets the screen but no mouse or keyboard.
 # No TTYReset or TTYVHangup: those clear the boot logo.
@@ -87,7 +87,7 @@ Environment=XCURSOR_SIZE=24
 WantedBy=multi-user.target
 EOF
 mkdir -p "$R/etc/systemd/system/multi-user.target.wants"
-ln -sf /etc/systemd/system/homebaseos-kiosk.service "$R/etc/systemd/system/multi-user.target.wants/homebaseos-kiosk.service"
+ln -sf /etc/systemd/system/majaos-kiosk.service "$R/etc/systemd/system/multi-user.target.wants/majaos-kiosk.service"
 
 echo "==> initramfs and squashfs"
 VMLINUZ="$(ls "$R"/boot/vmlinuz-* | head -1)"

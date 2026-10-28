@@ -1,6 +1,6 @@
-# Building the HomeBaseOS installation ISO
+# Building the MajaOS installation ISO
 
-The ISO is the official **Debian 13 amd64 netinst** image with HomeBaseOS added. A **release** build uses the graphical installer (`--live`): language, disk choice and confirmation in the browser-style UI, then Debian installs in the background.
+The ISO is the official **Debian 13 amd64 netinst** image with MajaOS added. A **release** build uses the graphical installer (`--live`): language, disk choice and confirmation in the browser-style UI, then Debian installs in the background.
 
 You need **Linux** (bare metal, VM, WSL2, or Docker). **macOS** cannot run `--live` natively (no GNU `cpio`, no `debootstrap` in the same way). Use WSL2 on Windows, a Linux machine, or Docker.
 
@@ -36,7 +36,7 @@ Same as `./iso/build.sh` or `npm run build:iso`.
 | `sudo ./iso/build-iso.sh --live` | Graphical installer + recovery Debian install entry | **Yes** for `--live` | 45–90 minutes |
 | `./iso/build-iso.sh` | Text-based Debian installer only (no live kiosk) | No | 10–20 minutes |
 
-Output (default): `dist/homebaseos-<version>-amd64.iso` and `.sha256` (`<version>` from `package.json`).
+Output (default): `dist/majaos-<version>-amd64.iso` and `.sha256` (`<version>` from `package.json`).
 
 ### Useful flags
 
@@ -59,7 +59,7 @@ First run downloads the netinst into `.iso-cache/` (~800 MB) and verifies SHA256
 sudo apt update
 sudo apt install -y xorriso cpio gzip curl git coreutils debootstrap squashfs-tools
 git clone https://github.com/lennertvh1/homebaseos.git
-cd homebaseos
+cd majaos
 git checkout dev   # or main for a release tag
 
 sudo ./iso/build-iso.sh --live --worktree --out dist
@@ -72,7 +72,7 @@ ls -lh dist/
 
 ## Windows with WSL2
 
-WSL2 is supported and is a good option. Use **WSL2** (not WSL1). Keep the repo on the **Linux filesystem** (`~/homebaseos`), not under `/mnt/c/...` (slower, permission quirks).
+WSL2 is supported and is a good option. Use **WSL2** (not WSL1). Keep the repo on the **Linux filesystem** (`~/majaos`), not under `/mnt/c/...` (slower, permission quirks).
 
 ### 1. Install WSL2
 
@@ -99,7 +99,7 @@ sudo apt update
 sudo apt install -y git xorriso cpio gzip curl coreutils debootstrap squashfs-tools
 cd ~
 git clone https://github.com/lennertvh1/homebaseos.git
-cd homebaseos
+cd majaos
 git checkout dev
 
 sudo ./iso/build-iso.sh --live --worktree --out dist
@@ -108,7 +108,7 @@ sudo ./iso/build-iso.sh --live --worktree --out dist
 ### 3. Copy the ISO to Windows
 
 ```bash
-cp dist/homebaseos-*.iso /mnt/c/Users/YOURNAME/Downloads/
+cp dist/majaos-*.iso /mnt/c/Users/YOURNAME/Downloads/
 ```
 
 Use **balenaEtcher** or **Rufus** on Windows to write the USB stick. Writing with `dd` to a USB device from WSL often fails (the stick is not exposed as `/dev/sdX`).
@@ -132,7 +132,7 @@ Use **balenaEtcher** or **Rufus** on Windows to write the USB stick. Writing wit
 If Docker is installed and the daemon is running:
 
 ```bash
-cd homebaseos
+cd majaos
 ./iso/build-docker.sh
 ```
 
@@ -164,9 +164,9 @@ Test servers on the **dev** channel use *Settings → Software update → Develo
 - **UEFI** enabled (matches the release ISO).
 - **Secure Boot** off (same as on real hardware for ZFS/NVIDIA later).
 - Enough RAM (e.g. 4 GB+ for the live installer).
-- First menu entry: **Install HomeBaseOS** (live). **Recovery** uses the classic Debian installer.
+- First menu entry: **Install MajaOS** (live). **Recovery** uses the classic Debian installer.
 
-If the screen stays black after the house logo: disable **3D/GPU acceleration** in the VM. If the mouse or keyboard does nothing: use a USB tablet as the VM's pointer. On the live system, **Ctrl+Alt+F2** opens a root shell: check `/tmp/homebaseos-installer.log` and `journalctl -u homebaseos-kiosk`. **Ctrl+Alt+F1** goes back to the installer. If the screen takes no keys at all, the serial port has the same shell: on Unraid or another libvirt host, run `virsh console <vm name>` (leave with Ctrl+]).
+If the screen stays black after the house logo: disable **3D/GPU acceleration** in the VM. If the mouse or keyboard does nothing: use a USB tablet as the VM's pointer. On the live system, **Ctrl+Alt+F2** opens a root shell: check `/tmp/majaos-installer.log` and `journalctl -u majaos-kiosk`. **Ctrl+Alt+F1** goes back to the installer. If the screen takes no keys at all, the serial port has the same shell: on Unraid or another libvirt host, run `virsh console <vm name>` (leave with Ctrl+]).
 
 ---
 

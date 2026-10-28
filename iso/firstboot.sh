@@ -1,18 +1,18 @@
 #!/bin/bash
-# First boot after an installation from the HomeBaseOS ISO: run install.sh (ZFS, libvirt, Docker, HomeBaseOS).
+# First boot after an installation from the MajaOS ISO: run install.sh (ZFS, libvirt, Docker, MajaOS).
 # If it succeeds, the installation files disappear and the address appears on the server's screen.
 # There is no password yet: you create an account in the browser the first time.
 # If it fails, everything stays and it tries again at the next boot.
 set -uo pipefail
-SETUP=/opt/homebaseos-setup
-LOG=/var/log/homebaseos-firstboot.log
-ISSUE=/etc/issue.d/homebaseos.issue
+SETUP=/opt/majaos-setup
+LOG=/var/log/majaos-firstboot.log
+ISSUE=/etc/issue.d/majaos.issue
 exec > >(tee -a "$LOG") 2>&1
 
 # Text above the login prompt on the server's screen (\4 = the IPv4 address, filled in by agetty).
 issue() { printf '%s\n' "$@" > "$ISSUE"; agetty --reload 2>/dev/null || true; }
 
-echo "== Installing HomeBaseOS: $(date)"
+echo "== Installing MajaOS: $(date)"
 
 # Wait for internet (max. 10 minutes): install.sh fetches packages.
 for _ in $(seq 1 120); do
@@ -24,14 +24,14 @@ ARGS=()
 [ -f "$SETUP/.nvidia" ] && ARGS+=(--nvidia)
 
 if bash "$SETUP/install.sh" "${ARGS[@]}"; then
-  ENV=/etc/homebaseos/homebaseos.env
+  ENV=/etc/majaos/majaos.env
   PORT="$(sed -n 's/^PORT=//p' "$ENV" | tail -1)"; PORT="${PORT:-80}"
   ADDR="http://\\4"; [ "$PORT" = 80 ] || ADDR="http://\\4:${PORT}"
-  issue "" "  HomeBaseOS is ready. Open in your browser:  ${ADDR}" \
+  issue "" "  MajaOS is ready. Open in your browser:  ${ADDR}" \
     "  and create your account there (the welcome wizard helps you along)." \
     "  The browser warns about the certificate the first time: that is expected." ""
   chmod 644 "$ISSUE"
-  systemctl disable homebaseos-firstboot.service
+  systemctl disable majaos-firstboot.service
   rm -rf "$SETUP"
   echo "== Done: $(date)"
   # The NVIDIA driver only loads after a reboot.
@@ -39,7 +39,7 @@ if bash "$SETUP/install.sh" "${ARGS[@]}"; then
   exit 0
 fi
 
-issue "" "  The installation of HomeBaseOS failed. See /var/log/homebaseos-firstboot.log." \
-  "  To try again:  sudo systemctl restart homebaseos-firstboot   (or reboot the server)" ""
+issue "" "  The installation of MajaOS failed. See /var/log/majaos-firstboot.log." \
+  "  To try again:  sudo systemctl restart majaos-firstboot   (or reboot the server)" ""
 echo "== Failed: $(date)"
 exit 1

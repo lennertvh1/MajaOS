@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs apt for Settings > Software update > Debian, as its own systemd unit (systemd-run): needrestart may restart
-# HomeBaseOS while apt runs, and that must not stop apt. HomeBaseOS copies this file to DATA_DIR/debian/ first.
+# MajaOS while apt runs, and that must not stop apt. MajaOS copies this file to DATA_DIR/debian/ first.
 #
 # Arguments: <action: check|upgrade|auto-on|auto-off> <status file> <log file> <20auto-upgrades file>
 set -u
@@ -8,7 +8,7 @@ ACTION="$1"; STATUS="$2"; LOG="$3"; AUTO="$4"
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a LC_ALL=C
 APT_OPTS=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 
-# Write the state to the status file (JSON); HomeBaseOS reads it and the browser shows it.
+# Write the state to the status file (JSON); MajaOS reads it and the browser shows it.
 st() { # state message [code]
   node -e '
     const fs = require("fs"); const [f, state, msg, code] = process.argv.slice(1);
@@ -25,16 +25,16 @@ step() { "$@" >> "$LOG" 2>&1; }
 
 # Automatic security updates: unattended-upgrades and needrestart, no automatic reboot, Docker never restarted by needrestart.
 configure() {
-  cat > /etc/apt/apt.conf.d/52homebaseos <<'CONF'
-// Written by HomeBaseOS (Settings > Software update). Security updates and Debian point releases are installed automatically.
-// Never an automatic reboot: a new kernel needs the ZFS module built first. HomeBaseOS shows when a restart is needed.
+  cat > /etc/apt/apt.conf.d/52majaos <<'CONF'
+// Written by MajaOS (Settings > Software update). Security updates and Debian point releases are installed automatically.
+// Never an automatic reboot: a new kernel needs the ZFS module built first. MajaOS shows when a restart is needed.
 Unattended-Upgrade::Automatic-Reboot "false";
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 CONF
   mkdir -p /etc/needrestart/conf.d
-  cat > /etc/needrestart/conf.d/homebaseos.conf <<'CONF'
-# Written by HomeBaseOS: restart services with old libraries automatically, but never Docker (that would stop all apps).
+  cat > /etc/needrestart/conf.d/majaos.conf <<'CONF'
+# Written by MajaOS: restart services with old libraries automatically, but never Docker (that would stop all apps).
 $nrconf{restart} = 'a';
 $nrconf{override_rc}{qr(^docker)} = 0;
 $nrconf{override_rc}{qr(^containerd)} = 0;

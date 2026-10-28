@@ -1,4 +1,4 @@
-/* The installation screen: one card on the same landscape as the rest of HomeBaseOS. */
+/* The installation screen: one card on the same landscape as the rest of MajaOS. */
 .inst {
   min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px;
   /* Onest has no Chinese or Japanese. These are the same letters, on a Mac and on the ISO (Noto Sans CJK). */

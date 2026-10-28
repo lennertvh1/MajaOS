@@ -1,4 +1,4 @@
-/* HomeBaseOS installer. The same page runs in the demo and from the USB stick. */
+/* MajaOS installer. The same page runs in the demo and from the USB stick. */
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
@@ -49,7 +49,7 @@
     return d.rotational ? t('Hard drive') : t('SSD');
   }
   function brand() {
-    return `<div class="inst-brand">${MARK}<span>HomeBaseOS</span></div>`;
+    return `<div class="inst-brand">${MARK}<span>MajaOS</span></div>`;
   }
   function actions(html) { return `<div class="inst-actions">${html}</div>`; }
   function btn(label, attrs, primary) {
@@ -59,7 +59,7 @@
   function draw() {
     const root = $('#inst');
     if (state.unavailable) {
-      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Install HomeBaseOS'))}</h1><p class="lead">${esc(t('This page is the installer. Start the computer from the HomeBaseOS USB stick to use it.'))}</p></section>`;
+      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Install MajaOS'))}</h1><p class="lead">${esc(t('This page is the installer. Start the computer from the MajaOS USB stick to use it.'))}</p></section>`;
       return;
     }
     if (state.step === 'lang') {
@@ -70,8 +70,8 @@
       return;
     }
     if (state.step === 'welcome') {
-      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Welcome to HomeBaseOS'))}</h1>
-        <p class="lead">${esc(t('This installs HomeBaseOS on this computer. You create your account in the browser afterwards.'))}</p>
+      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Welcome to MajaOS'))}</h1>
+        <p class="lead">${esc(t('This installs MajaOS on this computer. You create your account in the browser afterwards.'))}</p>
         ${actions(btn(t('Back'), 'data-go="lang"') + btn(t('Continue'), 'data-go="disk"', true))}</section>`;
       return;
     }
@@ -83,7 +83,7 @@
           <span class="disk-ico">${HDD}</span><span><b>${esc(label)}</b><span>${esc(d.name)} · ${esc(bytes(d.size))} · ${esc(extra)}</span></span></button>`;
       }).join('') : `<p class="lead">${esc(t('No disk to install on.'))}</p>`;
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Choose the disk'))}</h1>
-        <p class="lead">${esc(t('HomeBaseOS will be installed on this disk. Everything on it will be erased.'))}</p>
+        <p class="lead">${esc(t('MajaOS will be installed on this disk. Everything on it will be erased.'))}</p>
         ${cards}<p class="inst-error" role="alert">${esc(state.error)}</p>
         ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="confirm"' + (state.disk ? '' : ' disabled'), true))}</section>`;
       return;
@@ -100,7 +100,7 @@
     if (state.step === 'progress' || state.step === 'done') {
       const job = state.job || { percent: 0, message: t('Preparing the installation'), state: 'running', log: '' };
       const failed = job.state === 'failed';
-      const title = failed ? t('The installation failed. You can try again.') : (state.step === 'done' ? t('Installing HomeBaseOS') : t('Installing HomeBaseOS'));
+      const title = failed ? t('The installation failed. You can try again.') : (state.step === 'done' ? t('Installing MajaOS') : t('Installing MajaOS'));
       root.innerHTML = `<section class="inst-card" ${state.step === 'progress' && !failed ? 'data-step="progress"' : ''}>${brand()}<h1>${esc(title)}</h1>
         <p class="lead" data-msg>${esc(t(job.message || ''))}</p>
         <div class="bar" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
@@ -224,7 +224,7 @@
       await new Promise((resolve, reject) => {
         const s = document.createElement('script'); s.src = 'demo.js'; s.onload = resolve; s.onerror = reject; document.body.appendChild(s);
       });
-      api = window.HomeBaseOSDemo;
+      api = window.MajaOSDemo;
     } else if (cfg.installer) { api = realApi(); state.installer = true; }
     else { state.unavailable = true; draw(); return; }
     try { await setLang(localStorage.getItem('tb-lang') || 'en'); } catch (e) { await setLang('en'); }

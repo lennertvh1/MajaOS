@@ -38,15 +38,15 @@ test('compose file of an own app', () => {
   assert.match(c.text, /restart: "always"/);
   assert.match(c.text, /ports:\n {6}- "3001:3001\/tcp"/);
   assert.match(c.text, /volumes:\n {6}- "\/fast\/appdata\/kuma:\/app\/data"/);
-  assert.match(c.text, /homebaseos.custom: "1"/);
-  assert.match(c.text, /homebaseos.data: "\/fast\/appdata\/kuma"/);
+  assert.match(c.text, /majaos.custom: "1"/);
+  assert.match(c.text, /majaos.data: "\/fast\/appdata\/kuma"/);
   assert.deepEqual(c.data, ['/fast/appdata/kuma']);
-  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'mine', value: 'yes' }, { name: 'homebaseos.store', value: 'x' }] },
+  const extra = store.buildCustomCompose({ ...body, privileged: true, devices: [{ host: '/dev/dri', container: '' }], labels: [{ name: 'mine', value: 'yes' }, { name: 'majaos.store', value: 'x' }] },
     { network: { mode: 'bridge' }, takenPorts: [] });
   assert.match(extra.text, /devices:\n {6}- "\/dev\/dri:\/dev\/dri"/);
   assert.match(extra.text, /privileged: true/);
   assert.match(extra.text, /mine: "yes"/);
-  assert.doesNotMatch(extra.text, /homebaseos.store/);
+  assert.doesNotMatch(extra.text, /majaos.store/);
   const host = store.buildCustomCompose(body, { network: { mode: 'host' }, takenPorts: [] });
   assert.match(host.text, /network_mode: "host"/); assert.doesNotMatch(host.text, /ports:/);
   const bad = (b, re, taken = []) => assert.throws(() => store.buildCustomCompose({ ...body, ...b }, { network: { mode: 'bridge' }, takenPorts: taken }), re);

@@ -1,4 +1,4 @@
-/* Languages of HomeBaseOS. English is built in: the English text in the code is the key (like gettext).
+/* Languages of MajaOS. English is built in: the English text in the code is the key (like gettext).
  * To add a language: copy nl.js to <code>.js, translate the values and add a line below.
  * ui: the dictionary covers the interface. Without it, only the installer is translated, so Settings does not offer it. */
 window.TB_LANGS = {

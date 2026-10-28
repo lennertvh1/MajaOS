@@ -23,13 +23,13 @@ test('a public address is only a host', () => {
 
 test('the tunnel unit never contains the token', () => {
   const token = tunnel.unitText('token', {
-    bin: '/usr/bin/cloudflared', port: 80, log: '/var/lib/homebaseos/tunnel.log', env: '/var/lib/homebaseos/tunnel.env',
+    bin: '/usr/bin/cloudflared', port: 80, log: '/var/lib/majaos/tunnel.log', env: '/var/lib/majaos/tunnel.env',
   });
-  assert.match(token, /EnvironmentFile=\/var\/lib\/homebaseos\/tunnel\.env/);
+  assert.match(token, /EnvironmentFile=\/var\/lib\/majaos\/tunnel\.env/);
   assert.match(token, /--token \$TOKEN/);
   assert.doesNotMatch(token, /eyJ/);
   const quick = tunnel.unitText('quick', {
-    bin: '/usr/bin/cloudflared', port: 80, log: '/var/lib/homebaseos/tunnel.log', env: '/var/lib/homebaseos/tunnel.env',
+    bin: '/usr/bin/cloudflared', port: 80, log: '/var/lib/majaos/tunnel.log', env: '/var/lib/majaos/tunnel.env',
   });
   assert.match(quick, /--url http:\/\/127\.0\.0\.1:80/);
   assert.doesNotMatch(quick, /TOKEN/);

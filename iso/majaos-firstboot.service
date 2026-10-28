@@ -1,13 +1,13 @@
 [Unit]
-Description=Installing HomeBaseOS (first boot after the ISO)
+Description=Installing MajaOS (first boot after the ISO)
 After=network-online.target
 Wants=network-online.target
 # Only while the installation files are still there: they disappear after a successful installation.
-ConditionPathExists=/opt/homebaseos-setup/install.sh
+ConditionPathExists=/opt/majaos-setup/install.sh
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /opt/homebaseos-setup/iso/firstboot.sh
+ExecStart=/bin/bash /opt/majaos-setup/iso/firstboot.sh
 TimeoutStartSec=0
 RemainAfterExit=yes
 StandardOutput=journal+console

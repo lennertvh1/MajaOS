@@ -40,7 +40,7 @@ test('verifyTotp: one step of leeway, no reuse', () => {
 
 test('otpauth address', () => {
   const uri = auth.otpauthUri('ABCD', 'freddy');
-  assert.equal(uri, 'otpauth://totp/HomeBaseOS:freddy?secret=ABCD&issuer=HomeBaseOS&algorithm=SHA1&digits=6&period=30');
+  assert.equal(uri, 'otpauth://totp/MajaOS:freddy?secret=ABCD&issuer=MajaOS&algorithm=SHA1&digits=6&period=30');
 });
 
 test('recovery codes: shape and hash without capitals or dash', () => {

@@ -11,7 +11,7 @@ const installer = require('../lib/installer');
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.INSTALL_PORT || 8753);
-const DIR = process.env.INSTALL_DIR || '/run/homebaseos-install';
+const DIR = process.env.INSTALL_DIR || '/run/majaos-install';
 const STATUS = path.join(DIR, 'status.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 

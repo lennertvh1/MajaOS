@@ -73,7 +73,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.iso
         uses: actions/upload-artifact@v5
         with:
-          name: homebaseos-test-iso-${{ github.sha }}
+          name: majaos-test-iso-${{ github.sha }}
           path: dist/*
           retention-days: 7
 

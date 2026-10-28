@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=MajaOS
+Description=MajaOS boot logo
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/majaos
+ScriptFile=/usr/share/plymouth/themes/majaos/majaos.script

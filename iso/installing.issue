@@ -1,4 +1,4 @@
 
-  HomeBaseOS is being installed now (ZFS, Docker, libvirt). This takes 5 to 15 minutes.
-  To follow along: sign in as "homebase" and type  sudo journalctl -fu homebaseos-firstboot
+  MajaOS is being installed now (ZFS, Docker, libvirt). This takes 5 to 15 minutes.
+  To follow along: sign in as "maja" and type  sudo journalctl -fu majaos-firstboot
 

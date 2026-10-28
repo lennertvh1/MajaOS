@@ -14,7 +14,7 @@ const opts = { parents: PARENTS, existing: EXISTING };
 test('creating a network: bridge and macvlan', () => {
   assert.deepEqual(dn.validateNetwork({ name: 'apps', driver: 'bridge' }, opts), {
     Name: 'apps', Driver: 'bridge', Internal: false, Attachable: true, EnableIPv6: false,
-    IPAM: { Driver: 'default', Config: [] }, Options: {}, Labels: { homebaseos: '1' } });
+    IPAM: { Driver: 'default', Config: [] }, Options: {}, Labels: { majaos: '1' } });
   const b = dn.validateNetwork({ name: 'db', driver: 'bridge', subnet: '172.30.0.7/24', internal: true }, opts);
   assert.deepEqual(b.IPAM.Config, [{ Subnet: '172.30.0.0/24' }]); // netwerkadres rechtgezet
   assert.equal(b.Internal, true);
@@ -44,7 +44,7 @@ test('creating a network: wrong input', () => {
 
 test('summarising the output of GET /networks/<id>', () => {
   const n = dn.summarize({
-    Name: 'lan', Id: 'abc', Driver: 'macvlan', Internal: false, Options: { parent: 'br0' }, Labels: { homebaseos: '1' },
+    Name: 'lan', Id: 'abc', Driver: 'macvlan', Internal: false, Options: { parent: 'br0' }, Labels: { majaos: '1' },
     IPAM: { Config: [{ Subnet: 'fd00::/64' }, { Subnet: '192.168.1.0/24', Gateway: '192.168.1.1', IPRange: '192.168.1.192/27' }] },
     Containers: { x: { Name: 'pihole', IPv4Address: '192.168.1.200/24' }, y: { Name: 'adguard', IPv4Address: '' } },
   });
@@ -101,19 +101,19 @@ test('app store: template with br0 and a chosen custom network', () => {
 
 test('WebUI with an own address in the home network', () => {
   const ports = [{ public: 8080, private: 80, type: 'TCP' }];
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/admin' }, ports), 'http://[IP]:8080/admin');
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:80]/admin' }, [], null, '192.168.1.200'), 'http://192.168.1.200:80/admin');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:80]/admin' }, ports), 'http://[IP]:8080/admin');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:80]/admin' }, [], null, '192.168.1.200'), 'http://192.168.1.200:80/admin');
   assert.equal(webui({}, [], null, '192.168.1.200'), null);
 });
 
 test('WebUI op bridge en host', () => {
   // Template for host (port 8123) put on bridge with one published port: that port.
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 8124, private: 80, type: 'TCP' }]), 'http://[IP]:8124');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 8124, private: 80, type: 'TCP' }]), 'http://[IP]:8124');
   // Several ports and none that fits: the template's port.
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 1, private: 2, type: 'TCP' }, { public: 3, private: 4, type: 'TCP' }]), 'http://[IP]:8123');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:8123]' }, [{ public: 1, private: 2, type: 'TCP' }, { public: 3, private: 4, type: 'TCP' }]), 'http://[IP]:8123');
   // TCP goes before UDP with the same port.
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:53]/' }, [{ public: 5353, private: 53, type: 'UDP' }, { public: 5300, private: 53, type: 'TCP' }]), 'http://[IP]:5300/');
-  assert.equal(webui({ 'homebaseos.webui': 'http://[IP]:[PORT:8123]' }, [], null, null, true), 'http://[IP]:8123');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:53]/' }, [{ public: 5353, private: 53, type: 'UDP' }, { public: 5300, private: 53, type: 'TCP' }]), 'http://[IP]:5300/');
+  assert.equal(webui({ 'majaos.webui': 'http://[IP]:[PORT:8123]' }, [], null, null, true), 'http://[IP]:8123');
 });
 
 test('app store: extra ports, and not with host or an own address', () => {
@@ -128,11 +128,11 @@ test('app store: extra ports, and not with host or an own address', () => {
   assert.equal(host.warnings.join(), ''); // host is the normal choice now: no warning
 });
 
-test('the shared homebase network: a free subnet and a free address', () => {
+test('the shared maja network: a free subnet and a free address', () => {
   const c = (x) => dn.parseCidr(x, 0, 32);
-  assert.equal(dn.pickHomebaseSubnet([c('172.17.0.0/16'), c('192.168.1.0/24')]).text, '172.30.0.0/16');
-  assert.equal(dn.pickHomebaseSubnet([c('172.30.5.0/24')]).text, '172.29.0.0/16');
-  const n = { name: 'homebase', subnet: '172.30.0.0/16', gateway: '172.30.0.1', containers: [{ name: 'jellyfin', ip: '172.30.0.10/16' }] };
+  assert.equal(dn.pickMajaSubnet([c('172.17.0.0/16'), c('192.168.1.0/24')]).text, '172.30.0.0/16');
+  assert.equal(dn.pickMajaSubnet([c('172.30.5.0/24')]).text, '172.29.0.0/16');
+  const n = { name: 'maja', subnet: '172.30.0.0/16', gateway: '172.30.0.1', containers: [{ name: 'jellyfin', ip: '172.30.0.10/16' }] };
   assert.equal(dn.checkFreeIp('172.30.0.11', n), '172.30.0.11');
   assert.equal(dn.checkFreeIp('172.30.0.10', n, 'jellyfin'), '172.30.0.10'); // its own address when editing
   assert.throws(() => dn.checkFreeIp('172.30.0.10', n, 'plex'), /already used by jellyfin/);

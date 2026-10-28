@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One command to build the HomeBaseOS installation ISO (live + current files → dist/).
+# One command to build the MajaOS installation ISO (live + current files → dist/).
 # Picks native Linux/WSL or Docker on macOS. See docs/build-iso.md.
 #
 #   ./iso/build.sh

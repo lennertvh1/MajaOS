@@ -46,7 +46,7 @@
   let demo = false;
 
   const name = decodeURIComponent(location.hash.slice(1));
-  // In a HomeBaseOS window (iframe) or on its own (separate browser window)?
+  // In a MajaOS window (iframe) or on its own (separate browser window)?
   const embedded = window.self !== window.top;
   const consoleUrl = () => location.pathname + location.hash;
   const vmPath = '/api/vms/' + encodeURIComponent(name);
@@ -100,7 +100,7 @@
     rfb.addEventListener('connect', () => { connecting = false; status(''); setTools(true); rfb.focus(); });
     rfb.addEventListener('clipboard', (e) => onVmClipboard(e.detail.text));
     rfb.addEventListener('credentialsrequired', () => rfb.sendCredentials({ password: (vm.vnc && vm.vnc.password) || '' }));
-    rfb.addEventListener('securityfailure', () => status(t('The screen password is wrong. Open the console again from HomeBaseOS.')));
+    rfb.addEventListener('securityfailure', () => status(t('The screen password is wrong. Open the console again from MajaOS.')));
     rfb.addEventListener('disconnect', () => {
       connecting = false; rfb = null; setTools(false);
       retryAt = Date.now() + 5000; // try again by itself, but not right away
@@ -140,14 +140,14 @@
     $('#cTypeBar').hidden = true; $('#cType').setAttribute('aria-expanded', 'false');
   });
 
-  /* ---- separate window: take the console out of HomeBaseOS */
+  /* ---- separate window: take the console out of MajaOS */
   if (embedded) {
     $('#cPop').hidden = false; $('#cClose').hidden = false;
     document.querySelector('.console-bar .back').hidden = true;
   }
   $('#cPop').addEventListener('click', () => {
     const w = window.open(consoleUrl(), 'tb-console-' + name.replace(/[^\w-]/g, ''), 'popup=yes,width=1180,height=800');
-    if (!w) { toast(t('Your browser blocked the new window. Allow pop-ups for HomeBaseOS.'), true); return; }
+    if (!w) { toast(t('Your browser blocked the new window. Allow pop-ups for MajaOS.'), true); return; }
     disconnect();
     if (window.parent && window.parent.TB_closeConsole) window.parent.TB_closeConsole();
   });
@@ -260,14 +260,14 @@
 
   /* ---- start */
   (async function init() {
-    if (!name) { status(t('No VM chosen. Open the console from the VM page in HomeBaseOS.')); translateStatic(); return; }
+    if (!name) { status(t('No VM chosen. Open the console from the VM page in MajaOS.')); translateStatic(); return; }
     let cfg = null;
     try { cfg = await call('GET', '/api/config'); } catch (e) { /* below */ }
     if (cfg && !cfg.demo && cfg.language) LANG = cfg.language;
     translateStatic();
-    if (!cfg) { status(t('HomeBaseOS cannot be reached.'), [[t('Try again'), () => location.reload()]]); return; }
-    if (cfg.needsLogin) { status(t('Sign in to HomeBaseOS first.'), [[t('Sign in'), () => { location.href = '/'; }, true]]); return; }
-    if (cfg.demo && window.HomeBaseOSDemo) { demo = true; api = window.HomeBaseOSDemo; }
+    if (!cfg) { status(t('MajaOS cannot be reached.'), [[t('Try again'), () => location.reload()]]); return; }
+    if (cfg.needsLogin) { status(t('Sign in to MajaOS first.'), [[t('Sign in'), () => { location.href = '/'; }, true]]); return; }
+    if (cfg.demo && window.MajaOSDemo) { demo = true; api = window.MajaOSDemo; }
     await refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 5000);
   })();

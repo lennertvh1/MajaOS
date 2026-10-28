@@ -1,9 +1,9 @@
 'use strict';
 /*
- * HomeBaseOS — a simple management system for your home server (in the style of ZimaOS/HexOS).
+ * MajaOS — a simple management system for your home server (in the style of ZimaOS/HexOS).
  * Runs as root on Debian 13 with ZFS, KVM/libvirt and Docker. No external dependencies: Node 18.11+.
  *
- * Environment variables (on the server in /etc/homebaseos/homebaseos.env):
+ * Environment variables (on the server in /etc/majaos/majaos.env):
  *   APP_PASSWORD     password from older installs (optional). Without a password you create an account the first time.
  *   SESSION_SECRET   fixed key for sign-ins; otherwise random per start
  *   PORT             web port if Settings has none; otherwise 80 (8080 in the demo)
@@ -15,7 +15,7 @@
  *   SHARES_DIR       where Unraid shares (/mnt/user/...) go (older installs; default the first pool)
  *   STACKS_DIR       compose files of the app store, default /opt/stacks (like Dockge)
  *   APP_UID/APP_GID  user for apps instead of Unraid's 99:100, default 1000:1000
- *   DATA_DIR         own settings, default /var/lib/homebaseos
+ *   DATA_DIR         own settings, default /var/lib/majaos
  *   DEMO             1 = demo mode with sample data (no server needed)
  */
 const http = require('node:http');
@@ -276,7 +276,7 @@ async function handleApi(req, res, url) {
     res.setHeader('Set-Cookie', 'tb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return sendJson(res, 200, { ok: true });
   }
-  // Pairing the HomeBase Backup app on a PC: without sign-in, with a one-time code valid for 15 minutes (lib/kopia.js).
+  // Pairing the MajaOS Backup app on a PC: without sign-in, with a one-time code valid for 15 minutes (lib/kopia.js).
   const pair = p.match(/^\/api\/backup\/pair\/([A-Za-z0-9-]{1,20})$/);
   if (pair && method === 'GET' && !CFG.demo) {
     res.setHeader('Access-Control-Allow-Origin', '*'); // the app requests it from another address
@@ -288,7 +288,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/tls/ca.crt' && method === 'GET') {
     const pem = tlsCert.caPem();
     if (!pem) return sendJson(res, 404, { error: 'There is no certificate yet.' });
-    res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Disposition': 'attachment; filename="homebaseos-ca.crt"', 'Cache-Control': 'no-store' });
+    res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Disposition': 'attachment; filename="majaos-ca.crt"', 'Cache-Control': 'no-store' });
     return res.end(pem);
   }
   // The demo adapter fetches a real site icon through here. On a normal server this stays behind sign-in.
@@ -435,7 +435,7 @@ async function handleApi(req, res, url) {
         try { settings.saveSettings({ port: beforePort }, { checkPassword: () => true }); } catch { /* the listen error is the one to show */ }
         const wanted = Number(body.port);
         if (e.code === 'EADDRINUSE') throw Object.assign(new Error(`Port ${wanted} is already in use. Choose another port.`), { status: 409 });
-        if (e.code === 'EACCES' || e.code === 'EPERM') throw Object.assign(new Error(`Port ${wanted} needs HomeBaseOS to run as root. Choose a port above 1024.`), { status: 409 });
+        if (e.code === 'EACCES' || e.code === 'EPERM') throw Object.assign(new Error(`Port ${wanted} needs MajaOS to run as root. Choose a port above 1024.`), { status: 409 });
         throw Object.assign(new Error(e.message || 'The port could not be changed.'), { status: 409 });
       }
       tunnel.retarget().catch((err) => console.error('Remote access: ' + err.message));
@@ -511,7 +511,7 @@ async function handleApi(req, res, url) {
   // Change password (welcome wizard and Security). Other sessions are signed out, this one stays signed in.
   if (p === '/api/password' && method === 'POST') {
     const body = await readBody(req);
-    if (!passwordEnabled()) return sendJson(res, 409, { error: 'HomeBaseOS runs without a password.' });
+    if (!passwordEnabled()) return sendJson(res, 409, { error: 'MajaOS runs without a password.' });
     if (!checkPassword(body.current)) { await slow(); return sendJson(res, 401, { error: 'Your current password is not correct.' }); }
     auth.setPassword(body.password);
     removePasswordIssue();
@@ -676,7 +676,7 @@ function serveStatic(req, res, url) {
   fs.stat(file, (serr, st) => {
     if (serr || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
     // The browser checks each time whether the file changed (304 if it is the same),
-    // so a new version of HomeBaseOS shows up right after a normal refresh.
+    // so a new version of MajaOS shows up right after a normal refresh.
     const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
     // No other site may show these pages in a frame (clickjacking). The console window is the same origin.
     const headers = {
@@ -803,8 +803,8 @@ function bind(port) {
 }
 
 bind(CFG.port).then(() => {
-  console.log(`HomeBaseOS is running on port ${CFG.port}` + (CFG.demo ? ' (demo mode)' : ''));
-  // HomeBaseOS runs as root: until there is an account, you can only create that account (all other endpoints return 401).
+  console.log(`MajaOS is running on port ${CFG.port}` + (CFG.demo ? ' (demo mode)' : ''));
+  // MajaOS runs as root: until there is an account, you can only create that account (all other endpoints return 401).
   if (needsSetup()) console.log(`No account yet. Open http://<address>:${CFG.port} to create one.`);
   if (!CFG.demo) {
     startHttps().then((port) => port && console.log(`HTTPS on port ${port}.`))
@@ -818,13 +818,13 @@ bind(CFG.port).then(() => {
     const check = () => docker.checkUpdates(false).then((r) => r.updates && console.log(r.updates + ' app(s) with an update.')).catch(() => {});
     setTimeout(check, 2 * 60000);
     setInterval(check, 6 * 3600000);
-    release.startSchedule((msg) => console.log(msg)); // new versions of HomeBaseOS itself
+    release.startSchedule((msg) => console.log(msg)); // new versions of MajaOS itself
     backup.startSchedule(); // scheduled backup tasks
     sysbackup.startSchedule(); // scheduled backups of apps and VMs
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
   }
 }).catch((e) => {
-  console.error(`HomeBaseOS could not listen on port ${CFG.port}: ${e.message}`);
+  console.error(`MajaOS could not listen on port ${CFG.port}: ${e.message}`);
   process.exit(1);
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the HomeBaseOS ISO inside Ubuntu 24.04 (Docker). Use on macOS, Windows, or Linux when debootstrap is not on the host.
+# Build the MajaOS ISO inside Ubuntu 24.04 (Docker). Use on macOS, Windows, or Linux when debootstrap is not on the host.
 # See docs/build-iso.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

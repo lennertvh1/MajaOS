@@ -1,5 +1,5 @@
 {
-  "name": "homebaseos",
+  "name": "majaos",
   "version": "0.5.0",
   "description": "Simple management system for your home server on Debian, with ZFS, VMs and Docker",
   "main": "server.js",

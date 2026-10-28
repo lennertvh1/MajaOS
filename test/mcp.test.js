@@ -20,7 +20,7 @@ test('a frame split in two still parses', () => {
 
 test('initialize and tools/list answer, a notification does not', async () => {
   const init = await dispatch({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } }, null);
-  assert.equal(init.result.serverInfo.name, 'homebaseos');
+  assert.equal(init.result.serverInfo.name, 'majaos');
   assert.equal(init.result.protocolVersion, '2024-11-05');
   const list = await dispatch({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, null);
   const names = list.result.tools.map((t) => t.name);
@@ -126,7 +126,7 @@ test('the connector address signs in with PKCE and then answers MCP', async () =
   const init = await call('POST', '/mcp', { authorization: 'Bearer session-token' }, JSON.stringify({
     jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' },
   }));
-  assert.equal(JSON.parse(init.body).result.serverInfo.name, 'homebaseos');
+  assert.equal(JSON.parse(init.body).result.serverInfo.name, 'majaos');
   const nope = await call('GET', '/mcp');
   assert.equal(nope.status, 405);
   deps.enabled = () => false;

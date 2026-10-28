@@ -34,14 +34,14 @@ test('storage locations: nothing set, a new pool, and an own choice', () => {
 test('moving: only replace full paths', () => {
   const text = [
     '    volumes:', '      - "/fast/appdata/jellyfin:/config"', '      - /fast/appdata:/all', '      - "/fast/appdata2/x:/y"',
-    '      - type: bind', '        source: /fast/appdata/kuma', '    labels:', '      homebaseos.data: "/fast/appdata/jellyfin,/fast/appdata/kuma"',
+    '      - type: bind', '        source: /fast/appdata/kuma', '    labels:', '      majaos.data: "/fast/appdata/jellyfin,/fast/appdata/kuma"',
   ].join('\n');
   const out = replacePath(text, '/fast/appdata', '/tank/appdata');
   assert.match(out, /"\/tank\/appdata\/jellyfin:\/config"/);
   assert.match(out, /- \/tank\/appdata:\/all/);
   assert.match(out, /"\/fast\/appdata2\/x:\/y"/); // another path, stays
   assert.match(out, /source: \/tank\/appdata\/kuma/);
-  assert.match(out, /homebaseos\.data: "\/tank\/appdata\/jellyfin,\/tank\/appdata\/kuma"/);
+  assert.match(out, /majaos\.data: "\/tank\/appdata\/jellyfin,\/tank\/appdata\/kuma"/);
 });
 
 test('moving: which apps can come along', () => {

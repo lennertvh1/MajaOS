@@ -17,38 +17,38 @@ test('preseed asks for the disk, the confirmation and the password itself', () =
   // No passwords in the ISO.
   for (const k of Object.keys(preseed)) assert.ok(!/password/.test(k), k);
   assert.equal(preseed['passwd/root-login'].value, 'false'); // root off, the user gets sudo
-  assert.equal(preseed['passwd/username'].value, 'homebase');
+  assert.equal(preseed['passwd/username'].value, 'maja');
   assert.equal(preseed['debian-installer/locale'].value, 'en_US.UTF-8');
   assert.match(preseed['tasksel/first'].value, /ssh-server/);
-  assert.equal(preseed['preseed/late_command'].value, 'sh /cdrom/homebaseos/late.sh');
+  assert.equal(preseed['preseed/late_command'].value, 'sh /cdrom/majaos/late.sh');
 });
 
 test('late.sh, the first-boot service and firstboot.sh fit together', () => {
-  const late = read('late.sh'), unit = read('homebaseos-firstboot.service'), first = read('firstboot.sh');
-  for (const f of ['homebaseos.tar.gz', 'homebaseos-firstboot.service', 'installing.issue']) assert.ok(late.includes(f), f);
-  assert.match(late, /homebaseos\.nvidia=1/);
-  assert.match(late, /homebaseos\\.lang=/);
-  assert.match(late, /passwd -l homebase/);
-  assert.match(unit, /ExecStart=\/bin\/bash \/opt\/homebaseos-setup\/iso\/firstboot\.sh/);
-  assert.match(unit, /ConditionPathExists=\/opt\/homebaseos-setup\/install\.sh/);
+  const late = read('late.sh'), unit = read('majaos-firstboot.service'), first = read('firstboot.sh');
+  for (const f of ['majaos.tar.gz', 'majaos-firstboot.service', 'installing.issue']) assert.ok(late.includes(f), f);
+  assert.match(late, /majaos\.nvidia=1/);
+  assert.match(late, /majaos\\.lang=/);
+  assert.match(late, /passwd -l maja/);
+  assert.match(unit, /ExecStart=\/bin\/bash \/opt\/majaos-setup\/iso\/firstboot\.sh/);
+  assert.match(unit, /ConditionPathExists=\/opt\/majaos-setup\/install\.sh/);
   assert.match(first, /install\.sh/);
-  assert.match(first, /systemctl disable homebaseos-firstboot\.service/);
+  assert.match(first, /systemctl disable majaos-firstboot\.service/);
   // No password on the screen: you create the account in the browser. (server.js cleans up an old password file.)
-  assert.doesNotMatch(first, /APP_PASSWORD|homebaseos-wachtwoord\.issue/);
+  assert.doesNotMatch(first, /APP_PASSWORD|majaos-wachtwoord\.issue/);
   assert.match(first, /account/);
   assert.ok(fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8').includes('/etc/issue.d/homebaseos-wachtwoord.issue'));
   assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', 'install.sh'), 'utf8'), /APP_PASSWORD=\$/);
-  // The build script copies everything late.sh uses from /cdrom/homebaseos.
+  // The build script copies everything late.sh uses from /cdrom/majaos.
   const build = read('build-iso.sh');
-  for (const f of ['late.sh', 'homebaseos-firstboot.service', 'installing.issue', 'serve.js', 'kiosk.sh', 'run-install.sh']) assert.ok(build.includes('"$HERE/' + f + '"'), f);
+  for (const f of ['late.sh', 'majaos-firstboot.service', 'installing.issue', 'serve.js', 'kiosk.sh', 'run-install.sh']) assert.ok(build.includes('"$HERE/' + f + '"'), f);
   assert.match(build, /boot=live components quiet splash/);
-  assert.match(build, /background_image \/homebaseos\/splash\.png/);
+  assert.match(build, /background_image \/majaos\/splash\.png/);
   assert.ok(fs.existsSync(path.join(dir, 'plymouth', 'grub-splash.png')));
   const live = read('build-live.sh'), kiosk = read('kiosk.sh');
-  assert.match(live, /plymouth-set-default-theme homebaseos/);
+  assert.match(live, /plymouth-set-default-theme majaos/);
   assert.match(live, /cog cage/);
   assert.doesNotMatch(live, /chromium/);
-  assert.match(read('plymouth/homebaseos.script'), /bar.png/);
+  assert.match(read('plymouth/majaos.script'), /bar.png/);
   assert.match(kiosk, /retain-splash/);
   assert.match(kiosk, /kiosk=1/);
   assert.match(kiosk, /open_screen pixman/);

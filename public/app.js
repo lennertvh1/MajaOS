@@ -1,4 +1,4 @@
-/* HomeBaseOS — frontend */
+/* MajaOS — frontend */
 (function () {
   'use strict';
 
@@ -222,7 +222,7 @@
   function renderOverview() {
     const o = S.overview; if (!o) return;
     $('#host').textContent = o.hostname || '';
-    document.title = (o.hostname ? o.hostname + ' – ' : '') + 'HomeBaseOS';
+    document.title = (o.hostname ? o.hostname + ' – ' : '') + 'MajaOS';
     const cpu = o.cpu && o.cpu.percent; const mem = o.memory && o.memory.percent;
     setRing('#cpuRing', cpu); $('#cpuPct').textContent = cpu == null ? '–' : Math.round(cpu) + '%';
     setRing('#memRing', mem); $('#memPct').textContent = mem == null ? '–' : Math.round(mem) + '%';
@@ -1034,7 +1034,7 @@
           err.textContent = '';
         } else {
           lookedUp = ''; lookedIcon = '';
-          err.textContent = t('The site has no icon HomeBaseOS can use. Upload one instead.');
+          err.textContent = t('The site has no icon MajaOS can use. Upload one instead.');
         }
       } catch (e) { if (token === lookToken) err.textContent = ''; }
     }
@@ -1078,7 +1078,7 @@
         const r = await api.post(s ? '/api/shortcuts/' + encodeURIComponent(s.id) : '/api/shortcuts', body);
         try { S.shortcuts = await api.get('/api/shortcuts'); } catch (ex) { /* the tile still shows after the next refresh */ }
         setLayout(homeItems());
-        if (body.fetchIcon && r.iconFetched === false) toast(t('The site has no icon HomeBaseOS can use. Upload one instead.'), true);
+        if (body.fetchIcon && r.iconFetched === false) toast(t('The site has no icon MajaOS can use. Upload one instead.'), true);
         else toast(t('Saved.'));
         win.close();
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
@@ -1896,7 +1896,7 @@
       <h3>${t('Container')}</h3>
       ${!c ? `<p class="muted small">${t('This app was not started with Docker Compose. You change ports, folders and variables by recreating the container, e.g. from the app store.')}</p>`
         : !c.editable ? `<p class="muted small">${c.files.length > 1 ? t('This project uses several files ({files}). Edit them there yourself.', { files: esc(c.files.join(', ')) })
-          : t('This project uses a file HomeBaseOS cannot read. Edit it there yourself.')}</p>`
+          : t('This project uses a file MajaOS cannot read. Edit it there yourself.')}</p>`
         : `<p class="muted small">${esc(c.file)}${c.project !== a.name ? ' · ' + t('project {name}', { name: esc(c.project) }) : ''}</p>
           <div id="cfForm"${c.form ? '' : ' hidden'}></div>
           <div id="cfText"${c.form ? ' hidden' : ''}>
@@ -2018,7 +2018,7 @@
             return `<label class="fld"><span>${t('Fixed IP address (optional)')}</span><input class="field" data-cf-top="ip" value="${esc(f.ip || '')}" spellcheck="false" autocomplete="off"
               placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : f.network === '' ? '172.30.0.10' : '')}">
               <small>${ownIp ? t('The app\'s address in your home network. Empty = Docker picks one from the network\'s IP range.')
-                : f.network === '' ? t('Empty = Docker picks an address. With an address the app joins the HomeBaseOS network homebase (172.30.0.0/16), where apps also find each other by name.')
+                : f.network === '' ? t('Empty = Docker picks an address. With an address the app joins the MajaOS network maja (172.30.0.0/16), where apps also find each other by name.')
                 : t('Empty = Docker picks an address. A fixed address only works in a network with its own subnet.')}</small></label>`;
           })()}
           <label class="check"><input type="checkbox" data-cf-top="privileged"${f.privileged ? ' checked' : ''}> ${t('Privileged (almost full access to the server, only if the app really needs it)')}</label>
@@ -2298,7 +2298,7 @@
           </div>
           <p class="muted small">${t('Drag a disk to a bay. On a full bay the two swap places. Can\'t drag? Tap a disk and then a bay.')}</p>` : ''}
         <div class="bays-wrap"><div class="nas">
-          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'HomeBaseOS')}</span>
+          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'MajaOS')}</span>
             <span class="nas-power" title="${t('On')}"><i class="led"></i></span></div>
           <div class="bay-grid" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
           ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
@@ -2484,7 +2484,7 @@
     let name = ['tank', 'fast', 'data', 'storage'].find((n) => !o.pools.includes(n)) || 'data' + (o.pools.length + 1);
     const picked = new Set(); let layout = 'stripe', chosenByUser = false;
     const layoutLabel = poolBeginner ? t('How should your files be protected?') : t('Layout');
-    const layoutIntro = poolBeginner && !wiz ? `<p class="muted small pool-beginner-intro">${t('When you use more than one disk, HomeBaseOS can keep your photos, films and app data safe if one disk stops working. Not sure? Choose Recommended.')}</p>` : '';
+    const layoutIntro = poolBeginner && !wiz ? `<p class="muted small pool-beginner-intro">${t('When you use more than one disk, MajaOS can keep your photos, films and app data safe if one disk stops working. Not sure? Choose Recommended.')}</p>` : '';
     const compressionFld = poolBeginner ? '<input type="hidden" name="compression" value="lz4">' : `<label class="fld"><span>${t('Compression')}</span><select class="field" name="compression">
             <option value="lz4">${t('lz4 (recommended: fast and saves space)')}</option><option value="zstd">${t('zstd (saves more, a bit slower)')}</option><option value="off">${t('Off')}</option></select></label>`;
     const foldersCheck = `<label class="check${wiz ? ' check-compact' : ''}"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
@@ -2619,7 +2619,7 @@
           <div class="pool-big"><b>${bytes(c.usable)}</b> <span>${t('room for your files (approximately)')}</span></div>
           <p class="${c.failures ? 'temp-ok' : 'temp-warn'}">${esc(beginnerPoolSafetyLine(c, d.length))}</p>
           ${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}
-          <p class="small muted">${t('HomeBaseOS also turns on space saving (compression) by default.')}</p>`;
+          <p class="small muted">${t('MajaOS also turns on space saving (compression) by default.')}</p>`;
         return;
       }
       if (wiz) {
@@ -2825,7 +2825,7 @@
   }
 
   // The console opens in its own tab (one per VM), like in Unraid.
-  // The console opens large in HomeBaseOS; there you can move it to its own browser window with "Separate window".
+  // The console opens large in MajaOS; there you can move it to its own browser window with "Separate window".
   const consoleLink = (id, cls) => `<button class="${cls}" type="button" data-console="${esc(id)}">${t('Console')}</button>`;
   const conWin = $('#conWin'), conFrame = $('#conFrame');
   function openConsole(id) {
@@ -3263,7 +3263,7 @@
   const VM_KINDS = {
     linux: { label: 'Linux', help: 'Install Linux from an ISO, for example Debian or Ubuntu Server.', vcpus: 2, memoryGb: 4, diskGb: 32 },
     windows: { label: 'Windows 11', help: 'Windows 11 with TPM and UEFI. The disk uses SATA so the installer sees it right away.', vcpus: 4, memoryGb: 8, diskGb: 64 },
-    import: { label: 'Existing disk', help: 'Use an existing disk file, such as the qcow2 file of Home Assistant OS. HomeBaseOS makes a copy of it.', vcpus: 2, memoryGb: 4 },
+    import: { label: 'Existing disk', help: 'Use an existing disk file, such as the qcow2 file of Home Assistant OS. MajaOS makes a copy of it.', vcpus: 2, memoryGb: 4 },
   };
   async function vmCreateWindow() {
     openWindow(t('New VM'), `<p class="lead">${t('Loading…')}</p>`);
@@ -3506,10 +3506,10 @@
       const r = await api.get('/api/docker-networks/lan');
       if (!input.value.trim() && r.suggestion) { input.value = r.suggestion; input.dispatchEvent(new Event('input', { bubbles: true })); }
       small.textContent = r.home ? t('Free in {subnet} (through {card}). Reserve this address in your router, so it doesn\'t give it to another device.', { subnet: r.home.subnet, card: r.home.name })
-        : t('HomeBaseOS can\'t find your home network. Create a macvlan network in Settings → Docker networks.');
+        : t('MajaOS can\'t find your home network. Create a macvlan network in Settings → Docker networks.');
     } catch (e) { small.textContent = e.message; }
   }
-  // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (HomeBaseOS creates it on install).
+  // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (MajaOS creates it on install).
   const LAN_CHOICE = '@lan';
   const ownNet = (n) => n && /^(macvlan|ipvlan)$/.test(n.driver);
   const netLabel = (n) => (ownNet(n) ? t('Own address in my home network ({name})', { name: n.name }) : [n.name, n.driver, n.subnet].filter(Boolean).join(' · '));
@@ -3659,7 +3659,7 @@
       ${d.appdataMissing ? `<p class="lead temp-bad">${t('There is no folder for app data yet ({dir}). Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Open Settings → Storage')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         ${storeInstallFormInner(d, { basic, adv, ask, rest })}
-        <p class="muted small">${t('Image: {image}. HomeBaseOS turns it into a compose file that you can later open in Dockge too.', { image: esc(d.image) })}</p>
+        <p class="muted small">${t('Image: {image}. MajaOS turns it into a compose file that you can later open in Dockge too.', { image: esc(d.image) })}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Install')}</button>
           <button class="btn" type="button" data-close>${t('Cancel')}</button></div>
@@ -3669,19 +3669,19 @@
     if (experienceLevel() === 'expert') { const note = $('[data-install-note]', form); if (note) note.hidden = true; }
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
-      // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared homebase network).
+      // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared maja network).
       const lan = v === LAN_CHOICE || ownNet(n);
       const ipOk = v === 'bridge' || lan || !!(n && n.subnet);
       $('[data-store-ip]', form).hidden = !ipOk;
       if (!ipOk) form.elements.__ip.value = '';
       form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : v === 'bridge' ? '172.30.0.10' : '';
-      $('[data-store-ip] small', form).textContent = v === 'bridge' ? t('Empty = Docker picks an address. With an address the app joins the HomeBaseOS network homebase (172.30.0.0/16), where apps also find each other by name.')
+      $('[data-store-ip] small', form).textContent = v === 'bridge' ? t('Empty = Docker picks an address. With an address the app joins the MajaOS network maja (172.30.0.0/16), where apps also find each other by name.')
         : t('Empty = Docker picks an address.');
       if (lan) suggestLanIp(form.elements.__ip, $('[data-store-ip] small', form));
       $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You added an extra port, so the app now uses the default network (bridge): only there Docker can publish extra ports.')
-        : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
-        : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. HomeBaseOS sets up the network the first time. The server itself can\'t reach the app at that address (a Linux limitation); your other devices can.')
-        : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, HomeBaseOS sets the app\'s own port setting (when the template has one).')
+        : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
+        : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. MajaOS sets up the network the first time. The server itself can\'t reach the app at that address (a Linux limitation); your other devices can.')
+        : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one).')
         : n ? t('Apps in the same network find each other by name.') : t('Create new networks in Settings → Docker networks.');
     };
     let switched = false;
@@ -3800,7 +3800,7 @@
   /* --- own app: an image or a link to Docker Hub, GitHub or Quay */
   function customAppWindow(prefill = '') {
     openWindow(t('Add your own app'), `
-      <p class="lead">${t('Paste the name of an image or a link to its page. HomeBaseOS reads from the registry which ports and folders the app uses and fills in the form for you.')}</p>
+      <p class="lead">${t('Paste the name of an image or a link to its page. MajaOS reads from the registry which ports and folders the app uses and fills in the form for you.')}</p>
       <form class="inline-form" id="customImgForm">
         <input class="field" name="image" value="${esc(prefill)}" placeholder="${t('e.g. louislam/uptime-kuma or https://hub.docker.com/r/linuxserver/jellyfin')}" spellcheck="false" autocomplete="off" aria-label="${t('Image or link')}" required>
         <button class="btn primary" type="submit">${t('Fetch')}</button>
@@ -3900,7 +3900,7 @@
         } else {
           const x = await api.post('/api/apps/draft', { name, text: area.value });
           if (!x.form) { err.textContent = t('This code doesn\'t fit the form ({error}). Stay in the code, or change it.', { error: tr(x.formError || '') }); return; }
-          Object.assign(f, x.form, { labels: x.form.labels.filter((l) => !String(l.name).startsWith('homebaseos.')) });
+          Object.assign(f, x.form, { labels: x.form.labels.filter((l) => !String(l.name).startsWith('majaos.')) });
           mountCf();
         }
         mode = b.dataset.cmode;
@@ -4052,10 +4052,10 @@
     const sample = (c) => new Date(2026, 0, 1, 14, 30).toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit', ...clockOpts(c) });
     el.innerHTML = `
       <h2 class="pane-title">${t('Language')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
+      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
       ${langSelect()}
       <h2 class="pane-title">${t('Experience level')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
+      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
       <div class="experience-choices" role="radiogroup" aria-label="${t('Experience level')}">${experienceChoiceHtml(S.config.experience)}</div>
       <h2 class="pane-title">${t('Theme')}</h2>
       <p class="muted small">${t('Applies to this device only.')}</p>
@@ -4063,12 +4063,12 @@
         <label class="choice"><input type="radio" name="theme" value="${k}"${k === theme ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
       </div>
       <h2 class="pane-title">${t('Time format')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses HomeBaseOS on this server.')}</p>
+      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
       <div class="choice-row" role="radiogroup" aria-label="${t('Time format')}">${[['auto', t('Follow the language')], ['24', t('24-hour')], ['12', t('12-hour')]].map(([k, name]) => `
         <label class="choice"><input type="radio" name="clock" value="${k}"${k === clock ? ' checked' : ''}><span>${esc(name)} · ${esc(sample(k))}</span></label>`).join('')}
       </div>
       <h2 class="pane-title">${t('Web interface port')}</h2>
-      <p class="muted small">${t('This is the port of HomeBaseOS in your browser. 80 is the default, so you can open the server address without a port.')}</p>
+      <p class="muted small">${t('This is the port of MajaOS in your browser. 80 is the default, so you can open the server address without a port.')}</p>
       <form class="inline-form" data-port-form>
         <input class="field sm" name="port" inputmode="numeric" value="${esc(S.config.port || 80)}" aria-label="${t('Web interface port')}" autocomplete="off">
         <button class="btn sm primary" type="submit">${t('Save')}</button>
@@ -4084,7 +4084,7 @@
       const n = Number(portForm.elements.port.value);
       if (!Number.isInteger(n) || n < 1 || n > 65535) { toast(t('Choose a port from 1 to 65535.'), true); return; }
       if (n === Number(S.config.port)) return;
-      if (!await ask(t('Open HomeBaseOS on port {port} from now on? This page will reload there.', { port: n }), t('Save'))) return;
+      if (!await ask(t('Open MajaOS on port {port} from now on? This page will reload there.', { port: n }), t('Save'))) return;
       await withBusy(portForm.querySelector('button'), async () => {
         const r = await api.post('/api/settings', { port: n });
         S.config.port = r.port;
@@ -4125,12 +4125,12 @@
   const MCP_CLIENTS = [
     { id: 'claude', name: 'Claude', fileLabel: 'Address', kind: 'url', steps: [
       'Open Settings, then Connectors, then Add custom connector.',
-      'Name it HomeBaseOS. Paste the address below as the MCP server URL.',
-      'Choose Connect and sign in to HomeBaseOS.',
+      'Name it MajaOS. Paste the address below as the MCP server URL.',
+      'Choose Connect and sign in to MajaOS.',
     ] },
     { id: 'claude-code', name: 'Claude Code', fileLabel: 'Command', kind: 'claude-code', steps: [
       'Run the command below.',
-      'Then run claude mcp login homebaseos and sign in.',
+      'Then run claude mcp login majaos and sign in.',
     ] },
     { id: 'cursor', name: 'Cursor', file: 'mcp.json', kind: 'url-json', steps: [
       'Open Cursor Settings, search for MCP, and open mcp.json.',
@@ -4146,7 +4146,7 @@
     ] },
     { id: 'zed', name: 'Zed', file: 'settings.json', kind: 'zed', steps: [
       'In Zed, open settings.json.',
-      'Paste the configuration below. If context_servers already exists, add homebaseos next to the other servers.',
+      'Paste the configuration below. If context_servers already exists, add majaos next to the other servers.',
     ] },
     { id: 'codex', name: 'Codex', file: 'config.toml', kind: 'codex', steps: [
       'Open the Codex config file ~/.codex/config.toml.',
@@ -4159,11 +4159,11 @@
   ];
 
   function mcpSnippet(client, mcpUrl) {
-    if (client.kind === 'claude-code') return 'claude mcp add --transport http homebaseos ' + mcpUrl;
-    if (client.kind === 'vscode') return JSON.stringify({ servers: { homebaseos: { type: 'http', url: mcpUrl } } }, null, 2);
-    if (client.kind === 'zed') return JSON.stringify({ context_servers: { homebaseos: { url: mcpUrl } } }, null, 2);
-    if (client.kind === 'codex') return '[mcp_servers.homebaseos]\nurl = ' + JSON.stringify(mcpUrl) + '\n';
-    if (client.kind === 'url-json') return JSON.stringify({ mcpServers: { homebaseos: { url: mcpUrl } } }, null, 2);
+    if (client.kind === 'claude-code') return 'claude mcp add --transport http majaos ' + mcpUrl;
+    if (client.kind === 'vscode') return JSON.stringify({ servers: { majaos: { type: 'http', url: mcpUrl } } }, null, 2);
+    if (client.kind === 'zed') return JSON.stringify({ context_servers: { majaos: { url: mcpUrl } } }, null, 2);
+    if (client.kind === 'codex') return '[mcp_servers.majaos]\nurl = ' + JSON.stringify(mcpUrl) + '\n';
+    if (client.kind === 'url-json') return JSON.stringify({ mcpServers: { majaos: { url: mcpUrl } } }, null, 2);
     return mcpUrl;
   }
 
@@ -4185,7 +4185,7 @@
       <p class="form-error" role="alert" data-mcp-err></p>
       <form class="inline-form" id="mcpPw" hidden>
         <p class="muted small">${t('This makes security less strict. Type your password to confirm.')}</p>
-        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('HomeBaseOS password')}" aria-label="${t('HomeBaseOS password')}">
+        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('MajaOS password')}" aria-label="${t('MajaOS password')}">
         <button class="btn primary" type="submit">${t('Confirm')}</button>
         <button class="btn" type="button" data-mcp-cancel>${t('Cancel')}</button>
       </form>
@@ -4288,10 +4288,10 @@
         <form class="inline-form user-edit" data-sp-form="${k}" hidden>
           <input class="field" name="path" spellcheck="false" autocomplete="off" value="${esc(d.paths[k] || '')}" placeholder="/tank/${esc(d.folders[k] || '')}" aria-label="${t('Folder on the server')}">
           <button class="btn sm primary" type="submit">${t('Use this folder')}</button>
-          <span class="muted small" style="flex-basis:100%">${t('Nothing moves: HomeBaseOS uses this folder from now on.')}</span></form></li>`;
+          <span class="muted small" style="flex-basis:100%">${t('Nothing moves: MajaOS uses this folder from now on.')}</span></form></li>`;
     const appsText = d.apps.length ? t('Used by: {list}', { list: esc(d.apps.map((a) => a.project).join(', ')) }) : t('No apps yet.');
     el.innerHTML = `
-      <p class="muted small">${t('Where HomeBaseOS keeps your data. A new pool gets the folders appdata, media, backups, vms and isos.')}</p>
+      <p class="muted small">${t('Where MajaOS keeps your data. A new pool gets the folders appdata, media, backups, vms and isos.')}</p>
       ${d.pools.length ? '' : `<p class="lead">${t('There is no pool yet. Create one in Storage.')} <button class="btn sm" type="button" data-open="storage">${t('Open storage')}</button></p>`}
       <ul class="rows">
         ${row('appdata', t('App data'), appsText + (d.manual.length ? ' · ' + t('Not moved (no compose file on the server): {list}', { list: esc(d.manual.join(', ')) }) : ''), t('Move'))}
@@ -4330,7 +4330,7 @@
       e.preventDefault();
       const kind = f.dataset.spForm, dir = f.elements.path.value.trim();
       await withBusy($('[type=submit]', f), async () => {
-        try { await api.post('/api/storage-paths', { kind, path: dir }); toast(t('HomeBaseOS now uses {dir}.', { dir })); storagePane(el); }
+        try { await api.post('/api/storage-paths', { kind, path: dir }); toast(t('MajaOS now uses {dir}.', { dir })); storagePane(el); }
         catch (ex) { toast(ex.message, true); }
       });
     }));
@@ -4475,7 +4475,7 @@
       <p class="muted small" style="margin-top:6px">${t('The name of the server in your network. The connection keeps working.')}</p>
 
       <h2 class="pane-title">${t('IP address')}</h2>
-      ${!n.editable ? `<p class="lead">${t('This network is managed by {who}. HomeBaseOS can only change it when Debian uses ifupdown (/etc/network/interfaces), the default for a server without a desktop.', { who: esc(n.manager || t('another program')) })}</p>` : `
+      ${!n.editable ? `<p class="lead">${t('This network is managed by {who}. MajaOS can only change it when Debian uses ifupdown (/etc/network/interfaces), the default for a server without a desktop.', { who: esc(n.manager || t('another program')) })}</p>` : `
       <form class="form" id="netForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('Network card')}</span><select class="field" name="interface">${n.physical.map((p) => `<option${c && c.interface === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
@@ -4493,7 +4493,7 @@
           <small>${t('Separated by commas.')}</small></label>
         <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Create bridge br0 for VMs')}</label>
         <p class="muted small" style="margin-top:-6px">${t('Needed to give VMs (such as Home Assistant) their own address in your home network. Then set VM_NETWORK=bridge=br0.')}</p>
-        <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, HomeBaseOS restores the old settings by itself.')}</p>
+        <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Apply')}</button></div>
       </form>`}`;
@@ -4819,7 +4819,7 @@
           <label class="check"><input type="radio" name="where" value="new"${pools.length ? ' checked' : ' disabled'}> ${t('New folder on a pool')}</label>
           <label class="check"><input type="radio" name="where" value="existing"${pools.length ? '' : ' checked'}> ${t('Existing folder')}</label></div></fieldset>`}
         <label class="fld" data-where="new"><span>${t('Pool')}</span><select class="field" name="parent">${pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.mountpoint)})</option>`).join('')}</select>
-          <small>${t('HomeBaseOS creates its own dataset, e.g. tank/media, owned by the app user.')}</small></label>
+          <small>${t('MajaOS creates its own dataset, e.g. tank/media, owned by the app user.')}</small></label>
         <label class="fld" data-where="existing"><span>${t('Folder on the server')}</span><input class="field" name="path" list="shareRoots" value="${esc(sh.path)}" spellcheck="false" autocomplete="off" placeholder="/tank/media">
           <datalist id="shareRoots">${d.roots.map((r) => `<option value="${esc(r.mountpoint)}">`).join('')}</datalist>
           <small>${t('A folder on one of your pools.')}${d.appUser ? ' ' + t('Files are written as {user}, like your Docker apps.', { user: esc(d.appUser) }) : ''}</small></label>
@@ -5577,7 +5577,7 @@
     const sync = () => {
       const push = val('direction') === 'push';
       $('[data-push]', f).hidden = !push;
-      $('[data-local-help]', f).textContent = push ? t('The folder you want to keep safe.') : t('The files go here. HomeBaseOS creates the folder if it doesn\'t exist yet.');
+      $('[data-local-help]', f).textContent = push ? t('The folder you want to keep safe.') : t('The files go here. MajaOS creates the folder if it doesn\'t exist yet.');
       $$('[data-sched]', f).forEach((x) => { x.hidden = x.dataset.sched === 'weekly' ? F.every.value !== 'weekly' : F.every.value === 'manual'; });
       $('[data-sched-help]', f).hidden = F.every.value === 'manual';
       if ($('[data-encrypt]', f)) $('[data-encrypt]', f).hidden = !F.encrypt.checked;
@@ -5653,7 +5653,7 @@
     clearTimeout(bk.timer);
     box.innerHTML = `
       <h2 class="pane-title">${t('Restore {name}', { name: esc(job.name) })}</h2>
-      <p class="lead">${t('HomeBaseOS fetches everything from {dest} and puts it in the folder below. Existing files with the same name are overwritten.', { dest: esc(job.remote + ':' + (job.remotePath || '/')) })}${job.encrypt ? ' ' + t('The files are decrypted right away.') : ''}</p>
+      <p class="lead">${t('MajaOS fetches everything from {dest} and puts it in the folder below. Existing files with the same name are overwritten.', { dest: esc(job.remote + ':' + (job.remotePath || '/')) })}${job.encrypt ? ' ' + t('The files are decrypted right away.') : ''}</p>
       <form class="form" id="bkRestoreForm" novalidate>
         <label class="fld"><span>${t('Restore to')}</span><input class="field" name="target" value="${esc(job.localPath.replace(/\/$/, '') + '-teruggezet')}" spellcheck="false" autocomplete="off">
           <small>${t('A new folder is safest: you then choose yourself what to put back. Choose {path} to top up the original folder.', { path: esc(job.localPath) })}</small></label>
@@ -5857,14 +5857,14 @@
       ${dev.kind === 'mac' ? `<p class="muted small">${t('Don\'t see the folder? First connect to {smb} in the Finder (Go → Connect to Server).', v)}</p>` : ''}`;
   }
   const kopiaUrl = (k, d) => `https://${k.addresses[0] || d.hostname + '.local'}:${k.port}`;
-  // Address of HomeBaseOS as you use it in your browser now. Port 80 and 443 stay hidden.
+  // Address of MajaOS as you use it in your browser now. Port 80 and 443 stay hidden.
   const nasAddress = () => location.hostname + (location.port && location.port !== '80' && location.port !== '443' ? ':' + location.port : '');
   const pageOnPort = (port) => location.protocol + '//' + location.hostname + ((location.protocol === 'https:' && Number(port) === 443) || (location.protocol === 'http:' && Number(port) === 80) ? '' : ':' + port) + location.pathname + location.hash;
-  // On the device: the HomeBase Backup app (pair with a code), or the plain KopiaUI / command line.
+  // On the device: the MajaOS Backup app (pair with a code), or the plain KopiaUI / command line.
   function kopiaHowTo(dev, d) {
     const k = d.kopia, url = kopiaUrl(k, d), name = dev.user.split('@')[0];
     const home = { windows: 'C:\\Users\\…', mac: '/Users/…', linux: '/home/…' }[dev.kind] || '';
-    const v = { app: `<a href="${esc(k.appUrl)}" target="_blank" rel="noopener">HomeBase Backup</a>`, nas: '<code>' + esc(nasAddress()) + '</code>',
+    const v = { app: `<a href="${esc(k.appUrl)}" target="_blank" rel="noopener">MajaOS Backup</a>`, nas: '<code>' + esc(nasAddress()) + '</code>',
       link: '<a href="https://kopia.io/docs/installation/" target="_blank" rel="noopener">kopia.io</a>', url: '<code>' + esc(url) + '</code>',
       fp: '<code>' + esc(k.fingerprint || '') + '</code>', user: '<code>' + esc(name) + '</code>', home: '<code>' + esc(home) + '</code>' };
     const cli = `kopia repository connect server --url=${url} --server-cert-fingerprint=${k.fingerprint || ''} --override-username=${name} --override-hostname=${name}`;
@@ -5892,7 +5892,7 @@
     <div class="btn-row"><button class="btn sm" type="button" data-copy="${esc(s.value)}">${t('Copy')}</button>
       <button class="btn sm primary" type="button" data-secret-done>${t('I\'ve saved it')}</button></div></div>`;
   const pairSecret = (name, r) => ({ title: t('Pairing code for {name}', { name }), value: r.code, code: true, password: r.password,
-    text: t('Open HomeBase Backup on {name}, type {nas} as the address and this code. The code works once and until {time}.', { name, nas: nasAddress(), time: new Date(r.expires).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) });
+    text: t('Open MajaOS Backup on {name}, type {nas} as the address and this code. The code works once and until {time}.', { name, nas: nasAddress(), time: new Date(r.expires).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', ...clockOpts() }) }) });
   function kopiaCard(d) {
     const k = d.kopia, head = `<b>${t('Backup app (Kopia)')}</b>`;
     if (!k.installed) return `<div class="notice">${head}<span>${t('Kopia is not installed on the server. Run install.sh again.')}</span></div>`;
@@ -5941,7 +5941,7 @@
       e.preventDefault();
       withBusy($('[type=submit]', on), async () => {
         const r = await api.post('/api/backup/kopia', { enabled: true, pool: on.elements.pool ? on.elements.pool.value : undefined });
-        if (r.repoPassword) bk.secret = { title: t('Archive password'), value: r.repoPassword, text: t('Keep it somewhere safe, e.g. in your password manager. Without this password nobody can open the archive, not even if the server breaks. It is also on the server in /var/lib/homebaseos/kopia/server.env.') };
+        if (r.repoPassword) bk.secret = { title: t('Archive password'), value: r.repoPassword, text: t('Keep it somewhere safe, e.g. in your password manager. Without this password nobody can open the archive, not even if the server breaks. It is also on the server in /var/lib/majaos/kopia/server.env.') };
         toast(t('The backup app is on.'));
         backupPane(el);
       });
@@ -5993,7 +5993,7 @@
       <h2 class="pane-title">${t('New device')}</h2>
       <form class="form" id="bkDevForm" novalidate>
         <fieldset class="fld"><span>${t('How does this device make backups?')}</span><div class="form" style="gap:8px">
-          ${radio('kopia', t('With the HomeBase Backup app'), k.enabled ? t('For Windows, Mac and Linux. Pair with a code; encrypted, every hour, and old versions are kept.') : t('First turn on the backup app (under Devices, at the top).'), !k.enabled)}
+          ${radio('kopia', t('With the MajaOS Backup app'), k.enabled ? t('For Windows, Mac and Linux. Pair with a code; encrypted, every hour, and old versions are kept.') : t('First turn on the backup app (under Devices, at the top).'), !k.enabled)}
           ${radio('share', t('With a shared folder of its own'), d.samba ? t('For Time Machine on a Mac, File History on Windows and apps on your phone.') : t('Samba is not installed yet.'), !d.samba)}</div></fieldset>
         <label class="fld"><span>${t('Name')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. MacBook-Lies')}">
           <small data-name-help></small></label>
@@ -6051,7 +6051,7 @@
       try {
         const r = await api.post('/api/backup/devices', body);
         if (r.code) bk.secret = pairSecret(body.name, r);
-        toast(t(r.code ? '{name} is ready. Install HomeBase Backup on the device and pair with the code.' : 'The folder for {name} is ready. Follow the steps to turn on backups.', { name: body.name }));
+        toast(t(r.code ? '{name} is ready. Install MajaOS Backup on the device and pair with the code.' : 'The folder for {name} is ready. Follow the steps to turn on backups.', { name: body.name }));
         bk.openDevice = body.name; backupPane(el);
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
@@ -6410,18 +6410,18 @@
         <p class="muted small" style="margin-top:-4px">${esc(sshNote(cur))}</p>
       </div>
       <form class="inline-form sec-confirm" id="secConfirm" hidden>
-        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('HomeBaseOS password')}" aria-label="${t('HomeBaseOS password')}">
+        <input class="field" type="password" name="password" autocomplete="current-password" placeholder="${t('MajaOS password')}" aria-label="${t('MajaOS password')}">
         <button class="btn primary" type="submit">${t('Confirm')}</button><button class="btn" type="button" data-sec-cancel>${t('Cancel')}</button>
       </form>
       <p class="muted small" id="secHint" hidden>${t('This makes security less strict. Type your password to confirm.')}</p>
       <p class="form-error" role="alert" id="secErr"></p>
-      <p class="muted small">${t('Every time someone opens or closes the terminal, it is written to the system log (journalctl -u homebaseos).')}</p>`;
+      <p class="muted small">${t('Every time someone opens or closes the terminal, it is written to the system log (journalctl -u majaos).')}</p>`;
     mfaSection($('#mfaBox', el));
     httpsSection($('#httpsBox', el), cur);
     const pwForm = $('#pwForm', el);
     if (pwForm) {
       wirePasswordMeter(pwForm);
-      api.get('/api/mfa').then((m) => { if ($('#pwChanged', el)) $('#pwChanged', el).textContent = m.passwordChanged ? t('Last changed on {date}.', { date: longDate(m.passwordChanged) }) : t('You\'re still using the password from the installation (in /etc/homebaseos/homebaseos.env).'); }, () => {});
+      api.get('/api/mfa').then((m) => { if ($('#pwChanged', el)) $('#pwChanged', el).textContent = m.passwordChanged ? t('Last changed on {date}.', { date: longDate(m.passwordChanged) }) : t('You\'re still using the password from the installation (in /etc/majaos/majaos.env).'); }, () => {});
       pwForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = $('button[type="submit"]', pwForm); btn.disabled = true;
@@ -6474,7 +6474,7 @@
       : !st.listening ? t('HTTPS is not running. Only http works now.')
       : location.protocol === 'https:' ? t('This connection is encrypted.') : t('Open the dashboard with https:// to use the encrypted connection.');
     const steps = [
-      t('Mac: open the file. In Keychain Access, double-click the HomeBaseOS certificate, open Trust and choose Always Trust.'),
+      t('Mac: open the file. In Keychain Access, double-click the MajaOS certificate, open Trust and choose Always Trust.'),
       t('Windows: open the file, choose Install Certificate, then Local Machine, and put it in Trusted Root Certification Authorities.'),
       t('iPhone and iPad: open the file in Safari and install the profile in Settings. Then turn it on under General → About → Certificate Trust Settings.'),
       t('Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate.'),
@@ -6488,7 +6488,7 @@
         ${st.names ? `<p class="muted small">${esc(t('Valid for: {names}', { names: st.names.join(', ') }))}</p>
         <p class="muted small" style="overflow-wrap:anywhere">${t('Fingerprint: {fp}', { fp: `<code>${esc(st.caFingerprint || '')}</code>` })}</p>` : ''}
         <div class="btn-row">${S.config.demo || !st.caFingerprint ? `<button class="btn" type="button" disabled>${t('Download certificate')}</button>`
-          : `<a class="btn" href="/api/tls/ca.crt" download="homebaseos-ca.crt">${t('Download certificate')}</a>`}</div>
+          : `<a class="btn" href="/api/tls/ca.crt" download="majaos-ca.crt">${t('Download certificate')}</a>`}</div>
         <details><summary>${t('How do I trust the certificate?')}</summary>
           <ul class="muted small">${steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>
       </div>`;
@@ -6500,7 +6500,7 @@
     try { st = await api.get('/api/mfa'); } catch (e) { box.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; return; }
     if (!box.isConnected) return;
     const head = box.dataset.noHead ? '' : `<h2 class="pane-title">${t('Two-step verification')}</h2>
-      <p class="muted small">${t('Besides your password, HomeBaseOS then asks for a 6-digit code from an authenticator app on your phone (e.g. Google Authenticator, Microsoft Authenticator, 1Password or Aegis). Someone who only knows your password can\'t sign in.')}</p>`;
+      <p class="muted small">${t('Besides your password, MajaOS then asks for a 6-digit code from an authenticator app on your phone (e.g. Google Authenticator, Microsoft Authenticator, 1Password or Aegis). Someone who only knows your password can\'t sign in.')}</p>`;
     if (!st.available) { box.innerHTML = head + `<p class="muted small">${t('Set a password (APP_PASSWORD) first to use two-step verification.')}</p>`; return; }
     const demoHint = S.config.demo ? `<p class="muted small">${t('Demo: the password is {pw}.', { pw: '<b>demo</b>' })}</p>` : '';
     const since = st.since ? new Date(st.since).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -6516,7 +6516,7 @@
     const step = $('#mfaStep', box), errEl = $('#mfaErr', box);
     const pwForm = (label, withCode) => `${demoHint}
       <form class="inline-form" data-mfa-form>
-        <input class="field" type="password" name="password" autocomplete="current-password" required placeholder="${t('HomeBaseOS password')}" aria-label="${t('HomeBaseOS password')}">
+        <input class="field" type="password" name="password" autocomplete="current-password" required placeholder="${t('MajaOS password')}" aria-label="${t('MajaOS password')}">
         ${withCode ? `<input class="field mfa-code" name="code" required autocomplete="one-time-code" maxlength="11" placeholder="${t('Code')}" aria-label="${t('Code from the app or a recovery code')}">` : ''}
         <button class="btn primary" type="submit">${esc(label)}</button><button class="btn" type="button" data-mfa-cancel>${t('Cancel')}</button>
       </form>`;
@@ -6546,7 +6546,7 @@
       $('.mfa-code', step).focus();
     }
     function showRecovery(codes, fresh) {
-      const text = t('Recovery codes for HomeBaseOS') + '\n\n' + codes.join('\n') + '\n\n' + t('Each code works only once.') + '\n';
+      const text = t('Recovery codes for MajaOS') + '\n\n' + codes.join('\n') + '\n\n' + t('Each code works only once.') + '\n';
       box.innerHTML = head + `
         <div class="mfa-state on"><span class="dot"></span><div><b>${fresh ? t('Two-step verification is on') : t('New recovery codes')}</b>
           <div class="muted small">${t('Keep these recovery codes somewhere safe, e.g. in your password manager. If you lose your phone, sign in with one of these codes. Each code works only once, and you only see them here once.')}</div></div></div>
@@ -6560,7 +6560,7 @@
           try { await navigator.clipboard.writeText(text); toast(t('Copied.')); } catch (ex) { toast(t('Copying did not work in this browser.'), true); }
         } else if (b.dataset.rc === 'download') {
           const a = document.createElement('a');
-          a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'homebaseos-herstelcodes.txt';
+          a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'majaos-herstelcodes.txt';
           document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
         } else mfaSection(box);
       };
@@ -6601,7 +6601,7 @@
     };
   }
 
-  /* --- Software update: new versions of HomeBaseOS itself (GitHub releases) */
+  /* --- Software update: new versions of MajaOS itself (GitHub releases) */
   // Small Markdown reader for release notes. Everything through esc() first, only then formatting: no HTML from GitHub ever gets through.
   function mdToHtml(src) {
     const inline = (x) => esc(x)
@@ -6647,7 +6647,7 @@
     try { seen = localStorage.getItem('tb-update-seen'); } catch (e) { /* private window */ }
     if (seen === u.latest.version) return;
     try { localStorage.setItem('tb-update-seen', u.latest.version); } catch (e) { /* private window */ }
-    toast(t('HomeBaseOS {version} is available. See what\'s new in Settings → Software update.', { version: u.latest.version }));
+    toast(t('MajaOS {version} is available. See what\'s new in Settings → Software update.', { version: u.latest.version }));
   }
 
   // Progress of "Update now". During the restart the server is briefly gone: then we just keep asking.
@@ -6661,7 +6661,7 @@
         <div class="upd-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="updTitle"><span id="updFill"></span></div>
         <p class="small" id="updMsg">${t('Starting the update…')}</p>
         <ol class="upd-steps">${UPD_STEPS.map(([k, label]) => `<li data-step="${k}">${t(label)}</li>`).join('')}</ol>
-        <p class="muted small" id="updNote">${t('Keep this window open. HomeBaseOS will restart briefly; your apps and VMs keep running.')}</p>
+        <p class="muted small" id="updNote">${t('Keep this window open. MajaOS will restart briefly; your apps and VMs keep running.')}</p>
         <div class="btn-row" id="updBtns"></div></div>`;
     let lost = 0, shown = 0;
     const started = Date.now();
@@ -6701,8 +6701,8 @@
       try { p = await api.get('/api/update/progress'); lost = 0; }
       catch (e) {
         // Server restarting: no answer for a while. Give up after 3 minutes.
-        if (++lost === 1) $('#updMsg', el).textContent = t('HomeBaseOS is restarting… please wait.');
-        if (Date.now() - started > 180000) { finish({ state: 'failed', message: t('HomeBaseOS is not responding. Check on the server: journalctl -u homebaseos') }); return; }
+        if (++lost === 1) $('#updMsg', el).textContent = t('MajaOS is restarting… please wait.');
+        if (Date.now() - started > 180000) { finish({ state: 'failed', message: t('MajaOS is not responding. Check on the server: journalctl -u majaos') }); return; }
         setTimeout(poll, 1500); return;
       }
       if (p.state === 'idle') { updatePane(el); return; }
@@ -6729,13 +6729,13 @@
           <span class="muted small">${esc(longDate(r.published))}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">${t('On GitHub')}</a>` : ''}</span></div>
         <div class="md">${r.notes.trim() ? mdToHtml(r.notes) : `<p class="muted">${t('No release notes for this version.')}</p>`}</div></article>`;
     const card = u.updateAvailable ? `
-      <div class="upd-card new">${mark}<div class="upd-text"><b>${t('HomeBaseOS {version} is available', { version: esc(u.latest.version) })}</b>
+      <div class="upd-card new">${mark}<div class="upd-text"><b>${t('MajaOS {version} is available', { version: esc(u.latest.version) })}</b>
         <div class="muted small">${t('You have version {current}.', { current: esc(cur) })} ${u.newer.length > 1 ? t('There are {n} new versions.', { n: u.newer.length }) : ''}</div>
         <div class="muted small">${checked}</div></div>
         <div class="btn-row"><button class="btn" type="button" data-sw="check">${t('Check now')}</button>
           <button class="btn primary" type="button" data-sw="install"${u.install && u.install.ok ? '' : ' disabled'}>${t('Update now')}</button></div></div>
       ${u.install && !u.install.ok ? `<p class="muted small" style="margin-top:-6px">${esc(tr(u.install.reason))}</p>` : ''}` : `
-      <div class="upd-card">${mark}<div class="upd-text"><b>${t('HomeBaseOS is up to date')}</b>
+      <div class="upd-card">${mark}<div class="upd-text"><b>${t('MajaOS is up to date')}</b>
         <div class="muted small">${t('Version {current}', { current: esc(cur) })}</div><div class="muted small">${checked}</div></div>
         <button class="btn" type="button" data-sw="check">${t('Check now')}</button></div>`;
     el.innerHTML = card +
@@ -6743,8 +6743,8 @@
       (u.updateAvailable ? `
         <h2 class="pane-title">${t('What\'s new')}</h2>${u.newer.map(notes).join('')}
         ${u.install && u.install.ok ? '' : `<h2 class="pane-title">${t('Update')}</h2>
-        <div class="upd-how"><p class="muted small">${t('Get the new version in the folder with the HomeBaseOS code on the server, and run the install script again. Your settings, apps and VMs stay as they are.')}</p>
-          <pre>cd ~/homebaseos
+        <div class="upd-how"><p class="muted small">${t('Get the new version in the folder with the MajaOS code on the server, and run the install script again. Your settings, apps and VMs stay as they are.')}</p>
+          <pre>cd ~/majaos
 git pull
 sudo ./install.sh</pre></div>`}` : '') +
       (u.history.length ? `<details class="upd-older"${u.updateAvailable ? '' : ' open'}><summary>${u.updateAvailable ? t('Earlier versions') : t('Release notes')}</summary>${u.history.map(notes).join('')}</details>` : '') + `
@@ -6756,16 +6756,16 @@ sudo ./install.sh</pre></div>`}` : '') +
           <label class="choice"><input type="radio" name="updateChannel" value="${k}"${k === u.channel ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
         ${u.channel === 'dev' ? `<p class="muted small">${t('Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.', { branch: esc(u.branch || 'dev') })}</p>
         <div class="upd-how"><p class="muted small">${t('Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:', { branch: esc(u.branch || 'dev') })}</p>
-          <pre>sudo bash /opt/homebaseos/deploy/install-branch.sh ${esc(u.branch || 'dev')}</pre>
+          <pre>sudo bash /opt/majaos/deploy/install-branch.sh ${esc(u.branch || 'dev')}</pre>
           <p class="muted small">${t('Back to official versions: the same command with main.')}</p></div>` : ''}
-        <p class="muted small">${t('HomeBaseOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
+        <p class="muted small">${t('MajaOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
     debianSection($('#debianBox', el));
     if (u.running) { updateProgress(el); return; } // an update is already running (e.g. after refreshing the page)
     el.onclick = async (e) => {
       if (e.target.closest('[data-sw="install"]')) {
         const v = u.latest.version;
-        if (!(await ask(t('Update HomeBaseOS to version {version}? HomeBaseOS will restart briefly; your apps and VMs keep running.', { version: v }), t('Update now')))) return;
+        if (!(await ask(t('Update MajaOS to version {version}? MajaOS will restart briefly; your apps and VMs keep running.', { version: v }), t('Update now')))) return;
         try { await api.post('/api/update/install', { version: v }); updateProgress(el); }
         catch (ex) { toast(ex.message, true); }
         return;
@@ -6821,7 +6821,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const jobBox = $('[data-deb-job]', box);
     const follow = async () => {
       let p;
-      try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // HomeBaseOS restarting (needrestart)
+      try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // MajaOS restarting (needrestart)
       if (!box.isConnected) return;
       const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates') }[p.action] || '';
       jobBox.innerHTML = p.state === 'idle' ? '' : `<div class="deb-job">
@@ -6866,7 +6866,7 @@ sudo ./install.sh</pre></div>`}` : '') +
         [t('Graphics card'), (a.gpus || []).join(', ')]]],
       [t('Operating system'), [[t('System'), a.os], [t('Kernel'), a.kernel], [t('Architecture'), a.arch], [t('Time zone'), a.timezone],
         [t('Up for'), a.uptime != null ? duration(a.uptime) : null], [t('IP addresses'), (a.addresses || []).map((x) => x.address + ' (' + x.interface + ')').join(', ')]]],
-      [t('Versions'), Object.entries({ HomeBaseOS: a.versions.homebaseos, 'Node.js': a.versions.node, Docker: a.versions.docker, 'Docker Compose': a.versions.compose,
+      [t('Versions'), Object.entries({ MajaOS: a.versions.majaos, 'Node.js': a.versions.node, Docker: a.versions.docker, 'Docker Compose': a.versions.compose,
         ZFS: a.versions.zfs, libvirt: a.versions.libvirt, [t('Hypervisor')]: a.versions.hypervisor })],
     ];
     const plain = groups.map(([title, rows]) => title + '\n' + rows.map(([k, v]) => '  ' + k + ': ' + (v || '–')).join('\n')).join('\n\n');
@@ -7213,7 +7213,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (pop.open) pop.close();
     const demoInfo = S.config && S.config.demo;
     $('#loginDemo').hidden = !demoInfo;
-    if (demoInfo) $('#loginDemo').innerHTML = t('Demo: sign in as {user} with the password {pw}.', { user: '<b>' + esc(window.HomeBaseOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
+    if (demoInfo) $('#loginDemo').innerHTML = t('Demo: sign in as {user} with the password {pw}.', { user: '<b>' + esc(window.MajaOSDemo.user()) + '</b>', pw: '<b>demo</b>' });
     if (wasHidden) loginStep('password');
   }
 
@@ -7271,7 +7271,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       } });
     });
     if (S.update && S.update.updateAvailable && S.update.latest) {
-      out.push({ id: 'sw', level: 'info', title: t('HomeBaseOS {version} is available', { version: S.update.latest.version }), detail: t('Software update'), go: () => { location.hash = '#settings/update'; } });
+      out.push({ id: 'sw', level: 'info', title: t('MajaOS {version} is available', { version: S.update.latest.version }), detail: t('Software update'), go: () => { location.hash = '#settings/update'; } });
     }
     if (S.debian && S.debian.updates && S.debian.updates.length) {
       const n = S.debian.updates.length, sec = S.debian.security;
@@ -7627,7 +7627,7 @@ sudo ./install.sh</pre></div>`}` : '') +
         }
         el.innerHTML = hero('<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>', true) +
           `<h1 id="onbTitle">${t('Create your account')}</h1>
-          <p class="lead">${t('You use this to sign in to HomeBaseOS. Choose a password you can remember, or keep it in your password manager.')}</p>
+          <p class="lead">${t('You use this to sign in to MajaOS. Choose a password you can remember, or keep it in your password manager.')}</p>
           <form class="form" data-onb-form>
             <label class="fld"><span>${t('User name')}</span>
               <input class="field" name="user" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" value="admin">
@@ -7668,7 +7668,7 @@ sudo ./install.sh</pre></div>`}` : '') +
           (pwOn ? `<form class="form" data-onb-form>${passwordFields(t('Current password (from the installation)'))}
             ${S.config.demo ? `<p class="muted small">${t('Demo: the current password is {pw}. Signing in keeps working with demo.', { pw: '<b>demo</b>' })}</p>` : ''}
             <p class="form-error onb-err" role="alert"></p></form>`
-            : `<p class="muted">${t('HomeBaseOS runs without a password.')}</p>`);
+            : `<p class="muted">${t('MajaOS runs without a password.')}</p>`);
         if (pwOn) wirePasswordMeter(el);
       },
       async next(el) {
@@ -7688,7 +7688,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     return [
       { id: 'welcome',
         render(el) {
-          el.innerHTML = hero(HOUSE) + `<h1 id="onbTitle">${t('Welcome to HomeBaseOS')}</h1>
+          el.innerHTML = hero(HOUSE) + `<h1 id="onbTitle">${t('Welcome to MajaOS')}</h1>
             <p class="lead">${ONB.setup ? t('In a few steps your server is ready: an account, a name, storage and extra security. You can change everything later in Settings.')
               : t('In a few steps your server is ready: your own password, a name, storage and extra security. You can change everything later in Settings.')}</p>
             <h2 class="pane-title">${t('Language')}</h2>
@@ -7713,8 +7713,8 @@ sudo ./install.sh</pre></div>`}` : '') +
       { id: 'experience', skip: true,
         render(el) {
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="19" cy="17" r="3"/></svg>', true) +
-            `<h1 id="onbTitle">${t('How do you want to use HomeBaseOS?')}</h1>
-            <p class="lead">${t('Choose how much detail HomeBaseOS shows. You can change this later in Settings → General.')}</p>
+            `<h1 id="onbTitle">${t('How do you want to use MajaOS?')}</h1>
+            <p class="lead">${t('Choose how much detail MajaOS shows. You can change this later in Settings → General.')}</p>
             <div class="experience-choices" role="radiogroup" aria-label="${t('Experience level')}">${experienceChoiceHtml(ONB.experience || S.config.experience)}</div>`;
         },
         async next(el) {
@@ -7765,14 +7765,14 @@ sudo ./install.sh</pre></div>`}` : '') +
           ONB.pool = null;
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>', true) +
             `<h1 id="onbTitle">${t('Storage')}</h1>
-            <p class="lead">${pools.length ? t('HomeBaseOS found these storage pools. Your apps, VMs and shared folders go there.')
+            <p class="lead">${pools.length ? t('MajaOS found these storage pools. Your apps, VMs and shared folders go there.')
               : t('Tap the disks you want to use together, then choose how to protect your files. Or skip this step for now.')}</p>
             ${pools.length ? `<ul class="onb-list">${pools.map((x) => `<li><span class="ok-mark">✓</span><span class="grow"><b>${esc(x.name)}</b></span>
               <span class="muted small">${x.total ? esc(bytes(x.total)) : ''}</span><span class="pill ${x.health === 'ONLINE' ? 'ok' : 'warn'}">${esc(tr(x.health || ''))}</span></li>`).join('')}</ul>
               ${d().appdata ? `<p class="muted small">${t('App data: {dir}', { dir: `<code>${esc(d().appdata)}</code>` })}</p>` : ''}` : ''}
             ${free.length ? (pools.length ? `<div class="btn-row" data-onb-more><button class="btn" type="button" data-onb-pool>${t('Create another pool')}</button></div>` : '') +
                 `<div class="onb-pool" data-onb-poolbox${pools.length ? ' hidden' : ''}><p class="muted">${t('Looking for disks…')}</p></div>`
-              : `<p class="muted small">${pools.length ? t('There are no free disks left.') : t('HomeBaseOS found no free disks. Insert one and open Storage again later.')}</p>`}`;
+              : `<p class="muted small">${pools.length ? t('There are no free disks left.') : t('MajaOS found no free disks. Insert one and open Storage again later.')}</p>`}`;
           const box = $('[data-onb-poolbox]', el);
           if (!box) return;
           const mount = async () => {
@@ -7805,7 +7805,7 @@ sudo ./install.sh</pre></div>`}` : '') +
         render(el) {
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>', true) +
             `<h1 id="onbTitle">${t('Two-step verification')}</h1>
-            <p class="lead">${t('When signing in, HomeBaseOS then also asks for a code from an app on your phone. Someone who only knows your password can\'t get in. Recommended, especially if you use HomeBaseOS from outside your home.')}</p>
+            <p class="lead">${t('When signing in, MajaOS then also asks for a code from an app on your phone. Someone who only knows your password can\'t get in. Recommended, especially if you use MajaOS from outside your home.')}</p>
             <div id="onbMfa"><p class="muted">${t('Loading…')}</p></div>`;
           const box = $('#onbMfa', el); box.dataset.noHead = '1';
           mfaSection(box);
@@ -7818,7 +7818,7 @@ sudo ./install.sh</pre></div>`}` : '') +
           const row = (ok, label, value) => `<li><span class="${ok ? 'ok-mark' : 'no-mark'}">${ok ? '✓' : '–'}</span><span class="grow">${esc(label)}</span><span class="muted small">${esc(value)}</span></li>`;
           el.innerHTML = hero('<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', true) +
             `<h1 id="onbTitle">${t('Done!')}</h1>
-            <p class="lead">${t('HomeBaseOS is ready to use. This is what\'s set up:')}</p>
+            <p class="lead">${t('MajaOS is ready to use. This is what\'s set up:')}</p>
             <ul class="onb-list">
               ${d().user ? row(true, t('Account'), d().user) : row(!!d().passwordChanged, t('Password'), d().passwordChanged ? t('Own password') : t('Still the one from the installation'))}
               ${row(true, t('Server name'), d().hostname)}
@@ -7916,7 +7916,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   function demoWebPort() { try { const n = Number(localStorage.getItem('tb-port')); if (Number.isInteger(n) && n >= 1 && n <= 65535) return n; } catch (e) { /* private window */ } return 80; }
   // The demo starts like a new server: first create an account (until the wizard has been finished once).
   function useDemo() {
-    api = translatedApi(window.HomeBaseOSDemo);
+    api = translatedApi(window.MajaOSDemo);
     S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };
     applyExperienceLevel();
     startDesk();
@@ -8084,7 +8084,7 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* ------------------------------------------------------------ start */
   async function boot() {
-    if (window.HOMEBASEOS_FORCE_DEMO) return useDemo();
+    if (window.MAJAOS_FORCE_DEMO) return useDemo();
     let cfg;
     try { cfg = await realApi.get('/api/config'); } catch (e) { return useDemo(); } // no server: static demo
     S.config = cfg;

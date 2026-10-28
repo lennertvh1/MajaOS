@@ -149,7 +149,7 @@
   // Update now, simulated: the same steps as lib/updater.js + lib/update-helper.sh, with a restart during which the server is briefly gone.
   const UPD_PLAN = [[0, 'download', 2], [4000, 'extract', 42, 'Unpacking…'], [5000, 'verify', 50, 'Verifying the new version…'],
     [6500, 'handover', 56, 'Ready to install…'], [7000, 'backup', 60, 'Backing up version {from}…'],
-    [8500, 'install', 68, 'Installing new files…'], [10000, 'restart', 85, 'Restarting HomeBaseOS…'],
+    [8500, 'install', 68, 'Installing new files…'], [10000, 'restart', 85, 'Restarting MajaOS…'],
     [13500, 'check', 92, 'Checking that version {version} runs properly…'], [15500, 'done', 100, 'Updated to version {version}.']];
   function updProgress() {
     const j = upd.job; if (!j) return { state: 'idle' };
@@ -273,7 +273,7 @@
     if (action === 'setup') {
       if (mfa.enabled) throw err('Two-step verification is already on. Turn it off first to link again.', 409);
       mfa.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
-      return { secret: mfa.setup, uri: `otpauth://totp/HomeBaseOS:freddy?secret=${mfa.setup}&issuer=HomeBaseOS&algorithm=SHA1&digits=6&period=30` };
+      return { secret: mfa.setup, uri: `otpauth://totp/MajaOS:freddy?secret=${mfa.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30` };
     }
     if (!(await mfaCheck(body.code)).ok) { await wait(800); throw err('That code is not correct.', 401); }
     if (action === 'disable') { Object.assign(mfa, { enabled: false, secret: null, recovery: [], lastCounter: -1, since: null }); return { ok: true }; }
@@ -295,7 +295,7 @@
       ecc: { active: true, mode: 'SECDED', corrected: 0 }, gpus: ['NVIDIA GeForce RTX 3060 Ti'],
       board: { vendor: 'ASRock', product: 'B550M Steel Legend', boardVendor: 'ASRock', board: 'B550M Steel Legend', bios: 'P3.20', biosDate: '06/13/2025' },
       addresses: [{ interface: 'br0', address: net.links[1].ipv4[0].address.split('/')[0] }],
-      versions: { homebaseos: '0.2.0', node: '20.19.2', docker: '28.5.1', compose: '2.40.0', zfs: '2.3.2', libvirt: '11.3.0', hypervisor: 'QEMU 10.0.2' },
+      versions: { majaos: '0.2.0', node: '20.19.2', docker: '28.5.1', compose: '2.40.0', zfs: '2.3.2', libvirt: '11.3.0', hypervisor: 'QEMU 10.0.2' },
     };
   }
   const net = {
@@ -414,15 +414,15 @@
     return { removed: n.name };
   }
   // Set the network of an app. With its own address there are no ports on the server and the WebUI points to that address.
-  // Like networkFor() in lib/dockernet.js: a fixed address on the default network → the shared homebase network.
-  function homebaseNet() {
-    let n = dnets.find((x) => x.name === 'homebase');
-    if (!n) { n = { id: 'homebase0000', name: 'homebase', driver: 'bridge', builtin: false, internal: false, subnet: '172.30.0.0/16', gateway: '172.30.0.1', ipRange: null, parent: null, compose: null, ours: true, containers: [] }; dnets.push(n); }
+  // Like networkFor() in lib/dockernet.js: a fixed address on the default network → the shared maja network.
+  function majaNet() {
+    let n = dnets.find((x) => x.name === 'maja');
+    if (!n) { n = { id: 'maja0000', name: 'maja', driver: 'bridge', builtin: false, internal: false, subnet: '172.30.0.0/16', gateway: '172.30.0.1', ipRange: null, parent: null, compose: null, ours: true, containers: [] }; dnets.push(n); }
     return n;
   }
   function setAppNet(a, network, ip) {
     if (ip && (network === 'host' || network === 'none')) throw err('A fixed IP address doesn\'t work with the host network or without a network.');
-    if (ip && (!network || network === 'bridge')) network = homebaseNet().name;
+    if (ip && (!network || network === 'bridge')) network = majaNet().name;
     if (network === '@lan') network = (dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)) || {}).name || 'lan';
     if (ip && Object.entries(appNet).some(([app, x]) => x.ip === ip && app !== a.name)) {
       throw err(ip + ' is already used by ' + Object.entries(appNet).find(([app, x]) => x.ip === ip && app !== a.name)[0] + '. Choose another address.', 409);
@@ -591,7 +591,7 @@
     return body + xref + 'trailer<</Size ' + offs.length + '/Root 1 0 R>>\nstartxref\n' + xrefAt + '\n%%EOF';
   }
   const holidayJpeg = demoJpeg();
-  const taxPdf = miniPdf('HomeBaseOS');
+  const taxPdf = miniPdf('MajaOS');
   const shareTrees = {
     media: filesDir({
       Movies: filesDir({ 'Dune (2021).mkv': filesFile(4.2e9, 40), 'The Holdovers.mkv': filesFile(3.1e9, 12) }),
@@ -903,7 +903,7 @@
       { key: 'region', label: 'Region', type: 'text', required: false, placeholder: 'eu-central-003' },
       { key: 'access_key_id', label: 'Access key', type: 'text', required: true },
       { key: 'secret_access_key', label: 'Secret key', type: 'password', required: true }] },
-    sftp: { label: 'Other NAS or server (SFTP)', group: 'nas', oauth: false, hint: 'Over SSH: Synology, QNAP, TrueNAS, another HomeBaseOS or a Linux server', fields: [
+    sftp: { label: 'Other NAS or server (SFTP)', group: 'nas', oauth: false, hint: 'Over SSH: Synology, QNAP, TrueNAS, another MajaOS or a Linux server', fields: [
       { key: 'host', label: 'Address', type: 'text', required: true, placeholder: '192.168.1.20' },
       { key: 'port', label: 'Port', type: 'number', required: false, default: '22' },
       { key: 'user', label: 'User', type: 'text', required: true },
@@ -1309,9 +1309,9 @@
     if (a.fields().some((f) => f.value === '/var/run/docker.sock')) w.push('This app gets access to Docker and can therefore manage all your containers.');
     return w;
   }
-  // The ports an app listens on when it uses the server's network, and which of them are already taken (HomeBaseOS itself uses 80).
+  // The ports an app listens on when it uses the server's network, and which of them are already taken (MajaOS itself uses 80).
   const ownTcp = (fields) => fields.filter((f) => f.type === 'Port' && f.target && !(/udp/.test(f.mode) && !/tcp/.test(f.mode))).map((f) => Number(f.target));
-  const hostTaken = (port) => (port === 80 ? 'HomeBaseOS' : (apps.find((x) => x.ports.some((p) => p.public === port) || (x.hostPorts || []).includes(port)) || {}).name);
+  const hostTaken = (port) => (port === 80 ? 'MajaOS' : (apps.find((x) => x.ports.some((p) => p.public === port) || (x.hostPorts || []).includes(port)) || {}).name);
   const WEB_PORTS = [80, 443, 8080, 8443, 3000, 5000, 8000, 8096, 8123, 9000, 8081, 8888];
   function storeDetails(a) {
     let name = storeSlug(a.name);
@@ -1490,7 +1490,7 @@
   const drafts = {};
   const q = (v) => JSON.stringify(String(v));
   function draftYaml(name, f, labels) {
-    const out = ['# Created with HomeBaseOS (demo).', 'name: ' + q(name), 'services:', '  ' + name + ':', '    image: ' + q(f.image), '    container_name: ' + q(name)];
+    const out = ['# Created with MajaOS (demo).', 'name: ' + q(name), 'services:', '  ' + name + ':', '    image: ' + q(f.image), '    container_name: ' + q(name)];
     if (f.restart) out.push('    restart: ' + q(f.restart));
     if (f.network === 'host' || f.network === 'none') out.push('    network_mode: ' + q(f.network));
     else if (f.network) out.push('    networks:', '      ' + f.network + ':' + (f.ip ? '\n        ipv4_address: ' + q(f.ip) : ' null'));
@@ -1519,12 +1519,12 @@
         volumes: by('Path').filter((f) => f.value).map((f) => ({ host: f.value, container: f.target, mode: /^ro\b|^r$/.test(f.mode || '') ? 'ro' : 'rw', kind: 'bind' })),
         env: by('Variable').map((f) => ({ name: f.target, value: f.value })), devices: by('Device').filter((f) => f.value).map((f) => ({ host: f.value, container: f.value })),
         labels: by('Label').map((f) => ({ name: f.target, value: f.value })) };
-      labels = [{ name: 'homebaseos.store', value: a.id }];
+      labels = [{ name: 'majaos.store', value: a.id }];
     } else if (b.custom) {
       const c = b.custom;
       form = { ...base, image: c.image, restart: c.restart || 'unless-stopped', privileged: !!c.privileged, network: c.network === 'bridge' ? '' : c.network || '', ip: c.ip || '',
         ports: copy(c.ports || []), volumes: copy(c.volumes || []), env: copy(c.env || []), devices: copy(c.devices || []), labels: copy(c.labels || []) };
-      labels = [{ name: 'homebaseos.custom', value: '1' }];
+      labels = [{ name: 'majaos.custom', value: '1' }];
     } else {
       const text = String(b.text || '');
       if (!text.trim()) throw err('The compose file is empty.');
@@ -1552,7 +1552,7 @@
     const text = String(b.text || '');
     if (!/^services:/m.test(text)) throw err('The compose file has no service (services).');
     const img = text.match(/^\s*image:\s*"?([^"\n]+)"?/m);
-    const sid = (text.match(/homebaseos\.store:\s*"?([\w-]+)/) || [])[1], a = store.find((x) => x.id === sid);
+    const sid = (text.match(/majaos\.store:\s*"?([\w-]+)/) || [])[1], a = store.find((x) => x.id === sid);
     // Ports from the code ("8080:80/tcp"), so the app gets its ports and WebUI in the list.
     const fields = [...text.matchAll(/^\s*-\s*"?(\d+):(\d+)(?:\/(tcp|udp))?"?\s*$/gm)].map((m) => ({ type: 'Port', value: m[1], target: m[2], mode: m[3] || 'tcp' }))
       .concat([...text.matchAll(/^\s*-\s*"?(\/[^:"\s]+):\/[^"\s]*"?\s*$/gm)].map((m) => ({ type: 'Path', value: m[1] })));
@@ -2147,7 +2147,7 @@
     [30, 'Partitioning the disk'],
     [55, 'Installing Debian'],
     [78, 'Installing the boot loader'],
-    [92, 'Preparing HomeBaseOS'],
+    [92, 'Preparing MajaOS'],
     [100, 'The installation continues on its own. You don\'t have to do anything.'],
   ];
   let instJob = null;
@@ -2556,7 +2556,7 @@
     if (m) {
       const i = apps.findIndex((x) => x.id === decodeURIComponent(m[1]));
       if (i < 0) throw err('This app does not exist (anymore).', 404);
-      if (!apps[i].storeId && !apps[i].custom) throw err('Only app store apps or your own HomeBaseOS apps can be removed here. Remove other apps through their own compose file.', 400);
+      if (!apps[i].storeId && !apps[i].custom) throw err('Only app store apps or your own MajaOS apps can be removed here. Remove other apps through their own compose file.', 400);
       const [a] = apps.splice(i, 1);
       return { removed: m[2] ? a.dataDirs : [], kept: [] };
     }
@@ -2641,5 +2641,5 @@
     return filesDownload(q);
   }
 
-  window.HomeBaseOSDemo = { get, post, del, stream, put, download, user: () => acct.user };
+  window.MajaOSDemo = { get, post, del, stream, put, download, user: () => acct.user };
 })();

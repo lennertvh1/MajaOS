@@ -37,7 +37,7 @@ if ! command -v cloudflared >/dev/null 2>&1; then
 fi
 
 # Automatic security updates (since 0.6): turned on once; whoever turns them off in Settings > Software update keeps them off.
-if [ ! -f /etc/apt/apt.conf.d/52homebaseos ] && [ -f "$(dirname "$0")/../lib/apt-helper.sh" ]; then
+if [ ! -f /etc/apt/apt.conf.d/52majaos ] && [ -f "$(dirname "$0")/../lib/apt-helper.sh" ]; then
   echo "Turning on automatic security updates"
   bash "$(dirname "$0")/../lib/apt-helper.sh" auto-on "$(mktemp)" /dev/stdout /etc/apt/apt.conf.d/20auto-upgrades || echo "Turning on automatic updates failed; do it later in Settings > Software update."
 fi

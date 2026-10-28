@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs HomeBaseOS on a bare Debian 13 (trixie): ZFS, KVM/libvirt, Docker and the web interface.
+# Installs MajaOS on a bare Debian 13 (trixie): ZFS, KVM/libvirt, Docker and the web interface.
 # Usage:  sudo ./install.sh            (running it again = updating; your settings stay)
 #         sudo ./install.sh --nvidia   (also the NVIDIA driver and GPU support for Docker)
 set -euo pipefail
@@ -18,8 +18,10 @@ done
 [ "${VERSION_CODENAME:-}" = trixie ] || { echo "This script is made for Debian 13 (trixie). Found: ${PRETTY_NAME:-unknown}."; exit 1; }
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-APP=/opt/homebaseos
-ETC=/etc/homebaseos
+APP=/opt/majaos
+ETC=/etc/majaos
+# A server from before the rename: move its folders and units to MajaOS first (deploy/rename-majaos.sh).
+[ -f "$SRC/deploy/rename-majaos.sh" ] && bash "$SRC/deploy/rename-majaos.sh" "$SRC"
 export DEBIAN_FRONTEND=noninteractive
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
@@ -52,10 +54,10 @@ virsh -c qemu:///system net-start default >/dev/null 2>&1 || true
 step "Shared folders (Samba)"
 apt-get install -y samba wsdd || apt-get install -y samba
 # Own [global]: plain users with a password, guests only where a folder allows it, and working well with macOS.
-if ! grep -q "HomeBaseOS" /etc/samba/smb.conf 2>/dev/null; then
-  [ -f /etc/samba/smb.conf ] && cp /etc/samba/smb.conf /etc/samba/smb.conf.before-homebaseos
+if ! grep -q "MajaOS" /etc/samba/smb.conf 2>/dev/null; then
+  [ -f /etc/samba/smb.conf ] && cp /etc/samba/smb.conf /etc/samba/smb.conf.before-majaos
   cat > /etc/samba/smb.conf <<'SMB'
-# Samba for HomeBaseOS. The shared folders themselves are in homebaseos.conf (manage them in Settings → Shared folders).
+# Samba for MajaOS. The shared folders themselves are in majaos.conf (manage them in Settings → Shared folders).
 [global]
    workgroup = WORKGROUP
    server string = %h
@@ -71,18 +73,18 @@ if ! grep -q "HomeBaseOS" /etc/samba/smb.conf 2>/dev/null; then
    printing = bsd
    disable spoolss = yes
 
-# Shared folders of HomeBaseOS
-include = /etc/samba/homebaseos.conf
+# Shared folders of MajaOS
+include = /etc/samba/majaos.conf
 SMB
-  touch /etc/samba/homebaseos.conf
+  touch /etc/samba/majaos.conf
 fi
 systemctl enable --now smbd
 systemctl enable --now wsdd 2>/dev/null || true
 
 step "SSH (off until you turn it on in Settings → Security)"
 apt-get install -y openssh-server
-# The package turns SSH on. HomeBaseOS keeps it off unless Settings saved "ssh": true.
-if ! grep -q '"ssh": true' /var/lib/homebaseos/settings.json 2>/dev/null; then
+# The package turns SSH on. MajaOS keeps it off unless Settings saved "ssh": true.
+if ! grep -q '"ssh": true' /var/lib/majaos/settings.json 2>/dev/null; then
   systemctl disable --now ssh || true
 fi
 
@@ -125,39 +127,43 @@ fi
 
 step "Automatic security updates (unattended-upgrades, no automatic reboot)"
 # Only the first time: whoever turned it off in Settings > Software update keeps it off.
-if [ ! -f /etc/apt/apt.conf.d/52homebaseos ]; then
+if [ ! -f /etc/apt/apt.conf.d/52majaos ]; then
   bash "$SRC/lib/apt-helper.sh" auto-on "$(mktemp)" /dev/stdout /etc/apt/apt.conf.d/20auto-upgrades || echo "Turning on automatic updates failed; do it later in Settings > Software update."
 fi
 
-step "Installing HomeBaseOS in $APP"
+step "Installing MajaOS in $APP"
 mkdir -p "$APP" "$ETC" /opt/stacks
 rm -rf "$APP/lib" "$APP/public" "$APP/deploy"
 rm -f "$APP/build.json"   # marker of a development build; deploy/install-branch.sh writes it again after this script
 cp -r "$SRC/server.js" "$SRC/package.json" "$SRC/lib" "$SRC/public" "$SRC/deploy" "$APP/"
 # No password: you create an account yourself in the browser the first time (the welcome wizard).
 NEW_INSTALL=0
-if [ ! -f "$ETC/homebaseos.env" ]; then
+if [ ! -f "$ETC/majaos.env" ]; then
   NEW_INSTALL=1
   SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
-  sed -e "s#^SESSION_SECRET=.*#SESSION_SECRET=$SECRET#" "$SRC/deploy/homebaseos.env" > "$ETC/homebaseos.env"
-  chmod 600 "$ETC/homebaseos.env"
+  sed -e "s#^SESSION_SECRET=.*#SESSION_SECRET=$SECRET#" "$SRC/deploy/majaos.env" > "$ETC/majaos.env"
+  chmod 600 "$ETC/majaos.env"
 fi
-install -m 644 "$SRC/deploy/homebaseos.service" /etc/systemd/system/homebaseos.service
+install -m 644 "$SRC/deploy/majaos.service" /etc/systemd/system/majaos.service
 systemctl daemon-reload
-systemctl enable homebaseos >/dev/null
-systemctl restart homebaseos
+systemctl enable majaos >/dev/null
+if [ -f /etc/systemd/system/homebaseos.service ]; then  # the old name (before MajaOS) holds the port
+  systemctl disable --now homebaseos >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/homebaseos.service; systemctl daemon-reload
+fi
+systemctl restart majaos
 
 IP="$(hostname -I | awk '{print $1}')"
-PORT="$(sed -n 's/^PORT=//p' "$ETC/homebaseos.env" | tail -1)"
+PORT="$(sed -n 's/^PORT=//p' "$ETC/majaos.env" | tail -1)"
 PORT="${PORT:-80}"
 step "Done"
 if [ "$PORT" = 80 ]; then echo "Open http://$IP"; else echo "Open http://$IP:$PORT"; fi
 echo "It switches to https with the server's own certificate: the browser warns about it the first time. Settings > Security explains how to trust it."
 if [ "$NEW_INSTALL" = 1 ]; then
   echo "Open that address in your browser: the welcome wizard creates your account and helps you with the name, the time zone and your storage."
-  echo "You can also create a pool there; HomeBaseOS right away creates the folders appdata, media, backups, vms and isos on it."
+  echo "You can also create a pool there; MajaOS right away creates the folders appdata, media, backups, vms and isos on it."
 fi
 echo
-echo "Want VMs directly in your home network? Create a bridge br0 (Settings → Network) and set VM_NETWORK=bridge=br0 in $ETC/homebaseos.env"
+echo "Want VMs directly in your home network? Create a bridge br0 (Settings → Network) and set VM_NETWORK=bridge=br0 in $ETC/majaos.env"
 [ "$NVIDIA" = 1 ] && echo "Reboot the server, so the NVIDIA driver loads."
 exit 0

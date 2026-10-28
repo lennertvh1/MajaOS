@@ -41,7 +41,7 @@ test('reading the interfaces file: static address in a bridge, with netmask', ()
 test('new file: bridge with a static address, other cards stay', () => {
   const cfg = nw.validate({ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '192.168.1.1, 1.1.1.1', bridge: true }, ['enp5s0']);
   const out = nw.buildInterfaces(cfg, DEBIAN);
-  assert.match(out, /^# Managed by HomeBaseOS/);
+  assert.match(out, /^# Managed by MajaOS/);
   assert.match(out, /\nauto lo\niface lo inet loopback\n/);
   assert.match(out, /\niface enp5s0 inet manual\n\nauto br0\niface br0 inet static\n {4}bridge_ports enp5s0\n {4}bridge_stp off\n {4}bridge_fd 0\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n {4}dns-nameservers 192\.168\.1\.1 1\.1\.1\.1\n/);
   assert.doesNotMatch(out, /enp5s0 inet dhcp/);

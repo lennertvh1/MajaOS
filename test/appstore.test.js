@@ -88,7 +88,7 @@ test('building the compose file', () => {
   const [jf, pxe] = s.normalizeFeed(FEED).apps;
   const r = s.buildCompose(jf, 'jellyfin', s.prepareFields(jf.config, 'jellyfin', 'Europe/Brussels'), { tz: 'Europe/Brussels' });
   const t = r.text;
-  assert.match(t, /^# Created by HomeBaseOS from the Community Apps template "jellyfin" by linuxserver/);
+  assert.match(t, /^# Created by MajaOS from the Community Apps template "jellyfin" by linuxserver/);
   assert.match(t, /\n {4}image: "lscr\.io\/linuxserver\/jellyfin"\n/);
   assert.match(t, /- "8096:8096\/tcp"/);
   assert.match(t, /- "7359:7359\/udp"/);
@@ -103,8 +103,8 @@ test('building the compose file', () => {
   assert.match(t, /shm_size: "1gb"/);
   assert.match(t, /cap_add:\n {6}- "NET_ADMIN"/);
   assert.match(t, /driver: "nvidia"/);
-  assert.match(t, /homebaseos\.data: "\/fast\/appdata\/jellyfin"/);
-  assert.match(t, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:8096\]"/);
+  assert.match(t, /majaos\.data: "\/fast\/appdata\/jellyfin"/);
+  assert.match(t, /majaos\.webui: "http:\/\/\[IP\]:\[PORT:8096\]"/);
   assert.deepEqual(r.data, ['/fast/appdata/jellyfin']);
   assert.ok(r.warnings.some((w) => /NVIDIA/.test(w)));
   assert.ok(r.warnings.some((w) => /--foo-bar/.test(w)));
@@ -161,7 +161,7 @@ test('host network: a changed port goes to the template\'s port setting', () => 
   assert.match(r.text, /network_mode: "host"/);
   assert.doesNotMatch(r.text, /ports:/);
   assert.match(r.text, /WEBUI_PORT: "8090"/);
-  assert.match(r.text, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:8090\]"/);
+  assert.match(r.text, /majaos\.webui: "http:\/\/\[IP\]:\[PORT:8090\]"/);
   assert.ok(r.warnings.some((w) => /own port 6881/.test(w)));
   assert.equal(fields[1].value, '8080'); // the caller's fields are not changed
 });
@@ -173,22 +173,22 @@ test('host network: the WebUI works without touching anything', () => {
   const fields = [{ key: 'c0', type: 'Port', name: 'WebUI', target: '3000', value: '3001', mode: 'tcp' }];
   const r = s.buildCompose(app, 'grafana', fields, { tz: 'UTC', ...host, defaults: new Map([['c0', '3001']]) });
   assert.deepEqual(r.warnings, []);
-  assert.match(r.text, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:3000\]"/);
+  assert.match(r.text, /majaos\.webui: "http:\/\/\[IP\]:\[PORT:3000\]"/);
   assert.deepEqual(r.hostPorts, [{ port: 3000, proto: 'tcp' }]);
-  assert.match(r.text, /homebaseos\.listen: "3000"/);
+  assert.match(r.text, /majaos\.listen: "3000"/);
   // Without defaults a different value counts as a change (and warns, there is no port setting).
   assert.ok(s.buildCompose(app, 'grafana', fields, { tz: 'UTC', ...host }).warnings.some((w) => /own port 3000/.test(w)));
 
   // A template without a WebUI address: the web port is found, and only UDP or odd ports give nothing.
   const bare = { ...app, webui: '' };
-  assert.match(s.buildCompose(bare, 'grafana', fields, { tz: 'UTC', ...host }).text, /homebaseos\.webui: "http:\/\/\[IP\]:\[PORT:3000\]\/"/);
+  assert.match(s.buildCompose(bare, 'grafana', fields, { tz: 'UTC', ...host }).text, /majaos\.webui: "http:\/\/\[IP\]:\[PORT:3000\]\/"/);
   const odd = [{ key: 'a', type: 'Port', name: 'A', target: '1883', value: '1883', mode: 'tcp' }, { key: 'b', type: 'Port', name: 'B', target: '9001', value: '9001', mode: 'tcp' }];
   assert.equal(s.buildCompose(bare, 'mqtt', odd, { tz: 'UTC', ...host }).webui, '');
 });
 
-test('host network: a port that is taken is found, including HomeBaseOS itself', () => {
-  const inst = { ports: [{ port: 80, type: 'TCP', app: 'HomeBaseOS' }, { port: 8080, type: 'TCP', app: 'qbit' }, { port: 53, type: 'UDP', app: 'pihole' }] };
-  assert.deepEqual(s.hostClashes([{ port: 80 }, { port: 8080 }, { port: 8081 }], inst), [{ port: 80, app: 'HomeBaseOS' }, { port: 8080, app: 'qbit' }]);
+test('host network: a port that is taken is found, including MajaOS itself', () => {
+  const inst = { ports: [{ port: 80, type: 'TCP', app: 'MajaOS' }, { port: 8080, type: 'TCP', app: 'qbit' }, { port: 53, type: 'UDP', app: 'pihole' }] };
+  assert.deepEqual(s.hostClashes([{ port: 80 }, { port: 8080 }, { port: 8081 }], inst), [{ port: 80, app: 'MajaOS' }, { port: 8080, app: 'qbit' }]);
   assert.deepEqual(s.hostClashes([{ port: 53 }], inst), []); // only TCP is tracked
   assert.deepEqual(s.hostClashes([], inst), []);
 });

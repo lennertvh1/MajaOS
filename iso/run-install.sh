@@ -7,10 +7,10 @@ DISK="${1:-}"
 LANG_CODE="${2:-en}"
 NVIDIA="${3:-0}"
 ROOT="${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-DIR="${INSTALL_DIR:-/run/homebaseos-install}"
+DIR="${INSTALL_DIR:-/run/majaos-install}"
 STATUS="${STATUS:-$DIR/status.json}"
 LOG="$DIR/log.txt"
-TARGET=/mnt/homebase-install
+TARGET=/mnt/maja-install
 mkdir -p "$DIR"
 : > "$LOG"
 
@@ -75,7 +75,7 @@ printf '%s' "$DISK" | grep -qxE '[a-z][a-z0-9]{0,31}' || fail "Choose a disk." 5
 status running 8 "Preparing the installation"
 LIVE=""
 for cand in /run/live/medium /lib/live/mount/medium /cdrom; do
-  if [ -f "$cand/homebaseos/homebaseos.tar.gz" ]; then LIVE="$cand"; break; fi
+  if [ -f "$cand/majaos/majaos.tar.gz" ]; then LIVE="$cand"; break; fi
 done
 [ -n "$LIVE" ] || fail "The Debian installer was not found on this disc." 8
 live_src="$(findmnt -n -o SOURCE "$LIVE" 2>/dev/null || true)"
@@ -135,8 +135,8 @@ cp /etc/resolv.conf "$TARGET/etc/resolv.conf"
 printf 'Europe/Brussels\n' > "$TARGET/etc/timezone"
 ln -sf /usr/share/zoneinfo/Europe/Brussels "$TARGET/etc/localtime"
 printf 'XKBMODEL="pc105"\nXKBLAYOUT="be"\nXKBVARIANT=""\nXKBOPTIONS=""\n' > "$TARGET/etc/default/keyboard"
-printf 'homebaseos\n' > "$TARGET/etc/hostname"
-printf '127.0.0.1 localhost\n127.0.1.1 homebaseos\n' > "$TARGET/etc/hosts"
+printf 'majaos\n' > "$TARGET/etc/hostname"
+printf '127.0.0.1 localhost\n127.0.1.1 majaos\n' > "$TARGET/etc/hosts"
 export DEBIAN_FRONTEND=noninteractive
 if [ -n "$ESP" ]; then PKGS="linux-image-amd64 grub-efi-amd64 grub-efi-amd64-bin"; else PKGS="linux-image-amd64 grub-pc"; fi
 status running 66 "Installing Debian"
@@ -148,9 +148,9 @@ LOCALE="$(locale_of "$LANG_CODE")"
 grep -q "^$LOCALE UTF-8" "$TARGET/etc/locale.gen" || printf '%s UTF-8\n' "$LOCALE" >> "$TARGET/etc/locale.gen"
 chroot "$TARGET" locale-gen >>"$LOG" 2>&1 || true
 printf 'LANG=%s\n' "$LOCALE" > "$TARGET/etc/default/locale"
-chroot "$TARGET" useradd --create-home --shell /bin/bash --comment HomeBaseOS homebase >>"$LOG" 2>&1 || fail "The installation could not be prepared." 82
-chroot "$TARGET" passwd -l homebase >>"$LOG" 2>&1 || true
-chroot "$TARGET" usermod -aG sudo homebase >>"$LOG" 2>&1 || true
+chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS maja >>"$LOG" 2>&1 || fail "The installation could not be prepared." 82
+chroot "$TARGET" passwd -l maja >>"$LOG" 2>&1 || true
+chroot "$TARGET" usermod -aG sudo maja >>"$LOG" 2>&1 || true
 
 uuid() { blkid -s UUID -o value "$1"; }
 {
@@ -171,8 +171,8 @@ for unit in systemd-networkd.service systemd-resolved.service systemd-timesyncd.
   ln -sf "/usr/lib/systemd/system/$unit" "$TARGET/etc/systemd/system/multi-user.target.wants/$unit"
 done
 ln -sf /run/systemd/resolve/stub-resolv.conf "$TARGET/etc/resolv.conf"
-# No Debian menu at every start: straight on after a second (hold Esc or Shift for it), under the name HomeBaseOS.
-printf 'GRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\nGRUB_TIMEOUT_STYLE=hidden\nGRUB_TIMEOUT=1\nGRUB_DISTRIBUTOR="HomeBaseOS"\n' >> "$TARGET/etc/default/grub"
+# No Debian menu at every start: straight on after a second (hold Esc or Shift for it), under the name MajaOS.
+printf 'GRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\nGRUB_TIMEOUT_STYLE=hidden\nGRUB_TIMEOUT=1\nGRUB_DISTRIBUTOR="MajaOS"\n' >> "$TARGET/etc/default/grub"
 
 status running 84 "Installing the boot loader"
 if [ -n "$ESP" ]; then
@@ -182,18 +182,18 @@ else
 fi
 chroot "$TARGET" update-grub >>"$LOG" 2>&1 || fail "The installation could not be prepared." 88
 
-status running 92 "Preparing HomeBaseOS"
-mkdir -p "$TARGET/opt/homebaseos-setup"
-tar -xzf "$LIVE/homebaseos/homebaseos.tar.gz" -C "$TARGET/opt/homebaseos-setup" >>"$LOG" 2>&1 || fail "The installation could not be prepared." 92
-[ "$NVIDIA" = 1 ] && touch "$TARGET/opt/homebaseos-setup/.nvidia"
+status running 92 "Preparing MajaOS"
+mkdir -p "$TARGET/opt/majaos-setup"
+tar -xzf "$LIVE/majaos/majaos.tar.gz" -C "$TARGET/opt/majaos-setup" >>"$LOG" 2>&1 || fail "The installation could not be prepared." 92
+[ "$NVIDIA" = 1 ] && touch "$TARGET/opt/majaos-setup/.nvidia"
 if printf '%s' "$LANG_CODE" | grep -qxE '[a-z][a-z]*'; then
-  mkdir -p "$TARGET/var/lib/homebaseos"
-  printf '{"language":"%s"}\n' "$LANG_CODE" > "$TARGET/var/lib/homebaseos/settings.json"
-  chmod 600 "$TARGET/var/lib/homebaseos/settings.json"
+  mkdir -p "$TARGET/var/lib/majaos"
+  printf '{"language":"%s"}\n' "$LANG_CODE" > "$TARGET/var/lib/majaos/settings.json"
+  chmod 600 "$TARGET/var/lib/majaos/settings.json"
 fi
-cp "$LIVE/homebaseos/homebaseos-firstboot.service" "$TARGET/etc/systemd/system/homebaseos-firstboot.service"
-ln -sf /etc/systemd/system/homebaseos-firstboot.service "$TARGET/etc/systemd/system/multi-user.target.wants/homebaseos-firstboot.service"
+cp "$LIVE/majaos/majaos-firstboot.service" "$TARGET/etc/systemd/system/majaos-firstboot.service"
+ln -sf /etc/systemd/system/majaos-firstboot.service "$TARGET/etc/systemd/system/multi-user.target.wants/majaos-firstboot.service"
 mkdir -p "$TARGET/etc/issue.d"
-cp "$LIVE/homebaseos/installing.issue" "$TARGET/etc/issue.d/homebaseos.issue"
+cp "$LIVE/majaos/installing.issue" "$TARGET/etc/issue.d/majaos.issue"
 cleanup
 status done 100 "The installation continues on its own. You don't have to do anything."

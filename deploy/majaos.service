@@ -1,0 +1,19 @@
+[Unit]
+Description=MajaOS (management of your home server)
+After=network-online.target libvirtd.service docker.service zfs.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/majaos/majaos.env
+ExecStart=/usr/bin/node /opt/majaos/server.js
+Restart=on-failure
+RestartSec=5
+# /var/lib/majaos: own settings (e.g. the start delay of VMs)
+StateDirectory=majaos
+# /run/majaos: marker "VMs already started automatically". Stays until the server reboots,
+# so a restart of MajaOS itself doesn't start your VMs again.
+RuntimeDirectory=majaos
+RuntimeDirectoryPreserve=yes
+
+[Install]
+WantedBy=multi-user.target

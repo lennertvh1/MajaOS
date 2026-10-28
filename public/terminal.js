@@ -1,4 +1,4 @@
-/* Terminal on the server: a root shell in the browser with xterm.js. Opens in HomeBaseOS (iframe) or on its own via "Separate window". */
+/* Terminal on the server: a root shell in the browser with xterm.js. Opens in MajaOS (iframe) or on its own via "Separate window". */
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
@@ -34,7 +34,7 @@
   }
   const setState = (label, cls) => { $('#tState').textContent = label; $('#tState').className = 'pill ' + (cls || ''); };
 
-  /* ---- xterm: colours from the HomeBaseOS tokens */
+  /* ---- xterm: colours from the MajaOS tokens */
   function makeTerm() {
     const css = getComputedStyle(document.documentElement), v = (n) => css.getPropertyValue(n).trim();
     term = new window.Terminal({
@@ -89,7 +89,7 @@
   const closeParent = () => { if (window.parent && window.parent.TB_closeConsole) window.parent.TB_closeConsole(); };
   $('#tPop').addEventListener('click', () => {
     const w = window.open('/terminal.html', 'tb-terminal', 'popup=yes,width=1100,height=720');
-    if (!w) { toast(t('Your browser blocked the new window. Allow pop-ups for HomeBaseOS.'), true); return; }
+    if (!w) { toast(t('Your browser blocked the new window. Allow pop-ups for MajaOS.'), true); return; }
     if (sock) sock.close();
     closeParent();
   });
@@ -104,7 +104,7 @@
   const PROMPT = '\x1b[1;32mroot@freddy\x1b[0m:\x1b[1;34m~\x1b[0m# ';
   const DEMO = {
     help: 'Probeer: ls, uptime, free -h, df -h, zpool status, docker ps, uname -a, clear',
-    ls: 'compose  isos  logs  homebaseos.env',
+    ls: 'compose  isos  logs  majaos.env',
     whoami: 'root',
     uptime: ' 17:32:05 up 12 days,  5:17,  1 user,  load average: 0.42, 0.51, 0.48',
     'uname -a': 'Linux freddy 6.12.48+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.48-1 x86_64 GNU/Linux',
@@ -144,8 +144,8 @@
     try { cfg = await (await fetch('/api/config', { credentials: 'same-origin' })).json(); } catch (e) { cfg = null; }
     if (cfg && !cfg.demo && cfg.language) LANG = cfg.language;
     translateStatic();
-    if (!cfg) { status(t('HomeBaseOS cannot be reached.'), [[t('Try again'), () => location.reload()]]); return; }
-    if (cfg.needsLogin) { status(t('Sign in to HomeBaseOS first.'), [[t('Sign in'), () => { location.href = '/'; }, true]]); return; }
+    if (!cfg) { status(t('MajaOS cannot be reached.'), [[t('Try again'), () => location.reload()]]); return; }
+    if (cfg.needsLogin) { status(t('Sign in to MajaOS first.'), [[t('Sign in'), () => { location.href = '/'; }, true]]); return; }
     demo = !!cfg.demo;
     if (!window.Terminal) { status(t('xterm.js could not be loaded.')); return; }
     start();
