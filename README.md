@@ -5,7 +5,7 @@
 **A friendly dashboard for your home server.**<br>
 Storage, apps, virtual machines and backups on plain Debian, without the command line.
 
-[Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [User guide](https://github.com/lennertvh1/MajaOS/blob/dev/docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
+[Website](https://majaos.com) · [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [User guide](https://github.com/lennertvh1/MajaOS/blob/dev/docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
 
 <a href="https://ko-fi.com/lennertvh"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support MajaOS on Ko-fi" height="32"></a>
 
@@ -47,7 +47,9 @@ And around it: two-step sign-in, HTTPS out of the box, network and Docker networ
 
 ## Try it in two minutes
 
-The whole interface runs in your browser with sample data. No server, no Docker, no install: you only need [Node.js](https://nodejs.org) 18.11 or newer.
+The quickest way: open the live demo at **[majaos.com/demo](https://majaos.com/demo/)**. It runs entirely in your browser with sample data.
+
+Or run the same demo on your own computer. No server, no Docker, no install: you only need [Node.js](https://nodejs.org) 18.11 or newer.
 
 ```bash
 git clone -b dev https://github.com/lennertvh1/MajaOS.git
