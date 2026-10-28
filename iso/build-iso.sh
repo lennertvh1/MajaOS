@@ -127,6 +127,13 @@ fi
 grep -q '^menuentry' "$WORK/grub.cfg" || { echo "Unexpected grub.cfg: no menuentry found."; exit 1; }
 awk -v f="$WORK/grub-entries.cfg" '!done && /^menuentry/ { while ((getline l < f) > 0) print l; done = 1 } { print }' "$WORK/grub.cfg" > "$WORK/grub.cfg.new"
 mv "$WORK/grub.cfg.new" "$WORK/grub.cfg"
+if [ -f "$WORK/live/vmlinuz" ]; then
+  # While the installer loads: the house on the same blue as the boot logo, not Debian's splash. No beep either.
+  # The Debian menu behind Esc keeps its own look.
+  cp "$HERE/plymouth/grub-splash.png" "$WORK/hb/splash.png"
+  sed -i -e 's#^if background_image /isolinux/splash.png; then#if background_image /homebaseos/splash.png; then#' -e '/^play 960 /d' "$WORK/grub.cfg"
+  grep -q 'background_image /homebaseos/splash.png' "$WORK/grub.cfg" || echo "Note: the GRUB background was not replaced (unexpected grub.cfg)."
+fi
 
 MAPS=(-map "$WORK/grub.cfg" /boot/grub/grub.cfg)
 if [ "$BIOS" = 1 ]; then

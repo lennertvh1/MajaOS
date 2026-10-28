@@ -171,7 +171,8 @@ for unit in systemd-networkd.service systemd-resolved.service systemd-timesyncd.
   ln -sf "/usr/lib/systemd/system/$unit" "$TARGET/etc/systemd/system/multi-user.target.wants/$unit"
 done
 ln -sf /run/systemd/resolve/stub-resolv.conf "$TARGET/etc/resolv.conf"
-printf 'GRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' >> "$TARGET/etc/default/grub"
+# No Debian menu at every start: straight on after a second (hold Esc or Shift for it), under the name HomeBaseOS.
+printf 'GRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\nGRUB_TIMEOUT_STYLE=hidden\nGRUB_TIMEOUT=1\nGRUB_DISTRIBUTOR="HomeBaseOS"\n' >> "$TARGET/etc/default/grub"
 
 status running 84 "Installing the boot loader"
 if [ -n "$ESP" ]; then

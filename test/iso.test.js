@@ -42,6 +42,8 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   const build = read('build-iso.sh');
   for (const f of ['late.sh', 'homebaseos-firstboot.service', 'installing.issue', 'serve.js', 'kiosk.sh', 'run-install.sh']) assert.ok(build.includes('"$HERE/' + f + '"'), f);
   assert.match(build, /boot=live components quiet splash/);
+  assert.match(build, /background_image \/homebaseos\/splash\.png/);
+  assert.ok(fs.existsSync(path.join(dir, 'plymouth', 'grub-splash.png')));
   const live = read('build-live.sh'), kiosk = read('kiosk.sh');
   assert.match(live, /plymouth-set-default-theme homebaseos/);
   assert.match(live, /cog cage/);
