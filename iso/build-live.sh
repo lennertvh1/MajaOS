@@ -42,7 +42,7 @@ APP="$R/opt/homebaseos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
 cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
 cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
-cp "$ROOT/public/install.html" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
+cp "$ROOT/public/install.html" "$ROOT/public/favicon.svg" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
 cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
 
