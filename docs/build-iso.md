@@ -180,4 +180,4 @@ sudo ./iso/build-iso.sh --live --worktree --out dist
 ./iso/build-docker.sh
 ```
 
-For installing the finished ISO on hardware, see [README.md](../README.md#installing-with-the-iso-recommended).
+For installing the finished ISO on hardware, see [the user guide](guide.md#installing-with-the-iso-recommended).

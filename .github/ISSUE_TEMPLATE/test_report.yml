@@ -1,0 +1,48 @@
+name: Test report
+description: You tried MajaOS somewhere. Tell what worked and what didn't.
+labels: [test report]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for testing! Good news is useful too, so we know what works where.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → About, or the name of the ISO.
+      placeholder: 0.5.0, or 0.6.0+dev.abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did you run it?
+      options:
+        - Real hardware
+        - Proxmox
+        - Unraid
+        - VirtualBox
+        - VMware
+        - QEMU / virt-manager
+        - Only the demo
+        - Other (see below)
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware
+      description: CPU, RAM, disks, graphics card, network card. For a VM, its settings (UEFI, display, pointer).
+  - type: textarea
+    id: tried
+    attributes:
+      label: What did you try, and what happened?
+      description: Installer, first boot, pools, apps, VMs, backups… One line per thing is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: For example `journalctl -u majaos -e` or `/var/log/majaos-firstboot.log`. Remove passwords and addresses you don't want to share.
+      render: text
