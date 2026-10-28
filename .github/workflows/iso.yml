@@ -1,7 +1,7 @@
-# Creates the MajaOS release on GitHub and attaches the installation ISO. Only for tags on main (official versions);
-# the dev branch never gets releases (see test.yml for its checks and test ISO).
-# - Automatically for every pushed tag (e.g. v0.5.0): the release gets the tag message as title and text
-#   (git tag -a v0.5.0 -F notes.md: first line = title, the rest = text in Markdown). A tag with a - (v0.6.0-beta.1) becomes a pre-release.
+# Creates the MajaOS release on GitHub and attaches the installation ISO. Only when a tag is pushed, never for a plain push.
+# Official versions are tags on main. Pre-releases (a tag with a -, e.g. v0.1.0-beta.1) may also be tags on dev.
+# - Automatically for every pushed tag (e.g. v0.1.0): the release gets the tag message as title and text
+#   (git tag -a v0.1.0 -F notes.md: first line = title, the rest = text in Markdown). A tag with a - becomes a pre-release.
 # - A release you create yourself on github.com also gets an ISO.
 # - By hand: Actions > "Release and ISO" > Run workflow, and fill in the tag.
 # A release this workflow creates itself doesn't start other workflows; that's why the ISO is built here too.
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag, e.g. v0.5.0 (if the release doesn't exist yet, it is created)"
+        description: "Tag, e.g. v0.1.0 or v0.1.0-beta.1 (if the release doesn't exist yet, it is created)"
         required: true
 
 permissions:
@@ -33,10 +33,13 @@ jobs:
           ref: ${{ env.TAG }}
           fetch-depth: 0
 
-      - name: Only from main
+      - name: Only from main (pre-releases also from dev)
         run: |
-          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main \
-            || { echo "::error::$TAG is not on main. Official releases come from main only; test builds are on the dev branch."; exit 1; }
+          head="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$head" origin/main && exit 0
+          case "$TAG" in *-*) git merge-base --is-ancestor "$head" origin/dev && exit 0 ;; esac
+          echo "::error::$TAG is not on main. Official releases come from main; a pre-release (a tag with a -, e.g. v0.1.0-beta.1) may also come from dev."
+          exit 1
 
       - name: Check the version
         run: |

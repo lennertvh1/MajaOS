@@ -10,7 +10,7 @@ body:
     attributes:
       label: Version
       description: Settings → About, or the name of the ISO.
-      placeholder: 0.5.0, or 0.6.0+dev.abc1234
+      placeholder: 0.1.0-beta.1, or 0.1.0-beta.1+dev.abc1234
     validations:
       required: true
   - type: dropdown

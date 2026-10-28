@@ -1,6 +1,6 @@
 {
   "name": "majaos",
-  "version": "0.5.0",
+  "version": "0.1.0-beta.1",
   "description": "Simple management system for your home server on Debian, with ZFS, VMs and Docker",
   "main": "server.js",
   "scripts": {

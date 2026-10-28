@@ -212,10 +212,10 @@ Updating on the server: copy the folder again and run `sudo ./install.sh`.
 
 ### Branches, tests and test versions
 
-- Work happens on the **`dev`** branch. **`main`** only contains official versions, and only tags on `main` become releases (with an ISO).
+- Work happens on the **`dev`** branch. **`main`** only contains official versions. A release (with an ISO) only happens when a tag is pushed: official versions are tags on `main`, pre-releases (`v0.1.0-beta.1`) may also be tags on `dev`.
 - Every push to `dev` (and `main`) runs the tests on GitHub (*Actions > Test*). When the installer changes on `dev`, that run also builds a **test ISO** with the graphical installer (`--live`), which you download from the run (kept 14 days). You can also start it by hand: *Actions > Test > Run workflow*.
 - A **test server** follows `dev` directly, without releases: *Settings > Software update > Development*. Every new commit on `dev` then shows up as an update (`0.6.0+dev.abc1234`, with the commit messages as notes) and *Update now* installs it, with the same backup copy and rollback as a normal update.
-- The first time (a server on 0.5.0 doesn't know that channel yet), on the test server:
+- The first time (an older HomeBaseOS server may not know that channel yet), on the test server:
 
   ```bash
   curl -fsSL -o install-branch.sh https://raw.githubusercontent.com/lennertvh1/MajaOS/dev/deploy/install-branch.sh
@@ -223,7 +223,7 @@ Updating on the server: copy the folder again and run `sudo ./install.sh`.
   ```
 
   `sudo bash /opt/majaos/deploy/install-branch.sh main` puts the server back on official releases.
-- Releasing: bump the version in `package.json` on `dev`, merge `dev` into `main`, push, and push a tag `vX.Y.Z` on `main` (see *Software update*).
+- Releasing: bump the version in `package.json` on `dev`. For a pre-release, tag `vX.Y.Z-beta.N` on `dev` and push the tag. For an official version, merge `dev` into `main`, push, and push a tag `vX.Y.Z` on `main` (see *Software update*).
 
 ### Translations
 
