@@ -83,10 +83,10 @@
     { version: '0.4.0-beta.1', name: 'v0.4.0-beta.1', prerelease: true, published: '2026-10-21T09:00:00Z',
       notes: '## For testing\n\n- Take and restore snapshots of VMs\n- **Note:** not yet suitable for daily use' },
     { version: '0.3.0', name: 'Date, time and two-step verification', prerelease: false, published: '2026-10-20T18:00:00Z',
-      notes: '## New\n\n- **Sign in with two-step verification** (TOTP) with recovery codes\n- Set date, time and time zone in *Settings > General*\n- Time format: 24 or 12 hour\n\n## Improved\n\n- Faster list of apps\n- The console remembers the window size\n\n## Fixed\n\n- A share without users gave an error when saving\n\n**Full list**: https://github.com/lennertvh1/homebaseos/compare/v0.2.0...v0.3.0' },
+      notes: '## New\n\n- **Sign in with two-step verification** (TOTP) with recovery codes\n- Set date, time and time zone in *Settings > General*\n- Time format: 24 or 12 hour\n\n## Improved\n\n- Faster list of apps\n- The console remembers the window size\n\n## Fixed\n\n- A share without users gave an error when saving\n\n**Full list**: https://github.com/lennertvh1/MajaOS/compare/v0.2.0...v0.3.0' },
     { version: '0.2.0', name: 'v0.2.0', prerelease: false, published: '2026-10-01T12:00:00Z',
       notes: '## New\n\n- App store with the Unraid Community Apps catalogue\n- Disk bays, ZFS pools and shared folders\n- Terminal on the server' },
-  ].map((r) => ({ ...r, url: 'https://github.com/lennertvh1/homebaseos/releases/tag/v' + r.version }));
+  ].map((r) => ({ ...r, url: 'https://github.com/lennertvh1/MajaOS/releases/tag/v' + r.version }));
   // Channel dev, like devSummary() in lib/release.js: the newest commit of the dev branch.
   const DEV_HEAD = { sha: 'c0ffee15deadbeef0123456789abcdef01234567', version: '0.6.0', date: new Date(Date.now() - 3 * 3600000).toISOString(),
     commits: [['c0ffee15deadbeef0123456789abcdef01234567', 'Apps: progress bar while installing'], ['b4d5e6f70123456789abcdef0123456789abcdef', 'Translate the whole project to English']] };
@@ -94,9 +94,9 @@
     const cur = upd.current || '0.2.0', short = DEV_HEAD.sha.slice(0, 7);
     const latest = { version: DEV_HEAD.version + '+dev.' + short, tag: DEV_HEAD.sha, commit: DEV_HEAD.sha, pkgVersion: DEV_HEAD.version, dev: true, prerelease: true,
       name: DEV_HEAD.commits[0][1], notes: DEV_HEAD.commits.map(([h, m]) => `- ${m} (${h.slice(0, 7)})`).join('\n'),
-      url: 'https://github.com/lennertvh1/homebaseos/commit/' + DEV_HEAD.sha, published: DEV_HEAD.date };
+      url: 'https://github.com/lennertvh1/MajaOS/commit/' + DEV_HEAD.sha, published: DEV_HEAD.date };
     const updateAvailable = !upd.build || upd.build.commit !== DEV_HEAD.sha;
-    return { repo: 'lennertvh1/homebaseos', token: true, auto: upd.auto, channel: 'dev', branch: 'dev', checked: upd.checked, error: null, current: cur, build: upd.build || null,
+    return { repo: 'lennertvh1/MajaOS', token: true, auto: upd.auto, channel: 'dev', branch: 'dev', checked: upd.checked, error: null, current: cur, build: upd.build || null,
       latest, updateAvailable, newer: updateAvailable ? [latest] : [], installed: updateAvailable ? null : latest, history: [],
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
@@ -142,7 +142,7 @@
     if (upd.channel === 'dev') return updDev();
     const list = demoReleases.filter((r) => upd.channel === 'beta' || !r.prerelease), cur = upd.current || '0.2.0';
     const i = Math.max(0, list.findIndex((r) => r.version === cur)), newer = list.slice(0, i);
-    return { repo: 'lennertvh1/homebaseos', token: true, auto: upd.auto, channel: upd.channel, checked: upd.checked, error: null, current: cur,
+    return { repo: 'lennertvh1/MajaOS', token: true, auto: upd.auto, channel: upd.channel, checked: upd.checked, error: null, current: cur,
       build: upd.build || null, latest: list[0], updateAvailable: newer.length > 0, newer, installed: list[i] || null, history: list.slice(i),
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }

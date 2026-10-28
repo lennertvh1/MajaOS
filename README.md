@@ -236,7 +236,7 @@ Updating on the server: copy the folder again and run `sudo ./install.sh`.
   ```bash
   curl -fsSL -H "Authorization: Bearer $(sudo sed -n 's/^UPDATE_TOKEN=//p' /etc/majaos/majaos.env)" \
     -H "Accept: application/vnd.github.raw" -o install-branch.sh \
-    "https://api.github.com/repos/lennertvh1/homebaseos/contents/deploy/install-branch.sh?ref=dev"
+    "https://api.github.com/repos/lennertvh1/MajaOS/contents/deploy/install-branch.sh?ref=dev"
   sudo bash install-branch.sh dev
   ```
 

@@ -26,6 +26,9 @@ if [ -f /etc/majaos/homebaseos.env ] && [ ! -L /etc/majaos/homebaseos.env ] && [
   say "settings file → /etc/majaos/majaos.env"
 fi
 
+# The GitHub repository was renamed too (GitHub forwards the old name, but don't rely on that).
+[ -f /etc/majaos/majaos.env ] && sed -i 's#^UPDATE_REPO=lennertvh1/homebaseos$#UPDATE_REPO=lennertvh1/MajaOS#' /etc/majaos/majaos.env
+
 # The service itself. The old unit stays (disabled) until the new one runs: lib/update-helper.sh removes it,
 # or puts it back on a rollback.
 if [ -f /etc/systemd/system/homebaseos.service ] && [ -f "$SRC/deploy/majaos.service" ]; then

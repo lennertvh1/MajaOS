@@ -58,7 +58,7 @@ First run downloads the netinst into `.iso-cache/` (~800 MB) and verifies SHA256
 ```bash
 sudo apt update
 sudo apt install -y xorriso cpio gzip curl git coreutils debootstrap squashfs-tools
-git clone https://github.com/lennertvh1/homebaseos.git
+git clone https://github.com/lennertvh1/MajaOS.git
 cd majaos
 git checkout dev   # or main for a release tag
 
@@ -98,7 +98,7 @@ In the Ubuntu WSL shell:
 sudo apt update
 sudo apt install -y git xorriso cpio gzip curl coreutils debootstrap squashfs-tools
 cd ~
-git clone https://github.com/lennertvh1/homebaseos.git
+git clone https://github.com/lennertvh1/MajaOS.git
 cd majaos
 git checkout dev
 

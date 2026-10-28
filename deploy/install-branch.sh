@@ -18,7 +18,7 @@ if [ -z "${HB_DETACHED:-}" ] && command -v systemd-run >/dev/null 2>&1; then
 fi
 [ -f "$ENV" ] || { echo "$ENV is missing: install MajaOS first."; exit 1; }
 [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid branch name: $BRANCH"; exit 1; }
-REPO="$(sed -n 's/^UPDATE_REPO=//p' "$ENV" | tail -1)"; REPO="${REPO:-lennertvh1/homebaseos}"
+REPO="$(sed -n 's/^UPDATE_REPO=//p' "$ENV" | tail -1)"; REPO="${REPO:-lennertvh1/MajaOS}"
 TOKEN="$(sed -n 's/^UPDATE_TOKEN=//p' "$ENV" | tail -1)"
 AUTH=(); [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
 
