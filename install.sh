@@ -33,7 +33,7 @@ fi
 apt-get update
 
 step "Base packages"
-apt-get install -y ca-certificates curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone
+apt-get install -y ca-certificates openssl curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone
 # Keep the clock right: the codes of two-step verification depend on the time.
 apt-get install -y systemd-timesyncd || true
 timedatectl set-ntp true || true
@@ -152,6 +152,7 @@ PORT="$(sed -n 's/^PORT=//p' "$ETC/homebaseos.env" | tail -1)"
 PORT="${PORT:-80}"
 step "Done"
 if [ "$PORT" = 80 ]; then echo "Open http://$IP"; else echo "Open http://$IP:$PORT"; fi
+echo "It switches to https with the server's own certificate: the browser warns about it the first time. Settings > Security explains how to trust it."
 if [ "$NEW_INSTALL" = 1 ]; then
   echo "Open that address in your browser: the welcome wizard creates your account and helps you with the name, the time zone and your storage."
   echo "You can also create a pool there; HomeBaseOS right away creates the folders appdata, media, backups, vms and isos on it."

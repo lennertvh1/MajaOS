@@ -6395,6 +6395,7 @@
       <form class="form" id="pwForm" style="max-width:440px">${passwordFields()}
         <p class="form-error" role="alert" data-pw-err></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Change password')}</button></div></form>` : ''}
+      <div id="httpsBox"></div>
       <h2 class="pane-title">${t('Terminal on the server')}</h2>
       <p class="muted small">${t('The terminal icon at the top right opens a root shell on the server. Whoever can open the terminal can do anything on the server: delete files, format disks, read passwords.')}</p>
       <div class="form" style="margin-top:12px">
@@ -6416,6 +6417,7 @@
       <p class="form-error" role="alert" id="secErr"></p>
       <p class="muted small">${t('Every time someone opens or closes the terminal, it is written to the system log (journalctl -u homebaseos).')}</p>`;
     mfaSection($('#mfaBox', el));
+    httpsSection($('#httpsBox', el), cur);
     const pwForm = $('#pwForm', el);
     if (pwForm) {
       wirePasswordMeter(pwForm);
@@ -6437,14 +6439,23 @@
         S.config.terminal = r.terminal; S.config.terminalPassword = r.terminalPassword && !!S.config.passwordEnabled;
         $('#termBtn').hidden = !r.terminal;
         toast(t('Security saved.'));
+        // HTTPS on or off: the server switches in a moment, so go to the other address.
+        if (body.https != null && body.https !== (cur.https !== false) && !S.config.demo) {
+          const to = r.https !== false ? 'https://' + location.hostname + (r.httpsPort === 443 ? '' : ':' + r.httpsPort)
+            : 'http://' + location.hostname + (r.port === 80 ? '' : ':' + r.port);
+          setTimeout(() => { location.href = to + location.pathname + location.hash; }, 1500);
+          return;
+        }
         securityPane(el);
       } catch (e) { $('#secErr', el).textContent = e.message; }
     };
     el.onchange = (e) => {
-      const n = e.target.name; if (n !== 'terminal' && n !== 'terminalPassword' && n !== 'ssh') return;
+      const n = e.target.name; if (n !== 'terminal' && n !== 'terminalPassword' && n !== 'ssh' && n !== 'https') return;
       const body = { terminal: box('terminal').checked, terminalPassword: box('terminalPassword').checked };
       if (box('ssh') && !box('ssh').disabled) body.ssh = box('ssh').checked;
-      const looser = (body.terminal && !cur.terminal) || (!body.terminalPassword && cur.terminalPassword) || (body.ssh && !cur.ssh);
+      if (box('https')) body.https = box('https').checked;
+      const looser = (body.terminal && !cur.terminal) || (!body.terminalPassword && cur.terminalPassword) || (body.ssh && !cur.ssh)
+        || (body.https === false && cur.https !== false);
       if (looser && needsPw) {
         pending = body; confirmForm.hidden = false; $('#secHint', el).hidden = false;
         confirmForm.elements.password.focus();
@@ -6452,6 +6463,35 @@
     };
     confirmForm.addEventListener('submit', (e) => { e.preventDefault(); if (pending) save({ ...pending, password: confirmForm.elements.password.value }); });
     el.onclick = (e) => { if (e.target.closest('[data-sec-cancel]')) securityPane(el); };
+  }
+
+  /* --- Security: HTTPS with the server's own certificate (lib/tls.js) */
+  async function httpsSection(box, cur) {
+    let st;
+    try { st = await api.get('/api/tls'); } catch (e) { box.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; return; }
+    const on = cur.https !== false;
+    const state = !on ? t('HTTPS is off. Passwords go over the network unencrypted.')
+      : !st.listening ? t('HTTPS is not running. Only http works now.')
+      : location.protocol === 'https:' ? t('This connection is encrypted.') : t('Open the dashboard with https:// to use the encrypted connection.');
+    const steps = [
+      t('Mac: open the file. In Keychain Access, double-click the HomeBaseOS certificate, open Trust and choose Always Trust.'),
+      t('Windows: open the file, choose Install Certificate, then Local Machine, and put it in Trusted Root Certification Authorities.'),
+      t('iPhone and iPad: open the file in Safari and install the profile in Settings. Then turn it on under General → About → Certificate Trust Settings.'),
+      t('Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate.'),
+      t('Firefox has its own list: Settings → Privacy & Security → View Certificates → Authorities → Import.'),
+    ];
+    box.innerHTML = `<h2 class="pane-title">${t('HTTPS')}</h2>
+      <p class="muted small">${t('The dashboard uses an encrypted connection with its own certificate. Browsers warn about it until you trust that certificate once on each device.')}</p>
+      <div class="form" style="margin-top:12px">
+        <label class="check"><input type="checkbox" name="https"${on ? ' checked' : ''}> ${t('Use HTTPS')}</label>
+        <p class="muted small" style="margin-top:-4px">${esc(state)}</p>
+        ${st.names ? `<p class="muted small">${esc(t('Valid for: {names}', { names: st.names.join(', ') }))}</p>
+        <p class="muted small" style="overflow-wrap:anywhere">${t('Fingerprint: {fp}', { fp: `<code>${esc(st.caFingerprint || '')}</code>` })}</p>` : ''}
+        <div class="btn-row">${S.config.demo || !st.caFingerprint ? `<button class="btn" type="button" disabled>${t('Download certificate')}</button>`
+          : `<a class="btn" href="/api/tls/ca.crt" download="homebaseos-ca.crt">${t('Download certificate')}</a>`}</div>
+        <details><summary>${t('How do I trust the certificate?')}</summary>
+          <ul class="muted small">${steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>
+      </div>`;
   }
 
   /* --- Security: two-step verification (TOTP with an authenticator app) */

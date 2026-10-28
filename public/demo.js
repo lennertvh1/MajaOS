@@ -53,7 +53,7 @@
   Object.assign(apps.find((a) => a.name === 'pihole'), { webui: 'http://192.168.1.53/admin/', ports: [] });
 
   /* ---- settings: language, about and network */
-  const demoSecurity = { terminal: true, terminalPassword: true, ssh: false, mcp: true };
+  const demoSecurity = { terminal: true, terminalPassword: true, ssh: false, mcp: true, https: true };
   const demoSshState = () => ({ installed: true, enabled: !!demoSecurity.ssh, active: !!demoSecurity.ssh });
   /* ---- welcome wizard: remembered per browser whether it is finished */
   const onb = { passwordChanged: null };
@@ -2229,6 +2229,12 @@
     }
     if (path === '/api/storage-paths/migration') return { migration: spMigration() };
     if (path === '/api/settings') return { language: demoLang(), clock: demoClock(), experience: demoExperience(), port: demoWebPort(), ...demoSecurity, sshState: demoSshState() };
+    // HTTPS with the server's own certificate (lib/tls.js). The demo has none to download.
+    if (path === '/api/tls') {
+      return { enabled: demoSecurity.https !== false, port: demoSecurity.https !== false ? 443 : 0, listening: demoSecurity.https !== false, kind: 'own',
+        names: ['localhost', 'freddy', 'freddy.local', '127.0.0.1', '192.168.1.10'], expires: new Date(Date.now() + 380 * 864e5).toISOString(),
+        caFingerprint: '6D:CE:C0:A0:7B:0E:D7:79:57:5F:1E:AE:D9:21:14:10:2A:74:8D:75:4E:1B:12:90:65:49:67:5E:A2:7F:EE:AB', caExpires: new Date(Date.now() + 3650 * 864e5).toISOString() };
+    }
     if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
@@ -2373,7 +2379,8 @@
       Object.assign(demoSecurity, { terminal: body.terminal == null ? demoSecurity.terminal : !!body.terminal,
         terminalPassword: body.terminalPassword == null ? demoSecurity.terminalPassword : !!body.terminalPassword,
         ssh: body.ssh == null ? demoSecurity.ssh : !!body.ssh,
-        mcp: body.mcp == null ? demoSecurity.mcp !== false : !!body.mcp });
+        mcp: body.mcp == null ? demoSecurity.mcp !== false : !!body.mcp,
+        https: body.https == null ? demoSecurity.https !== false : !!body.https });
       return { language: demoLang(), clock: demoClock(), ...demoSecurity, sshState: demoSshState() };
     }
     if (path === '/api/settings') {

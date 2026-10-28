@@ -28,7 +28,8 @@ if bash "$SETUP/install.sh" "${ARGS[@]}"; then
   PORT="$(sed -n 's/^PORT=//p' "$ENV" | tail -1)"; PORT="${PORT:-80}"
   ADDR="http://\\4"; [ "$PORT" = 80 ] || ADDR="http://\\4:${PORT}"
   issue "" "  HomeBaseOS is ready. Open in your browser:  ${ADDR}" \
-    "  and create your account there (the welcome wizard helps you along)." ""
+    "  and create your account there (the welcome wizard helps you along)." \
+    "  The browser warns about the certificate the first time: that is expected." ""
   chmod 644 "$ISSUE"
   systemctl disable homebaseos-firstboot.service
   rm -rf "$SETUP"

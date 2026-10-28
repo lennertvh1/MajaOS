@@ -61,6 +61,7 @@ const layout = require('./lib/layout');
 const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
 const mcphttp = require('./lib/mcphttp');
+const tlsCert = require('./lib/tls');
 const shares = require('./lib/shares');
 const files = require('./lib/files');
 const sharelinks = require('./lib/sharelinks');
@@ -283,6 +284,13 @@ async function handleApi(req, res, url) {
     if (r.status !== 200) await slow();
     return sendJson(res, r.status, r.data || { error: r.status === 429 ? 'Too many wrong codes. Wait 5 minutes and try again.' : 'That pairing code is wrong or has expired.' });
   }
+  // The own CA, so a device can trust the HTTPS certificate. Public: it holds no secret.
+  if (p === '/api/tls/ca.crt' && method === 'GET') {
+    const pem = tlsCert.caPem();
+    if (!pem) return sendJson(res, 404, { error: 'There is no certificate yet.' });
+    res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Disposition': 'attachment; filename="homebaseos-ca.crt"', 'Cache-Control': 'no-store' });
+    return res.end(pem);
+  }
   // The demo adapter fetches a real site icon through here. On a normal server this stays behind sign-in.
   if (p === '/api/shortcuts/fetch-icon' && method === 'POST') {
     if (!CFG.demo && !isAuthed(req)) return sendJson(res, 401, { error: 'Not signed in' });
@@ -402,6 +410,9 @@ async function handleApi(req, res, url) {
       : await ssh.status().catch(() => ({ installed: false, enabled: false, active: false }));
     return sendJson(res, 200, { ...s, port: settings.listenPort(), sshState });
   }
+  if (p === '/api/tls' && method === 'GET') {
+    return sendJson(res, 200, { enabled: settings.getSettings().https !== false, port: settings.httpsPort(), listening: !!secure, ...(tlsCert.info() || {}) });
+  }
   if (p === '/api/settings' && method === 'POST') {
     const body = await readBody(req);
     const beforePort = settings.listenPort();
@@ -429,7 +440,15 @@ async function handleApi(req, res, url) {
       }
       tunnel.retarget().catch((err) => console.error('Remote access: ' + err.message));
     }
-    return sendJson(res, 200, { ...saved, port: settings.listenPort() });
+    // HTTPS on, off or on another port. Answer first over the old connection, then switch.
+    if ((body.https != null && (saved.https !== false) !== (before.https !== false)) || (body.httpsPort != null && settings.httpsPort() !== (secure && secure.port))) {
+      if (saved.https !== false && settings.httpsPort() === settings.listenPort()) {
+        settings.saveSettings({ https: before.https !== false, httpsPort: before.httpsPort || settings.httpsPort() }, { checkPassword: () => true });
+        throw Object.assign(new Error('HTTPS needs another port than the web port.'), { status: 409 });
+      }
+      setTimeout(() => startHttps().catch((e) => console.error('HTTPS could not start: ' + e.message)), 500);
+    }
+    return sendJson(res, 200, { ...saved, port: settings.listenPort(), httpsPort: settings.httpsPort() });
   }
   // What Cursor needs to talk to this server. The token is a normal session (30 days); the password never leaves this check.
   if (p === '/api/mcp' && method === 'GET') {
@@ -516,7 +535,11 @@ async function handleApi(req, res, url) {
   if (p === '/api/network' && method === 'POST') return sendJson(res, 200, await network.applyNetwork(await readBody(req)));
   if (p === '/api/network/confirm' && method === 'POST') return sendJson(res, 200, network.confirmNetwork());
   if (p === '/api/network/revert' && method === 'POST') return sendJson(res, 200, await network.revertNetwork());
-  if (p === '/api/network/hostname' && method === 'POST') return sendJson(res, 200, await network.setHostname((await readBody(req)).hostname));
+  if (p === '/api/network/hostname' && method === 'POST') {
+    const r = await network.setHostname((await readBody(req)).hostname);
+    refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)); // the new name in the certificate
+    return sendJson(res, 200, r);
+  }
 
   if (p === '/api/docker-networks' && method === 'GET') return sendJson(res, 200, await dockernet.listNetworks());
   // "Own address in my home network": the home network, the macvlan network if there is one, and a free address.
@@ -669,6 +692,41 @@ function serveStatic(req, res, url) {
   });
 }
 
+/* ------------------------------------------------------------------ HTTPS */
+
+// HTTPS next to the web port, with an own certificate (lib/tls.js). Not in the demo.
+let secure = null;
+const isLoopback = (req) => /^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''));
+// Browsers that come in over http go to https. Not for the server itself: the remote access tunnel and the
+// updater talk to http://127.0.0.1, and the backup app pairs over http with its own certificate check.
+function toHttps(req, res, url) {
+  if (!secure || req.socket.encrypted || isLoopback(req) || url.pathname.startsWith('/api/backup/pair/')) return false;
+  const host = String(req.headers.host || '').replace(/:\d+$/, '');
+  const name = /^[a-z0-9.-]+$|^\[[0-9a-f:.]+\]$/i.test(host) ? host : (req.socket.localAddress || '').replace(/^::ffff:/, '');
+  const port = settings.httpsPort();
+  res.writeHead(308, { Location: `https://${name}${port === 443 ? '' : ':' + port}${req.url}`, 'Cache-Control': 'no-store' });
+  res.end();
+  return true;
+}
+async function startHttps() {
+  const port = CFG.demo ? 0 : settings.httpsPort();
+  if (!port) { if (secure) { secure.close(); secure = null; } return null; }
+  const { key, cert } = await tlsCert.ensure();
+  const next = https.createServer({ key, cert }, onRequest);
+  next.on('upgrade', onUpgrade);
+  await new Promise((resolve, reject) => { next.once('error', reject); next.listen(port, () => { next.removeListener('error', reject); resolve(); }); });
+  const prev = secure;
+  secure = next; secure.port = port;
+  if (prev) prev.close();
+  return port;
+}
+// A new host name or address needs a new certificate: swap it in without restarting.
+async function refreshHttps() {
+  if (!secure) return;
+  const r = await tlsCert.ensure();
+  if (r.renewed) { secure.setSecureContext({ key: r.key, cert: r.cert }); console.log(`New HTTPS certificate (${r.reason}).`); }
+}
+
 // Older installs showed the first password on the server's screen: remove it as soon as there is an own one.
 function removePasswordIssue() {
   const pwIssue = '/etc/issue.d/homebaseos-wachtwoord.issue';
@@ -681,6 +739,7 @@ function onRequest(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const shared = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{16,80})(?:\/(.*))?$/);
   Promise.resolve().then(() => {
+    if (toHttps(req, res, url)) return;
     if (shared) return sharelinks.send(req, res, shared[1], shared[2] ? decodeURIComponent(shared[2]) : '', clientIp(req));
     // MCP connector: one address, then the program signs in. It sits outside the cookie check on purpose.
     if (mcphttp.match(url.pathname)) {
@@ -748,6 +807,10 @@ bind(CFG.port).then(() => {
   // HomeBaseOS runs as root: until there is an account, you can only create that account (all other endpoints return 401).
   if (needsSetup()) console.log(`No account yet. Open http://<address>:${CFG.port} to create one.`);
   if (!CFG.demo) {
+    startHttps().then((port) => port && console.log(`HTTPS on port ${port}.`))
+      .catch((e) => console.error('HTTPS could not start, only http works: ' + e.message));
+    // A new address (DHCP, Settings → Network) needs a new certificate. openssl only runs when something changed.
+    setInterval(() => refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)), 10 * 60000);
     paths.detect().catch(() => {}); // pools that already have an appdata/vms/isos folder
     ssh.enforce(settings.getSettings().ssh).catch((e) => console.error('SSH: ' + e.message));
     vms.bootAutostart();
