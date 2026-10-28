@@ -14,6 +14,10 @@
 .inst h1 { font-size: 1.55rem; font-weight: 650; letter-spacing: -.02em; margin-bottom: 8px; }
 .inst .lead { color: var(--muted); margin-bottom: 18px; }
 .lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.inst-card.wide .lang-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kbd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; }
+.kbd-grid button { text-align: left; border: 1px solid var(--glass-line); background: var(--glass); color: inherit; border-radius: 12px; padding: 8px 12px; font: inherit; font-size: .9rem; cursor: pointer; }
+.kbd-grid button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--glass)); }
 .lang-grid button, .disk {
   text-align: left; border: 1px solid var(--glass-line); background: var(--glass); color: inherit;
   border-radius: 14px; padding: 12px 14px; font: inherit; cursor: pointer;

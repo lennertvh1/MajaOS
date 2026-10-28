@@ -36,6 +36,7 @@
   // A network socket (RJ45) seen from the front: the body with the latch below and four contacts.
   const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10h-4v3H8v-3H4z"/><path d="M8.5 8v3M11 8v3M13 8v3M15.5 8v3"/></svg>';
   const state = { step: 'lang', disks: [], disk: null, nvidia: false, error: '', job: null, timer: null, unavailable: false,
+    kbd: null, kbdList: [], kbdDefaults: {}, kbdPicked: false, kbdBusy: false,
     net: null, netForms: {}, netSeen: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null };
   let api = null;
 
@@ -68,8 +69,12 @@
     if (state.step === 'lang') {
       const items = Object.entries(LANGS).map(([code, info]) =>
         `<button type="button" data-lang="${esc(code)}" aria-pressed="${code === LANG ? 'true' : 'false'}">${esc(info.name)}</button>`).join('');
-      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Choose your language'))}</h1><div class="lang-grid">${items}</div>
-        ${actions(btn(t('Continue'), 'data-go="welcome"', true))}</section>`;
+      // Buttons, not a <select>: the installer's browser (WPE) has no drop-down list.
+      const kbds = state.kbdList.map((k) => `<button type="button" data-kbd="${esc(k.id)}" aria-pressed="${k.id === state.kbd ? 'true' : 'false'}">${esc(t(k.name))}</button>`).join('');
+      root.innerHTML = `<section class="inst-card wide">${brand()}<h1>${esc(t('Choose your language'))}</h1><div class="lang-grid">${items}</div>
+        ${kbds ? `<h2 class="inst-sub">${esc(t('Keyboard'))}</h2><div class="kbd-grid">${kbds}</div>` : ''}
+        <p class="inst-error" role="alert">${esc(state.error)}</p>
+        ${actions(btn(state.kbdBusy ? t('Switching the keyboard…') : t('Continue'), 'data-go="welcome"' + (state.kbdBusy ? ' disabled' : ''), true))}</section>`;
       return;
     }
     if (state.step === 'welcome') {
@@ -329,7 +334,20 @@
     }
   }
 
+  // Continue on the first screen: the keyboard goes to the installer. A different one starts the screen again
+  // (iso/serve.js stops cage, kiosk.sh starts it with the new keyboard) and the page then continues at the welcome.
+  async function applyKeyboard() {
+    if (!state.kbd) { state.step = 'welcome'; draw(); return; }
+    state.kbdBusy = true; state.error = ''; draw();
+    try {
+      const r = await api.post('/api/install/keyboard', { layout: state.kbd, language: LANG, resume: 'welcome' });
+      if (r.restart) return; // the screen starts again in a moment
+      state.kbdBusy = false; state.step = 'welcome'; draw();
+    } catch (e) { state.kbdBusy = false; state.error = t(e.message); draw(); }
+  }
+
   async function go(step) {
+    if (step === 'welcome' && state.step === 'lang') return applyKeyboard();
     if (step === 'network') { state.step = 'network'; state.error = ''; draw(); await loadNetwork(); draw(); watchNetwork(); return; }
     if (step === 'disk' && state.step === 'network') return applyNetwork();
     if (step === 'disk') { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
@@ -369,7 +387,14 @@
 
   $('#inst').addEventListener('click', (e) => {
     const lang = e.target.closest('[data-lang]');
-    if (lang) { void setLang(lang.dataset.lang).then(draw).catch((err) => { state.error = err.message; draw(); }); return; }
+    if (lang) {
+      // The keyboard follows the language until you choose one yourself.
+      if (!state.kbdPicked && state.kbdDefaults[lang.dataset.lang]) state.kbd = state.kbdDefaults[lang.dataset.lang];
+      void setLang(lang.dataset.lang).then(draw).catch((err) => { state.error = err.message; draw(); });
+      return;
+    }
+    const kbd = e.target.closest('[data-kbd]');
+    if (kbd && !state.kbdBusy) { state.kbd = kbd.dataset.kbd; state.kbdPicked = true; draw(); return; }
     const card = e.target.closest('[data-card]');
     if (card && !state.netBusy) { state.netSel = card.dataset.card; state.netPicked = true; state.error = ''; draw(); return; }
     const mode = e.target.closest('[data-mode]');
@@ -441,7 +466,17 @@
       api = window.MajaOSDemo;
     } else if (cfg.installer) { api = realApi(); state.installer = true; }
     else { state.unavailable = true; draw(); return; }
-    try { await setLang(localStorage.getItem('tb-lang') || 'en'); } catch (e) { await setLang('en'); }
+    // After a new keyboard the screen started again: the same language, and on to where it was going.
+    // (Only the installer's own /api/config says so; the demo's is MajaOS's.)
+    const again = cfg.installer ? cfg : {};
+    try { await setLang(again.language || localStorage.getItem('tb-lang') || 'en'); } catch (e) { await setLang('en'); }
+    try {
+      const k = await api.get('/api/keyboard');
+      state.kbdList = k.layouts || []; state.kbdDefaults = k.defaults || {};
+      state.kbd = again.language ? k.layout : (state.kbdDefaults[LANG] || k.layout || 'us');
+      state.kbdPicked = !!again.language;
+    } catch (e) { /* no keyboard choice: the installer keeps its own */ }
+    if (again.resume === 'welcome') state.step = 'welcome';
     // The screen was started again while installing (iso/kiosk.sh): go straight back to the progress.
     try {
       const job = await api.get('/api/install/progress');

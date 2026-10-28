@@ -2140,15 +2140,33 @@
     { name: 'sdb', model: 'WDC WD20EFRX-68EUZN0', size: 2 * TB, rotational: true, tran: 'sata', install: false },
     { name: 'sdc', model: 'SanDisk Ultra Fit', size: 32 * GB, rotational: false, tran: 'usb', install: true },
   ];
+  // The same steps as iso/run-install.sh: Debian, then MajaOS itself with install.sh in the chroot.
   const instSteps = [
     [12, 'Preparing the installation'],
-    [30, 'Partitioning the disk'],
-    [55, 'Installing Debian'],
-    [78, 'Installing the boot loader'],
-    [92, 'Preparing MajaOS'],
-    [100, 'The installation continues on its own. You don\'t have to do anything.'],
+    [18, 'Partitioning the disk'],
+    [35, 'Installing Debian'],
+    [52, 'Installing the boot loader'],
+    [60, 'Installing MajaOS'],
+    [72, 'Installing ZFS (this takes a few minutes)'],
+    [82, 'Installing virtual machines'],
+    [85, 'Installing shared folders'],
+    [88, 'Installing backups and remote access'],
+    [91, 'Installing Docker'],
+    [97, 'Finishing MajaOS'],
+    [100, 'MajaOS is installed. After the restart the address appears on the screen.'],
   ];
   let instJob = null;
+  // The keyboards of lib/keyboard.js (LAYOUTS), for Settings > General and the installer's first screen.
+  const KBD_LAYOUTS = [['us', 'English (US, QWERTY)'], ['us:intl', 'US international (QWERTY)'], ['gb', 'English (UK, QWERTY)'], ['be', 'Belgian (AZERTY)'],
+    ['fr', 'French (AZERTY)'], ['de', 'German (QWERTZ)'], ['ch', 'Swiss (QWERTZ)'], ['nl', 'Dutch (QWERTY)'], ['es', 'Spanish (QWERTY)'],
+    ['pt', 'Portuguese (QWERTY)'], ['it', 'Italian (QWERTY)'], ['pl', 'Polish (QWERTY)'], ['jp', 'Japanese']].map(([id, name]) => ({ id, name }));
+  let demoKbd = 'us';
+  const KBD_DEFAULTS = { en: 'us', nl: 'us', fr: 'fr', de: 'de', es: 'es', pt: 'pt', it: 'it', pl: 'pl', zh: 'us', ja: 'jp' };
+  const kbdView = () => ({ layout: demoKbd, layouts: copy(KBD_LAYOUTS), defaults: copy(KBD_DEFAULTS), editable: true });
+  function kbdSet(id) {
+    if (!KBD_LAYOUTS.some((l) => l.id === id)) throw err('Choose one of the keyboards in the list.');
+    demoKbd = id; return kbdView();
+  }
   // The network step, like iso/serve.js: two cards, the first one with a cable and a DHCP address.
   const instCards = [
     { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 },
@@ -2260,6 +2278,7 @@
     if (path === '/api/remote') return demoRemoteView();
     if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
+    if (path === '/api/keyboard') return kbdView();
     if (path === '/api/install/progress') return instProgress();
     if (path === '/api/install/network') return { cards: instCardsNow(), online: true, dns: ['192.168.1.1'], chosen: copy(instChosen) };
     if (path === '/api/storage-paths') return spGet();
@@ -2372,6 +2391,8 @@
       return { started: true };
     }
     if (path === '/api/install/reboot') return { ok: true };
+    if (path === '/api/keyboard') { await wait(300); return kbdSet(body.layout); }
+    if (path === '/api/install/keyboard') { kbdSet(body.layout); return { restart: false }; }
     if (path === '/api/install/network') { await wait(1500); return instNetSet(body); }
     if (path === '/api/remote') { await wait(400); return demoRemoteSet(body); }
     if (path === '/api/ai/settings') { await wait(200); return demoAiSave(body); }

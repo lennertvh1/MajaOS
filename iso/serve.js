@@ -8,6 +8,7 @@ const { spawn } = require('node:child_process');
 const { run } = require('../lib/system');
 const net = require('node:net');
 const installer = require('../lib/installer');
+const keyboard = require('../lib/keyboard');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -18,6 +19,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 let child = null;
 let installLang = null; // the language of the running installation: a screen that starts again shows it in that language
+// The first screen: language and keyboard. A new keyboard starts the screen again (cage reads it at its start, kiosk.sh);
+// the page then continues at `resume` in the same language.
+const KBD_FILE = path.join(DIR, 'keyboard');
+let first = { language: null, keyboard: null, resume: null };
+const activeKeyboard = () => { try { return fs.readFileSync(KBD_FILE, 'utf8').trim() || 'us'; } catch { return 'us'; } };
 let chosen = null; // the network settings per card from the network step: they go along to the installed system
 
 function send(res, status, body, type) {
@@ -157,7 +163,26 @@ async function defaultNetwork() {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   try {
-    if (url.pathname === '/api/config' && req.method === 'GET') return send(res, 200, { installer: true, demo: false });
+    if (url.pathname === '/api/config' && req.method === 'GET') {
+      const out = { installer: true, demo: false, ...first, keyboard: first.keyboard || activeKeyboard() };
+      first.resume = null; // only once: a later reload starts at the first screen again
+      return send(res, 200, out);
+    }
+    if (url.pathname === '/api/keyboard' && req.method === 'GET') {
+      return send(res, 200, { layout: first.keyboard || activeKeyboard(), layouts: keyboard.LAYOUTS, defaults: keyboard.DEFAULT_FOR });
+    }
+    if (url.pathname === '/api/install/keyboard' && req.method === 'POST') {
+      const body = await readBody(req);
+      const id = keyboard.checkLayout(body.layout);
+      first = { language: installer.languageOf(body.language), keyboard: id, resume: null };
+      if (id === activeKeyboard()) return send(res, 200, { restart: false });
+      fs.mkdirSync(DIR, { recursive: true });
+      fs.writeFileSync(KBD_FILE, id + '\n');
+      first.resume = String(body.resume || 'welcome');
+      // Answer first; kiosk.sh starts the screen again within a second, with the new keyboard.
+      setTimeout(() => spawn('pkill', ['-x', 'cage'], { stdio: 'ignore' }), 300);
+      return send(res, 200, { restart: true });
+    }
     if (url.pathname === '/api/install/disks' && req.method === 'GET') return send(res, 200, await disks());
     if (url.pathname === '/api/install/progress' && req.method === 'GET') return send(res, 200, { ...status(), language: installLang });
     if (url.pathname === '/api/install/network' && req.method === 'GET') {
@@ -191,7 +216,7 @@ const server = http.createServer(async (req, res) => {
       const resolv = installer.installResolv(plan);
       if (resolv) fs.writeFileSync(path.join(DIR, 'resolv.conf'), resolv);
       const out = fs.openSync(path.join(DIR, 'log.txt'), 'a');
-      child = spawn('bash', [path.join(__dirname, 'run-install.sh'), picked.disk.name, picked.language, body.nvidia ? '1' : '0'], {
+      child = spawn('bash', [path.join(__dirname, 'run-install.sh'), picked.disk.name, picked.language, body.nvidia ? '1' : '0', picked.keyboard], {
         env: { ...process.env, INSTALL_DIR: DIR, STATUS, ROOT }, stdio: ['ignore', out, out],
       });
       fs.closeSync(out);

@@ -2,6 +2,8 @@
 # Installs MajaOS on a bare Debian 13 (trixie): ZFS, KVM/libvirt, Docker and the web interface.
 # Usage:  sudo ./install.sh            (running it again = updating; your settings stay)
 #         sudo ./install.sh --nvidia   (also the NVIDIA driver and GPU support for Docker)
+# The ISO installer runs it in a chroot on the new disk with MAJAOS_CHROOT=1: services are only enabled (they start at
+# the first boot), and kernel modules are built for the kernel on that disk instead of the running one.
 set -euo pipefail
 
 NVIDIA=0
@@ -25,6 +27,14 @@ ETC=/etc/majaos
 export DEBIAN_FRONTEND=noninteractive
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+CHROOT="${MAJAOS_CHROOT:-0}"
+# The kernel modules (ZFS, NVIDIA) are built for: the running kernel, or in the chroot the newest one on the new disk.
+if [ "$CHROOT" = 1 ]; then KVER="$(ls /lib/modules | sort -V | tail -1)"; else KVER="$(uname -r)"; fi
+# In the chroot nothing can start: only enable, the first boot starts it.
+enable_now() { if [ "$CHROOT" = 1 ]; then systemctl enable "$@"; else systemctl enable --now "$@"; fi; }
+disable_now() { if [ "$CHROOT" = 1 ]; then systemctl disable "$@"; else systemctl disable --now "$@"; fi; }
+restart() { [ "$CHROOT" = 1 ] || systemctl restart "$@"; }
+
 step "Turning on the contrib and non-free package sources (needed for ZFS and NVIDIA)"
 if [ -f /etc/apt/sources.list.d/debian.sources ]; then
   sed -i -E '/^Components:/{/ contrib( |$)/!s/$/ contrib/;/ non-free( |$)/!s/$/ non-free/}' /etc/apt/sources.list.d/debian.sources
@@ -36,20 +46,34 @@ apt-get update
 
 step "Base packages"
 apt-get install -y ca-certificates openssl curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone
+# <name>.local in the browser (macOS, Linux, and Windows 10+ also ask mDNS); also on the server's screen.
+apt-get install -y avahi-daemon || true
 # Keep the clock right: the codes of two-step verification depend on the time.
 apt-get install -y systemd-timesyncd || true
-timedatectl set-ntp true || true
+if [ "$CHROOT" = 1 ]; then systemctl enable systemd-timesyncd || true; else timedatectl set-ntp true || true; fi
 
 step "ZFS"
-apt-get install -y "linux-headers-$(uname -r)" linux-headers-amd64
+apt-get install -y "linux-headers-$KVER" linux-headers-amd64
 apt-get install -y zfs-dkms zfsutils-linux
-modprobe zfs
+if [ "$CHROOT" = 1 ]; then
+  # zfs-dkms builds for the running kernel (the installer's); make sure it is there for the new disk's kernel.
+  dkms autoinstall -k "$KVER"
+  modinfo -k "$KVER" zfs >/dev/null || { echo "The ZFS module was not built for kernel $KVER."; exit 1; }
+else
+  modprobe zfs
+fi
 
 step "Virtual machines (KVM/QEMU and libvirt)"
 apt-get install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients virtinst ovmf swtpm swtpm-tools
-systemctl enable --now libvirtd
-virsh -c qemu:///system net-autostart default >/dev/null 2>&1 || true
-virsh -c qemu:///system net-start default >/dev/null 2>&1 || true
+enable_now libvirtd
+if [ "$CHROOT" = 1 ]; then
+  # What net-autostart does, without a running libvirtd: the default network starts with libvirtd at the first boot.
+  [ -f /etc/libvirt/qemu/networks/default.xml ] && mkdir -p /etc/libvirt/qemu/networks/autostart \
+    && ln -sf /etc/libvirt/qemu/networks/default.xml /etc/libvirt/qemu/networks/autostart/default.xml
+else
+  virsh -c qemu:///system net-autostart default >/dev/null 2>&1 || true
+  virsh -c qemu:///system net-start default >/dev/null 2>&1 || true
+fi
 
 step "Shared folders (Samba)"
 apt-get install -y samba wsdd || apt-get install -y samba
@@ -78,14 +102,14 @@ include = /etc/samba/majaos.conf
 SMB
   touch /etc/samba/majaos.conf
 fi
-systemctl enable --now smbd
-systemctl enable --now wsdd 2>/dev/null || true
+enable_now smbd
+enable_now wsdd 2>/dev/null || true
 
 step "SSH (off until you turn it on in Settings → Security)"
 apt-get install -y openssh-server
 # The package turns SSH on. MajaOS keeps it off unless Settings saved "ssh": true.
 if ! grep -q '"ssh": true' /var/lib/majaos/settings.json 2>/dev/null; then
-  systemctl disable --now ssh || true
+  disable_now ssh || true
 fi
 
 step "Backup app for your PCs (Kopia, official package source)"
@@ -110,7 +134,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   > /etc/apt/sources.list.d/docker.list
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-systemctl enable --now docker
+enable_now docker
 
 if [ "$NVIDIA" = 1 ]; then
   step "NVIDIA driver and GPU support for Docker"
@@ -122,7 +146,8 @@ if [ "$NVIDIA" = 1 ]; then
   apt-get update
   apt-get install -y nvidia-container-toolkit
   nvidia-ctk runtime configure --runtime=docker
-  systemctl restart docker
+  [ "$CHROOT" = 1 ] && dkms autoinstall -k "$KVER"
+  restart docker
 fi
 
 step "Automatic security updates (unattended-upgrades, no automatic reboot)"
@@ -145,13 +170,15 @@ if [ ! -f "$ETC/majaos.env" ]; then
   chmod 600 "$ETC/majaos.env"
 fi
 install -m 644 "$SRC/deploy/majaos.service" /etc/systemd/system/majaos.service
-systemctl daemon-reload
+[ "$CHROOT" = 1 ] || systemctl daemon-reload
 systemctl enable majaos >/dev/null
 if [ -f /etc/systemd/system/homebaseos.service ]; then  # the old name (before MajaOS) holds the port
   systemctl disable --now homebaseos >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/homebaseos.service; systemctl daemon-reload
 fi
-systemctl restart majaos
+restart majaos
+# In the chroot: the installer shows the address itself.
+[ "$CHROOT" = 1 ] && { step "Done (MajaOS starts at the first boot)"; exit 0; }
 
 IP="$(hostname -I | awk '{print $1}')"
 PORT="$(sed -n 's/^PORT=//p' "$ETC/majaos.env" | tail -1)"

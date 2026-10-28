@@ -4115,6 +4115,7 @@
         <button class="btn sm primary" type="submit">${t('Save')}</button>
       </form>
       <div id="dtBox"><h2 class="pane-title">${t('Date and time')}</h2><p class="muted small">${t('Loading…')}</p></div>
+      <div id="kbdBox"></div>
       <h2 class="pane-title">${t('Welcome wizard')}</h2>
       <p class="muted small">${t('Go through the basic settings again: account, name, time zone, storage and two-step verification.')}</p>
       <div class="btn-row"><button class="btn" type="button" data-onb-open>${t('Open welcome wizard')}</button></div>`;
@@ -4160,6 +4161,27 @@
       } catch (ex) { toast(t('Saving the language failed: {error}', { error: ex.message }), true); }
     };
     dateTimeSection($('#dtBox', el));
+    keyboardSection($('#kbdBox', el));
+  }
+
+  /* --- Settings > General > the keyboard of the server's own screen (lib/keyboard.js) */
+  async function keyboardSection(box) {
+    let k;
+    try { k = await api.get('/api/keyboard'); } catch (e) { box.innerHTML = ''; return; }
+    if (!box.isConnected || !k.editable) { box.innerHTML = ''; return; }
+    const known = k.layouts.some((l) => l.id === k.layout);
+    box.innerHTML = `<h2 class="pane-title">${t('Keyboard')}</h2>
+      <p class="muted small">${t('The keyboard of a screen and keyboard connected to the server itself. Your own computer keeps its own.')}</p>
+      <div class="form dt-form"><label class="fld"><span>${t('Keyboard on the server\'s screen')}</span>
+        <select class="field" name="kbd">${known ? '' : `<option value="" selected>${esc(k.layout || t('Unknown'))}</option>`}${k.layouts.map((l) =>
+          `<option value="${esc(l.id)}"${l.id === k.layout ? ' selected' : ''}>${esc(t(l.name))}</option>`).join('')}</select></label></div>`;
+    $('select', box).onchange = async (e) => {
+      if (!e.target.value) return;
+      e.target.disabled = true;
+      try { await api.post('/api/keyboard', { layout: e.target.value }); toast(t('Keyboard saved.')); }
+      catch (ex) { toast(ex.message, true); }
+      keyboardSection(box);
+    };
   }
 
   // One block per program. The token is a session, so the password itself never goes into the file.

@@ -42,7 +42,7 @@ echo "==> installer files"
 APP="$R/opt/majaos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
 cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
-cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
+cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$ROOT/lib/keyboard.js" "$APP/lib/"
 cp "$ROOT/public/install.html" "$ROOT/public/favicon.svg" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
 cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
@@ -93,8 +93,6 @@ Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=WLR_NO_HARDWARE_CURSORS=1
 Environment=XCURSOR_THEME=Adwaita
 Environment=XCURSOR_SIZE=24
-# Typing an IP address in the network step: the keyboard is Belgian AZERTY, like the installed system.
-Environment=XKB_DEFAULT_LAYOUT=be
 [Install]
 WantedBy=multi-user.target
 EOF

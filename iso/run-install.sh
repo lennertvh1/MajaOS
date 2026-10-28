@@ -1,11 +1,12 @@
 #!/bin/bash
 # Installs Debian on the disk that the screen already confirmed, while that screen stays up.
 # The Debian installer itself is not started: its text would replace the loading screen.
-# Usage: run-install.sh <disk> <language> <nvidia 0|1>
+# Usage: run-install.sh <disk> <language> <nvidia 0|1> [keyboard: layout or layout:variant, see lib/keyboard.js]
 set -uo pipefail
 DISK="${1:-}"
 LANG_CODE="${2:-en}"
 NVIDIA="${3:-0}"
+KEYBOARD="${4:-us}"
 ROOT="${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 DIR="${INSTALL_DIR:-/run/majaos-install}"
 STATUS="${STATUS:-$DIR/status.json}"
@@ -25,6 +26,7 @@ JS
 }
 
 cleanup() {
+  umount "$TARGET/run" 2>/dev/null || true
   umount "$TARGET/boot/efi" 2>/dev/null || true
   umount "$TARGET/dev/pts" 2>/dev/null || true
   umount "$TARGET/dev" 2>/dev/null || true
@@ -154,10 +156,10 @@ mkdir -p "$TARGET"
 mount "$ROOTP" "$TARGET" || fail "$NOT_PREPARED" 30
 if [ -n "$ESP" ]; then mkdir -p "$TARGET/boot/efi"; mount "$ESP" "$TARGET/boot/efi" || fail "$NOT_PREPARED" 30; fi
 
-status running 32 "Installing Debian"
+status running 20 "Installing Debian"
 # Also the non-free firmware: network cards such as Realtek 2.5G need it after the first start.
 debootstrap --components=main,contrib,non-free,non-free-firmware trixie "$TARGET" http://deb.debian.org/debian >"$DIR/debootstrap.log" 2>&1 &
-watch $! 32 64 "Installing Debian" || { tail_into_log "$DIR/debootstrap.log"; fail "Debian could not be downloaded. Check the internet connection and try again." 40; }
+watch $! 20 40 "Installing Debian" || { tail_into_log "$DIR/debootstrap.log"; fail "Debian could not be downloaded. Check the internet connection and try again." 40; }
 
 mount --bind /dev "$TARGET/dev"
 mount --bind /dev/pts "$TARGET/dev/pts"
@@ -166,22 +168,24 @@ mount --bind /sys "$TARGET/sys"
 cp /etc/resolv.conf "$TARGET/etc/resolv.conf"
 printf 'Europe/Brussels\n' > "$TARGET/etc/timezone"
 ln -sf /usr/share/zoneinfo/Europe/Brussels "$TARGET/etc/localtime"
-printf 'XKBMODEL="pc105"\nXKBLAYOUT="be"\nXKBVARIANT=""\nXKBOPTIONS=""\n' > "$TARGET/etc/default/keyboard"
+# The keyboard chosen on the first screen (layout or layout:variant); Settings > General changes it later.
+printf '%s' "$KEYBOARD" | grep -qxE '[a-z]{2,8}(:[a-z0-9_]{1,16})?' || KEYBOARD=us
+printf 'XKBMODEL="pc105"\nXKBLAYOUT="%s"\nXKBVARIANT="%s"\nXKBOPTIONS=""\n' "${KEYBOARD%%:*}" "$( [ "${KEYBOARD#*:}" = "$KEYBOARD" ] || printf '%s' "${KEYBOARD#*:}")" > "$TARGET/etc/default/keyboard"
 printf 'majaos\n' > "$TARGET/etc/hostname"
 printf '127.0.0.1 localhost\n127.0.1.1 majaos\n' > "$TARGET/etc/hosts"
 export DEBIAN_FRONTEND=noninteractive
 if [ -n "$ESP" ]; then PKGS="linux-image-amd64 grub-efi-amd64 grub-efi-amd64-bin"; else PKGS="linux-image-amd64 grub-pc"; fi
-status running 66 "Installing Debian"
-chroot "$TARGET" apt-get update -qq >>"$LOG" 2>&1 || fail "Debian could not be downloaded. Check the internet connection and try again." 66
+status running 41 "Installing Debian"
+chroot "$TARGET" apt-get update -qq >>"$LOG" 2>&1 || fail "Debian could not be downloaded. Check the internet connection and try again." 41
 chroot "$TARGET" apt-get install -y -qq $PKGS sudo curl ca-certificates openssh-server locales keyboard-configuration console-setup systemd-timesyncd \
   ifupdown dhcpcd-base firmware-realtek firmware-misc-nonfree firmware-amd-graphics >"$DIR/apt.log" 2>&1 &
-watch $! 66 80 "Installing Debian" || { tail_into_log "$DIR/apt.log"; fail "Debian could not be downloaded. Check the internet connection and try again." 70; }
+watch $! 41 50 "Installing Debian" || { tail_into_log "$DIR/apt.log"; fail "Debian could not be downloaded. Check the internet connection and try again." 45; }
 
 LOCALE="$(locale_of "$LANG_CODE")"
 grep -q "^$LOCALE UTF-8" "$TARGET/etc/locale.gen" || printf '%s UTF-8\n' "$LOCALE" >> "$TARGET/etc/locale.gen"
 chroot "$TARGET" locale-gen >>"$LOG" 2>&1 || true
 printf 'LANG=%s\n' "$LOCALE" > "$TARGET/etc/default/locale"
-chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS maja >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 82
+chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS maja >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 50
 chroot "$TARGET" passwd -l maja >>"$LOG" 2>&1 || true
 chroot "$TARGET" usermod -aG sudo maja >>"$LOG" 2>&1 || true
 
@@ -220,26 +224,70 @@ ln -sf /usr/lib/systemd/system/systemd-timesyncd.service "$TARGET/etc/systemd/sy
 # No Debian menu at every start: straight on after a second (hold Esc or Shift for it), under the name MajaOS.
 printf 'GRUB_DISABLE_OS_PROBER=true\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\nGRUB_TIMEOUT_STYLE=hidden\nGRUB_TIMEOUT=1\nGRUB_DISTRIBUTOR="MajaOS"\n' >> "$TARGET/etc/default/grub"
 
-status running 84 "Installing the boot loader"
+status running 52 "Installing the boot loader"
 if [ -n "$ESP" ]; then
-  chroot "$TARGET" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --removable >>"$LOG" 2>&1 || fail "The boot loader could not be installed. Open Details to see why." 84
+  chroot "$TARGET" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --removable >>"$LOG" 2>&1 || fail "The boot loader could not be installed. Open Details to see why." 52
 else
-  chroot "$TARGET" grub-install --target=i386-pc "/dev/$DISK" >>"$LOG" 2>&1 || fail "The boot loader could not be installed. Open Details to see why." 84
+  chroot "$TARGET" grub-install --target=i386-pc "/dev/$DISK" >>"$LOG" 2>&1 || fail "The boot loader could not be installed. Open Details to see why." 52
 fi
-chroot "$TARGET" update-grub >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 88
+chroot "$TARGET" update-grub >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 54
 
-status running 92 "Preparing MajaOS"
+# MajaOS itself (ZFS, libvirt, Samba, Docker and the web interface) with install.sh in the chroot: after the restart it
+# runs right away. install.sh only enables services there; they start at the first boot.
+status running 56 "Preparing MajaOS"
 mkdir -p "$TARGET/opt/majaos-setup"
-tar -xzf "$LIVE/majaos/majaos.tar.gz" -C "$TARGET/opt/majaos-setup" >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 92
+tar -xzf "${MAJAOS_TAR:-$LIVE/majaos/majaos.tar.gz}" -C "$TARGET/opt/majaos-setup" >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 56
 [ "$NVIDIA" = 1 ] && touch "$TARGET/opt/majaos-setup/.nvidia"
 if printf '%s' "$LANG_CODE" | grep -qxE '[a-z][a-z]*'; then
   mkdir -p "$TARGET/var/lib/majaos"
   printf '{"language":"%s"}\n' "$LANG_CODE" > "$TARGET/var/lib/majaos/settings.json"
   chmod 600 "$TARGET/var/lib/majaos/settings.json"
 fi
-cp "$LIVE/majaos/majaos-firstboot.service" "$TARGET/etc/systemd/system/majaos-firstboot.service"
-ln -sf /etc/systemd/system/majaos-firstboot.service "$TARGET/etc/systemd/system/multi-user.target.wants/majaos-firstboot.service"
+
+# The bar follows the steps of install.sh ("==> ZFS" and so on): each step has its own message and part of the bar.
+watch_majaos() {
+  local pid="$1"
+  local pct=58 lo=58 hi=62 msg="Installing MajaOS" last
+  while kill -0 "$pid" 2>/dev/null; do
+    last="$(grep -a '==> ' "$DIR/majaos.log" 2>/dev/null | tail -1 | sed 's/\x1b\[[0-9;]*m//g; s/^.*==> //')"
+    case "$last" in
+      "Turning on"*|"Base packages"*) lo=58; hi=64; msg="Installing MajaOS" ;;
+      ZFS*) lo=64; hi=80; msg="Installing ZFS (this takes a few minutes)" ;;
+      "Virtual machines"*) lo=80; hi=84; msg="Installing virtual machines" ;;
+      "Shared folders"*) lo=84; hi=86; msg="Installing shared folders" ;;
+      SSH*|"Backup app"*|"Remote access"*) lo=86; hi=89; msg="Installing backups and remote access" ;;
+      Docker*) lo=89; hi=93; msg="Installing Docker" ;;
+      NVIDIA*) lo=93; hi=96; msg="Installing the NVIDIA driver" ;;
+      "Automatic security"*|"Installing MajaOS"*|Done*) lo=96; hi=98; msg="Finishing MajaOS" ;;
+    esac
+    [ "$pct" -lt "$lo" ] && pct="$lo"
+    [ "$pct" -lt "$hi" ] && pct=$((pct + 1))
+    status running "$pct" "$msg"
+    sleep 4
+  done
+  wait "$pid"
+}
+
+# /run as an empty tmpfs: package scripts need /run/lock, and without /run/systemd/system nothing starts in the chroot.
+mount -t tmpfs tmpfs "$TARGET/run" && mkdir -p "$TARGET/run/lock"
+MAJAOS_ARGS=(); [ "$NVIDIA" = 1 ] && MAJAOS_ARGS+=(--nvidia)
+status running 58 "Installing MajaOS"
+chroot "$TARGET" env MAJAOS_CHROOT=1 bash /opt/majaos-setup/install.sh "${MAJAOS_ARGS[@]}" >"$DIR/majaos.log" 2>&1 &
 mkdir -p "$TARGET/etc/issue.d"
-cp "$LIVE/majaos/installing.issue" "$TARGET/etc/issue.d/majaos.issue"
-cleanup
-status done 100 "The installation continues on its own. You don't have to do anything."
+if watch_majaos $!; then
+  # Done: no first boot needed.
+  # The logo and the address on the server's screen (lib/issue.js; MajaOS rewrites it at every start).
+  chroot "$TARGET" node /opt/majaos/lib/issue.js >>"$LOG" 2>&1 || true
+  rm -rf "$TARGET/opt/majaos-setup"
+  cleanup
+  status done 100 "MajaOS is installed. After the restart the address appears on the screen."
+else
+  # Not finished (often the network): Debian is there, so the first boot runs install.sh again, like before.
+  tail_into_log "$DIR/majaos.log"
+  echo "MajaOS could not be installed yet; it is installed at the first boot." >> "$LOG"
+  cp "$LIVE/majaos/majaos-firstboot.service" "$TARGET/etc/systemd/system/majaos-firstboot.service"
+  ln -sf /etc/systemd/system/majaos-firstboot.service "$TARGET/etc/systemd/system/multi-user.target.wants/majaos-firstboot.service"
+  cp "$LIVE/majaos/installing.issue" "$TARGET/etc/issue.d/majaos.issue"
+  cleanup
+  status done 100 "Debian is installed. MajaOS finishes installing after the restart (5 to 15 minutes)."
+fi

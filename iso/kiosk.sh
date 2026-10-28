@@ -25,6 +25,9 @@ fi
 # pixman first: works in VMs without GPU passthrough; gles2 when a GPU is available.
 # Only options that cage 0.2.0 (Debian 13) knows: an unknown one (like -D) stops cage at once and leaves a black screen.
 open_screen() {
+  # The keyboard chosen on the first screen (serve.js writes it, then stops cage so this starts it again).
+  local kbd; kbd="$(cat /run/majaos-install/keyboard 2>/dev/null || echo us)"
+  XKB_DEFAULT_LAYOUT="${kbd%%:*}" XKB_DEFAULT_VARIANT="$( [ "${kbd#*:}" = "$kbd" ] || printf '%s' "${kbd#*:}")" \
   WLR_RENDERER="$1" cage -s -- cog --platform=wl --bg-color='#101a33' --doc-viewer \
     --webprocess-failure=restart "$url" >>/tmp/majaos-installer.log 2>&1
 }

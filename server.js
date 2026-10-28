@@ -79,6 +79,8 @@ const kopia = require('./lib/kopia');
 const vmsnap = require('./lib/vmsnap');
 const sysbackup = require('./lib/sysbackup');
 const ai = require('./lib/ai');
+const issue = require('./lib/issue');
+const keyboard = require('./lib/keyboard');
 
 const CFG = {
   port: settings.listenPort(),
@@ -247,6 +249,7 @@ async function handleApi(req, res, url) {
     const r = auth.createAccount(body.user, body.password);
     if (body.language || body.experience) settings.saveSettings({ language: body.language, experience: body.experience });
     removePasswordIssue();
+    refreshIssue(); // "create your account" becomes "sign in"
     setSession(res, true);
     console.log(`Account ${r.user} created from ${clientIp(req)}.`);
     return sendJson(res, 200, r);
@@ -448,6 +451,7 @@ async function handleApi(req, res, url) {
       }
       setTimeout(() => startHttps().catch((e) => console.error('HTTPS could not start: ' + e.message)), 500);
     }
+    refreshIssue(); // http/https and the ports on the server's screen
     return sendJson(res, 200, { ...saved, port: settings.listenPort(), httpsPort: settings.httpsPort() });
   }
   // What Cursor needs to talk to this server. The token is a normal session (30 days); the password never leaves this check.
@@ -498,6 +502,8 @@ async function handleApi(req, res, url) {
     if (!auth.checkCode(body.code).ok) { await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
     return sendJson(res, 200, action === 'disable' ? auth.disable() : auth.newRecovery());
   }
+  if (p === '/api/keyboard' && method === 'GET') return sendJson(res, 200, keyboard.getKeyboard());
+  if (p === '/api/keyboard' && method === 'POST') return sendJson(res, 200, await keyboard.setKeyboard((await readBody(req)).layout));
   if (p === '/api/datetime' && method === 'GET') return sendJson(res, 200, await datetime.getDateTime());
   if (p === '/api/datetime' && method === 'POST') return sendJson(res, 200, await datetime.setDateTime(await readBody(req)));
   if (p === '/api/update' && method === 'GET') return sendJson(res, 200, { ...release.status(), install: updater.canUpdate(), running: updater.isRunning() });
@@ -538,6 +544,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/network/hostname' && method === 'POST') {
     const r = await network.setHostname((await readBody(req)).hostname);
     refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)); // the new name in the certificate
+    refreshIssue(); // and <name>.local on the server's screen
     return sendJson(res, 200, r);
   }
 
@@ -727,6 +734,13 @@ async function refreshHttps() {
   if (r.renewed) { secure.setSecureContext({ key: r.key, cert: r.cert }); console.log(`New HTTPS certificate (${r.reason}).`); }
 }
 
+// The server's own screen: the logo with the address (lib/issue.js). After every change of what it says.
+function refreshIssue() {
+  if (CFG.demo) return;
+  issue.write({ https: settings.httpsPort() > 0, httpsPort: settings.httpsPort(), port: CFG.port, setup: needsSetup(), hostname: os.hostname(), mdns: issue.hasMdns() })
+    .catch((e) => console.error('Screen text: ' + e.message));
+}
+
 // Older installs showed the first password on the server's screen: remove it as soon as there is an own one.
 function removePasswordIssue() {
   const pwIssue = '/etc/issue.d/homebaseos-wachtwoord.issue';
@@ -811,6 +825,7 @@ bind(CFG.port).then(() => {
       .catch((e) => console.error('HTTPS could not start, only http works: ' + e.message));
     // A new address (DHCP, Settings → Network) needs a new certificate. openssl only runs when something changed.
     setInterval(() => refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)), 10 * 60000);
+    refreshIssue(); // the logo and the address on the server's own screen
     paths.detect().catch(() => {}); // pools that already have an appdata/vms/isos folder
     ssh.enforce(settings.getSettings().ssh).catch((e) => console.error('SSH: ' + e.message));
     vms.bootAutostart();

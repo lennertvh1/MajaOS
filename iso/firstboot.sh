@@ -24,13 +24,8 @@ ARGS=()
 [ -f "$SETUP/.nvidia" ] && ARGS+=(--nvidia)
 
 if bash "$SETUP/install.sh" "${ARGS[@]}"; then
-  ENV=/etc/majaos/majaos.env
-  PORT="$(sed -n 's/^PORT=//p' "$ENV" | tail -1)"; PORT="${PORT:-80}"
-  ADDR="http://\\4"; [ "$PORT" = 80 ] || ADDR="http://\\4:${PORT}"
-  issue "" "  MajaOS is ready. Open in your browser:  ${ADDR}" \
-    "  and create your account there (the welcome wizard helps you along)." \
-    "  The browser warns about the certificate the first time: that is expected." ""
-  chmod 644 "$ISSUE"
+  # The logo and the address on the screen: MajaOS (started by install.sh) writes them itself (lib/issue.js).
+  node /opt/majaos/lib/issue.js || true
   systemctl disable majaos-firstboot.service
   rm -rf "$SETUP"
   echo "== Done: $(date)"

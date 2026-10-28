@@ -66,9 +66,17 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   const handoff = read('run-install.sh');
   assert.match(handoff, /debootstrap [^\n]*trixie/);
   assert.doesNotMatch(handoff, /kexec/);
+  // MajaOS is installed during the installer, in the chroot; the first boot is only the fallback.
+  assert.match(handoff, /chroot "\$TARGET" env MAJAOS_CHROOT=1 bash \/opt\/majaos-setup\/install\.sh/);
+  assert.match(handoff, /majaos-firstboot\.service/);
   // Without internet the disk stays as it was: the check comes before wipefs.
   assert.ok(handoff.indexOf('Checking the internet connection') < handoff.indexOf('wipefs -a'));
   assert.match(live, /firmware-realtek/);
+  // The keyboard: chosen on the first screen, not fixed in the kiosk unit; the live system has lib/keyboard.js.
+  assert.doesNotMatch(live, /XKB_DEFAULT_LAYOUT=be/);
+  assert.match(live, /lib\/keyboard\.js/);
+  assert.match(read('kiosk.sh'), /XKB_DEFAULT_LAYOUT="\$\{kbd%%:\*\}"/);
+  assert.match(handoff, /XKBLAYOUT="%s"/);
   // DHCP with the MAC address as client ID, on the stick and on the installed system (a DUID made some routers slow).
   assert.match(live, /s\/\^duid\$\/clientid\//);
   assert.match(handoff, /s\/\^duid\$\/clientid\/' "\$TARGET\/etc\/dhcpcd.conf"/);
@@ -85,4 +93,15 @@ test('no local line in the ISO scripts uses a variable it sets itself', () => {
       for (const n of names) assert.ok(!new RegExp('\\$\\{?' + n + '\\b').test(m[1]), f + ': ' + line.trim());
     }
   }
+});
+
+test('install.sh in the chroot only enables services and builds modules for the new disk\'s kernel', () => {
+  const sh = fs.readFileSync(path.join(__dirname, '..', 'install.sh'), 'utf8');
+  // Starting or restarting goes through the helpers, which skip it in the chroot (old HomeBaseOS units excepted).
+  const direct = sh.split('\n').filter((l) => /systemctl (start|restart|enable --now|disable --now)/.test(l)
+    && !/^(enable_now|disable_now|restart)\(\)/.test(l) && !/homebaseos/.test(l));
+  assert.deepEqual(direct, []);
+  assert.match(sh, /KVER="\$\(ls \/lib\/modules \| sort -V \| tail -1\)"/);
+  assert.match(sh, /dkms autoinstall -k "\$KVER"/);
+  assert.match(sh, /\[ "\$CHROOT" = 1 \] && \{ step "Done/);
 });
