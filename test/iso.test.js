@@ -51,7 +51,7 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.match(read('plymouth/majaos.script'), /bar.png/);
   assert.match(kiosk, /retain-splash/);
   assert.match(kiosk, /kiosk=1/);
-  assert.match(kiosk, /open_screen pixman/);
+  assert.match(kiosk, /renderer=pixman[\s\S]*open_screen "\$renderer"/);
   assert.match(kiosk, /--platform=wl/);
   assert.match(live, /PAMName=login/);
   assert.match(live, /TTYPath=\/dev\/tty1/);

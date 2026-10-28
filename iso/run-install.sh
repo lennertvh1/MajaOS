@@ -207,6 +207,8 @@ else
     done
   } > "$TARGET/etc/network/interfaces"
 fi
+# MajaOS sets the host name (Settings > Network): dhcpcd must not replace it with the router's.
+echo 'nohook hostname' >> "$TARGET/etc/dhcpcd.conf"
 rm -f "$TARGET/etc/resolv.conf"
 if [ -f "$DIR/resolv.conf" ]; then cp "$DIR/resolv.conf" "$TARGET/etc/resolv.conf"; else cp /etc/resolv.conf "$TARGET/etc/resolv.conf"; fi
 mkdir -p "$TARGET/etc/systemd/system/multi-user.target.wants"

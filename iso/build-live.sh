@@ -42,10 +42,13 @@ echo "==> installer files"
 APP="$R/opt/majaos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
 cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
-cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$ROOT/lib/network.js" "$APP/lib/"
+cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
 cp "$ROOT/public/install.html" "$ROOT/public/favicon.svg" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
 cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
+
+# dhcpcd must not rename the computer to what the router hands out (option host_name, hook 30-hostname).
+echo 'nohook hostname' >> "$R/etc/dhcpcd.conf"
 
 # Logo on a quiet boot. Plymouth keeps it until Cog is ready to draw. A login prompt would wipe it.
 THEME="$R/usr/share/plymouth/themes/majaos"

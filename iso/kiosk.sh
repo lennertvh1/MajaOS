@@ -34,7 +34,24 @@ if command -v cage >/dev/null && command -v cog >/dev/null; then
   { echo "== input devices"; grep -E '^(N|H):' /proc/bus/input/devices; echo "== sessions"; loginctl list-sessions --no-pager; } >>/tmp/majaos-installer.log 2>&1
   # cage needs the screen. --retain-splash leaves the logo on it until the page paints over it.
   plymouth quit --retain-splash 2>/dev/null || true
-  open_screen pixman || open_screen gles2 || true
+  # The screen can stop (a crash in the browser or the compositor). Start it again instead of leaving a dead screen;
+  # the page picks up a running installation by itself. A screen that stops right at the start counts as a failed try:
+  # then the other renderer is tried (pixman, gles2), and after 6 such tries in a row it gives up.
+  renderer=pixman quick=0
+  while :; do
+    started=$(date +%s)
+    open_screen "$renderer"; code=$?
+    ran=$(( $(date +%s) - started ))
+    echo "== $(date +%T) the screen stopped after ${ran}s (cage exit ${code}, renderer ${renderer})" >>/tmp/majaos-installer.log
+    if [ "$ran" -lt 8 ]; then
+      quick=$((quick + 1))
+      [ "$quick" -ge 6 ] && break
+      if [ "$renderer" = pixman ]; then renderer=gles2; else renderer=pixman; fi
+    else
+      quick=0
+    fi
+    sleep 1
+  done
   say "The installer screen stopped. Open $url"
   say "The log is /tmp/majaos-installer.log"
   # tty1 still holds the boot logo in graphics mode, so text there stays invisible. tty2 is a root shell.

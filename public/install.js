@@ -283,6 +283,13 @@
     } catch (e) {
       state.job = { state: 'failed', percent: 0, message: e.message }; draw(); return;
     }
+    followProgress();
+  }
+  function resumeProgress(job) {
+    state.job = job; state.step = job.state === 'done' ? 'done' : 'progress'; draw();
+    if (job.state === 'running') followProgress();
+  }
+  async function followProgress() {
     const poll = async () => {
       try { state.job = await api.get('/api/install/progress'); }
       catch (e) { state.job = { state: 'failed', percent: 0, message: e.message }; }
@@ -357,6 +364,14 @@
     } else if (cfg.installer) { api = realApi(); state.installer = true; }
     else { state.unavailable = true; draw(); return; }
     try { await setLang(localStorage.getItem('tb-lang') || 'en'); } catch (e) { await setLang('en'); }
+    // The screen was started again while installing (iso/kiosk.sh): go straight back to the progress.
+    try {
+      const job = await api.get('/api/install/progress');
+      if (job.state === 'running' || job.state === 'done') {
+        if (job.language && job.language !== LANG) { try { await setLang(job.language); } catch (e) { /* stays in English */ } }
+        resumeProgress(job); return;
+      }
+    } catch (e) { /* not started yet */ }
     draw();
   }
   boot();

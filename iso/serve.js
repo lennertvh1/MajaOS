@@ -8,7 +8,6 @@ const { spawn } = require('node:child_process');
 const { run } = require('../lib/system');
 const net = require('node:net');
 const installer = require('../lib/installer');
-const network = require('../lib/network');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -18,6 +17,7 @@ const STATUS = path.join(DIR, 'status.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
 let child = null;
+let installLang = null; // the language of the running installation: a screen that starts again shows it in that language
 let chosen = null; // the network settings per card from the network step: they go along to the installed system
 
 function send(res, status, body, type) {
@@ -103,7 +103,9 @@ async function waitOnline(seconds) {
   for (let i = 0; i < seconds; i += 2) { if (await online()) return true; await new Promise((r) => setTimeout(r, 2000)); }
   return online();
 }
-function nameservers() { try { return network.nameservers(fs.readFileSync('/etc/resolv.conf', 'utf8')); } catch { return []; } }
+function nameservers() {
+  try { return fs.readFileSync('/etc/resolv.conf', 'utf8').split('\n').map((l) => l.match(/^\s*nameserver\s+(\S+)/)).filter(Boolean).map((m) => m[1]); } catch { return []; }
+}
 const quiet = (cmd, args, timeout = 8000) => run(cmd, args, { timeout }).catch(() => '');
 
 // Per card: DHCP that already has an address stays as it is; the rest gets the new settings.
@@ -137,7 +139,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/api/config' && req.method === 'GET') return send(res, 200, { installer: true, demo: false });
     if (url.pathname === '/api/install/disks' && req.method === 'GET') return send(res, 200, await disks());
-    if (url.pathname === '/api/install/progress' && req.method === 'GET') return send(res, 200, status());
+    if (url.pathname === '/api/install/progress' && req.method === 'GET') return send(res, 200, { ...status(), language: installLang });
     if (url.pathname === '/api/install/network' && req.method === 'GET') {
       const [list, ok] = await Promise.all([cards(), online()]);
       askDhcp(list);
@@ -157,6 +159,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const list = await disks();
       const picked = installer.choose(list, body);
+      installLang = picked.language;
       fs.mkdirSync(DIR, { recursive: true });
       fs.writeFileSync(STATUS, JSON.stringify({ state: 'running', percent: 5, message: 'Preparing the installation', log: '' }));
       // The installed system gets the same network, in the file MajaOS manages (Settings > Network).
