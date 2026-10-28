@@ -80,7 +80,7 @@
     }
     if (state.step === 'network') {
       const n = state.net, f = form();
-      // From 4 cards on: an even wider window with 4 tiles per row and no MAC line, so it still fits without scrolling.
+      // From 4 cards on: an even wider window with 4 tiles per row and tighter spacing, so it still fits without scrolling.
       const head = `<section class="inst-card wide${n && n.cards.length >= 4 ? ' many' : ''}">${brand()}<h1>${esc(t('Network'))}</h1>
         <p class="lead">${esc(t('MajaOS needs the internet to install. Choose a network card and how it gets its address.'))}</p>`;
       if (!n || (n.cards.length && !f)) {
