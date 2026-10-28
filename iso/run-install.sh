@@ -209,6 +209,10 @@ else
 fi
 # MajaOS sets the host name (Settings > Network): dhcpcd must not replace it with the router's.
 echo 'nohook hostname' >> "$TARGET/etc/dhcpcd.conf"
+# The MAC address as client ID, like the installer: the router hands out the same address as during the installation,
+# and a reservation by MAC address works.
+sed -i 's/^duid$/clientid/' "$TARGET/etc/dhcpcd.conf"
+grep -q '^clientid$' "$TARGET/etc/dhcpcd.conf" || echo clientid >> "$TARGET/etc/dhcpcd.conf"
 rm -f "$TARGET/etc/resolv.conf"
 if [ -f "$DIR/resolv.conf" ]; then cp "$DIR/resolv.conf" "$TARGET/etc/resolv.conf"; else cp /etc/resolv.conf "$TARGET/etc/resolv.conf"; fi
 mkdir -p "$TARGET/etc/systemd/system/multi-user.target.wants"

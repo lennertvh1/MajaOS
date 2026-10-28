@@ -69,6 +69,9 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   // Without internet the disk stays as it was: the check comes before wipefs.
   assert.ok(handoff.indexOf('Checking the internet connection') < handoff.indexOf('wipefs -a'));
   assert.match(live, /firmware-realtek/);
+  // DHCP with the MAC address as client ID, on the stick and on the installed system (a DUID made some routers slow).
+  assert.match(live, /s\/\^duid\$\/clientid\//);
+  assert.match(handoff, /s\/\^duid\$\/clientid\/' "\$TARGET\/etc\/dhcpcd.conf"/);
   assert.match(live, /debootstrap/);
 });
 

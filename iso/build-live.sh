@@ -51,6 +51,10 @@ chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
 # Faster when a cable goes in: no random wait before it starts (nodelay), no 5 s check whether the address is
 # free (noarp), and no 169.254.x.x address while it waits for the router (noipv4ll).
 printf 'nohook hostname\nnodelay\nnoarp\nnoipv4ll\n' >> "$R/etc/dhcpcd.conf"
+# Ask with the MAC address as client ID, like Windows and most devices, instead of a DUID that is new at every start
+# of the stick: some routers (mesh systems) ignored the first requests and answered only after a minute.
+sed -i 's/^duid$/clientid/' "$R/etc/dhcpcd.conf"
+grep -q '^clientid$' "$R/etc/dhcpcd.conf" || echo clientid >> "$R/etc/dhcpcd.conf"
 
 # Logo on a quiet boot. Plymouth keeps it until Cog is ready to draw. A login prompt would wipe it.
 THEME="$R/usr/share/plymouth/themes/majaos"
