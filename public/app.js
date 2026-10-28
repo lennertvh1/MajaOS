@@ -3260,38 +3260,73 @@
     });
   }
 
-  const VM_KINDS = {
-    linux: { label: 'Linux', help: 'Install Linux from an ISO, for example Debian or Ubuntu Server.', vcpus: 2, memoryGb: 4, diskGb: 32 },
-    windows: { label: 'Windows 11', help: 'Windows 11 with TPM and UEFI. The disk uses SATA so the installer sees it right away.', vcpus: 4, memoryGb: 8, diskGb: 64 },
-    import: { label: 'Existing disk', help: 'Use an existing disk file, such as the qcow2 file of Home Assistant OS. MajaOS makes a copy of it.', vcpus: 2, memoryGb: 4 },
-  };
+  // Operating systems for a new VM, with sizes to start from. The server (lib/vms.js, OS) knows the same ids and picks
+  // the hardware; Advanced changes it. family: the defaults under Advanced (same as FAMILY in lib/vms.js).
+  const VM_OS = [
+    { group: 'Linux', items: [
+      { id: 'debian', label: 'Debian', family: 'linux', vcpus: 2, memoryGb: 2, diskGb: 32 },
+      { id: 'ubuntu', label: 'Ubuntu', family: 'linux', vcpus: 2, memoryGb: 4, diskGb: 32 },
+      { id: 'fedora', label: 'Fedora', family: 'linux', vcpus: 2, memoryGb: 4, diskGb: 32 },
+      { id: 'linux', label: 'Linux (other)', family: 'linux', vcpus: 2, memoryGb: 4, diskGb: 32, help: 'Any other Linux distribution, from its ISO.' },
+    ] },
+    { group: 'Appliances', items: [
+      { id: 'haos', label: 'Home Assistant OS', family: 'linux', media: 'disk', vcpus: 2, memoryGb: 4, help: 'Use an existing disk file, such as the qcow2 file of Home Assistant OS. MajaOS makes a copy of it.' },
+      { id: 'truenas', label: 'TrueNAS SCALE', family: 'linux', vcpus: 2, memoryGb: 8, diskGb: 32 },
+      { id: 'opnsense', label: 'OPNsense / pfSense', family: 'bsd', vcpus: 2, memoryGb: 4, diskGb: 32, help: 'A firewall or router. Add a second network card in Edit for your internet connection.' },
+    ] },
+    { group: 'Windows', items: [
+      { id: 'windows11', label: 'Windows 11', family: 'windows', tpm: true, vcpus: 4, memoryGb: 8, diskGb: 64, help: 'Windows 11 with TPM and UEFI. The disk uses SATA so the installer sees it right away.' },
+      { id: 'windows10', label: 'Windows 10', family: 'windows', vcpus: 4, memoryGb: 8, diskGb: 64, help: 'Windows 10 with UEFI. The disk uses SATA so the installer sees it right away.' },
+      { id: 'winserver', label: 'Windows Server', family: 'windows', tpm: true, vcpus: 4, memoryGb: 8, diskGb: 80, help: 'Windows Server 2022 or 2025 with TPM and UEFI. The disk uses SATA so the installer sees it right away.' },
+    ] },
+    { group: 'Other', items: [
+      { id: 'freebsd', label: 'FreeBSD', family: 'bsd', vcpus: 2, memoryGb: 2, diskGb: 32 },
+      { id: 'other', label: 'Other operating system', family: 'other', vcpus: 2, memoryGb: 4, diskGb: 32, help: 'Any other system. MajaOS uses hardware almost every installer knows (a SATA disk and an Intel network card). Change it under Advanced.' },
+    ] },
+  ];
+  const VM_FAMILY = { linux: { bus: 'virtio', nic: 'virtio' }, bsd: { bus: 'virtio', nic: 'virtio' }, windows: { bus: 'sata', nic: 'e1000e' }, other: { bus: 'sata', nic: 'e1000e' } };
+  const vmOs = (id) => VM_OS.flatMap((g) => g.items).find((x) => x.id === id) || VM_OS[0].items[0];
   async function vmCreateWindow() {
     openWindow(t('New VM'), `<p class="lead">${t('Loading…')}</p>`);
     let opts;
     try { opts = await vmOptions(); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
-    let kind = 'linux';
+    let osId = 'debian', media = 'iso';
     const draw = (keep) => {
-      const k = VM_KINDS[kind];
-      const files = kind === 'import' ? opts.images : opts.isos;
-      const fileLabel = t(kind === 'import' ? 'Disk file' : 'Installation ISO');
+      const k = vmOs(osId), fam = VM_FAMILY[k.family];
+      const files = media === 'disk' ? opts.images : opts.isos;
+      const fileLabel = t(media === 'disk' ? 'Disk file' : 'Installation ISO');
       const blocked = opts.vmDirMissing || !files.length;
+      const sel = (name, list, cur) => `<select class="field" name="${name}">${list.map(([v, label]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
       $('#winBody').innerHTML = `
-        <div class="seg kind-seg" role="radiogroup" aria-label="${t('Kind of VM')}">${Object.entries(VM_KINDS).map(([key, v]) =>
-          `<button type="button" role="radio" aria-checked="${key === kind}" data-kind="${key}">${esc(t(v.label))}</button>`).join('')}</div>
-        <p class="lead" style="margin-top:12px">${esc(t(k.help))}</p>
         ${opts.vmDirMissing ? `<p class="lead temp-bad">${t('The folder for VM disks ({dir}) does not exist. Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(opts.vmDir) })}</p>` : ''}
         <form class="form" id="vmForm" novalidate>
-          <input type="hidden" name="kind" value="${kind}">
+          <label class="fld"><span>${t('Operating system')}</span>
+            <select class="field" name="os">${VM_OS.map((g) => `<optgroup label="${esc(t(g.group))}">${g.items.map((x) =>
+              `<option value="${x.id}"${x.id === osId ? ' selected' : ''}>${esc(t(x.label))}</option>`).join('')}</optgroup>`).join('')}</select>
+            <small>${esc(k.help ? t(k.help) : t('Install {os} from its ISO.', { os: k.label }))}</small></label>
+          <input type="hidden" name="media" value="${media}">
+          <div class="fld"><span>${t('Install from')}</span>
+            <div class="seg kind-seg" role="radiogroup" aria-label="${t('Install from')}">${[['iso', t('Installation ISO')], ['disk', t('Existing disk')]].map(([v, label]) =>
+              `<button type="button" role="radio" aria-checked="${v === media}" data-media="${v}">${esc(label)}</button>`).join('')}</div></div>
           <label class="fld"><span>${fileLabel}</span>
             ${files.length ? `<select class="field" name="source" required>${files.map((f) =>
               `<option value="${esc(f.name)}"${keep && keep.source === f.name ? ' selected' : ''}>${esc(f.name)} (${bytes(f.size)})</option>`).join('')}</select>`
-            : `<p class="muted small">${t(kind === 'import' ? 'There are no disk files (.qcow2, .img, .raw) in {dir} yet.' : 'There are no ISO files in {dir} yet.', { dir: esc(opts.isoDir) })}
+            : `<p class="muted small">${t(media === 'disk' ? 'There are no disk files (.qcow2, .img, .raw) in {dir} yet.' : 'There are no ISO files in {dir} yet.', { dir: esc(opts.isoDir) })}
                 ${t('Put one there, for example via the shared folder or with scp, and open this window again.')}</p>`}
             <small>${t('From {dir}', { dir: esc(opts.isoDir) })}</small></label>
-          ${(() => { const v = { name: keep ? keep.name : '', vcpus: k.vcpus, memory: k.memoryGb * 1073741824, diskGb: k.diskGb, autostart: false, delay: 0,
-            description: keep ? keep.description : '' }; return vmNameField(v) + vmSizeFields(v, opts) + `
+          ${(() => { const v = { name: keep ? keep.name : '', vcpus: k.vcpus, memory: k.memoryGb * 1073741824, diskGb: media === 'disk' ? undefined : (k.diskGb || 32),
+            autostart: false, delay: 0, description: keep ? keep.description : '' }; return vmNameField(v) + vmSizeFields(v, opts) + `
           <label class="fld"><span>${t('Network')}</span><select class="field" name="network">${vmNetOptions(opts, keep && keep.network || opts.network)}</select>
             <small>${t(VM_NET_HELP)}</small></label>` + vmDescAutoFields(v); })()}
+          <details class="adv"><summary>${t('Advanced')}</summary><div class="form" style="margin-top:10px">
+            <div class="fld-row">
+              <label class="fld"><span>${t('Firmware')}</span>${sel('firmware', [['uefi', 'UEFI'], ['bios', t('BIOS (older systems)')]], 'uefi')}</label>
+              <label class="fld"><span>${t('Disk bus')}</span>${sel('bus', [['virtio', t('VirtIO (fastest)')], ['sata', t('SATA (works everywhere)')]], fam.bus)}</label>
+              <label class="fld"><span>${t('Network card')}</span>${sel('nic', [['virtio', t('VirtIO (fastest)')], ['e1000e', t('Intel e1000e (works everywhere)')], ['rtl8139', t('Realtek RTL8139 (very old systems)')]], fam.nic)}</label>
+            </div>
+            <label class="check"><input type="checkbox" name="tpm"${k.tpm ? ' checked' : ''}> ${t('TPM 2.0 (needed for Windows 11)')}</label>
+            <p class="muted small">${t('VirtIO is the fastest, but Windows and some other installers need extra drivers for it. SATA and Intel work right away.')}</p>
+          </div></details>
           <p class="muted small">${t('The VM starts right after it is created. Change network cards, disks and devices afterwards in Edit.')}</p>
           <p class="form-error" role="alert"></p>
           <div class="btn-row"><button class="btn primary" type="submit"${blocked ? ' disabled' : ''}>${t('Create')}</button><button class="btn" type="button" data-close>${t('Cancel')}</button></div>
@@ -3300,11 +3335,17 @@
     };
     draw();
     const body = $('#winBody');
+    const keepOf = (f) => ({ name: f.elements.name.value, description: f.elements.description.value, source: f.elements.source && f.elements.source.value, network: f.elements.network.value });
+    body.addEventListener('change', (e) => {
+      if (e.target.name !== 'os') return;
+      const keep = keepOf($('#vmForm'));
+      osId = e.target.value; media = vmOs(osId).media || 'iso'; draw(keep);
+      $('#vmForm').elements.os.focus();
+    });
     body.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-kind]'); if (!b || b.dataset.kind === kind) return;
-      const f = $('#vmForm');
-      const keep = { name: f.elements.name.value, description: f.elements.description.value, source: f.elements.source && f.elements.source.value, network: f.elements.network.value };
-      kind = b.dataset.kind; draw(keep);
+      const b = e.target.closest('[data-media]'); if (!b || b.dataset.media === media) return;
+      const keep = keepOf($('#vmForm'));
+      media = b.dataset.media; draw(keep);
     });
     body.addEventListener('submit', async (e) => {
       e.preventDefault();

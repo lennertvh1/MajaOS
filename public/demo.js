@@ -2497,15 +2497,26 @@
       checkFields({ ...body, name });
       if (vms.some((v) => v.name === name)) throw err('A VM named ' + name + ' already exists.', 409);
       const opts = vmOptions();
-      if (!(body.kind === 'import' ? opts.images : opts.isos).some((f) => f.name === body.source)) throw err('Choose a file from /tank/isos.');
+      // Like vmHardware() in lib/vms.js: an operating system, ISO or existing disk, and what Advanced changed.
+      const OS_FAMILY = { linux: 'linux', debian: 'linux', ubuntu: 'linux', fedora: 'linux', haos: 'linux', truenas: 'linux', freebsd: 'bsd', opnsense: 'bsd', windows11: 'windows', windows10: 'windows', winserver: 'windows', other: 'other' };
+      const old = !body.os && { linux: ['linux', 'iso'], windows: ['windows11', 'iso'], import: ['linux', 'disk'] }[body.kind];
+      const osId = old ? old[0] : body.os;
+      if (!OS_FAMILY[osId]) throw err('Choose an operating system.');
+      const media = old ? old[1] : body.media || (osId === 'haos' ? 'disk' : 'iso');
+      if (media !== 'iso' && media !== 'disk') throw err('Choose an installation ISO or an existing disk.');
+      if (body.firmware && !['uefi', 'bios'].includes(body.firmware)) throw err('Choose UEFI or BIOS.');
+      if (body.bus && !['virtio', 'sata'].includes(body.bus)) throw err('Choose VirtIO or SATA for the disk.');
+      if (body.nic && !['virtio', 'e1000e', 'rtl8139'].includes(body.nic)) throw err('Choose a network card: VirtIO, e1000e or RTL8139.');
+      const nicModel = body.nic || (['windows', 'other'].includes(OS_FAMILY[osId]) ? 'e1000e' : 'virtio');
+      if (!(media === 'disk' ? opts.images : opts.isos).some((f) => f.name === body.source)) throw err('Choose a file from /tank/isos.');
       const [ntype, nsrc] = String(body.network || opts.network).split(':');
       if (!(ntype === 'network' ? opts.networks : ntype === 'bridge' ? opts.bridges : []).some((x) => x.name === nsrc)) throw err('Choose a network for the VM.');
       await wait(1200);
       vms.push({ name, state: 'RUNNING', vcpus: body.vcpus, memory: Math.round(body.memoryGb * 1024) * 1048576, diskGb: body.diskGb || 32,
         autostart: !!body.autostart, delay: body.autostart ? body.delay || 0 : 0, description: String(body.description || '').trim(),
         base: [20, 60], ram: [0.2, 0.35] });
-      vmHw[name] = { nics: [nic(ntype, nsrc, body.kind === 'windows' ? 'e1000e' : 'virtio', '52:54:00:' + [0, 0, 0].map(() => Math.floor(rnd(16, 255)).toString(16)).join(':'))],
-        extra: [], cdrom: body.kind === 'import' ? null : '/tank/isos/' + body.source, boot: body.kind === 'import' ? 'disk' : 'cdrom', hostdevs: [], cpuPins: [] };
+      vmHw[name] = { nics: [nic(ntype, nsrc, nicModel, '52:54:00:' + [0, 0, 0].map(() => Math.floor(rnd(16, 255)).toString(16)).join(':'))],
+        extra: [], cdrom: media === 'disk' ? null : '/tank/isos/' + body.source, boot: media === 'disk' ? 'disk' : 'cdrom', hostdevs: [], cpuPins: [] };
       return { name, disk: '/tank/vms/' + slug(name) + '/' + slug(name) + '.qcow2' };
     }
     m = path.match(/^\/api\/vms\/([^/]+)\/settings$/);
