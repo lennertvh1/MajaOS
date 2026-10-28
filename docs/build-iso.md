@@ -58,9 +58,8 @@ First run downloads the netinst into `.iso-cache/` (~800 MB) and verifies SHA256
 ```bash
 sudo apt update
 sudo apt install -y xorriso cpio gzip curl git coreutils debootstrap squashfs-tools
-git clone https://github.com/lennertvh1/MajaOS.git
-cd majaos
-git checkout dev   # or main for a release tag
+git clone -b dev https://github.com/lennertvh1/MajaOS.git   # or -b main for the released version
+cd MajaOS
 
 sudo ./iso/build-iso.sh --live --worktree --out dist
 ls -lh dist/
@@ -72,7 +71,7 @@ ls -lh dist/
 
 ## Windows with WSL2
 
-WSL2 is supported and is a good option. Use **WSL2** (not WSL1). Keep the repo on the **Linux filesystem** (`~/majaos`), not under `/mnt/c/...` (slower, permission quirks).
+WSL2 is supported and is a good option. Use **WSL2** (not WSL1). Keep the repo on the **Linux filesystem** (`~/MajaOS`), not under `/mnt/c/...` (slower, permission quirks).
 
 ### 1. Install WSL2
 
@@ -98,9 +97,8 @@ In the Ubuntu WSL shell:
 sudo apt update
 sudo apt install -y git xorriso cpio gzip curl coreutils debootstrap squashfs-tools
 cd ~
-git clone https://github.com/lennertvh1/MajaOS.git
-cd majaos
-git checkout dev
+git clone -b dev https://github.com/lennertvh1/MajaOS.git
+cd MajaOS
 
 sudo ./iso/build-iso.sh --live --worktree --out dist
 ```
@@ -132,7 +130,7 @@ Use **balenaEtcher** or **Rufus** on Windows to write the USB stick. Writing wit
 If Docker is installed and the daemon is running:
 
 ```bash
-cd majaos
+cd MajaOS
 ./iso/build-docker.sh
 ```
 

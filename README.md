@@ -5,7 +5,7 @@
 **A friendly dashboard for your home server.**<br>
 Storage, apps, virtual machines and backups on plain Debian, without the command line.
 
-[Website](https://majaos.com) · [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [User guide](docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
+[Website](https://majaos.com) · [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [Build a test ISO](#build-a-test-iso) · [User guide](docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
 
 <a href="https://ko-fi.com/lennertvh"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support MajaOS on Ko-fi" height="32"></a>
 
@@ -60,7 +60,7 @@ Open <http://localhost:8080>. The demo starts like a new server with the welcome
 
 You need a 64-bit PC (UEFI, Secure Boot off) with an internet connection, and a disk MajaOS may erase for the system. Your data disks are separate.
 
-1. Download `majaos-<version>-amd64.iso` from the [latest release](https://github.com/lennertvh1/MajaOS/releases), or [build it yourself](docs/build-iso.md).
+1. Download `majaos-<version>-amd64.iso` from the [latest release](https://github.com/lennertvh1/MajaOS/releases), or [build a test ISO](#build-a-test-iso) with the newest changes.
 2. Write it to a USB stick with [balenaEtcher](https://etcher.balena.io) and boot from it.
 3. Pick your language and the disk, tick the NVIDIA driver if you have such a card, and choose **Erase and install**.
 4. After the restart MajaOS sets itself up (5 to 15 minutes). The address appears on the server's screen. Open it in a browser and create your account.
@@ -69,11 +69,65 @@ Your browser warns about the certificate the first time: MajaOS uses its own. *S
 
 Prefer to start from your own Debian 13? `sudo ./install.sh` does the same on an existing install. See the [user guide](docs/guide.md#installing-by-hand).
 
+## Build a test ISO
+
+Releases come from `main`. The newest work is on this `dev` branch: to test it, build an ISO from it yourself. A build takes 45 to 90 minutes and about 20 GB of free disk space. The result is `dist/majaos-<version>-amd64.iso`; write it to a USB stick with [balenaEtcher](https://etcher.balena.io) or [Rufus](https://rufus.ie).
+
+Already have a copy of the repository? Run `git checkout dev && git pull` in it instead of `git clone`.
+
+<details open>
+<summary><b>Linux</b> (Debian or Ubuntu on an x86-64 PC)</summary>
+
+```bash
+sudo apt install -y git xorriso cpio gzip curl coreutils debootstrap squashfs-tools
+git clone -b dev https://github.com/lennertvh1/MajaOS.git
+cd MajaOS
+sudo ./iso/build-iso.sh --live --worktree --out dist
+```
+
+</details>
+
+<details open>
+<summary><b>Windows</b> (WSL2 with Ubuntu)</summary>
+
+1. Open PowerShell as administrator, run `wsl --install -d Ubuntu-24.04` and restart.
+2. Open **Ubuntu** from the Start menu and run the same commands as on Linux, in your home folder (not under `/mnt/c`):
+
+   ```bash
+   sudo apt update
+   sudo apt install -y git xorriso cpio gzip curl coreutils debootstrap squashfs-tools
+   cd ~
+   git clone -b dev https://github.com/lennertvh1/MajaOS.git
+   cd MajaOS
+   sudo ./iso/build-iso.sh --live --worktree --out dist
+   ```
+
+3. Copy the ISO to Windows: `cp dist/majaos-*.iso /mnt/c/Users/<your name>/Downloads/`
+
+</details>
+
+<details open>
+<summary><b>macOS</b> (with Docker Desktop)</summary>
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and start it. Then, in Terminal:
+
+```bash
+git clone -b dev https://github.com/lennertvh1/MajaOS.git
+cd MajaOS
+./build-iso.sh
+```
+
+The script builds inside Docker. On a Mac with Apple Silicon (M1 or newer) Docker emulates an x86 PC, so the build is slower.
+
+</details>
+
+Options, troubleshooting and booting the ISO in a VM: [docs/build-iso.md](docs/build-iso.md). A server that already runs MajaOS doesn't need a new ISO: *Settings → Software update → Development* follows `dev` by itself.
+
 ## Help test MajaOS
 
 The most useful thing right now is people running MajaOS on real hardware and telling what happens. Good things to try:
 
-- **The installer** on a real PC or in Proxmox, Unraid, VirtualBox or VMware (UEFI): does it start, can you click, does the installation finish?
+- **The installer** ([build a test ISO](#build-a-test-iso)) on a real PC or in Proxmox, Unraid, VirtualBox or VMware (UEFI): does it start, can you click, does the network step find your cards, does the installation finish?
 - **The first boot**: does MajaOS set itself up and show its address?
 - **Your real disks**: creating a pool, SMART details, temperatures, a disk in standby.
 - **Apps** from the app store you actually use, and their web addresses.
