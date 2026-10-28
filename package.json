@@ -11,6 +11,13 @@
     "build:iso": "./iso/build.sh",
     "mcp": "node mcp.js"
   },
-  "engines": { "node": ">=18.11" },
-  "license": "MIT"
+  "engines": {
+    "node": ">=18.11"
+  },
+  "license": "MIT",
+  "homepage": "https://majaos.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lennertvh1/MajaOS.git"
+  }
 }
