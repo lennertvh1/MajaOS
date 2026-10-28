@@ -7,6 +7,8 @@ Storage, apps, virtual machines and backups on plain Debian, without the command
 
 [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [User guide](https://github.com/lennertvh1/MajaOS/blob/dev/docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
 
+<a href="https://ko-fi.com/lennertvh"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support MajaOS on Ko-fi" height="32"></a>
+
 ![The MajaOS home screen](docs/images/home-dark.png)
 
 </div>
@@ -110,6 +112,10 @@ Every system command goes through one function without a shell, and the parsers 
 ## Status and roadmap
 
 MajaOS is developed in the open on the `dev` branch; `main` only holds released versions. What is known to be untested on real hardware is listed under *Known uncertainties* in [CLAUDE.md](https://github.com/lennertvh1/MajaOS/blob/dev/CLAUDE.md). Ideas for what comes next: notifications (failing disk, degraded pool, failed backup), managing datasets and snapshots, extending a pool and replacing a disk, a second app catalogue, and Let's Encrypt certificates for your own domain.
+
+## Support MajaOS
+
+MajaOS is free and made in spare time. If it's useful to you and you'd like to help it along, you can buy me a coffee on [Ko-fi](https://ko-fi.com/lennertvh). Testing it and reporting what you find helps just as much.
 
 ## License
 
