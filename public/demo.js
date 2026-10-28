@@ -2163,22 +2163,32 @@
     if (el > 12000) Object.assign(list[1], { address: '192.168.1.58/24', dynamic: true });
     return list;
   }
+  // Like installer.validateCards: settings per card, a gateway on at most one card, DHCP or a gateway somewhere.
   function instNetSet(body) {
-    const card = instCardsNow().find((c) => c.name === body.interface);
-    if (!card) throw err('Choose one of the server\'s network cards.');
+    const now = instCardsNow(), list = Array.isArray(body.cards) ? body.cards : [];
     const v4 = (ip) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) && ip.split('.').every((o) => Number(o) <= 255);
-    const out = { interface: card.name, mode: body.mode === 'static' ? 'static' : 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' };
-    out.dns = String(body.dns || '').split(/[\s,]+/).filter(Boolean);
-    if (out.mode === 'static') {
-      const [ip, prefix] = String(body.address || '').trim().split('/');
-      if (!v4(ip) || !(Number(prefix) >= 8 && Number(prefix) <= 32)) throw err('Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.');
-      out.address = ip + '/' + Number(prefix); out.gateway = String(body.gateway || '').trim();
-      if (!v4(out.gateway)) throw err('Fill in the gateway, usually your router\'s address (e.g. 192.168.1.1).');
-      if (!out.dns.length) throw err('Fill in at least one DNS server, e.g. your router or 1.1.1.1.');
-    }
-    for (const d of out.dns) if (!v4(d)) throw err(`"${d}" is not a valid DNS address.`);
+    const bad = (msg, card) => { const e = err(msg); e.card = card; return e; };
+    const out = list.map((raw) => {
+      const card = now.find((c) => c.name === raw.interface);
+      if (!card) throw err('Choose one of the server\'s network cards.');
+      const c = { interface: card.name, mode: ['static', 'off'].includes(raw.mode) ? raw.mode : 'dhcp', address: '', gateway: '', dns: [] };
+      if (c.mode !== 'static') return c;
+      const [ip, prefix] = String(raw.address || '').trim().split('/');
+      if (!v4(ip) || !(Number(prefix) >= 8 && Number(prefix) <= 32)) throw bad('Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.', c.interface);
+      c.address = ip + '/' + Number(prefix); c.gateway = String(raw.gateway || '').trim();
+      if (c.gateway && !v4(c.gateway)) throw bad('Fill in the gateway, usually your router\'s address (e.g. 192.168.1.1).', c.interface);
+      c.dns = String(raw.dns || '').split(/[\s,]+/).filter(Boolean);
+      if (c.dns.some((d) => !v4(d))) throw bad('Fill in valid DNS addresses, separated by spaces.', c.interface);
+      if (c.gateway && !c.dns.length) throw bad('Fill in at least one DNS server, e.g. your router or 1.1.1.1.', c.interface);
+      return c;
+    });
+    const gws = out.filter((c) => c.gateway);
+    if (gws.length > 1) throw bad('Only one network card can have a gateway. Leave it empty on the others.', gws[1].interface);
+    if (!out.some((c) => c.mode === 'dhcp' || c.gateway)) throw bad('One network card needs DHCP or a gateway, otherwise there is no internet.', out[0] && out[0].interface);
     instChosen = out;
-    return { online: card.connected, cards: instCardsNow(), dns: ['192.168.1.1'], chosen: copy(out) };
+    // Internet when a card with a cable has DHCP, or the card with the gateway has a cable.
+    const online = out.some((c) => (c.mode === 'dhcp' || c.gateway) && now.find((x) => x.name === c.interface).connected);
+    return { online, cards: now, dns: ['192.168.1.1'], chosen: copy(out) };
   }
   function instProgress() {
     if (!instJob) return { state: 'idle', percent: 0, message: '', log: '' };

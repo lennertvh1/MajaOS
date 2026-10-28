@@ -18,7 +18,7 @@ const STATUS = path.join(DIR, 'status.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
 let child = null;
-let chosen = null; // the network settings from the network step: they go along to the installed system
+let chosen = null; // the network settings per card from the network step: they go along to the installed system
 
 function send(res, status, body, type) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
@@ -80,7 +80,8 @@ async function cards() {
 const asked = {};
 function askDhcp(list) {
   for (const c of list) {
-    if (!c.connected || c.address || (chosen && chosen.interface === c.name && chosen.mode === 'static')) continue;
+    const own = chosen && chosen.find((x) => x.interface === c.name);
+    if (!c.connected || c.address || (own && own.mode !== 'dhcp')) continue;
     if (Date.now() - (asked[c.name] || 0) < 20000) continue;
     asked[c.name] = Date.now();
     quiet('dhcpcd', ['-x', c.name])
@@ -105,24 +106,30 @@ async function waitOnline(seconds) {
 function nameservers() { try { return network.nameservers(fs.readFileSync('/etc/resolv.conf', 'utf8')); } catch { return []; } }
 const quiet = (cmd, args, timeout = 8000) => run(cmd, args, { timeout }).catch(() => '');
 
-async function applyLive(cfg) {
-  const dev = cfg.interface;
-  await quiet('dhcpcd', ['-x', dev]);
-  await quiet('ip', ['addr', 'flush', 'dev', dev]);
-  await quiet('ip', ['link', 'set', dev, 'up']);
-  if (cfg.mode === 'dhcp') {
-    await quiet('dhcpcd', ['-4', '--noipv4ll', '-w', '-t', '20', dev], 25000);
-  } else {
+// Per card: DHCP that already has an address stays as it is; the rest gets the new settings.
+async function applyLive(list, now) {
+  for (const cfg of list) {
+    const dev = cfg.interface, live = now.find((c) => c.name === dev);
+    const before = chosen && chosen.find((x) => x.interface === dev);
+    if (cfg.mode === 'dhcp' && live && live.address && (!before || before.mode === 'dhcp')) continue;
+    await quiet('dhcpcd', ['-x', dev]);
+    await quiet('ip', ['addr', 'flush', 'dev', dev]);
+    if (cfg.mode === 'off') { await quiet('ip', ['link', 'set', dev, 'down']); continue; }
+    await quiet('ip', ['link', 'set', dev, 'up']);
+    if (cfg.mode === 'dhcp') {
+      // Without a cable there is no point in waiting: dhcpcd keeps trying in the background.
+      await quiet('dhcpcd', live && live.connected ? ['-4', '--noipv4ll', '-w', '-t', '20', dev] : ['-4', '--noipv4ll', '-b', dev], 25000);
+      continue;
+    }
     await run('ip', ['addr', 'add', cfg.address, 'dev', dev], { timeout: 5000 });
-    await run('ip', ['route', 'replace', 'default', 'via', cfg.gateway, 'dev', dev], { timeout: 5000 });
-    fs.writeFileSync('/etc/resolv.conf', cfg.dns.map((d) => 'nameserver ' + d).join('\n') + '\n');
+    if (cfg.gateway) await run('ip', ['route', 'replace', 'default', 'via', cfg.gateway, 'dev', dev], { timeout: 5000 });
   }
+  const resolv = installer.installResolv(list);
+  if (resolv) fs.writeFileSync('/etc/resolv.conf', resolv);
 }
-// Without a choice: DHCP on the card that has the default route (or the first one with a cable).
+// Without a choice: DHCP on every card.
 async function defaultNetwork() {
-  const list = await cards();
-  const card = list[0];
-  return card ? { interface: card.name, mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' } : null;
+  return (await cards()).map((c) => ({ interface: c.name, mode: 'dhcp', address: '', gateway: '', dns: [] }));
 }
 
 const server = http.createServer(async (req, res) => {
@@ -138,10 +145,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/install/network' && req.method === 'POST') {
       if (child) return send(res, 409, { error: 'The installation is already running.' });
-      const cfg = network.validate(await readBody(req), physicalCards());
-      await applyLive(cfg);
-      chosen = cfg;
-      const ok = await waitOnline(cfg.mode === 'dhcp' ? 10 : 8);
+      const body = await readBody(req);
+      const list = installer.validateCards(body.cards, physicalCards());
+      await applyLive(list, await cards());
+      chosen = list;
+      const ok = await waitOnline(10);
       return send(res, 200, { online: ok, cards: await cards(), dns: nameservers(), chosen });
     }
     if (url.pathname === '/api/install' && req.method === 'POST') {
@@ -152,10 +160,11 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(DIR, { recursive: true });
       fs.writeFileSync(STATUS, JSON.stringify({ state: 'running', percent: 5, message: 'Preparing the installation', log: '' }));
       // The installed system gets the same network, in the file MajaOS manages (Settings > Network).
-      const net = chosen || await defaultNetwork();
+      const plan = chosen || await defaultNetwork();
       for (const f of ['interfaces', 'resolv.conf']) fs.rmSync(path.join(DIR, f), { force: true });
-      if (net) fs.writeFileSync(path.join(DIR, 'interfaces'), network.buildInterfaces(net, ''));
-      if (net && net.mode === 'static') fs.writeFileSync(path.join(DIR, 'resolv.conf'), net.dns.map((d) => 'nameserver ' + d).join('\n') + '\n');
+      if (plan.length) fs.writeFileSync(path.join(DIR, 'interfaces'), installer.buildInstallInterfaces(plan));
+      const resolv = installer.installResolv(plan);
+      if (resolv) fs.writeFileSync(path.join(DIR, 'resolv.conf'), resolv);
       const out = fs.openSync(path.join(DIR, 'log.txt'), 'a');
       child = spawn('bash', [path.join(__dirname, 'run-install.sh'), picked.disk.name, picked.language, body.nvidia ? '1' : '0'], {
         env: { ...process.env, INSTALL_DIR: DIR, STATUS, ROOT }, stdio: ['ignore', out, out],
@@ -181,7 +190,7 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
-    send(res, e.status || 500, { error: e.message || 'The installer failed.' });
+    send(res, e.status || 500, { error: e.message || 'The installer failed.', card: e.card });
   }
 });
 

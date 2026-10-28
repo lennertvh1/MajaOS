@@ -33,6 +33,10 @@
 /* Network cards: grey without a cable, a green outline with one. */
 .net-card .disk-ico { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
 .net-card.up .disk-ico { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); box-shadow: inset 0 0 0 1.5px var(--ok); }
+.net-card .net-text { flex: 1; min-width: 0; }
+.net-mode { flex: none; font-size: .8rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--muted); }
+.inst-sub { font-size: 1rem; font-weight: 650; margin: 14px 0 6px; }
+.inst-hint { color: var(--muted); font-size: .85rem; }
 .inst-seg { display: flex; width: 100%; margin: 6px 0 4px; }
 .inst-seg button { flex: 1; font: inherit; cursor: pointer; }
 .inst-fields { display: grid; gap: 10px; margin-top: 12px; }

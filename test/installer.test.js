@@ -86,11 +86,38 @@ test('network step: physical cards, the one with the default route first', () =>
   assert.equal(apipa[0].address, '');
 });
 
-test('the installed system gets the chosen network in the ifupdown file MajaOS manages', () => {
+test('network settings per card: a fixed address without a gateway on a second card', () => {
+  const physical = ['enp5s0', 'enp6s0', 'enp7s0'];
+  const list = installer.validateCards([
+    { interface: 'enp5s0', mode: 'dhcp' },
+    { interface: 'enp6s0', mode: 'static', address: '10.10.0.1/24', gateway: '', dns: '' },
+    { interface: 'enp7s0', mode: 'off' },
+  ], physical);
+  const text = installer.buildInstallInterfaces(list);
+  assert.match(text, /allow-hotplug enp5s0\niface enp5s0 inet dhcp/);
+  assert.match(text, /auto enp6s0\niface enp6s0 inet static\n {4}address 10\.10\.0\.1\/24\n/);
+  assert.doesNotMatch(text, /enp7s0/);
+  assert.doesNotMatch(text, /gateway/);
+  assert.equal(installer.installResolv(list), null); // DHCP: dhcpcd writes resolv.conf
+  // MajaOS reads the same file back in Settings > Network.
   const network = require('../lib/network');
-  const cfg = network.validate({ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '1.1.1.1 9.9.9.9' }, ['enp5s0']);
-  const text = network.buildInterfaces(cfg, '');
-  assert.match(text, /auto enp5s0\niface enp5s0 inet static\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n {4}dns-nameservers 1\.1\.1\.1 9\.9\.9\.9/);
-  assert.deepEqual(network.configFromInterfaces(network.parseInterfaces(text), ['enp5s0']).address, '192.168.1.10/24');
-  assert.throws(() => network.validate({ interface: 'wlan0', mode: 'dhcp' }, ['enp5s0']));
+  assert.equal(network.configFromInterfaces(network.parseInterfaces(text), physical).interface, 'enp5s0');
+});
+
+test('network settings per card: one gateway, internet somewhere, and the card the message is about', () => {
+  const physical = ['enp5s0', 'enp6s0'];
+  const fixed = installer.validateCards([
+    { interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '1.1.1.1 9.9.9.9' },
+    { interface: 'enp6s0', mode: 'dhcp' },
+  ], physical);
+  assert.equal(installer.installResolv(fixed), 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n');
+  const fails = (cards) => { try { installer.validateCards(cards, physical); } catch (e) { return [e.message, e.card]; } return null; };
+  assert.deepEqual(fails([
+    { interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '1.1.1.1' },
+    { interface: 'enp6s0', mode: 'static', address: '10.0.0.2/24', gateway: '10.0.0.1', dns: '1.1.1.1' },
+  ]), ['Only one network card can have a gateway. Leave it empty on the others.', 'enp6s0']);
+  assert.deepEqual(fails([{ interface: 'enp5s0', mode: 'off' }, { interface: 'enp6s0', mode: 'static', address: '10.0.0.2/24' }])[1], 'enp5s0');
+  assert.deepEqual(fails([{ interface: 'enp6s0', mode: 'static', address: '10.0.0.2' }]), ['Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.', 'enp6s0']);
+  assert.deepEqual(fails([{ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.2.1', dns: '1.1.1.1' }])[0], 'The gateway is not in the same network as the IP address.');
+  assert.ok(fails([{ interface: 'wlan0', mode: 'dhcp' }]));
 });

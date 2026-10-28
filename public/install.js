@@ -36,7 +36,7 @@
   // A network socket (RJ45) seen from the front: the body with the latch below and four contacts.
   const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10h-4v3H8v-3H4z"/><path d="M8.5 8v3M11 8v3M13 8v3M15.5 8v3"/></svg>';
   const state = { step: 'lang', disks: [], disk: null, nvidia: false, error: '', job: null, timer: null, unavailable: false,
-    net: null, netForm: null, netBusy: false, netPicked: false, netTimer: null };
+    net: null, netForms: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null };
   let api = null;
 
   function bytes(n) {
@@ -79,29 +79,36 @@
       return;
     }
     if (state.step === 'network') {
-      const n = state.net, f = state.netForm;
+      const n = state.net, f = form();
       const head = `<section class="inst-card">${brand()}<h1>${esc(t('Network'))}</h1>
-        <p class="lead">${esc(t('MajaOS needs the internet to install. Choose the network card and how it gets its address.'))}</p>`;
-      if (!n || !f) {
+        <p class="lead">${esc(t('MajaOS needs the internet to install. Choose a network card and how it gets its address.'))}</p>`;
+      if (!n || (n.cards.length && !f)) {
         root.innerHTML = head + `<p class="lead">${esc(state.error || t('Looking for network cards…'))}</p>
           ${actions(btn(t('Back'), 'data-go="welcome"'))}</section>`;
         return;
       }
+      const summary = (c) => {
+        const cf = state.netForms[c.name];
+        return cf.mode === 'off' ? t('Not used') : cf.mode === 'static' ? t('Fixed address') : t('DHCP');
+      };
       const cards = n.cards.length ? n.cards.map((c) => {
         const info = [c.mac, c.connected ? t('Connected') : t('No cable'), c.address, speedText(c.speed)].filter(Boolean).join(' · ');
-        return `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${f.interface === c.name ? 'true' : 'false'}">
-          <span class="disk-ico">${NET}</span><span><b>${esc(c.name)}</b><span>${esc(info)}</span></span></button>`;
+        return `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${state.netSel === c.name ? 'true' : 'false'}">
+          <span class="disk-ico">${NET}</span><span class="net-text"><b>${esc(c.name)}</b><span>${esc(info)}</span></span>
+          <span class="net-mode">${esc(summary(c))}</span></button>`;
       }).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
       const field = (name, label, hint) => `<label class="inst-field"><span>${esc(label)}</span>
         <input class="field" name="${name}" value="${esc(f[name])}" placeholder="${esc(hint)}" autocomplete="off" spellcheck="false" inputmode="decimal"></label>`;
-      const fixed = f.mode === 'static' ? `<div class="inst-fields">
+      const fixed = f && f.mode === 'static' ? `<div class="inst-fields">
           ${field('address', t('IP address'), t('For example 192.168.1.10/24'))}
           ${field('gateway', t('Gateway'), t('Usually your router, for example 192.168.1.1'))}
-          ${field('dns', t('DNS servers'), t('For example 1.1.1.1 9.9.9.9'))}</div>` : '';
+          ${field('dns', t('DNS servers'), t('For example 1.1.1.1 9.9.9.9'))}
+          <p class="inst-hint">${esc(t('Leave the gateway empty on a card without internet, for example a direct cable to another computer.'))}</p></div>` : '';
       const status = state.netBusy ? t('Connecting…') : n.online ? t('Connected to the internet.') : t('No internet connection yet.');
       root.innerHTML = head + cards + (n.cards.length ? `
-        <div class="seg inst-seg" role="radiogroup" aria-label="${esc(t('Address'))}">${mode('dhcp', t('Automatic (DHCP)'))}${mode('static', t('Fixed address'))}</div>
+        <h2 class="inst-sub">${esc(t('Settings for {name}', { name: state.netSel }))}</h2>
+        <div class="seg inst-seg" role="radiogroup" aria-label="${esc(t('Address'))}">${mode('dhcp', t('Automatic (DHCP)'))}${mode('static', t('Fixed address'))}${mode('off', t('Not used'))}</div>
         ${fixed}<p class="inst-net ${n.online && !state.netBusy ? 'ok' : ''}" role="status">${esc(status)}</p>` : '') + `
         <p class="inst-error" role="alert">${esc(state.error)}</p>
         ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="disk"' + (state.netBusy || !n.cards.length ? ' disabled' : ''), true))}</section>`;
@@ -182,16 +189,23 @@
     const num = new Intl.NumberFormat((LANGS[LANG] && LANGS[LANG].locale) || 'en-GB', { maximumFractionDigits: 1 });
     return mbit >= 1000 ? t('{n} Gbit/s', { n: num.format(mbit / 1000) }) : t('{n} Mbit/s', { n: num.format(mbit) });
   }
-  // The form starts from what the computer has now: the card with the default route, by DHCP.
+  // One form per card. It starts from what was chosen before, otherwise DHCP. The card with the internet is selected first.
+  function form() { return state.netForms[state.netSel] || null; }
+  function syncForms() {
+    const n = state.net, chosen = n.chosen || [];
+    for (const c of n.cards) {
+      if (state.netForms[c.name]) continue;
+      const cf = chosen.find((x) => x.interface === c.name);
+      state.netForms[c.name] = cf ? { mode: cf.mode, address: cf.address || '', gateway: cf.gateway || '', dns: (cf.dns || []).join(' ') }
+        : { mode: 'dhcp', address: '', gateway: '', dns: '' };
+    }
+    if (!n.cards.some((c) => c.name === state.netSel)) state.netSel = n.cards[0] ? n.cards[0].name : null;
+  }
   async function loadNetwork() {
     state.error = '';
     try { state.net = await api.get('/api/install/network'); }
     catch (e) { state.net = null; state.error = t(e.message); return; }
-    const c = state.net.chosen, first = state.net.cards[0];
-    if (!state.netForm) {
-      state.netForm = c ? { interface: c.interface, mode: c.mode, address: c.address || '', gateway: c.gateway || '', dns: (c.dns || []).join(' ') }
-        : { interface: first ? first.name : '', mode: 'dhcp', address: '', gateway: '', dns: '' };
-    }
+    syncForms();
   }
   // While the step is open: a cable plugged in, or an address that comes later, shows up by itself.
   function watchNetwork() {
@@ -202,12 +216,13 @@
       let n;
       try { n = await api.get('/api/install/network'); } catch (e) { return; }
       if (state.step !== 'network' || state.netBusy) return;
-      const before = JSON.stringify([state.net.cards, state.net.online, state.netForm.interface]);
+      const before = JSON.stringify([state.net.cards, state.net.online, state.netSel]);
       state.net = n;
-      // Not chosen yet: follow the card that has the internet (the server puts it first).
-      if (!state.netPicked && !n.chosen && n.cards[0]) state.netForm.interface = n.cards[0].name;
-      if (state.netForm.mode === 'static') prefill(); // only fills fields that are still empty
-      if (JSON.stringify([n.cards, n.online, state.netForm.interface]) === before && !$('#inst input[name="address"][value=""]')) return;
+      syncForms();
+      // Not picked yet: follow the card that has the internet (the server puts it first).
+      if (!state.netPicked && n.cards[0]) state.netSel = n.cards[0].name;
+      if (form() && form().mode === 'static') prefill(); // only fills fields that are still empty
+      if (JSON.stringify([n.cards, n.online, state.netSel]) === before && !$('#inst input[name="address"][value=""]')) return;
       redrawKeepingFocus();
     }, 3000);
   }
@@ -223,23 +238,29 @@
   function cardOf(name) { return state.net && state.net.cards.find((c) => c.name === name); }
   // Fixed address: start from the address DHCP gave, so usually only the last number changes.
   function prefill() {
-    const f = state.netForm, c = cardOf(f.interface);
+    const f = form(), c = cardOf(state.netSel);
+    if (!f) return;
     if (!f.address && c && c.address) f.address = c.address;
     if (!f.gateway && c && c.gateway) f.gateway = c.gateway;
+    if (c && !c.gateway && !f.dns) return; // a card without internet: no DNS needed
     if (!f.dns && state.net.dns.length) f.dns = state.net.dns.join(' ');
   }
-  // Continue on the network step: nothing to change when DHCP on the first card already works; otherwise apply and test.
+  // Continue on the network step: nothing to change when every card stays on DHCP and the internet already works.
   async function applyNetwork() {
-    const f = state.netForm, first = state.net.cards[0];
-    if (f.mode === 'dhcp' && first && f.interface === first.name && state.net.online && !state.net.chosen) { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
+    const list = state.net.cards.map((c) => ({ interface: c.name, ...state.netForms[c.name] }));
+    if (list.every((c) => c.mode === 'dhcp') && state.net.online && !state.net.chosen) { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
     state.netBusy = true; state.error = ''; draw();
     try {
-      const r = await api.post('/api/install/network', { interface: f.interface, mode: f.mode, address: f.address, gateway: f.gateway, dns: f.dns });
+      const r = await api.post('/api/install/network', { cards: list });
       state.net = { ...state.net, ...r };
       state.netBusy = false;
       if (!r.online) { state.error = t('There is no internet connection with these settings. Check the cable and the settings.'); draw(); return; }
       state.step = 'disk'; draw(); await loadDisks(); draw();
-    } catch (e) { state.netBusy = false; state.error = t(e.message); draw(); }
+    } catch (e) {
+      state.netBusy = false; state.error = t(e.message);
+      if (e.card && state.netForms[e.card]) state.netSel = e.card; // show the card the message is about
+      draw();
+    }
   }
 
   async function go(step) {
@@ -277,9 +298,9 @@
     const lang = e.target.closest('[data-lang]');
     if (lang) { void setLang(lang.dataset.lang).then(draw).catch((err) => { state.error = err.message; draw(); }); return; }
     const card = e.target.closest('[data-card]');
-    if (card && !state.netBusy) { state.netForm.interface = card.dataset.card; state.netPicked = true; if (state.netForm.mode === 'static') prefill(); state.error = ''; draw(); return; }
+    if (card && !state.netBusy) { state.netSel = card.dataset.card; state.netPicked = true; state.error = ''; draw(); return; }
     const mode = e.target.closest('[data-mode]');
-    if (mode && !state.netBusy) { state.netForm.mode = mode.dataset.mode; if (mode.dataset.mode === 'static') prefill(); state.error = ''; draw(); return; }
+    if (mode && !state.netBusy && form()) { form().mode = mode.dataset.mode; if (mode.dataset.mode === 'static') prefill(); state.error = ''; draw(); return; }
     const disk = e.target.closest('[data-disk]');
     if (disk && !disk.disabled) { state.disk = disk.dataset.disk; state.error = ''; draw(); return; }
     const goBtn = e.target.closest('[data-go]');
@@ -287,7 +308,8 @@
   });
 
   $('#inst').addEventListener('input', (e) => {
-    if (state.netForm && e.target.name in state.netForm) state.netForm[e.target.name] = e.target.value;
+    const f = state.step === 'network' && form();
+    if (f && e.target.name in f) f[e.target.name] = e.target.value;
   });
 
   // Cog on the USB stick (WPE WebKit 2.48) sends mousedown and mouseup but never click. Make the click ourselves
@@ -310,7 +332,7 @@
     async function call(method, path, body) {
       const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { const err = new Error(data.error || res.statusText); err.status = res.status; throw err; }
+      if (!res.ok) { const err = new Error(data.error || res.statusText); err.status = res.status; err.card = data.card; throw err; }
       return data;
     }
     return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b) };
