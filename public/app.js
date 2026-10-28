@@ -7265,6 +7265,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     $('#powerBtn').hidden = false;
+    $('#feedbackBtn').hidden = false;
     $('#termBtn').hidden = !S.config.terminal;
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
@@ -7367,28 +7368,44 @@ sudo ./install.sh</pre></div>`}` : '') +
     catch (e) { /* keep the last Debian status */ }
   }
 
-  /* --- power: restart or shut down the server (button at the top) */
-  const powerMenu = $('#powerMenu'), powerBtn = $('#powerBtn'), powerWin = $('#powerWin');
-  function closePowerMenu(focus) {
-    powerMenu.hidden = true; powerBtn.setAttribute('aria-expanded', 'false');
-    if (focus) powerBtn.focus();
+  /* --- small menus under a button at the top (power, feedback): arrows, Escape, click elsewhere closes */
+  function topMenu(btn, menu, attr, pick) {
+    const close = (focus) => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); if (focus) btn.focus(); };
+    btn.addEventListener('click', () => {
+      if (!menu.hidden) { close(false); return; }
+      menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
+      const b = btn.getBoundingClientRect(), r = menu.getBoundingClientRect();
+      menu.style.left = Math.max(8, Math.min(b.right - r.width, innerWidth - r.width - 8)) + 'px';
+      menu.style.top = (b.bottom + 6) + 'px';
+      $('.menu-item', menu).focus();
+    });
+    menu.addEventListener('keydown', (e) => {
+      const items = $$('.menu-item', menu), i = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+      else if (e.key === 'Tab') close(false);
+    });
+    document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) close(false); }, true);
+    menu.addEventListener('click', (e) => { const b = e.target.closest('[' + attr + ']'); if (b) { close(false); pick(b.getAttribute(attr)); } });
   }
-  powerBtn.addEventListener('click', () => {
-    if (!powerMenu.hidden) { closePowerMenu(false); return; }
-    powerMenu.hidden = false; powerBtn.setAttribute('aria-expanded', 'true');
-    const b = powerBtn.getBoundingClientRect(), r = powerMenu.getBoundingClientRect();
-    powerMenu.style.left = Math.max(8, Math.min(b.right - r.width, innerWidth - r.width - 8)) + 'px';
-    powerMenu.style.top = (b.bottom + 6) + 'px';
-    $('.menu-item', powerMenu).focus();
-  });
-  powerMenu.addEventListener('keydown', (e) => {
-    const items = $$('.menu-item', powerMenu), i = items.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
-    else if (e.key === 'Escape') { e.preventDefault(); closePowerMenu(true); }
-    else if (e.key === 'Tab') closePowerMenu(false);
-  });
-  document.addEventListener('pointerdown', (e) => { if (!powerMenu.hidden && !powerMenu.contains(e.target) && !powerBtn.contains(e.target)) closePowerMenu(false); }, true);
-  powerMenu.addEventListener('click', (e) => { const b = e.target.closest('[data-power]'); if (b) { closePowerMenu(false); powerAction(b.dataset.power); } });
+
+  /* --- feedback: the issue forms on GitHub, with the version filled in (nothing about the server itself) */
+  const FEEDBACK_REPO = 'https://github.com/lennertvh1/MajaOS';
+  const FEEDBACK_FORMS = { bug: 'bug_report.yml', test: 'test_report.yml', idea: 'feature_request.yml' };
+  async function sendFeedback(kind) {
+    let version = 'Demo';
+    if (!S.config.demo) {
+      try { version = (await api.get('/api/about')).versions.majaos || ''; } catch (e) { version = ''; }
+    }
+    const q = new URLSearchParams({ template: FEEDBACK_FORMS[kind] });
+    if (kind !== 'idea' && version) q.set('version', version);
+    window.open(FEEDBACK_REPO + '/issues/new?' + q, '_blank', 'noopener');
+  }
+  topMenu($('#feedbackBtn'), $('#feedbackMenu'), 'data-feedback', sendFeedback);
+
+  /* --- power: restart or shut down the server (button at the top) */
+  const powerWin = $('#powerWin');
+  topMenu($('#powerBtn'), $('#powerMenu'), 'data-power', (act) => powerAction(act));
 
   function showPower(title, text, spinning, buttons = '') {
     $('#powerTitle').textContent = title; $('#powerText').textContent = text;

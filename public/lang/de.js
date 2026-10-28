@@ -2444,4 +2444,8 @@ window.TB_LANG.de = {
   "Choose UEFI or BIOS.": "Wählen Sie UEFI oder BIOS.",
   "Choose VirtIO or SATA for the disk.": "Wählen Sie VirtIO oder SATA für die Festplatte.",
   "Choose a network card: VirtIO, e1000e or RTL8139.": "Wählen Sie eine Netzwerkkarte: VirtIO, e1000e oder RTL8139.",
+  "Feedback": "Feedback",
+  "Report a bug": "Fehler melden",
+  "Share a test report": "Testbericht teilen",
+  "Suggest an idea": "Idee vorschlagen",
 };

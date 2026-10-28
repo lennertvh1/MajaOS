@@ -2444,4 +2444,8 @@ window.TB_LANG.zh = {
   "Choose UEFI or BIOS.": "请选择 UEFI 或 BIOS。",
   "Choose VirtIO or SATA for the disk.": "请为磁盘选择 VirtIO 或 SATA。",
   "Choose a network card: VirtIO, e1000e or RTL8139.": "请选择网卡：VirtIO、e1000e 或 RTL8139。",
+  "Feedback": "反馈",
+  "Report a bug": "报告问题",
+  "Share a test report": "分享测试报告",
+  "Suggest an idea": "提出建议",
 };

@@ -2444,4 +2444,8 @@ window.TB_LANG.ja = {
   "Choose UEFI or BIOS.": "UEFI または BIOS を選んでください。",
   "Choose VirtIO or SATA for the disk.": "ディスクには VirtIO または SATA を選んでください。",
   "Choose a network card: VirtIO, e1000e or RTL8139.": "ネットワークカードを選んでください：VirtIO、e1000e、RTL8139。",
+  "Feedback": "フィードバック",
+  "Report a bug": "不具合を報告",
+  "Share a test report": "テストレポートを共有",
+  "Suggest an idea": "アイデアを提案",
 };

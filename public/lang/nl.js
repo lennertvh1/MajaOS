@@ -2448,4 +2448,8 @@ window.TB_LANG.nl = {
   "Choose UEFI or BIOS.": "Kies UEFI of BIOS.",
   "Choose VirtIO or SATA for the disk.": "Kies VirtIO of SATA voor de schijf.",
   "Choose a network card: VirtIO, e1000e or RTL8139.": "Kies een netwerkkaart: VirtIO, e1000e of RTL8139.",
+  "Feedback": "Feedback",
+  "Report a bug": "Een fout melden",
+  "Share a test report": "Een testverslag delen",
+  "Suggest an idea": "Een idee voorstellen",
 };
