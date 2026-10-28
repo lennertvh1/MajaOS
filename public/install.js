@@ -33,9 +33,10 @@
 
   const MARK = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 15.5 16 6l11 9.5V27H19.5v-7.5h-7V27H5z"/></svg>';
   const HDD = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 12h18"/><circle cx="7.5" cy="15.2" r="1"/><circle cx="11" cy="15.2" r="1"/></svg>';
-  const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="11" rx="2"/><path d="M8 15v3m8-3v3M9 8.5h1m4 0h1M6 18h12"/></svg>';
+  // A network socket (RJ45) seen from the front: the body with the latch below and four contacts.
+  const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10h-4v3H8v-3H4z"/><path d="M8.5 8v3M11 8v3M13 8v3M15.5 8v3"/></svg>';
   const state = { step: 'lang', disks: [], disk: null, nvidia: false, error: '', job: null, timer: null, unavailable: false,
-    net: null, netForm: null, netBusy: false };
+    net: null, netForm: null, netBusy: false, netPicked: false, netTimer: null };
   let api = null;
 
   function bytes(n) {
@@ -88,7 +89,7 @@
       }
       const cards = n.cards.length ? n.cards.map((c) => {
         const info = [c.mac, c.connected ? t('Connected') : t('No cable'), c.address, speedText(c.speed)].filter(Boolean).join(' · ');
-        return `<button type="button" class="disk" data-card="${esc(c.name)}" aria-pressed="${f.interface === c.name ? 'true' : 'false'}">
+        return `<button type="button" class="disk net-card${c.connected ? ' up' : ''}" data-card="${esc(c.name)}" aria-pressed="${f.interface === c.name ? 'true' : 'false'}">
           <span class="disk-ico">${NET}</span><span><b>${esc(c.name)}</b><span>${esc(info)}</span></span></button>`;
       }).join('') : `<p class="lead">${esc(t('No network card found.'))}</p>`;
       const mode = (k, label) => `<button type="button" role="radio" data-mode="${k}" aria-checked="${f.mode === k ? 'true' : 'false'}">${esc(label)}</button>`;
@@ -192,6 +193,33 @@
         : { interface: first ? first.name : '', mode: 'dhcp', address: '', gateway: '', dns: '' };
     }
   }
+  // While the step is open: a cable plugged in, or an address that comes later, shows up by itself.
+  function watchNetwork() {
+    if (state.netTimer) clearInterval(state.netTimer);
+    state.netTimer = setInterval(async () => {
+      if (state.step !== 'network') { clearInterval(state.netTimer); state.netTimer = null; return; }
+      if (state.netBusy || !state.net) return;
+      let n;
+      try { n = await api.get('/api/install/network'); } catch (e) { return; }
+      if (state.step !== 'network' || state.netBusy) return;
+      const before = JSON.stringify([state.net.cards, state.net.online, state.netForm.interface]);
+      state.net = n;
+      // Not chosen yet: follow the card that has the internet (the server puts it first).
+      if (!state.netPicked && !n.chosen && n.cards[0]) state.netForm.interface = n.cards[0].name;
+      if (state.netForm.mode === 'static') prefill(); // only fills fields that are still empty
+      if (JSON.stringify([n.cards, n.online, state.netForm.interface]) === before && !$('#inst input[name="address"][value=""]')) return;
+      redrawKeepingFocus();
+    }, 3000);
+  }
+  // Redrawing replaces the inputs: keep the one being typed in, with its cursor.
+  function redrawKeepingFocus() {
+    const el = document.activeElement;
+    const name = el && el.name, start = el && el.selectionStart, end = el && el.selectionEnd;
+    draw();
+    if (!name) return;
+    const again = document.querySelector(`#inst input[name="${name}"]`);
+    if (again) { again.focus(); try { again.setSelectionRange(start, end); } catch (e) { /* not a text field */ } }
+  }
   function cardOf(name) { return state.net && state.net.cards.find((c) => c.name === name); }
   // Fixed address: start from the address DHCP gave, so usually only the last number changes.
   function prefill() {
@@ -215,7 +243,7 @@
   }
 
   async function go(step) {
-    if (step === 'network') { state.step = 'network'; state.error = ''; draw(); await loadNetwork(); draw(); return; }
+    if (step === 'network') { state.step = 'network'; state.error = ''; draw(); await loadNetwork(); draw(); watchNetwork(); return; }
     if (step === 'disk' && state.step === 'network') return applyNetwork();
     if (step === 'disk') { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
     if (step === 'confirm') {
@@ -249,7 +277,7 @@
     const lang = e.target.closest('[data-lang]');
     if (lang) { void setLang(lang.dataset.lang).then(draw).catch((err) => { state.error = err.message; draw(); }); return; }
     const card = e.target.closest('[data-card]');
-    if (card && !state.netBusy) { state.netForm.interface = card.dataset.card; if (state.netForm.mode === 'static') prefill(); state.error = ''; draw(); return; }
+    if (card && !state.netBusy) { state.netForm.interface = card.dataset.card; state.netPicked = true; if (state.netForm.mode === 'static') prefill(); state.error = ''; draw(); return; }
     const mode = e.target.closest('[data-mode]');
     if (mode && !state.netBusy) { state.netForm.mode = mode.dataset.mode; if (mode.dataset.mode === 'static') prefill(); state.error = ''; draw(); return; }
     const disk = e.target.closest('[data-disk]');

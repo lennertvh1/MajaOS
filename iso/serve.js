@@ -75,6 +75,19 @@ async function cards() {
   const [addrs, routes] = await Promise.all([run('ip', ['-j', 'addr'], { timeout: 4000 }), run('ip', ['-j', 'route'], { timeout: 4000 })]);
   return installer.parseCards(JSON.parse(addrs || '[]'), JSON.parse(routes || '[]'), names, speeds);
 }
+// live-boot only asks DHCP for cards that had a cable at the start, and dhcpcd falls back to 169.254.x.x.
+// A card with a cable but without a real address: ask again (in the background, at most every 20 s), without that fallback.
+const asked = {};
+function askDhcp(list) {
+  for (const c of list) {
+    if (!c.connected || c.address || (chosen && chosen.interface === c.name && chosen.mode === 'static')) continue;
+    if (Date.now() - (asked[c.name] || 0) < 20000) continue;
+    asked[c.name] = Date.now();
+    quiet('dhcpcd', ['-x', c.name])
+      .then(() => quiet('ip', ['-4', 'addr', 'flush', 'dev', c.name]))
+      .then(() => quiet('dhcpcd', ['-4', '--noipv4ll', '-b', c.name], 10000));
+  }
+}
 // A real connection to the Debian mirror: a DNS answer alone also comes with a wrong gateway (the router is in the same network).
 function online() {
   return new Promise((resolve) => {
@@ -98,7 +111,7 @@ async function applyLive(cfg) {
   await quiet('ip', ['addr', 'flush', 'dev', dev]);
   await quiet('ip', ['link', 'set', dev, 'up']);
   if (cfg.mode === 'dhcp') {
-    await quiet('dhcpcd', ['-4', '-w', '-t', '20', dev], 25000);
+    await quiet('dhcpcd', ['-4', '--noipv4ll', '-w', '-t', '20', dev], 25000);
   } else {
     await run('ip', ['addr', 'add', cfg.address, 'dev', dev], { timeout: 5000 });
     await run('ip', ['route', 'replace', 'default', 'via', cfg.gateway, 'dev', dev], { timeout: 5000 });
@@ -120,6 +133,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/install/progress' && req.method === 'GET') return send(res, 200, status());
     if (url.pathname === '/api/install/network' && req.method === 'GET') {
       const [list, ok] = await Promise.all([cards(), online()]);
+      askDhcp(list);
       return send(res, 200, { cards: list, online: ok, dns: nameservers(), chosen });
     }
     if (url.pathname === '/api/install/network' && req.method === 'POST') {

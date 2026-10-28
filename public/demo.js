@@ -2154,9 +2154,17 @@
     { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 },
     { name: 'enp6s0', mac: 'a8:a1:59:3c:72:11', connected: false, address: '', dynamic: false, gateway: '', speed: null },
   ];
-  let instChosen = null;
+  let instChosen = null, instNetSince = 0;
+  // A cable in the second card a few seconds after the step opens, and its DHCP address a little later.
+  function instCardsNow() {
+    if (!instNetSince) instNetSince = Date.now();
+    const el = Date.now() - instNetSince, list = copy(instCards);
+    if (el > 8000) Object.assign(list[1], { connected: true, speed: 1000 });
+    if (el > 12000) Object.assign(list[1], { address: '192.168.1.58/24', dynamic: true });
+    return list;
+  }
   function instNetSet(body) {
-    const card = instCards.find((c) => c.name === body.interface);
+    const card = instCardsNow().find((c) => c.name === body.interface);
     if (!card) throw err('Choose one of the server\'s network cards.');
     const v4 = (ip) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) && ip.split('.').every((o) => Number(o) <= 255);
     const out = { interface: card.name, mode: body.mode === 'static' ? 'static' : 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' };
@@ -2170,7 +2178,7 @@
     }
     for (const d of out.dns) if (!v4(d)) throw err(`"${d}" is not a valid DNS address.`);
     instChosen = out;
-    return { online: card.connected, cards: copy(instCards), dns: ['192.168.1.1'], chosen: copy(out) };
+    return { online: card.connected, cards: instCardsNow(), dns: ['192.168.1.1'], chosen: copy(out) };
   }
   function instProgress() {
     if (!instJob) return { state: 'idle', percent: 0, message: '', log: '' };
@@ -2235,7 +2243,7 @@
     if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
     if (path === '/api/install/progress') return instProgress();
-    if (path === '/api/install/network') return { cards: copy(instCards), online: true, dns: ['192.168.1.1'], chosen: copy(instChosen) };
+    if (path === '/api/install/network') return { cards: instCardsNow(), online: true, dns: ['192.168.1.1'], chosen: copy(instChosen) };
     if (path === '/api/storage-paths') return spGet();
     if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
     const bkb = path.match(/^\/api\/backup\/remotes\/([^/]+)\/browse\?path=(.*)$/);

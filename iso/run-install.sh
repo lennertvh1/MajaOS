@@ -48,7 +48,7 @@ bring_up_network() {
     case "$dev" in lo|docker*|veth*|virbr*|br-*|wl*) continue ;; esac
     [ -e "/sys/class/net/$dev/device" ] || continue
     ip link set "$dev" up >>"$LOG" 2>&1 || true
-    ip -4 addr show dev "$dev" | grep -q 'inet ' || timeout 25 dhcpcd -4 -w -t 20 "$dev" >>"$LOG" 2>&1 || true
+    ip -4 addr show dev "$dev" | grep 'inet ' | grep -qv ' 169\.254\.' || timeout 25 dhcpcd -4 --noipv4ll -w -t 20 "$dev" >>"$LOG" 2>&1 || true
   done
 }
 

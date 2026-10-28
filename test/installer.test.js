@@ -81,6 +81,9 @@ test('network step: physical cards, the one with the default route first', () =>
   assert.deepEqual(cards[0], { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 });
   assert.equal(cards[1].connected, false);
   assert.equal(cards[1].speed, null);
+  // A card that gave itself 169.254.x.x (no DHCP answer) has no address yet.
+  const apipa = installer.parseCards([{ ifname: 'enp5s0', flags: ['UP', 'LOWER_UP'], addr_info: [{ family: 'inet', local: '169.254.12.7', prefixlen: 16 }] }], [], ['enp5s0']);
+  assert.equal(apipa[0].address, '');
 });
 
 test('the installed system gets the chosen network in the ifupdown file MajaOS manages', () => {
