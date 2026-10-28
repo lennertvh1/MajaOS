@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseDisks, choose, buildPreseed, LANGUAGES } = require('../lib/installer');
+const installer = require('../lib/installer');
+const { parseDisks, choose, buildPreseed, LANGUAGES } = installer;
 
 const lsblk = {
   blockdevices: [
@@ -65,4 +66,28 @@ test('the language menu and the dictionaries offer the same languages', () => {
     assert.match(text, new RegExp('TB_LANG\\.' + code));
     assert.match(text, /Choose your language/);
   }
+});
+
+test('network step: physical cards, the one with the default route first', () => {
+  const addrs = [
+    { ifname: 'lo', flags: ['LOOPBACK', 'UP', 'LOWER_UP'], address: '00:00:00:00:00:00', addr_info: [{ family: 'inet', local: '127.0.0.1', prefixlen: 8 }] },
+    { ifname: 'enp6s0', flags: ['NO-CARRIER', 'BROADCAST', 'UP'], address: 'a8:a1:59:3c:72:11', addr_info: [] },
+    { ifname: 'enp5s0', flags: ['BROADCAST', 'UP', 'LOWER_UP'], address: 'a8:a1:59:3c:72:10',
+      addr_info: [{ family: 'inet', local: '192.168.1.57', prefixlen: 24, dynamic: true }, { family: 'inet6', local: 'fe80::1', prefixlen: 64 }] },
+  ];
+  const routes = [{ dst: 'default', gateway: '192.168.1.1', dev: 'enp5s0' }, { dst: '192.168.1.0/24', dev: 'enp5s0' }];
+  const cards = installer.parseCards(addrs, routes, ['enp5s0', 'enp6s0'], { enp5s0: 2500, enp6s0: -1 });
+  assert.deepEqual(cards.map((c) => c.name), ['enp5s0', 'enp6s0']);
+  assert.deepEqual(cards[0], { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 });
+  assert.equal(cards[1].connected, false);
+  assert.equal(cards[1].speed, null);
+});
+
+test('the installed system gets the chosen network in the ifupdown file MajaOS manages', () => {
+  const network = require('../lib/network');
+  const cfg = network.validate({ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '1.1.1.1 9.9.9.9' }, ['enp5s0']);
+  const text = network.buildInterfaces(cfg, '');
+  assert.match(text, /auto enp5s0\niface enp5s0 inet static\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n {4}dns-nameservers 1\.1\.1\.1 9\.9\.9\.9/);
+  assert.deepEqual(network.configFromInterfaces(network.parseInterfaces(text), ['enp5s0']).address, '192.168.1.10/24');
+  assert.throws(() => network.validate({ interface: 'wlan0', mode: 'dhcp' }, ['enp5s0']));
 });

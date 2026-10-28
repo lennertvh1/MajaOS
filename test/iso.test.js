@@ -64,8 +64,11 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.match(live, /WLR_NO_HARDWARE_CURSORS=1/);
   assert.doesNotMatch(live, /getty@tty1\.service[\s\S]{0,40}\/dev\/null/);
   const handoff = read('run-install.sh');
-  assert.match(handoff, /debootstrap trixie/);
+  assert.match(handoff, /debootstrap [^\n]*trixie/);
   assert.doesNotMatch(handoff, /kexec/);
+  // Without internet the disk stays as it was: the check comes before wipefs.
+  assert.ok(handoff.indexOf('Checking the internet connection') < handoff.indexOf('wipefs -a'));
+  assert.match(live, /firmware-realtek/);
   assert.match(live, /debootstrap/);
 });
 

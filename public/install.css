@@ -30,6 +30,13 @@
 .inst-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; color: var(--muted); }
 .inst-check input { margin-top: 3px; accent-color: var(--accent); }
 .inst .btn[disabled] { cursor: not-allowed; }
+.inst-seg { display: flex; width: 100%; margin: 6px 0 4px; }
+.inst-seg button { flex: 1; font: inherit; cursor: pointer; }
+.inst-fields { display: grid; gap: 10px; margin-top: 12px; }
+.inst-field { display: grid; gap: 4px; color: var(--muted); font-size: .9rem; }
+.inst-field .field { width: 100%; color: var(--text); font-family: inherit; }
+.inst-net { color: var(--muted); margin-top: 12px; }
+.inst-net.ok { color: var(--ok); }
 .inst-error { color: var(--bad); min-height: 1.3em; margin-top: 10px; }
 .inst details { margin-top: 12px; color: var(--muted); font-size: .9rem; }
 .inst pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; margin: 8px 0 0; }

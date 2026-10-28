@@ -2149,6 +2149,29 @@
     [100, 'The installation continues on its own. You don\'t have to do anything.'],
   ];
   let instJob = null;
+  // The network step, like iso/serve.js: two cards, the first one with a cable and a DHCP address.
+  const instCards = [
+    { name: 'enp5s0', mac: 'a8:a1:59:3c:72:10', connected: true, address: '192.168.1.57/24', dynamic: true, gateway: '192.168.1.1', speed: 2500 },
+    { name: 'enp6s0', mac: 'a8:a1:59:3c:72:11', connected: false, address: '', dynamic: false, gateway: '', speed: null },
+  ];
+  let instChosen = null;
+  function instNetSet(body) {
+    const card = instCards.find((c) => c.name === body.interface);
+    if (!card) throw err('Choose one of the server\'s network cards.');
+    const v4 = (ip) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) && ip.split('.').every((o) => Number(o) <= 255);
+    const out = { interface: card.name, mode: body.mode === 'static' ? 'static' : 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' };
+    out.dns = String(body.dns || '').split(/[\s,]+/).filter(Boolean);
+    if (out.mode === 'static') {
+      const [ip, prefix] = String(body.address || '').trim().split('/');
+      if (!v4(ip) || !(Number(prefix) >= 8 && Number(prefix) <= 32)) throw err('Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.');
+      out.address = ip + '/' + Number(prefix); out.gateway = String(body.gateway || '').trim();
+      if (!v4(out.gateway)) throw err('Fill in the gateway, usually your router\'s address (e.g. 192.168.1.1).');
+      if (!out.dns.length) throw err('Fill in at least one DNS server, e.g. your router or 1.1.1.1.');
+    }
+    for (const d of out.dns) if (!v4(d)) throw err(`"${d}" is not a valid DNS address.`);
+    instChosen = out;
+    return { online: card.connected, cards: copy(instCards), dns: ['192.168.1.1'], chosen: copy(out) };
+  }
   function instProgress() {
     if (!instJob) return { state: 'idle', percent: 0, message: '', log: '' };
     if (instJob.failed) return { state: 'failed', percent: instJob.percent, message: instJob.message, log: instJob.log };
@@ -2212,6 +2235,7 @@
     if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
     if (path === '/api/install/progress') return instProgress();
+    if (path === '/api/install/network') return { cards: copy(instCards), online: true, dns: ['192.168.1.1'], chosen: copy(instChosen) };
     if (path === '/api/storage-paths') return spGet();
     if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
     const bkb = path.match(/^\/api\/backup\/remotes\/([^/]+)\/browse\?path=(.*)$/);
@@ -2322,6 +2346,7 @@
       return { started: true };
     }
     if (path === '/api/install/reboot') return { ok: true };
+    if (path === '/api/install/network') { await wait(1500); return instNetSet(body); }
     if (path === '/api/remote') { await wait(400); return demoRemoteSet(body); }
     if (path === '/api/ai/settings') { await wait(200); return demoAiSave(body); }
     if (path === '/api/share-links') { await wait(200); return demoLinkCreate(body); }

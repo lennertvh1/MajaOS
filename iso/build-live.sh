@@ -30,7 +30,8 @@ DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   linux-image-amd64 live-boot live-boot-initramfs-tools systemd dbus libpam-systemd nodejs \
   cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk \
   plymouth plymouth-themes plymouth-label \
-  debootstrap parted dosfstools openssl cpio gzip zstd
+  debootstrap parted dosfstools openssl cpio gzip zstd \
+  ifupdown dhcpcd-base firmware-realtek firmware-misc-nonfree firmware-bnx2 firmware-bnx2x
 # gzip, not zstd: the installer's GRUB must be able to load this initrd. Trixie defaults to zstd; replace, don't append a second COMPRESS line.
 CONF="$R/etc/initramfs-tools/initramfs.conf"
 if grep -q '^COMPRESS=' "$CONF"; then sed -i 's/^COMPRESS=.*/COMPRESS=gzip/' "$CONF"; else echo 'COMPRESS=gzip' >> "$CONF"; fi
@@ -41,7 +42,7 @@ echo "==> installer files"
 APP="$R/opt/majaos-installer"
 mkdir -p "$APP/iso" "$APP/lib" "$APP/public/lang"
 cp "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$HERE/preseed.cfg" "$APP/iso/"
-cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$APP/lib/"
+cp "$ROOT/lib/installer.js" "$ROOT/lib/system.js" "$ROOT/lib/network.js" "$APP/lib/"
 cp "$ROOT/public/install.html" "$ROOT/public/favicon.svg" "$ROOT/public/install.js" "$ROOT/public/install.css" "$ROOT/public/style.css" "$APP/public/"
 cp "$ROOT/public/lang/"*.js "$APP/public/lang/"
 chmod 755 "$APP/iso/kiosk.sh" "$APP/iso/run-install.sh"
@@ -83,6 +84,8 @@ Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=WLR_NO_HARDWARE_CURSORS=1
 Environment=XCURSOR_THEME=Adwaita
 Environment=XCURSOR_SIZE=24
+# Typing an IP address in the network step: the keyboard is Belgian AZERTY, like the installed system.
+Environment=XKB_DEFAULT_LAYOUT=be
 [Install]
 WantedBy=multi-user.target
 EOF
