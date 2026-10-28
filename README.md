@@ -5,7 +5,7 @@
 **A friendly dashboard for your home server.**<br>
 Storage, apps, virtual machines and backups on plain Debian, without the command line.
 
-[Website](https://majaos.com) · [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [User guide](https://github.com/lennertvh1/MajaOS/blob/dev/docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
+[Website](https://majaos.com) · [Try the demo](#try-it-in-two-minutes) · [Install](#install-on-a-server) · [Test the newest version](https://github.com/lennertvh1/MajaOS/tree/dev#build-a-test-iso) · [User guide](https://github.com/lennertvh1/MajaOS/blob/dev/docs/guide.md) · [Help test](#help-test-majaos) · [Contribute](CONTRIBUTING.md)
 
 <a href="https://ko-fi.com/lennertvh"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support MajaOS on Ko-fi" height="32"></a>
 
@@ -15,6 +15,8 @@ Storage, apps, virtual machines and backups on plain Debian, without the command
 
 > [!NOTE]
 > The latest release, **0.5.0**, still carries the old name **HomeBaseOS** and a Dutch-first interface. The next release is the first as MajaOS. Everything described here is on the [`dev`](https://github.com/lennertvh1/MajaOS/tree/dev) branch, where development happens.
+>
+> **Want to test?** Use the `dev` branch: its README explains how to [build a test ISO](https://github.com/lennertvh1/MajaOS/tree/dev#build-a-test-iso) on Linux, Windows or macOS.
 
 > [!WARNING]
 > **MajaOS is early software.** It runs as root and manages your disks. Most of it has been tested in the demo, in virtual machines and with sample output of the real tools, but not yet on many real servers. Try it on a test machine or in a VM, not on a server with data you can't lose. That is exactly where [your help](#help-test-majaos) comes in.
@@ -63,7 +65,7 @@ Open <http://localhost:8080>. The demo starts like a new server with the welcome
 
 You need a 64-bit PC (UEFI, Secure Boot off) with an internet connection, and a disk MajaOS may erase for the system. Your data disks are separate.
 
-1. Download `majaos-<version>-amd64.iso` from the [latest release](https://github.com/lennertvh1/MajaOS/releases), or [build it yourself](https://github.com/lennertvh1/MajaOS/blob/dev/docs/build-iso.md).
+1. Download `majaos-<version>-amd64.iso` from the [latest release](https://github.com/lennertvh1/MajaOS/releases), or [build a test ISO](https://github.com/lennertvh1/MajaOS/tree/dev#build-a-test-iso) from the `dev` branch with the newest changes.
 2. Write it to a USB stick with [balenaEtcher](https://etcher.balena.io) and boot from it.
 3. Pick your language and the disk, tick the NVIDIA driver if you have such a card, and choose **Erase and install**.
 4. After the restart MajaOS sets itself up (5 to 15 minutes). The address appears on the server's screen. Open it in a browser and create your account.
@@ -74,7 +76,7 @@ Prefer to start from your own Debian 13? `sudo ./install.sh` does the same on an
 
 ## Help test MajaOS
 
-The most useful thing right now is people running MajaOS on real hardware and telling what happens. Good things to try:
+The most useful thing right now is people running MajaOS on real hardware and telling what happens. **Test the `dev` branch**, not this one: `main` only changes at a release, `dev` has the newest fixes. [Build a test ISO from `dev`](https://github.com/lennertvh1/MajaOS/tree/dev#build-a-test-iso), or follow `dev` on a running server with *Settings → Software update → Development*. Good things to try:
 
 - **The installer** on a real PC or in Proxmox, Unraid, VirtualBox or VMware (UEFI): does it start, can you click, does the installation finish?
 - **The first boot**: does MajaOS set itself up and show its address?
