@@ -95,6 +95,10 @@ step "Changing the boot menus"
 KERNEL=/install.amd/vmlinuz
 if [ -f "$WORK/live/vmlinuz" ]; then
   cat > "$WORK/grub-entries.cfg" <<EOF
+# Start the installer right away. Hold Esc while it starts for the menu (recovery, plain Debian).
+set default=0
+set timeout_style=hidden
+set timeout=1
 menuentry --hotkey=h 'Install HomeBaseOS $VERSION' {
     set background_color=black
     linux    /live/vmlinuz boot=live components quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0 live-media-path=/live
@@ -152,8 +156,9 @@ label homebaseos-nvidia
 EOF
   fi
   grep -q '^include gtk.cfg' "$WORK/menu.cfg" || { echo "Unexpected isolinux/menu.cfg."; exit 1; }
+  # BIOS: the same, after one second (isolinux counts in tenths).
   awk -v title="menu title HomeBaseOS $VERSION (Debian 13)" \
-    '/^include gtk.cfg/ { print "include homebaseos.cfg" } /^menu title / { print title; next } { print }' "$WORK/menu.cfg" > "$WORK/menu.cfg.new"
+    '/^include gtk.cfg/ { print "include homebaseos.cfg"; if (live) print "timeout 10" } /^menu title / { print title; next } { print }' live="$([ -f "$WORK/live/vmlinuz" ] && echo 1 || echo 0)" "$WORK/menu.cfg" > "$WORK/menu.cfg.new"
   mv "$WORK/menu.cfg.new" "$WORK/menu.cfg"
   awk '!/^[[:space:]]*menu default/' "$WORK/gtk.cfg" > "$WORK/gtk.cfg.new"   # the default choice is now HomeBaseOS
   mv "$WORK/gtk.cfg.new" "$WORK/gtk.cfg"

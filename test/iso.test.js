@@ -66,3 +66,15 @@ test('late.sh, the first-boot service and firstboot.sh fit together', () => {
   assert.doesNotMatch(handoff, /kexec/);
   assert.match(live, /debootstrap/);
 });
+
+test('no local line in the ISO scripts uses a variable it sets itself', () => {
+  // local expands all its words before assigning, so `local a="$1" b="$a"` stops a script under set -u.
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.sh'))) {
+    for (const line of read(f).split('\n')) {
+      const m = line.match(/^\s*local\s+(.*)$/);
+      if (!m) continue;
+      const names = [...m[1].matchAll(/\b([A-Za-z_]\w*)=/g)].map((x) => x[1]);
+      for (const n of names) assert.ok(!new RegExp('\\$\\{?' + n + '\\b').test(m[1]), f + ': ' + line.trim());
+    }
+  }
+});

@@ -73,10 +73,19 @@ const server = http.createServer(async (req, res) => {
       const picked = installer.choose(list, body);
       fs.mkdirSync(DIR, { recursive: true });
       fs.writeFileSync(STATUS, JSON.stringify({ state: 'running', percent: 5, message: 'Preparing the installation', log: '' }));
+      const out = fs.openSync(path.join(DIR, 'log.txt'), 'a');
       child = spawn('bash', [path.join(__dirname, 'run-install.sh'), picked.disk.name, picked.language, body.nvidia ? '1' : '0'], {
-        env: { ...process.env, INSTALL_DIR: DIR, STATUS, ROOT },
+        env: { ...process.env, INSTALL_DIR: DIR, STATUS, ROOT }, stdio: ['ignore', out, out],
       });
-      child.on('exit', () => { child = null; });
+      fs.closeSync(out);
+      // A script that stops without saying so would leave the screen on its last step forever.
+      child.on('exit', (code) => {
+        child = null;
+        const now = status();
+        if (code !== 0 && now.state === 'running') {
+          fs.writeFileSync(STATUS, JSON.stringify({ ...now, state: 'failed', message: 'The installation could not be prepared.' }));
+        }
+      });
       return send(res, 200, { started: true });
     }
     if (url.pathname === '/api/install/reboot' && req.method === 'POST') {

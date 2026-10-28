@@ -36,7 +36,9 @@ fail() { echo "$1" >> "$LOG"; cleanup; status failed "${2:-0}" "$1"; exit 1; }
 
 # Keep the bar moving while a long command runs. Its own output stays out of the loading screen.
 watch() {
-  local pid="$1" from="$2" to="$3" msg="$4" pct="$from"
+  # Two lines: local expands all its words first, so pct="$from" on the same line hits set -u and ends the script.
+  local pid="$1" from="$2" to="$3" msg="$4"
+  local pct="$from"
   while kill -0 "$pid" 2>/dev/null; do
     [ "$pct" -lt "$to" ] && pct=$((pct + 1))
     status running "$pct" "$msg"
