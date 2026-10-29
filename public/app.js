@@ -241,20 +241,26 @@
 
   /* ------------------------------------------------------------ notifications */
   // The windows are modal dialogs in the top layer: the toasts are a popover, shown again for every toast so they land
-  // above the window that is open now.
+  // above the window that is open now. Each has a × to close it. Errors and long messages stay until they are closed
+  // (no time to read them otherwise); short confirmations go away by themselves.
   function toast(msg, bad) {
-    const box = $('#toasts');
+    const box = $('#toasts'), text = String(msg);
     // The same message once at a time (e.g. several requests failing while the server restarts).
-    if ([...box.children].some((x) => x.textContent === String(msg))) return;
+    if ([...box.children].some((x) => ($('.toast-text', x) || x).textContent === text)) return;
     const el = document.createElement('div');
     el.className = 'toast' + (bad ? ' bad' : '');
-    el.textContent = msg;
-    box.appendChild(el);
-    if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
-    setTimeout(() => {
+    el.setAttribute('role', bad ? 'alert' : 'status');
+    el.innerHTML = `<span class="toast-text"></span><button class="toast-x" type="button" aria-label="${esc(t('Close'))}" title="${esc(t('Close'))}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
+    $('.toast-text', el).textContent = text;
+    const close = () => {
       el.remove();
       if (!box.children.length && box.hidePopover) { try { box.hidePopover(); } catch (e) { /* already hidden */ } }
-    }, bad ? 6000 : 3200);
+    };
+    $('.toast-x', el).addEventListener('click', close);
+    box.appendChild(el);
+    if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
+    if (!bad && text.length <= 90) setTimeout(close, 3200);
   }
 
   /* ------------------------------------------------------------ clock */

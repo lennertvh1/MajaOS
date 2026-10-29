@@ -1065,7 +1065,11 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 /* As a popover (above modal windows): none of the browser's popover box. */
 .toasts[popover] { top: auto; right: auto; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; overflow: visible; height: auto; }
 @supports selector(:popover-open) { .toasts[popover]:not(:popover-open) { display: none; } }
-.toast { padding: 11px 16px; border-radius: 14px; background: var(--glass-strong); font-size: 14px; animation: pop .2s ease-out; }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 11px 8px 11px 16px; border-radius: 14px; background: var(--glass-strong); font-size: 14px; animation: pop .2s ease-out; pointer-events: auto; }
+.toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; padding-top: 2px; }
+.toast-x { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: -2px 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.toast-x:hover, .toast-x:focus-visible { background: var(--glass); color: var(--text); }
+.toast-x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .toast.bad { border-color: var(--bad); }
 
 /* ---- phone: the bar moves to the bottom. Above this, labels ease shut on their own. */
