@@ -82,6 +82,7 @@ const ai = require('./lib/ai');
 const issue = require('./lib/issue');
 const keyboard = require('./lib/keyboard');
 const mixed = require('./lib/mixed');
+const unraid = require('./lib/unraid');
 
 const CFG = {
   port: settings.listenPort(),
@@ -669,6 +670,11 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, await mixed.remove(name, { inUse: await require('./lib/poolusers').poolUsers(mixed.find(name).mountpoint) }));
     }
   }
+  // Moving from Unraid (lib/unraid.js): what the stick and the old disks hold, taking it over as a job, closing.
+  if (p === '/api/unraid' && method === 'GET') return sendJson(res, 200, await unraid.scan({ fresh: url.searchParams.get('fresh') === '1' }));
+  if (p === '/api/unraid/migrate' && method === 'POST') return sendJson(res, 200, await unraid.migrate(await readBody(req)));
+  if (p === '/api/unraid/progress' && method === 'GET') return sendJson(res, 200, unraid.progress());
+  if (p === '/api/unraid/close' && method === 'POST') return sendJson(res, 200, await unraid.close());
   // Storage locations (Settings → Storage): move app data to another pool, or choose a pool for VMs, ISOs and shared folders.
   if (p === '/api/storage-paths' && method === 'GET') return sendJson(res, 200, await migrate.overview());
   if (p === '/api/storage-paths' && method === 'POST') {

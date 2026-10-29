@@ -2015,6 +2015,79 @@
   }
   // Like startCreate/progress in lib/zpool.js: the pool is made right away (so errors come back at once), the steps
   // run on the clock: about a second per disk, two for the pool, one for the folders.
+  /* ---- moving from Unraid (lib/unraid.js): a stick and three disks of an old server, the steps run on the clock */
+  const unraidScan = () => ({
+    found: true, name: 'Tower', version: '6.12.13', flash: 'sdk', warnings: [],
+    disks: [
+      { name: 'sde', size: 4e12, model: 'ST4000VN006 IronWolf', serial: 'DEMOSDE', rotational: true, transport: 'sata', part: 'sde1', fs: 'xfs', uuid: 'demo-sde', role: 'data', used: 2.6e12, folders: ['media', 'photos', 'domains'] },
+      { name: 'sdg', size: 3e12, model: 'WDC WD30EFRX', serial: 'DEMOSDG', rotational: true, transport: 'sata', part: 'sdg1', fs: 'xfs', uuid: 'demo-sdg', role: 'data', used: 1.1e12, folders: ['media', 'documents'] },
+      { name: 'sdf', size: 4e12, model: 'ST4000VN006 IronWolf', serial: 'DEMOSDF', rotational: true, transport: 'sata', part: 'sdf1', fs: null, uuid: null, role: 'parity' },
+      { name: 'sdi', size: 1e12, model: 'Samsung SSD 870 EVO', serial: 'DEMOSDI', rotational: false, transport: 'sata', part: 'sdi1', fs: 'btrfs', uuid: 'demo-cache', role: 'cache', used: 2.1e11, folders: ['appdata', 'domains', 'system'] },
+    ],
+    shares: [
+      { name: 'media', comment: 'Films and series', exported: true, security: 'public', guest: true, users: {}, cache: 'yes', onData: ['sde', 'sdg'], onCache: [] },
+      { name: 'photos', comment: '', exported: true, security: 'private', guest: false, users: { lisa: 'rw', tom: 'ro' }, cache: 'no', onData: ['sde'], onCache: [] },
+      { name: 'documents', comment: 'Paperwork', exported: true, security: 'private', guest: false, users: { lisa: 'rw' }, cache: 'yes', onData: ['sdg'], onCache: ['sdi'] },
+      { name: 'appdata', comment: '', exported: false, security: 'public', guest: true, users: {}, cache: 'only', onData: [], onCache: ['sdi'] },
+    ],
+    users: ['lisa', 'tom'],
+    apps: [
+      { file: 'my-plex.xml', name: 'Plex-Media-Server', slug: 'plex-media-server', image: 'plexinc/pms-docker', icon: ICON('plex'), network: 'host', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 4.2e9 },
+      { file: 'my-sonarr.xml', name: 'sonarr', slug: 'sonarr', image: 'lscr.io/linuxserver/sonarr', icon: ICON('sonarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 3.1e8 },
+      { file: 'my-homarr.xml', name: 'homarr', slug: 'homarr', image: 'ghcr.io/ajnart/homarr', icon: ICON('homarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: [], dataSize: 2.4e7 },
+      { file: 'my-nextcloud.xml', name: 'nextcloud', slug: 'nextcloud', image: 'lscr.io/linuxserver/nextcloud', icon: ICON('nextcloud'), network: 'bridge', ip: null, installed: false, folders: [], shares: ['documents'], dataSize: null },
+    ],
+    vms: [
+      { name: 'Home Assistant', memory: 4 * 1073741824, vcpus: 2, firmware: 'uefi', nic: 'virtio', os: 'haos', passthrough: 1, disks: [{ path: '/mnt/user/domains/Home Assistant/haos.qcow2', at: '/x', size: 32e9 }] },
+      { name: 'Windows 11', memory: 8 * 1073741824, vcpus: 4, firmware: 'uefi', nic: 'virtio', os: 'windows11', passthrough: 0, disks: [{ path: '/mnt/user/domains/Windows 11/vdisk1.img', at: '/x', size: 80e9 }, { path: '/mnt/user/domains/Windows 11/vdisk2.img', at: '/y', size: 20e9 }] },
+    ],
+  });
+  let unraidJob = null;
+  function unraidMigrate(b) {
+    if (unraidJob && !unraidProgress().done) throw err('A move from Unraid is already running.', 409);
+    const scan = unraidScan();
+    const steps = [];
+    if (b.pool) {
+      const name = String(b.pool.name || '').trim();
+      if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) throw err('Choose a name of lowercase letters, digits, - or _ that starts with a letter (e.g. media).');
+      if (pools.some((p) => p.name === name)) throw err('A pool named ' + name + ' already exists.', 409);
+      if (!(b.pool.data || []).length) throw err('Choose at least one data disk.');
+      (b.pool.parity || []).forEach((n) => steps.push({ id: 'disk:' + n, label: 'Preparing parity disk {name}', name: n, secs: 2 }));
+      steps.push({ id: 'mount', label: 'Taking over the data disks', secs: 2 }, { id: 'folders', label: 'Creating the folders', secs: 1 });
+    }
+    if ((b.shares || []).length && !b.pool) throw err('Shared folders come along with the data disks. Tick the data disks too.');
+    (b.users || []).forEach((u) => { if (String(u.password || '').length < 8) throw err('Choose a password of at least 8 characters.'); steps.push({ id: 'user:' + u.name, label: 'User {name}', name: u.name, secs: 1 }); });
+    (b.shares || []).forEach((n) => steps.push({ id: 'share:' + n, label: 'Shared folder {name}', name: n, secs: 1 }));
+    (b.apps || []).forEach((a) => { const x = scan.apps.find((y) => y.file === a.file); if (x) steps.push({ id: 'app:' + a.file, label: 'App {name}', name: x.name, secs: a.data ? 4 : 2, app: x }); });
+    (b.vms || []).forEach((n) => steps.push({ id: 'vm:' + n, label: 'VM {name}', name: n, secs: 4 }));
+    if (!steps.length) throw err('Choose what you want to take over.');
+    // Like the real server: an app whose name is taken fails, the rest goes on.
+    steps.forEach((x) => { if (x.app && apps.some((a) => a.name === x.app.slug)) x.error = 'An app named ' + x.app.slug + ' already exists. Choose another name.'; });
+    unraidJob = { steps, at: Date.now(), body: b, applied: false };
+    return { started: true, progress: unraidProgress() };
+  }
+  function unraidProgress() {
+    if (!unraidJob) return { state: 'idle' };
+    const j = unraidJob, total = j.steps.reduce((a, x) => a + x.secs, 0);
+    let left = (Date.now() - j.at) / 1000;
+    const steps = j.steps.map(({ secs, app, error, ...x }) => {
+      const state = left >= secs ? (error ? 'failed' : 'done') : left > 0 ? 'running' : 'waiting';
+      const out = { ...x, state, ...(state === 'running' ? { percent: Math.round((left / secs) * 100), secs: Math.floor(left) } : {}), ...(state === 'failed' ? { error } : {}) };
+      left -= secs; return out;
+    });
+    const done = steps.every((x) => x.state === 'done' || x.state === 'failed');
+    const failed = steps.filter((x) => x.state === 'failed').length;
+    if (done && !j.applied) {
+      j.applied = true;
+      if (j.body.pool) {
+        try { demoCreateMixed({ name: j.body.pool.name, confirm: j.body.pool.name, disks: [...j.body.pool.data.map((n) => ({ name: n, role: 'data' })), ...(j.body.pool.parity || []).map((n) => ({ name: n, role: 'parity' }))] }); } catch (e) { /* already there */ }
+      }
+      j.steps.filter((x) => x.app && !x.error).forEach((x) => apps.push({ id: 'demo:' + x.app.slug, name: x.app.slug, image: x.app.image, state: 'RUNNING', status: 'Up 1 minute', autoStart: true, icon: x.app.icon,
+        webui: null, ports: [], compose: { project: x.app.slug, service: x.app.slug }, canUpdate: true, update: false, updateChecked: null, updateError: null, storeId: null, dataDirs: [AD() + '/' + x.app.slug] }));
+    }
+    return { steps, percent: done ? 100 : Math.min(99, Math.round(((Date.now() - j.at) / 1000 / total) * 100)), done, ok: done ? failed === 0 : null,
+      error: done && failed ? 'Not everything could be taken over. See the steps.' : null, lines: [], started: new Date(j.at).toISOString(), state: done ? (failed ? 'failed' : 'done') : 'running' };
+  }
   let demoCreating = null;
   function demoStartCreate(b) {
     if (demoCreating && !demoProgress().done) throw err('A pool is already being created. Wait until it is ready.', 409);
@@ -2609,6 +2682,8 @@
     if (path === '/api/pools/importable') return zpRoute('GET', path);
     if (path === '/api/pools/progress') return demoProgress();
     if (path === '/api/storage/disks') return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })) };
+    if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidScan();
+    if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
@@ -2732,6 +2807,8 @@
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(300, 600)); return demoStartCreate(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
+    if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
+    if (path === '/api/unraid/close') return { closed: true };
     if (path === '/api/storage/rescan') return demoRescan();
     if (path.startsWith('/api/pools/')) { await wait(rnd(400, 900)); const r = zpRoute('POST', path, body); if (r !== undefined) return r; }
     const vs = path.match(/^\/api\/vm-networks\/([^/]+)\/start$/);

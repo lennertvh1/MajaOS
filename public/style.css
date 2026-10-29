@@ -1665,6 +1665,13 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mix-disks .row-side .seg button { font-size: 13px; }
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
+/* Move from Unraid: one card per kind, a row per disk, share, user, app or VM. */
+.ur-sec { display: grid; gap: 10px; margin-bottom: 14px; }
+.ur-sec.muted .ur-item { opacity: .55; }
+.ur-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ur-icon { flex: none; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; background: var(--glass); }
+.ur-icon img { width: 100%; height: 100%; object-fit: contain; }
+[data-ur-poolbox][hidden], [data-ur-nopool][hidden] { display: none; }
 /* Replacing a disk of a pool with mixed disks: a button on the disk, the form inside the pool card. */
 .disk-main [data-mx-replace] { margin-top: 6px; }
 .mx-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
