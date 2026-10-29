@@ -8,6 +8,10 @@ EnvironmentFile=/etc/majaos/majaos.env
 ExecStart=/usr/bin/node /opt/majaos/server.js
 Restart=on-failure
 RestartSec=5
+# Stopping (an update, a restart): SIGTERM to MajaOS itself, then whatever it started (a terminal's bash ignores SIGTERM,
+# which made systemd wait 90 s) is killed right away.
+KillMode=mixed
+TimeoutStopSec=15
 # /var/lib/majaos: own settings (e.g. the start delay of VMs)
 StateDirectory=majaos
 # /run/majaos: marker "VMs already started automatically". Stays until the server reboots,

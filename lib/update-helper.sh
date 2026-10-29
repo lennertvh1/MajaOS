@@ -64,6 +64,11 @@ fi
 # 3. Stop MajaOS before its files change: a running server loads some modules only when it needs them, and with lib/
 # half replaced it crashed (systemd then started a mix of old and new files). The page shows "restarting" meanwhile.
 st install 72 running "Installing new files…"
+# The new service file first: how MajaOS stops (KillMode, TimeoutStopSec) already counts for this stop.
+if [ -f "$NEW/deploy/majaos.service" ] && [ -f /etc/systemd/system/majaos.service ] && ! cmp -s "$NEW/deploy/majaos.service" /etc/systemd/system/majaos.service; then
+  install -m 644 "$NEW/deploy/majaos.service" /etc/systemd/system/majaos.service
+  systemctl daemon-reload
+fi
 systemctl stop majaos >/dev/null 2>&1 || true
 systemctl stop homebaseos >/dev/null 2>&1 || true  # the old name, if it still runs: it holds the port
 for p in $PARTS; do
