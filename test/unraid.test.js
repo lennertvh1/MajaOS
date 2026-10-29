@@ -121,3 +121,59 @@ test('taking over disks as a pool: the checks', () => {
   assert.deepEqual(p.data.map((x) => [x.mount, x.fs, x.uuid]), [['/mnt/media/disk1', 'xfs', 'u-sdb'], ['/mnt/media/disk2', 'xfs', 'u-sdc']]);
   assert.match(mixed.fstabBlock({ name: 'media', mountpoint: '/media', disks: [{ ...p.data[0], role: 'data' }] }), /UUID=u-sdb \/mnt\/media\/disk1 xfs defaults,noatime,nofail/);
 });
+
+test('over SSH: values are quoted for the remote shell, and the form is checked before connecting', async () => {
+  assert.equal(u.shq("Home Assistant"), "'Home Assistant'");
+  assert.equal(u.shq("it's"), "'it'\\''s'");
+  const fails = async (body) => { try { await u.connect(body); } catch (e) { return e.message; } return null; };
+  assert.match(await fails({ host: 'bad host;rm', password: 'x' }), /address of your Unraid server/);
+  assert.match(await fails({ host: 'tower.local', user: 'Root!', password: 'x' }), /user name/);
+  assert.match(await fails({ host: 'tower.local', password: '' }), /password/);
+  assert.match(await fails({ host: 'tower.local', port: 70000, password: 'x' }), /port/);
+});
+
+test('over SSH: the scan reads the stick\'s files, Docker and libvirt of a running server', async () => {
+  // A fake ssh that answers like an Unraid server (and refuses a wrong password).
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'unraid-ssh-'));
+  const fx = path.join(tmp, 'boot');
+  fs.mkdirSync(path.join(fx, 'config', 'shares'), { recursive: true });
+  fs.mkdirSync(path.join(fx, 'config', 'plugins', 'dockerMan', 'templates-user'), { recursive: true });
+  fs.writeFileSync(path.join(fx, 'config', 'ident.cfg'), 'NAME="Tower"\n');
+  fs.writeFileSync(path.join(fx, 'changes.txt'), '# Version 6.12.13 2024-08-21\n');
+  fs.writeFileSync(path.join(fx, 'config', 'shares', 'media.cfg'), 'shareExport="e"\nshareSecurity="public"\n');
+  fs.writeFileSync(path.join(fx, 'config', 'passwd'), 'root:x:0:0::/root:/bin/bash\nlisa:x:1000:100::/:/bin/false\n');
+  fs.writeFileSync(path.join(fx, 'config', 'plugins', 'dockerMan', 'templates-user', 'my-sonarr.xml'),
+    '<?xml version="1.0"?><Container><Name>sonarr</Name><Repository>lscr.io/linuxserver/sonarr</Repository><Network>bridge</Network>' +
+    '<Config Name="Config" Target="/config" Type="Path" Mode="rw">/mnt/user/appdata/sonarr</Config>' +
+    '<Config Name="TV" Target="/tv" Type="Path" Mode="rw">/mnt/user/media/tv</Config></Container>');
+  const bin = path.join(tmp, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'ssh'), `#!/usr/bin/env node
+const cmd = process.argv[process.argv.length - 1];
+if (process.env.MAJAOS_SSH_PW !== 'secret') { process.stderr.write('root@tower: Permission denied (password).\\n'); process.exit(255); }
+const { execFileSync } = require('child_process');
+if (/unraid-version/.test(cmd)) console.log('version="6.12.13"');
+else if (/^cd \\/boot && tar/.test(cmd)) process.stdout.write(execFileSync('tar', ['-cf', '-', '-C', ${JSON.stringify(fx)}, 'config', 'changes.txt']).toString('base64'));
+else if (/^docker ps/.test(cmd)) console.log('sonarr\\trunning');
+else if (/^du -sb/.test(cmd)) console.log('312000000\\t/mnt/user/appdata/sonarr');
+else if (/^virsh list/.test(cmd)) console.log('Home Assistant\\n');
+else if (/^virsh dumpxml/.test(cmd)) console.log("<domain><name>Home Assistant</name><memory unit='KiB'>2097152</memory><vcpu>2</vcpu><os><loader>/usr/share/qemu/ovmf-x64/OVMF_CODE-pure-efi.fd</loader></os><devices><disk device='disk'><source file='/mnt/user/domains/Home Assistant/haos.qcow2'/><target bus='virtio'/></disk></devices></domain>");
+else if (/^virsh domstate/.test(cmd)) console.log('running');
+else if (/^stat -c/.test(cmd)) console.log('34359738368');
+`, { mode: 0o755 });
+  process.env.PATH = bin + path.delimiter + process.env.PATH;
+  process.env.UNRAID_MOUNT_DIR = path.join(tmp, 'run');
+  delete require.cache[require.resolve('../lib/unraid')];
+  const v = require('../lib/unraid');
+  await assert.rejects(v.connect({ host: '192.168.1.10', password: 'wrong' }), /password is wrong/);
+  const r = await v.connect({ host: '192.168.1.10', password: 'secret' });
+  assert.equal(r.mode, 'ssh');
+  assert.equal(r.name, 'Tower');
+  assert.equal(r.version, '6.12.13');
+  assert.deepEqual(r.users, ['lisa']);
+  assert.deepEqual(r.shares.map((x) => [x.name, x.guest]), [['media', true]]);
+  assert.deepEqual(r.apps.map((a) => [a.name, a.installed, a.state, a.dataSize, a.shares]), [['sonarr', true, 'running', 312000000, ['media']]]);
+  assert.deepEqual(r.vms.map((x) => [x.name, x.state, x.vcpus, x.firmware, x.os, x.disks[0].size]), [['Home Assistant', 'running', 2, 'uefi', 'haos', 34359738368]]);
+  await v.close();
+  assert.equal(fs.existsSync(path.join(tmp, 'run', 'ssh')), false); // the password script and the copied config are gone
+});

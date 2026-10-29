@@ -672,6 +672,7 @@ async function handleApi(req, res, url) {
   }
   // Moving from Unraid (lib/unraid.js): what the stick and the old disks hold, taking it over as a job, closing.
   if (p === '/api/unraid' && method === 'GET') return sendJson(res, 200, await unraid.scan({ fresh: url.searchParams.get('fresh') === '1' }));
+  if (p === '/api/unraid/connect' && method === 'POST') return sendJson(res, 200, await unraid.connect(await readBody(req)));
   if (p === '/api/unraid/migrate' && method === 'POST') return sendJson(res, 200, await unraid.migrate(await readBody(req)));
   if (p === '/api/unraid/progress' && method === 'GET') return sendJson(res, 200, unraid.progress());
   if (p === '/api/unraid/close' && method === 'POST') return sendJson(res, 200, await unraid.close());

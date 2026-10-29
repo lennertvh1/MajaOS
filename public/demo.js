@@ -2042,6 +2042,22 @@
       { name: 'Windows 11', memory: 8 * 1073741824, vcpus: 4, firmware: 'uefi', nic: 'virtio', os: 'windows11', passthrough: 0, disks: [{ path: '/mnt/user/domains/Windows 11/vdisk1.img', at: '/x', size: 80e9 }, { path: '/mnt/user/domains/Windows 11/vdisk2.img', at: '/y', size: 20e9 }] },
     ],
   });
+  // Over the network (SSH): the same server, without disks; shared folders are copied to a pool of this server.
+  let unraidSsh = null;
+  const unraidSshScan = () => {
+    const x = unraidScan();
+    return { ...x, mode: 'ssh', host: unraidSsh, disks: [], shares: x.shares.map((sh) => ({ ...sh, onData: [], onCache: [] })),
+      apps: x.apps.map((a) => ({ ...a, state: a.installed ? 'running' : null })), vms: x.vms.map((v, i) => ({ ...v, state: i ? 'shut off' : 'running' })),
+      pools: pools.map((p) => ({ name: p.name, mountpoint: '/' + p.name, free: p.free })) };
+  };
+  function unraidConnect(b) {
+    const host = String(b.host || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host)) throw err('Fill in the address of your Unraid server, e.g. 192.168.1.10 or tower.local.');
+    if (!String(b.password || '')) throw err('Fill in the password of that user.');
+    if (b.password === 'wrong') throw err('The password is wrong, or this user may not sign in over SSH.', 401);
+    unraidSsh = host;
+    return unraidSshScan();
+  }
   let unraidJob = null;
   function unraidMigrate(b) {
     if (unraidJob && !unraidProgress().done) throw err('A move from Unraid is already running.', 409);
@@ -2055,7 +2071,8 @@
       (b.pool.parity || []).forEach((n) => steps.push({ id: 'disk:' + n, label: 'Preparing parity disk {name}', name: n, secs: 2 }));
       steps.push({ id: 'mount', label: 'Taking over the data disks', secs: 2 }, { id: 'folders', label: 'Creating the folders', secs: 1 });
     }
-    if ((b.shares || []).length && !b.pool) throw err('Shared folders come along with the data disks. Tick the data disks too.');
+    if (unraidSsh && (b.shares || []).length && !pools.some((p) => p.name === b.target)) throw err('Choose the pool the shared folders are copied to.');
+    if (!unraidSsh && (b.shares || []).length && !b.pool) throw err('Shared folders come along with the data disks. Tick the data disks too.');
     (b.users || []).forEach((u) => { if (String(u.password || '').length < 8) throw err('Choose a password of at least 8 characters.'); steps.push({ id: 'user:' + u.name, label: 'User {name}', name: u.name, secs: 1 }); });
     (b.shares || []).forEach((n) => steps.push({ id: 'share:' + n, label: 'Shared folder {name}', name: n, secs: 1 }));
     (b.apps || []).forEach((a) => { const x = scan.apps.find((y) => y.file === a.file); if (x) steps.push({ id: 'app:' + a.file, label: 'App {name}', name: x.name, secs: a.data ? 4 : 2, app: x }); });
@@ -2682,7 +2699,7 @@
     if (path === '/api/pools/importable') return zpRoute('GET', path);
     if (path === '/api/pools/progress') return demoProgress();
     if (path === '/api/storage/disks') return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })) };
-    if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidScan();
+    if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidSsh ? unraidSshScan() : unraidScan();
     if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
@@ -2808,7 +2825,8 @@
     if (path === '/api/pools') { await wait(rnd(300, 600)); return demoStartCreate(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
-    if (path === '/api/unraid/close') return { closed: true };
+    if (path === '/api/unraid/close') { unraidSsh = null; return { closed: true }; }
+    if (path === '/api/unraid/connect') { await wait(900); return unraidConnect(body || {}); }
     if (path === '/api/storage/rescan') return demoRescan();
     if (path.startsWith('/api/pools/')) { await wait(rnd(400, 900)); const r = zpRoute('POST', path, body); if (r !== undefined) return r; }
     const vs = path.match(/^\/api\/vm-networks\/([^/]+)\/start$/);

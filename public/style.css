@@ -1670,6 +1670,9 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mig-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--glass); color: var(--accent); }
 .mig-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .mig-text { flex: 1; min-width: 0; }
+.mig-net { align-items: flex-start; margin-top: 12px; }
+.mig-form { display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 8px; margin-top: 10px; }
+@media (max-width: 720px) { .mig-form { grid-template-columns: 1fr; } }
 .ur-sec { display: grid; gap: 10px; margin-bottom: 14px; }
 .ur-sec.muted .ur-item { opacity: .55; }
 .ur-item { display: flex; align-items: center; gap: 10px; min-width: 0; }

@@ -2601,15 +2601,39 @@
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/></svg></span>
         <div class="mig-text"><b>Unraid</b><div class="muted small">${t('Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.')}</div></div>
         <button class="btn primary" type="button" data-mig-unraid>${t('Start')}</button>
+      </section>
+      <section class="pool-card plain mig-card mig-net">
+        <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>
+        <div class="mig-text"><b>${t('Unraid over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
+          <div class="muted small">${t('Your Unraid server keeps running; nothing has to move.')}</div>
+          <form class="mig-form" data-mig-ssh novalidate>
+            <input class="field" name="host" placeholder="${esc(t('Address, e.g. 192.168.1.10'))}" aria-label="${esc(t('Address'))}" autocomplete="off" spellcheck="false">
+            <input class="field" name="user" value="root" aria-label="${esc(t('User name'))}" autocomplete="off" spellcheck="false">
+            <input class="field" name="password" type="password" placeholder="${esc(t('Password'))}" aria-label="${esc(t('Password'))}" autocomplete="off">
+            <button class="btn primary" type="submit">${t('Connect')}</button>
+          </form><p class="form-error" role="alert"></p></div>
       </section>`;
     $('[data-mig-unraid]', el).addEventListener('click', () => unraidFlow(el));
+    $('[data-mig-ssh]', el).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget, err = $('.mig-net .form-error', el), btn = $('[type=submit]', f);
+      err.textContent = ''; btn.disabled = true; btn.textContent = t('Connecting…');
+      try {
+        const r = await api.post('/api/unraid/connect', { host: f.elements.host.value.trim(), user: f.elements.user.value.trim(), password: f.elements.password.value });
+        unraidFlow(el, false, r);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Connect'); }
+    });
   }
-  async function unraidFlow(el, fresh) {
+  // given: the answer of /api/unraid/connect (over SSH); otherwise the stick (or the connection that is open) is read.
+  async function unraidFlow(el, fresh, given) {
     el.innerHTML = `<div class="ur-root"><p class="lead">${t('Looking for the Unraid USB stick and its disks…')}</p></div>`;
     const body = $('.ur-root', el);
-    let r;
-    try { r = await api.get('/api/unraid' + (fresh ? '?fresh=1' : '')); }
-    catch (e) { body.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    let r = given;
+    if (!r) {
+      try { r = await api.get('/api/unraid' + (fresh ? '?fresh=1' : '')); }
+      catch (e) { body.innerHTML = `<p class="lead">${esc(e.message)}</p><div class="btn-row"><button class="btn" type="button" data-ur-back>${t('Back')}</button></div>`;
+        body.onclick = (x) => { if (x.target.closest('[data-ur-back]')) { api.post('/api/unraid/close').catch(() => {}); migrationPane(el); } }; return; }
+    }
     if (!body.isConnected) return;
     const back = `<button class="btn" type="button" data-ur-back>${t('Back')}</button>`;
     body.onclick = (e) => {
@@ -2623,26 +2647,28 @@
         <div class="btn-row"><button class="btn primary" type="button" data-ur-again>${t('Look again')}</button>${back}</div>`;
       return;
     }
+    const net = r.mode === 'ssh';
     const ROLE_NAME = { data: 'Data disk', parity: 'Parity disk', cache: 'Cache', encrypted: 'Encrypted', zfs: 'ZFS pool', other: 'Other disk' };
     const kindOf = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
     const poolDisks = r.disks.filter((d) => ['data', 'parity'].includes(d.role) || (d.role === 'other' && !d.fs));
     const appRow = (a, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-app="${i}"${a.installed ? ' checked' : ''}>
         <span class="ur-icon">${a.icon ? `<img src="${esc(a.icon)}" alt="" loading="lazy">` : ''}</span>
-        <span><b>${esc(a.name)}</b><br><span class="muted small">${esc(a.image)}${a.installed ? '' : ' · ' + esc(t('not installed anymore'))}</span></span></label>
+        <span><b>${esc(a.name)}</b><br><span class="muted small">${esc(a.image)}${a.installed ? '' : ' · ' + esc(t('not installed anymore'))}${net && a.state === 'running' ? ' · ' + esc(t('stops on Unraid')) : ''}</span></span></label>
       <div class="row-side"><select class="field sm" data-ur-appdata="${i}">
         <option value="1">${esc(a.dataSize != null ? t('With app data ({size})', { size: bytes(a.dataSize) }) : t('With app data'))}</option>
         <option value="0">${t('Without app data')}</option></select></div></li>`;
     const vmRow = (v, i) => {
       const size = v.disks.reduce((n, d) => n + (d.size || 0), 0);
       const notes = [v.vcpus ? t('{n} vCPUs', { n: v.vcpus }) : null, v.memory ? bytes(v.memory) + ' RAM' : null, size ? t('disk {size}', { size: bytes(size) }) : null,
-        v.disks.length > 1 ? t('only the first disk') : null, v.passthrough ? t('without passed-through devices') : null, v.disks.some((d) => d.at) ? null : t('disk not found')].filter(Boolean);
+        v.disks.length > 1 ? t('only the first disk') : null, v.passthrough ? t('without passed-through devices') : null, v.disks.some((d) => d.at) ? null : t('disk not found'),
+        net && v.state && !/shut off/i.test(v.state) ? t('is shut down on Unraid') : null].filter(Boolean);
       return `<li><label class="check ur-item"><input type="checkbox" data-ur-vm="${i}"${v.disks.some((d) => d.at) ? ' checked' : ' disabled'}>
         <span><b>${esc(v.name)}</b><br><span class="muted small">${esc(notes.join(' · '))}</span></span></label></li>`;
     };
     body.innerHTML = `
-      <p class="lead">${esc(t('Unraid server {name}', { name: r.name || '' }))}${r.version ? ` <span class="muted small">${esc(t('version {v}', { v: r.version }))}</span>` : ''}</p>
+      <p class="lead">${esc(t('Unraid server {name}', { name: r.name || '' }))}${r.version ? ` <span class="muted small">${esc(t('version {v}', { v: r.version }))}</span>` : ''}${net ? ` <span class="muted small">· ${esc(r.host)}</span>` : ''}</p>
       ${r.warnings.map((w) => `<p class="small temp-warn">${esc(tr(w))}</p>`).join('')}
-      <section class="pool-card plain ur-sec">
+      ${net ? '' : `<section class="pool-card plain ur-sec">
         <label class="check"><input type="checkbox" data-ur-pool${poolDisks.some((d) => d.role === 'data') ? ' checked' : ''}> <b>${t('Take over the data disks as a pool')}</b>
           ${hint(t('The data disks keep their files: nothing is copied or formatted. They become a pool with mixed disks. The parity disk is erased and gets new parity; until that first parity update is done (hours), the files aren\'t protected.'))}</label>
         <div data-ur-poolbox>
@@ -2655,9 +2681,11 @@
               <option value=""${d.role === 'other' ? ' selected' : ''}>${t('Not used')}</option></select></div></li>`).join('')}</ul>
         </div>
         <p class="muted small" data-ur-nopool hidden>${t('The disks stay as they are. MajaOS only reads from them.')}</p>
-      </section>
-      ${r.shares.length ? `<section class="pool-card plain ur-sec" data-ur-shares><div class="sub-head">${t('Shared folders')} ${hint(t('They come along with the data disks. Files that were still on the cache are copied onto the pool.'))}</div>
-        <ul class="rows">${r.shares.map((sh, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-share="${i}"${sh.exported && (sh.onData.length || sh.onCache.length) ? ' checked' : ''}>
+      </section>`}
+      ${r.shares.length ? `<section class="pool-card plain ur-sec" data-ur-shares><div class="sub-head">${t('Shared folders')} ${hint(net ? t('Their files are copied over the network to the pool you choose. That can take hours for a large folder.') : t('They come along with the data disks. Files that were still on the cache are copied onto the pool.'))}</div>
+        ${net ? ((r.pools || []).length ? `<label class="fld"><span>${t('Copy to')}</span><select class="field" data-ur-target>${r.pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(t('{size} free', { size: bytes(p.free) }))}</option>`).join('')}</select></label>`
+          : `<p class="small temp-warn">${t('Create a pool first to copy shared folders to.')}</p>`) : ''}
+        <ul class="rows">${r.shares.map((sh, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-share="${i}"${!net && sh.exported && (sh.onData.length || sh.onCache.length) ? ' checked' : ''}${net && !(r.pools || []).length ? ' disabled' : ''}>
           <span><b>${esc(sh.name)}</b>${sh.comment ? ` <span class="muted">${esc(sh.comment)}</span>` : ''}<br><span class="muted small">${esc([
             sh.exported ? (sh.guest ? t('everyone can read') : t('users: {list}', { list: Object.keys(sh.users).join(', ') || '–' })) : t('not shared on the network'),
             sh.onCache.length ? t('partly on the cache') : null].filter(Boolean).join(' · '))}</span></span></label></li>`).join('')}</ul></section>` : ''}
@@ -2671,15 +2699,18 @@
         <ul class="rows">${r.vms.map(vmRow).join('')}</ul></section>` : ''}
       <p class="form-error" role="alert"></p>
       <div class="btn-row"><button class="btn primary" type="button" data-ur-go>${t('Take over')}</button>${back}<button class="btn" type="button" data-ur-again>${t('Look again')}</button></div>`;
-    const usePool = () => $('[data-ur-pool]', body).checked;
-    // When the disks don't come along: a folder for each share the chosen apps use.
+    const usePool = () => { const c = $('[data-ur-pool]', body); return !!(c && c.checked); };
+    const copied = () => (net ? $$('[data-ur-share]:checked', body).map((c) => r.shares[c.dataset.urShare].name) : []);
+    // When the disks don't come along (or a share isn't copied): a folder for each share the chosen apps use.
     const drawFolders = () => {
-      $('[data-ur-poolbox]', body).hidden = !usePool();
-      $('[data-ur-nopool]', body).hidden = usePool();
-      const sec = $('[data-ur-shares]', body);
-      if (sec) { sec.classList.toggle('muted', !usePool()); $$('[data-ur-share]', sec).forEach((c) => { c.disabled = !usePool(); }); }
+      if (!net) {
+        $('[data-ur-poolbox]', body).hidden = !usePool();
+        $('[data-ur-nopool]', body).hidden = usePool();
+        const sec = $('[data-ur-shares]', body);
+        if (sec) { sec.classList.toggle('muted', !usePool()); $$('[data-ur-share]', sec).forEach((c) => { c.disabled = !usePool(); }); }
+      }
       const box = $('[data-ur-folders]', body); if (!box) return;
-      const need = usePool() ? [] : [...new Set($$('[data-ur-app]:checked', body).flatMap((c) => r.apps[c.dataset.urApp].shares))];
+      const need = usePool() ? [] : [...new Set($$('[data-ur-app]:checked', body).flatMap((c) => r.apps[c.dataset.urApp].shares))].filter((x) => !copied().includes(x));
       const keep = Object.fromEntries($$('[data-ur-folder]', box).map((x) => [x.dataset.urFolder, x.value]));
       box.innerHTML = need.length ? `<div class="sub-head">${t('Folders for the apps')} ${hint(t('The apps use these Unraid folders. Choose where they are on this server; leave a field empty to leave that folder out.'))}</div>
         ${need.map((sh) => `<label class="fld"><span>/mnt/user/${esc(sh)}</span><input class="field" data-ur-folder="${esc(sh)}" value="${esc(keep[sh] != null ? keep[sh] : '')}" placeholder="/tank/${esc(sh)}" autocomplete="off" spellcheck="false"></label>`).join('')}` : '';
@@ -2692,7 +2723,8 @@
       const pool = usePool() ? { name: $('[data-ur-poolname]', body).value.trim(), data: roles.filter(([, v]) => v === 'data').map(([n]) => n), parity: roles.filter(([, v]) => v === 'parity').map(([n]) => n) } : null;
       const payload = {
         pool,
-        shares: usePool() ? $$('[data-ur-share]:checked', body).map((c) => r.shares[c.dataset.urShare].name) : [],
+        shares: usePool() || net ? $$('[data-ur-share]:checked', body).map((c) => r.shares[c.dataset.urShare].name) : [],
+        target: net && $('[data-ur-target]', body) ? $('[data-ur-target]', body).value : null,
         users: $$('[data-ur-user]:checked', body).map((c) => ({ name: r.users[c.dataset.urUser], password: $(`[data-ur-pw="${c.dataset.urUser}"]`, body).value })),
         apps: $$('[data-ur-app]:checked', body).map((c) => ({ file: r.apps[c.dataset.urApp].file, data: $(`[data-ur-appdata="${c.dataset.urApp}"]`, body).value === '1' })),
         folders: Object.fromEntries($$('[data-ur-folder]', body).map((x) => [x.dataset.urFolder, x.value.trim()]).filter(([, v]) => v)),
