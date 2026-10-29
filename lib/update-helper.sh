@@ -54,15 +54,25 @@ for p in $PARTS; do [ -e "$APP/$p" ] && cp -a "$APP/$p" "$BACKUP/$p"; done
 cp -a /etc/systemd/system/majaos.service "$BACKUP/majaos.service" 2>/dev/null || true
 cp -a /etc/systemd/system/homebaseos.service "$BACKUP/homebaseos.service" 2>/dev/null || true  # before the rename to MajaOS
 
-# 2. New files in place. Settings (/etc/majaos, DATA_DIR) stay untouched.
-st install 68 running "Installing new files…"
+# 2. System packages the new version needs (deploy/upgrade.sh, may run more than once). This can take minutes; the old
+# version keeps running meanwhile, its files are untouched.
+if [ -f "$NEW/deploy/upgrade.sh" ]; then
+  st packages 65 running "Checking required system packages…"
+  if ! bash "$NEW/deploy/upgrade.sh" >>"${STATUS%.json}.log" 2>&1; then restore "The system packages could not be installed."; fi
+fi
+
+# 3. Stop MajaOS before its files change: a running server loads some modules only when it needs them, and with lib/
+# half replaced it crashed (systemd then started a mix of old and new files). The page shows "restarting" meanwhile.
+st install 72 running "Installing new files…"
+systemctl stop majaos >/dev/null 2>&1 || true
+systemctl stop homebaseos >/dev/null 2>&1 || true  # the old name, if it still runs: it holds the port
 for p in $PARTS; do
   rm -rf "${APP:?}/$p"
   if [ -e "$NEW/$p" ] && ! cp -a "$NEW/$p" "$APP/$p"; then restore "Copying failed."; fi
 done
 # A server from before the rename: folders, units and files get the name MajaOS (once).
 if [ -f "$NEW/deploy/rename-majaos.sh" ] && [ -f /etc/systemd/system/homebaseos.service ]; then
-  st install 70 running "Renaming HomeBaseOS to MajaOS…"
+  st install 78 running "Renaming HomeBaseOS to MajaOS…"
   bash "$NEW/deploy/rename-majaos.sh" "$NEW" >>"${STATUS%.json}.log" 2>&1 || restore "Renaming to MajaOS failed."
 fi
 if [ -f "$NEW/deploy/majaos.service" ] && ! cmp -s "$NEW/deploy/majaos.service" /etc/systemd/system/majaos.service; then
@@ -70,15 +80,8 @@ if [ -f "$NEW/deploy/majaos.service" ] && ! cmp -s "$NEW/deploy/majaos.service" 
   systemctl daemon-reload
 fi
 
-# 3. System packages the new version needs (deploy/upgrade.sh, may run more than once).
-if [ -f "$NEW/deploy/upgrade.sh" ]; then
-  st packages 75 running "Checking required system packages…"
-  if ! bash "$NEW/deploy/upgrade.sh" >>"${STATUS%.json}.log" 2>&1; then restore "The system packages could not be installed."; fi
-fi
-
-# 4. Restart and check that the new version responds.
+# 4. Start and check that the new version responds.
 st restart 85 running "Restarting MajaOS…"
-systemctl stop homebaseos >/dev/null 2>&1 || true  # the old name, if it still runs: it holds the port
 systemctl restart majaos
 st check 92 running "Checking that version ${VERSION} runs properly…"
 healthy || restore "Version ${VERSION} did not respond within 45 seconds."
