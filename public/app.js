@@ -6,6 +6,14 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // A question mark that shows an explanation on hover, focus or tap, instead of a paragraph of text (tooltip below).
+  const hint = (text) => `<button type="button" class="hint" data-tip="${esc(text)}" aria-label="${esc(text)}">?</button>`;
+  // The explanation of a settings pane: a ? next to the pane's title (the title is filled in again for every tab).
+  const paneHint = (text) => {
+    const h = document.getElementById('setWinTitle');
+    if (h) { h.querySelectorAll('.hint').forEach((x) => x.remove()); h.insertAdjacentHTML('beforeend', ' ' + hint(text)); }
+    return '';
+  };
 
   /* ------------------------------------------------------------ language */
   // The English text is the key itself (like gettext). Other languages are in public/lang/<code>.js (see languages.js).
@@ -1018,10 +1026,10 @@
       <form class="form" id="cutForm">
         <div class="store-head">${preview}</div>
         <label class="fld"><span>${t('Name')}</span><input class="field" name="name" required maxlength="40" value="${s ? esc(s.name) : ''}"></label>
-        <label class="fld"><span>${t('Address')}</span><input class="field" name="url" required placeholder="https://" value="${s ? esc(s.url) : ''}" spellcheck="false" autocomplete="off">
-          <small>${t('Opens in a new tab.')}</small></label>
-        <label class="fld"><span>${t('Icon')}</span><input class="field" name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,.ico">
-          <small>${t('Upload an image, or leave this empty to use the site\'s icon.')}</small></label>
+        <label class="fld"><span>${t('Address')} ${hint(t('Opens in a new tab.'))}</span><input class="field" name="url" required placeholder="https://" value="${s ? esc(s.url) : ''}" spellcheck="false" autocomplete="off">
+          </label>
+        <label class="fld"><span>${t('Icon')} ${hint(t('Upload an image, or leave this empty to use the site\'s icon.'))}</span><input class="field" name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,.ico">
+          </label>
         <label class="check"><input type="checkbox" name="fetchIcon"${s && s.icon ? '' : ' checked'}> ${t('Use the site\'s icon')}</label>
         <p class="form-error" role="alert"></p>
         <div class="btn-row">
@@ -1903,9 +1911,9 @@
           <input class="field" name="webui" value="${esc(s.webui)}" placeholder="${esc(s.webuiDefault || s.webuiAuto || 'http://[IP]:[PORT:8080]/')}" autocomplete="off" spellcheck="false">
           <small>${t('This opens when you click the app. {ip} becomes the address of your server, {port} the port on the server that is mapped to port 80 in the app.', { ip: '<code>[IP]</code>', port: '<code>[PORT:80]</code>' })}
             ${t('Leave empty = automatic ({value}).', { value: esc(s.webuiDefault || s.webuiAuto || t('none')) })}</small></label>
-        <label class="fld"><span>${t('Icon')}</span>
+        <label class="fld"><span>${t('Icon')} ${hint(t('Address of an image. Leave empty = automatic.'))}</span>
           <input class="field" name="icon" value="${esc(s.icon)}" placeholder="${esc(s.iconDefault || 'https://…/logo.png')}" autocomplete="off" spellcheck="false">
-          <small>${t('Address of an image. Leave empty = automatic.')}</small></label>
+          </label>
         <label class="check"><input type="checkbox" name="autoStart"${s.autoStart ? ' checked' : ''}> ${t('Start automatically when the server starts')}</label>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Save')}</button><button class="btn" type="button" data-close>${t('Close')}</button></div>
@@ -2018,8 +2026,8 @@
     const draw = (focus) => {
       el.innerHTML = `
         <div class="form">
-          <label class="fld"><span>${t('Image')}</span><input class="field" data-cf-top="image" value="${esc(f.image)}" placeholder="${t('e.g. lscr.io/linuxserver/jellyfin:latest')}" spellcheck="false">
-            <small>${t('Want a fixed version? Put it after the colon, e.g. :10.10.7 instead of :latest.')}</small></label>
+          <label class="fld"><span>${t('Image')} ${hint(t('Want a fixed version? Put it after the colon, e.g. :10.10.7 instead of :latest.'))}</span><input class="field" data-cf-top="image" value="${esc(f.image)}" placeholder="${t('e.g. lscr.io/linuxserver/jellyfin:latest')}" spellcheck="false">
+            </label>
           <div class="fld-row">
             <label class="fld"><span>${t('Restart')}</span><select class="field" data-cf-top="restart">
               ${[['unless-stopped', 'Always, unless I stop it'], ['always', 'Always'], ['on-failure', 'Only after a failure'], ['no', 'Never'], ['', 'Not set']]
@@ -2299,8 +2307,7 @@
     const draw = () => {
       const unplaced = s.disks.filter((d) => !bayOf(d.key));
       if (!cfg.count && !edit) {
-        el.innerHTML = `<h3>${t('Drive bays')}</h3>
-          <p class="muted small">${t('Give your case its number of bays and drag your disks to the right place. That way you see right away which disk to replace.')}</p>
+        el.innerHTML = `<h3>${t('Drive bays')} ${hint(t('Give your case its number of bays and drag your disks to the right place. That way you see right away which disk to replace.'))}</h3>
           <div class="btn-row" style="margin-top:10px"><button class="btn sm" type="button" data-bay-edit>${t('Set up bays')}</button></div>`;
         return;
       }
@@ -2540,10 +2547,9 @@
     const role = new Map();
     const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
     body.innerHTML = `<form class="form" id="mixForm" novalidate>
-        <p class="muted small">${t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.')}</p>
-        <label class="fld"><span>${t('Pool name')}</span><input class="field" name="name" value="${esc(name0)}" maxlength="32" autocomplete="off" spellcheck="false">
-          <small>${t('Lowercase letters, digits, - or _. The pool is mounted at /name.')}</small></label>
-        <fieldset class="fld"><span>${t('Disks')}</span><ul class="rows mix-disks" id="mixDisks"></ul></fieldset>
+        <label class="fld"><span>${t('Pool name')} ${hint(t('Lowercase letters, digits, - or _. The pool is mounted at /name.'))}</span><input class="field" name="name" value="${esc(name0)}" maxlength="32" autocomplete="off" spellcheck="false">
+          </label>
+        <fieldset class="fld"><span>${t('Disks')} ${hint(t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.'))}</span><ul class="rows mix-disks" id="mixDisks"></ul></fieldset>
         <div class="pool-sum" id="mixSum" aria-live="polite"></div>
         <label class="check"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}</span></label>
         <p class="form-error" role="alert"></p>
@@ -2628,7 +2634,7 @@
     const compressionFld = poolBeginner ? '<input type="hidden" name="compression" value="lz4">' : `<label class="fld"><span>${t('Compression')}</span><select class="field" name="compression">
             <option value="lz4">${t('lz4 (recommended: fast and saves space)')}</option><option value="zstd">${t('zstd (saves more, a bit slower)')}</option><option value="off">${t('Off')}</option></select></label>`;
     const foldersCheck = `<label class="check${wiz ? ' check-compact' : ''}"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
-          ${wiz ? '' : `<span class="muted small">${t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.')}</span>`}</span></label>`;
+          ${wiz ? '' : `${hint(t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.'))}`}</span></label>`;
     body.innerHTML = wiz ? `
       <form class="form pool-form-wizard${poolBeginner ? ' pool-form-beginner' : ''}" id="poolForm" novalidate>
         <p class="muted small pool-wizard-hint">${t('Tap the disks you want to use together.')}</p>
@@ -3232,9 +3238,9 @@
 
   /* --- VM forms (create and edit) */
   function vmNameField(d, off = true) {
-    return `<label class="fld"><span>${t('Name')}</span>
+    return `<label class="fld"><span>${t('Name')} ${hint(t('Turn the VM off to change its name.'))}</span>
         <input class="field" name="name" required maxlength="63" autocomplete="off" value="${esc(d.name || '')}"${off ? '' : ' disabled'}>
-        ${off ? '' : `<small>${t('Turn the VM off to change its name.')}</small>`}</label>`;
+        ${off ? '' : ``}</label>`;
   }
   function vmSizeFields(d, opts, pinned = false) {
     const maxGb = Math.floor(opts.maxMemory / 1073741824);
@@ -3246,9 +3252,9 @@
         <label class="fld"><span>${t('Memory (GB)')}</span>
           <input class="field" name="memoryGb" type="number" min="0.25" max="${maxGb}" step="0.25" required value="${gb}">
           <small>${t('Your server has {size}.', { size: bytes(opts.maxMemory) })}</small></label>
-        ${d.diskGb !== undefined ? `<label class="fld"><span>${t('Disk (GB)')}</span>
+        ${d.diskGb !== undefined ? `<label class="fld"><span>${t('Disk (GB)')} ${hint(t('Grows as needed, does not take everything at once.'))}</span>
           <input class="field" name="diskGb" type="number" min="4" max="16384" step="1" required value="${esc(d.diskGb)}">
-          <small>${t('Grows as needed, does not take everything at once.')}</small></label>` : ''}
+          </label>` : ''}
       </div>`;
   }
   function vmDescAutoFields(d) {
@@ -3256,9 +3262,9 @@
         <textarea class="field" name="description" rows="2" maxlength="2000">${esc(d.description || '')}</textarea></label>
       <fieldset class="fld autostart">
         <label class="check"><input type="checkbox" name="autostart"${d.autostart ? ' checked' : ''}> ${t('Start automatically when the server starts')}</label>
-        <label class="fld"><span>${t('Start delay (seconds)')}</span>
+        <label class="fld"><span>${t('Start delay (seconds)')} ${hint(t('For example 60: the VM starts 1 minute after the server, so the server can start up calmly first.'))}</span>
           <input class="field" name="delay" type="number" min="0" max="3600" step="5" value="${esc(d.delay || 0)}"${d.autostart ? '' : ' disabled'}>
-          <small>${t('For example 60: the VM starts 1 minute after the server, so the server can start up calmly first.')}</small></label>
+          </label>
       </fieldset>`;
   }
   // List of networks: "network:<name>" (libvirt) or "bridge:<name>" (a bridge of the server).
@@ -3366,8 +3372,7 @@
             <button class="cf-del" type="button" data-nic-del="${i}" aria-label="${t('Remove')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join('')
         || `<p class="muted">${t('This VM has no network card, so it cannot reach the network.')}</p>`}</div>
         <div class="btn-row"><button class="btn sm" type="button" data-nic-add${st.nics.length >= 8 ? ' disabled' : ''}>+ ${t('Network card')}</button></div>
-        <p class="muted small">${t(VM_NET_HELP)} ${t('Create your own VM networks in')} <a href="#settings/vmnet">${t('Settings → VM networks')}</a>.</p>
-        <p class="muted small">${t('The MAC address decides which IP address your router gives the VM. Keep it if your router has a fixed address for the VM.')}</p>`;
+        <p class="muted small">${t(VM_NET_HELP)} ${t('Create your own VM networks in')} <a href="#settings/vmnet">${t('Settings → VM networks')}</a>. ${hint(t('The MAC address decides which IP address your router gives the VM. Keep it if your router has a fixed address for the VM.'))}</p>`;
     };
 
     /* Storage: disks, cd-rom and boot */
@@ -3385,18 +3390,17 @@
             <label class="disk-size"><input class="field" type="number" min="1" max="16384" step="1" data-add="${i}:sizeGb" value="${esc(k.sizeGb)}" aria-label="${t('Size in GB')}"> GB</label>
             <div class="disk-new-side"><select class="field cf-small" data-add="${i}:bus" aria-label="${t('Interface')}"><option value="virtio"${k.bus !== 'sata' ? ' selected' : ''}>virtio</option><option value="sata"${k.bus === 'sata' ? ' selected' : ''}>SATA</option></select>
             <button class="cf-del" type="button" data-add-del="${i}" aria-label="${t('Remove')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div>`).join('')}</div>
-        <div class="btn-row"><button class="btn sm" type="button" data-add-disk${st.add.length >= 4 ? ' disabled' : ''}>+ ${t('Disk')}</button></div>
-        <p class="muted small">${t('A disk can only grow. Afterwards, also grow the partition inside the VM. Detach removes the disk from the VM; the file stays.')}</p>
+        <div class="btn-row"><button class="btn sm" type="button" data-add-disk${st.add.length >= 4 ? ' disabled' : ''}>+ ${t('Disk')}</button>${hint(t('A disk can only grow. Afterwards, also grow the partition inside the VM. Detach removes the disk from the VM; the file stays.'))}</div>
         <div class="fld-row">
           <label class="fld"><span>${t('CD-ROM')}</span><select class="field" name="cdrom">
             <option value="">${t('Empty')}</option>
             ${cur && !isoKnown ? `<option value="=" selected>${esc(cur)}</option>` : ''}
             ${opts.isos.map((f) => `<option value="${esc(f.name)}"${f.name === curIso ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
             <small>${t('ISOs from {dir}', { dir: esc(opts.isoDir) })}</small></label>
-          <label class="fld"><span>${t('Boot from')}</span><select class="field" name="boot">
+          <label class="fld"><span>${t('Boot from')} ${hint(t('Choose the CD-ROM to install an operating system.'))}</span><select class="field" name="boot">
             <option value="disk"${d.boot !== 'cdrom' ? ' selected' : ''}>${t('Disk first')}</option>
             <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('CD-ROM first')}</option></select>
-            <small>${t('Choose the CD-ROM to install an operating system.')}</small></label>
+            </label>
         </div>`;
     };
 
@@ -3418,7 +3422,7 @@
             <span><b>${esc(p.name)}</b> <span class="muted small">${esc([t(p.kind), p.address, p.group != null ? t('group {n}', { n: p.group }) : null].filter(Boolean).join(' · '))}</span>
             ${busy(p) ? `<span class="small temp-warn">${t('Now in use by the server (driver {driver}).', { driver: esc(p.driver) })}${p.kind === 'Display' ? ' ' + t('If you pass it through, the server cannot use it while the VM runs (e.g. Ollama).') : ''}</span>` : ''}
             ${p.groupDevices.length ? `<span class="small muted">${t('Is in the same group as {list}. Pass them through together.', { list: esc(p.groupDevices.map((g) => g.name).join(', ')) })}</span>` : ''}</span></label>`).join('')}
-          ${pciMissing.map((k) => `<label class="check dev"><input type="checkbox" data-dev="${esc(k)}" checked><span><b>${esc(k.slice(4))}</b> <span class="muted small">${t('not found')}</span></span></label>`).join('')}</div>`}`;
+          ${pciMissing.map((k) => `<label class="check dev"><input type="checkbox" data-dev="${esc(k)}" checked><span><b>${esc(k.slice(4))}</b> ${hint(t('not found'))}</span></label>`).join('')}</div>`}`;
     };
 
     drawCpu(); drawNet(); drawStorage(); drawDevices();
@@ -3434,7 +3438,7 @@
       snapPane.innerHTML = `
         <p class="muted small">${t('A snapshot captures the VM as it is now. If you go back later, everything that changed afterwards is gone. Handy before an update. A snapshot is not a backup: it is on the same disk.')}</p>
         <div class="fld-row">
-          <label class="fld"><span>${t('Name')}</span><input class="field" data-snap="name" maxlength="48" spellcheck="false" autocomplete="off" placeholder="${t('e.g. before-update')}"><small>${t('Empty = the date and time.')}</small></label>
+          <label class="fld"><span>${t('Name')} ${hint(t('Empty = the date and time.'))}</span><input class="field" data-snap="name" maxlength="48" spellcheck="false" autocomplete="off" placeholder="${t('e.g. before-update')}"></label>
           <label class="fld"><span>${t('Description')} <em class="muted">${t('(optional)')}</em></span><input class="field" data-snap="description" maxlength="200"></label>
         </div>
         ${on ? `<label class="check"><input type="checkbox" data-snap="diskOnly"> ${t('Disks only (faster, without memory)')}</label>
@@ -3835,8 +3839,8 @@
       <label class="fld"><span>${t('Network')}</span><select class="field" name="__network">${opts.map(([v, label]) =>
         `<option value="${esc(v)}"${v === d.networkDefault ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
         <small id="storeNetHelp"></small></label>
-      <label class="fld" data-store-ip><span>${t('Fixed IP address (optional)')}</span><input class="field" name="__ip" spellcheck="false" autocomplete="off">
-        <small>${t('Empty = Docker picks an address.')}</small></label></div>`;
+      <label class="fld" data-store-ip><span>${t('Fixed IP address (optional)')} ${hint(t('Empty = Docker picks an address.'))}</span><input class="field" name="__ip" spellcheck="false" autocomplete="off">
+        </label></div>`;
   }
   function storeSections(fields, d) {
     return FIELD_GROUPS.map(([type, title]) => {
@@ -3849,13 +3853,13 @@
   // A path under `from` moves to `to` (the rest of the path stays): /fast/appdata/x/config → /tank/apps/x/config.
   const rebasePath = (p, from, to) => (from && to && (p === from || String(p).startsWith(from + '/')) ? to + String(p).slice(from.length) : p);
   function dataDirHtml(d, name) {
-    return `<label class="fld" data-datadir><span>${t('Data folder')}</span>
+    return `<label class="fld" data-datadir><span>${t('Data folder')} ${hint(t('Where the app keeps its settings and data. All folders below that are inside this folder move along. You can also change each folder separately.'))}</span>
       <input class="field" name="__datadir" list="appFolders" value="${esc(d.appdataDir + '/' + name)}" spellcheck="false" autocomplete="off">
       <datalist id="appFolders">${(d.folders || []).map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
-      <small>${t('Where the app keeps its settings and data. All folders below that are inside this folder move along. You can also change each folder separately.')}</small></label>`;
+      </label>`;
   }
   const advToggleHtml = () => `<label class="check adv-switch"><input type="checkbox" name="__adv">
-      <span><b>${t('Advanced')}</b> <span class="muted small">${t('Set every option yourself: image, restart, network, and add your own ports, folders, variables, devices and labels. Or edit the compose file as code.')}</span></span></label>`;
+      <span><b>${t('Advanced')}</b> ${hint(t('Set every option yourself: image, restart, network, and add your own ports, folders, variables, devices and labels. Or edit the compose file as code.'))}</span></label>`;
 
   function storeInstallFormInner(d, { basic, adv, ask, rest }) {
     const exp = experienceLevel();
@@ -4152,8 +4156,8 @@
             <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
           <label class="fld"><span>${t('Icon')} <em class="muted">${t('(optional)')}</em></span><input class="field" name="__icon" value="${esc(d.icon)}" placeholder="https://…" spellcheck="false" autocomplete="off"></label>
         </div>
-        <label class="fld"><span>${t('Web interface address (WebUI)')} <em class="muted">${t('(optional)')}</em></span><input class="field" name="__webui" value="${esc(d.webui)}" placeholder="http://[IP]:[PORT:8080]/" spellcheck="false" autocomplete="off">
-          <small>${t('[IP] becomes your server\'s address, [PORT:80] the server port linked to port 80 in the app.')}</small></label>
+        <label class="fld"><span>${t('Web interface address (WebUI)')} <em class="muted">${t('(optional)')}</em> ${hint(t('[IP] becomes your server\'s address, [PORT:80] the server port linked to port 80 in the app.'))}</span><input class="field" name="__webui" value="${esc(d.webui)}" placeholder="http://[IP]:[PORT:8080]/" spellcheck="false" autocomplete="off">
+          </label>
         ${dataDirHtml(d, d.name)}
         <div class="adv-bar"><div class="seg" role="radiogroup" aria-label="${t('View')}">
           <button type="button" role="radio" aria-checked="true" data-cmode="fields">${t('Fields')}</button>
@@ -4364,32 +4368,26 @@
     const theme = themeNow(), clock = S.config.clock || 'auto';
     const sample = (c) => new Date(2026, 0, 1, 14, 30).toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit', ...clockOpts(c) });
     el.innerHTML = `
-      <h2 class="pane-title">${t('Language')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
+      <h2 class="pane-title">${t('Language')} ${hint(t('Applies to everyone who uses MajaOS on this server.'))}</h2>
       ${langSelect()}
-      <h2 class="pane-title">${t('Experience level')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
+      <h2 class="pane-title">${t('Experience level')} ${hint(t('Applies to everyone who uses MajaOS on this server.'))}</h2>
       <div class="experience-choices" role="radiogroup" aria-label="${t('Experience level')}">${experienceChoiceHtml(S.config.experience)}</div>
-      <h2 class="pane-title">${t('Theme')}</h2>
-      <p class="muted small">${t('Applies to this device only.')}</p>
+      <h2 class="pane-title">${t('Theme')} ${hint(t('Applies to this device only.'))}</h2>
       <div class="choice-row" role="radiogroup" aria-label="${t('Theme')}">${[['auto', t('Automatic')], ['light', t('Light (morning mist)')], ['dark', t('Dark (evening)')]].map(([k, name]) => `
         <label class="choice"><input type="radio" name="theme" value="${k}"${k === theme ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}
       </div>
-      <h2 class="pane-title">${t('Time format')}</h2>
-      <p class="muted small">${t('Applies to everyone who uses MajaOS on this server.')}</p>
+      <h2 class="pane-title">${t('Time format')} ${hint(t('Applies to everyone who uses MajaOS on this server.'))}</h2>
       <div class="choice-row" role="radiogroup" aria-label="${t('Time format')}">${[['auto', t('Follow the language')], ['24', t('24-hour')], ['12', t('12-hour')]].map(([k, name]) => `
         <label class="choice"><input type="radio" name="clock" value="${k}"${k === clock ? ' checked' : ''}><span>${esc(name)} · ${esc(sample(k))}</span></label>`).join('')}
       </div>
-      <h2 class="pane-title">${t('Web interface port')}</h2>
-      <p class="muted small">${t('This is the port of MajaOS in your browser. 80 is the default, so you can open the server address without a port.')}</p>
+      <h2 class="pane-title">${t('Web interface port')} ${hint(t('This is the port of MajaOS in your browser. 80 is the default, so you can open the server address without a port.'))}</h2>
       <form class="inline-form" data-port-form>
         <input class="field sm" name="port" inputmode="numeric" value="${esc(S.config.port || 80)}" aria-label="${t('Web interface port')}" autocomplete="off">
         <button class="btn sm primary" type="submit">${t('Save')}</button>
       </form>
-      <div id="dtBox"><h2 class="pane-title">${t('Date and time')}</h2><p class="muted small">${t('Loading…')}</p></div>
+      <div id="dtBox"><h2 class="pane-title">${t('Date and time')} ${hint(t('Loading…'))}</h2></div>
       <div id="kbdBox"></div>
-      <h2 class="pane-title">${t('Welcome wizard')}</h2>
-      <p class="muted small">${t('Go through the basic settings again: account, name, time zone, storage and two-step verification.')}</p>
+      <h2 class="pane-title">${t('Welcome wizard')} ${hint(t('Go through the basic settings again: account, name, time zone, storage and two-step verification.'))}</h2>
       <div class="btn-row"><button class="btn" type="button" data-onb-open>${t('Open welcome wizard')}</button></div>`;
     el.onclick = (e) => { if (e.target.closest('[data-onb-open]')) { closeSettings(); openOnboarding(0); } };
     const portForm = $('[data-port-form]', el);
@@ -4442,8 +4440,7 @@
     try { k = await api.get('/api/keyboard'); } catch (e) { box.innerHTML = ''; return; }
     if (!box.isConnected || !k.editable) { box.innerHTML = ''; return; }
     const known = k.layouts.some((l) => l.id === k.layout);
-    box.innerHTML = `<h2 class="pane-title">${t('Keyboard')}</h2>
-      <p class="muted small">${t('The keyboard of a screen and keyboard connected to the server itself. Your own computer keeps its own.')}</p>
+    box.innerHTML = `<h2 class="pane-title">${t('Keyboard')} ${hint(t('The keyboard of a screen and keyboard connected to the server itself. Your own computer keeps its own.'))}</h2>
       <div class="form dt-form"><label class="fld"><span>${t('Keyboard on the server\'s screen')}</span>
         <select class="field" name="kbd">${known ? '' : `<option value="" selected>${esc(k.layout || t('Unknown'))}</option>`}${k.layouts.map((l) =>
           `<option value="${esc(l.id)}"${l.id === k.layout ? ' selected' : ''}>${esc(t(l.name))}</option>`).join('')}</select></label></div>`;
@@ -4525,8 +4522,7 @@
         <button class="btn" type="button" data-mcp-cancel>${t('Cancel')}</button>
       </form>
       <div data-mcp-rest${on ? '' : ' hidden'}>
-      <h2 class="pane-title">${t('Connect a program')}</h2>
-      <p class="muted small">${t('A program on your computer can manage this server: apps, virtual machines, files and everything else you can do here.')}</p>
+      <h2 class="pane-title">${t('Connect a program')} ${hint(t('A program on your computer can manage this server: apps, virtual machines, files and everything else you can do here.'))}</h2>
       <label class="fld" style="max-width:280px;margin:14px 0">
         <span>${t('Program')}</span>
         <select class="field" id="mcpClient" aria-label="${t('Program')}">${MCP_CLIENTS.map((c) => `<option value="${esc(c.id)}">${esc(c.nameKey ? t(c.nameKey) : c.name)}</option>`).join('')}</select>
@@ -4616,23 +4612,24 @@
       return `<select class="field sm" data-sp-pool="${k}" aria-label="${t('Pool')}">${d.pools.map((p) => `<option value="${esc(p.name)}"${cur && cur.name === p.name ? ' selected' : ''}>${esc(p.name)} · ${esc(t('{size} free', { size: bytes(p.free) }))}</option>`).join('')}</select>`;
     };
     const busy = d.migration && d.migration.state === 'running';
-    const row = (k, title, help, btn) => `<li>
-        <div><div class="row-title">${title}</div><div class="row-sub">${where(k)}</div><div class="row-sub">${help}</div></div>
+    // help: what is visible (e.g. which apps use it); tip: the explanation behind the ?.
+    const row = (k, title, help, btn, tip) => `<li>
+        <div><div class="row-title">${title}${tip ? ' ' + hint(tip) : ''}</div><div class="row-sub">${where(k)}</div>${help ? `<div class="row-sub">${help}</div>` : ''}</div>
         <div class="row-side btn-row">${d.pools.length ? select(k) + `<button class="btn sm${k === 'appdata' ? ' primary' : ''}" type="button" data-sp-save="${k}"${busy ? ' disabled' : ''}>${btn}</button>` : ''}
           <button class="btn sm" type="button" data-sp-own="${k}"${busy ? ' disabled' : ''}>${t('Existing folder…')}</button></div>
         <form class="inline-form user-edit" data-sp-form="${k}" hidden>
           <input class="field" name="path" spellcheck="false" autocomplete="off" value="${esc(d.paths[k] || '')}" placeholder="/tank/${esc(d.folders[k] || '')}" aria-label="${t('Folder on the server')}">
           <button class="btn sm primary" type="submit">${t('Use this folder')}</button>
-          <span class="muted small" style="flex-basis:100%">${t('Nothing moves: MajaOS uses this folder from now on.')}</span></form></li>`;
+          ${hint(t('Nothing moves: MajaOS uses this folder from now on.'))}</form></li>`;
     const appsText = d.apps.length ? t('Used by: {list}', { list: esc(d.apps.map((a) => a.project).join(', ')) }) : t('No apps yet.');
     el.innerHTML = `
-      <p class="muted small">${t('Where MajaOS keeps your data. A new pool gets the folders appdata, media, backups, vms and isos.')}</p>
+      ${paneHint(t('Where MajaOS keeps your data. A new pool gets the folders appdata, media, backups, vms and isos.'))}
       ${d.pools.length ? '' : `<p class="lead">${t('There is no pool yet. Create one in Storage.')} <button class="btn sm" type="button" data-open="storage">${t('Open storage')}</button></p>`}
       <ul class="rows">
         ${row('appdata', t('App data'), appsText + (d.manual.length ? ' · ' + t('Not moved (no compose file on the server): {list}', { list: esc(d.manual.join(', ')) }) : ''), t('Move'))}
-        ${row('vms', t('VM disks'), t('New VMs go here. Existing VM disks stay where they are.'), t('Save'))}
-        ${row('isos', t('ISOs and disk images'), t('Put installation ISOs here, e.g. through a shared folder.'), t('Save'))}
-        ${row('shares', t('Shared folders for Unraid apps'), t('/mnt/user/… from the app store becomes this folder.'), t('Save'))}
+        ${row('vms', t('VM disks'), '', t('Save'), t('New VMs go here. Existing VM disks stay where they are.'))}
+        ${row('isos', t('ISOs and disk images'), '', t('Save'), t('Put installation ISOs here, e.g. through a shared folder.'))}
+        ${row('shares', t('Shared folders for apps'), '', t('Save'), t('/mnt/user/… from the app store becomes this folder.'))}
       </ul>
       <div id="spMig"></div>`;
     const mig = $('#spMig', el);
@@ -4726,8 +4723,7 @@
       : `<span class="pill">${t('Set manually')}</span>`;
     const skew = Math.abs(offset) > 120000 ? `<p class="small" style="color:var(--warn)">${t('The clocks of the server and this computer differ by {n} minutes.', { n: Math.round(Math.abs(offset) / 60000) })}</p>` : '';
     box.innerHTML = `
-      <h2 class="pane-title">${t('Date and time')}</h2>
-      <p class="muted small">${t('The server\'s clock. Apps from the app store get the same time zone (TZ).')}</p>
+      <h2 class="pane-title">${t('Date and time')} ${hint(t('The server\'s clock. Apps from the app store get the same time zone (TZ).'))}</h2>
       <div class="dt-now"><div><div class="dt-clock" id="dtClock"></div><div class="muted small" id="dtDate"></div></div>${sync}</div>
       ${skew}
       <form class="form dt-form" id="dtForm">
@@ -4736,10 +4732,9 @@
         ${browserTz && browserTz !== d.timezone && d.timezones.includes(browserTz) ? `<p class="small" style="margin-top:-4px"><button class="link-btn" type="button" data-tz="${esc(browserTz)}">${t('Use {zone}, the time zone of this computer', { zone: esc(browserTz.replace(/_/g, ' ')) })}</button></p>` : ''}
         <label class="check"><input type="checkbox" name="ntp"${d.ntp ? ' checked' : ''}${d.editable ? '' : ' disabled'}> ${t('Set time automatically over the internet (NTP)')}</label>
         <div data-dt="ntp"${d.ntp ? '' : ' hidden'}>
-          <label class="fld"><span>${t('Time servers')}</span>
+          <label class="fld"><span>${t('Time servers')} ${hint(t('Leave empty for the Debian default. Or use e.g. be.pool.ntp.org or your router\'s address. Separate multiple servers with a space.'))}</span>
             <input class="field" name="servers" value="${esc(d.servers.join(' '))}" spellcheck="false" autocomplete="off"
               placeholder="${esc(d.defaultServers.length ? t('Default: {list}', { list: d.defaultServers.slice(0, 2).join(', ') + (d.defaultServers.length > 2 ? ', …' : '') }) : t('Debian default'))}"></label>
-          <p class="muted small">${t('Leave empty for the Debian default. Or use e.g. be.pool.ntp.org or your router\'s address. Separate multiple servers with a space.')}</p>
         </div>
         <div data-dt="manual"${d.ntp ? ' hidden' : ''}>
           <label class="fld"><span>${t('Date and time')}</span>
@@ -4819,13 +4814,13 @@
             <option value="static"${c && c.mode === 'static' ? ' selected' : ''}>${t('Fixed address')}</option></select></label>
         </div>
         <div class="fld-row" data-static>
-          <label class="fld"><span>${t('IP address and netmask')}</span><input class="field" name="address" value="${esc(c ? c.address : '')}" placeholder="192.168.1.10/24" spellcheck="false">
-            <small>${t('/24 means netmask 255.255.255.0, which fits most home networks.')}</small></label>
-          <label class="fld"><span>${t('Gateway')}</span><input class="field" name="gateway" value="${esc(c ? c.gateway : '')}" placeholder="192.168.1.1" spellcheck="false">
-            <small>${t('Usually the address of your router.')}</small></label>
+          <label class="fld"><span>${t('IP address and netmask')} ${hint(t('/24 means netmask 255.255.255.0, which fits most home networks.'))}</span><input class="field" name="address" value="${esc(c ? c.address : '')}" placeholder="192.168.1.10/24" spellcheck="false">
+            </label>
+          <label class="fld"><span>${t('Gateway')} ${hint(t('Usually the address of your router.'))}</span><input class="field" name="gateway" value="${esc(c ? c.gateway : '')}" placeholder="192.168.1.1" spellcheck="false">
+            </label>
         </div>
-        <label class="fld" data-static><span>${t('DNS servers')}</span><input class="field" name="dns" value="${esc(c ? c.dns.join(', ') : '')}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false">
-          <small>${t('Separated by commas.')}</small></label>
+        <label class="fld" data-static><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span><input class="field" name="dns" value="${esc(c ? c.dns.join(', ') : '')}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false">
+          </label>
         <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Create bridge br0 for VMs')}</label>
         <p class="muted small" style="margin-top:-6px">${t('Needed to give VMs (such as Home Assistant) their own address in your home network. Then set VM_NETWORK=bridge=br0.')}</p>
         <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
@@ -4930,7 +4925,7 @@
           : `<button class="btn sm danger" type="button" data-net-del="${esc(n.name)}"${n.containers.length ? ` disabled title="${t('Move the apps out of this network first.')}"` : ''}>${t('Remove')}</button>`}</div></li>`;
     };
     el.innerHTML = `
-      <p class="muted small">${t('Choose a network in an app\'s settings (compose form) or when installing from the app store.')}</p>
+      ${paneHint(t('Choose a network in an app\'s settings (compose form) or when installing from the app store.'))}
       <h2 class="pane-title">${t('Custom networks')}</h2>
       <ul class="rows">${own.map(row).join('') || `<li><span class="muted">${t('No custom networks yet. Create one below.')}</span></li>`}</ul>
       <h2 class="pane-title">${t('Create network')}</h2>
@@ -4943,17 +4938,17 @@
             <option value="ipvlan"${d.parents.length ? '' : ' disabled'}>${t('ipvlan (own address, same MAC address)')}</option></select></label>
         </div>
         <p class="muted small" id="dnHelp"></p>
-        <label class="fld" data-own><span>${t('Network card')}</span><select class="field" name="parent">${d.parents.map((p) =>
+        <label class="fld" data-own><span>${t('Network card')} ${hint(t('The network card (or bridge br0) connected to your home network.'))}</span><select class="field" name="parent">${d.parents.map((p) =>
           `<option value="${esc(p.name)}"${lan && lan.name === p.name ? ' selected' : ''}>${esc(p.name + (p.subnet ? ' · ' + p.subnet : ''))}</option>`).join('')}</select>
-          <small>${t('The network card (or bridge br0) connected to your home network.')}</small></label>
+          </label>
         <div class="fld-row">
           <label class="fld"><span>${t('Subnet')}</span><input class="field" name="subnet" spellcheck="false" autocomplete="off">
             <small data-bridge>${t('Empty = Docker picks one.')}</small><small data-own>${t('The subnet of your home network.')}</small></label>
           <label class="fld"><span>${t('Gateway')}</span><input class="field" name="gateway" spellcheck="false" autocomplete="off">
             <small data-bridge>${t('Empty = Docker picks one.')}</small><small data-own>${t('Usually the address of your router.')}</small></label>
         </div>
-        <label class="fld" data-own><span>${t('IP range for apps')}</span><input class="field" name="ipRange" spellcheck="false" autocomplete="off">
-          <small>${t('Docker hands out addresses from this range. Pick a part your router does not hand out via DHCP, otherwise addresses can clash.')}</small></label>
+        <label class="fld" data-own><span>${t('IP range for apps')} ${hint(t('Docker hands out addresses from this range. Pick a part your router does not hand out via DHCP, otherwise addresses can clash.'))}</span><input class="field" name="ipRange" spellcheck="false" autocomplete="off">
+          </label>
         <label class="check" data-bridge><input type="checkbox" name="internal"> ${t('No internet (only traffic between the apps in this network)')}</label>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Create')}</button></div>
@@ -5012,7 +5007,7 @@
     let suggest = '';
     for (let i = 150; i < 250 && !suggest; i++) { const c = '192.168.' + i + '.0/24'; if (!d.networks.some((n) => n.subnet === c)) suggest = c; }
     el.innerHTML = `
-      <p class="muted small">${t('Choose a VM\'s network in Edit → Network, or when creating it.')}</p>
+      ${paneHint(t('Choose a VM\'s network in Edit → Network, or when creating it.'))}
       <h2 class="pane-title">${t('Home network (bridges)')}</h2>
       <ul class="rows">${d.bridges.map((b) => `<li>
           <div><div class="row-title">${esc(b.name)} <span class="pill ${b.up ? 'ok' : ''}">${t('Bridge')}</span></div>
@@ -5036,8 +5031,8 @@
             <option value="nat">${t('NAT (with internet)')}</option><option value="isolated">${t('Isolated (no internet)')}</option></select></label>
         </div>
         <p class="muted small" id="vnHelp"></p>
-        <label class="fld"><span>${t('Subnet')}</span><input class="field" name="subnet" value="${esc(suggest)}" spellcheck="false" autocomplete="off">
-          <small>${t('A private subnet that is not used anywhere yet. The server gets the first address.')}</small></label>
+        <label class="fld"><span>${t('Subnet')} ${hint(t('A private subnet that is not used anywhere yet. The server gets the first address.'))}</span><input class="field" name="subnet" value="${esc(suggest)}" spellcheck="false" autocomplete="off">
+          </label>
         <label class="check"><input type="checkbox" name="dhcp" checked> ${t("Hand out addresses with DHCP (VMs get an address automatically)")}</label>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Create')}</button></div>
@@ -5110,8 +5105,7 @@
     const host = d.hostname;
     el.innerHTML = `
       ${d.running ? '' : `<p class="lead temp-warn">${t('Samba is not running. Start it on the server with: sudo systemctl start smbd')}</p>`}
-      <p class="muted small">${t('Windows can open an older copy of a file: right-click it, then Properties, then Previous Versions. A snapshot is taken every hour and kept for a day, then one per day for 2 weeks and one per week for 8 weeks.')}</p>
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Folders')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Folders')} ${hint(t('Windows can open an older copy of a file: right-click it, then Properties, then Previous Versions. A snapshot is taken every hour and kept for a day, then one per day for 2 weeks and one per week for 8 weeks.'))}</h2>
         <button class="btn sm primary" type="button" data-share-new>+ ${t('Shared folder')}</button></div>
       <ul class="rows">${d.shares.map((sh) => `<li>
           <div><div class="row-title">${esc(sh.name)}</div>
@@ -5158,8 +5152,8 @@
         <fieldset class="fld"><span>${t('Folder')}</span><div class="radio-row">
           <label class="check"><input type="radio" name="where" value="new"${pools.length ? ' checked' : ' disabled'}> ${t('New folder on a pool')}</label>
           <label class="check"><input type="radio" name="where" value="existing"${pools.length ? '' : ' checked'}> ${t('Existing folder')}</label></div></fieldset>`}
-        <label class="fld" data-where="new"><span>${t('Pool')}</span><select class="field" name="parent">${pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.mountpoint)})</option>`).join('')}</select>
-          <small>${t('MajaOS creates its own dataset, e.g. tank/media, owned by the app user.')}</small></label>
+        <label class="fld" data-where="new"><span>${t('Pool')} ${hint(t('MajaOS creates its own dataset, e.g. tank/media, owned by the app user.'))}</span><select class="field" name="parent">${pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.mountpoint)})</option>`).join('')}</select>
+          </label>
         <label class="fld" data-where="existing"><span>${t('Folder on the server')}</span><input class="field" name="path" list="shareRoots" value="${esc(sh.path)}" spellcheck="false" autocomplete="off" placeholder="/tank/media">
           <datalist id="shareRoots">${d.roots.map((r) => `<option value="${esc(r.mountpoint)}">`).join('')}</datalist>
           <small>${t('A folder on one of your pools.')}${d.appUser ? ' ' + t('Files are written as {user}, like your Docker apps.', { user: esc(d.appUser) }) : ''}</small></label>
@@ -5836,9 +5830,8 @@
         ${j.running ? `<div class="row-bar">${bkProgress(j.running)}</div>` : ''}</li>`;
     };
     box.innerHTML = `
-      <p class="lead">${t('Put files from your NAS in the cloud (Google Drive, OneDrive, Dropbox, S3) or on another NAS, on a schedule. Or fetch them from there.')}</p>
       ${d.remotes.length ? '' : `<div class="notice">${t('First create a connection to your cloud or your other NAS.')}<div><button class="btn sm primary" type="button" data-bktab="remotes">${t('Add connection')}</button></div></div>`}
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Tasks')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Tasks')} ${hint(t('Put files from your NAS in the cloud (Google Drive, OneDrive, Dropbox, S3) or on another NAS, on a schedule. Or fetch them from there.'))}</h2>
         <button class="btn sm primary" type="button" data-bk-new${d.remotes.length ? '' : ' disabled'}>+ ${t('Task')}</button></div>
       <ul class="rows bk-rows" id="bkJobList">${d.jobs.map(row).join('') || `<li><span class="muted">${t('No tasks yet.')}</span></li>`}</ul>`;
     const job = (id) => d.jobs.find((j) => j.id === id);
@@ -5875,8 +5868,8 @@
         <label class="fld"><span>${t('Folder on the NAS')}</span><input class="field" name="localPath" list="bkFolders" value="${esc(j.localPath)}" spellcheck="false" autocomplete="off" placeholder="/tank/photos">
           <datalist id="bkFolders">${d.folders.map((f) => `<option value="${esc(f)}">`).join('')}</datalist><small data-local-help></small></label>
         <label class="fld"><span>${t('Connection')}</span><select class="field" name="remote">${d.remotes.map((r) => opt(r.name, j.remote, r.name + ' (' + tr(r.label) + ')')).join('')}</select></label>
-        <label class="fld"><span>${t('Folder on the destination')}</span><span class="inline-form"><input class="field" name="remotePath" value="${esc(j.remotePath)}" spellcheck="false" autocomplete="off" placeholder="${t('e.g. Backups/Freddy')}">
-          <button class="btn" type="button" data-browse>${t('Browse')}</button></span><small>${t('Empty = the top folder.')}</small></label>
+        <label class="fld"><span>${t('Folder on the destination')} ${hint(t('Empty = the top folder.'))}</span><span class="inline-form"><input class="field" name="remotePath" value="${esc(j.remotePath)}" spellcheck="false" autocomplete="off" placeholder="${t('e.g. Backups/Freddy')}">
+          <button class="btn" type="button" data-browse>${t('Browse')}</button></span></label>
         <div class="bk-browse" id="bkBrowse" hidden></div>
         <fieldset class="fld"><span>${t('How')}</span><div class="form" style="gap:8px">
           ${radio('mode', 'copy', j.mode, t('Copy'), t('Transfer new and changed files. What you delete stays on the other side.'))}
@@ -5892,18 +5885,17 @@
           <div class="form" data-encrypt hidden>
             <p class="muted small">${t('Files and folder names are encrypted before they leave the NAS. Without this password nobody gets them back, not even you. Keep it safe, e.g. in your password manager.')}</p>
             <div class="fld-row">
-              <label class="fld"><span>${t('Password')}</span><input class="field" type="password" name="password" autocomplete="new-password"><small>${t('At least 10 characters.')}</small></label>
+              <label class="fld"><span>${t('Password')} ${hint(t('At least 10 characters.'))}</span><input class="field" type="password" name="password" autocomplete="new-password"></label>
               <label class="fld"><span>${t('Repeat password')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label></div></div>`}
-          <label class="check"><input type="checkbox" name="versions"${j.versions ? ' checked' : ''}> ${t('Keep old versions')}</label>
+          <label class="check"><input type="checkbox" name="versions"${j.versions ? ' checked' : ''}> ${t('Keep old versions')} ${hint(t('What gets overwritten or deleted first goes to a folder next to it ("… (old versions)"). After the number of days below it disappears.'))}</label>
           <div class="form" data-versions hidden>
-            <p class="muted small">${t('What gets overwritten or deleted first goes to a folder next to it ("… (old versions)"). After the number of days below it disappears.')}</p>
             <label class="fld" style="max-width:220px"><span>${t('Days to keep')}</span><input class="field" type="number" name="keepDays" min="1" max="3650" value="${esc(j.keepDays)}"></label></div>
         </div>
         <details class="adv"><summary>${t('Advanced')}</summary><div class="form" style="margin-top:10px">
-          <label class="fld"><span>${t('Exclude')}</span><textarea class="field" name="excludes" rows="3" spellcheck="false" placeholder="*.tmp&#10;.DS_Store&#10;cache/**">${esc((j.excludes || []).join('\n'))}</textarea>
-            <small>${t('One pattern per line, as in rclone.')}</small></label>
-          <label class="fld" style="max-width:260px"><span>${t('Maximum speed')}</span><input class="field" name="bwlimit" value="${esc(j.bwlimit)}" placeholder="${t('e.g. 10M')}">
-            <small>${t('In bytes per second, with K, M or G. Empty = as fast as possible.')}</small></label></div></details>
+          <label class="fld"><span>${t('Exclude')} ${hint(t('One pattern per line, as in rclone.'))}</span><textarea class="field" name="excludes" rows="3" spellcheck="false" placeholder="*.tmp&#10;.DS_Store&#10;cache/**">${esc((j.excludes || []).join('\n'))}</textarea>
+            </label>
+          <label class="fld" style="max-width:260px"><span>${t('Maximum speed')} ${hint(t('In bytes per second, with K, M or G. Empty = as fast as possible.'))}</span><input class="field" name="bwlimit" value="${esc(j.bwlimit)}" placeholder="${t('e.g. 10M')}">
+            </label></div></details>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t(job ? 'Save' : 'Create')}</button><button class="btn" type="button" data-cancel>${t('Cancel')}</button></div>
       </form>
@@ -6068,8 +6060,7 @@
         ${j.running ? `<div class="row-bar">${sysProgress(j.running)}</div>` : ''}</li>`;
     };
     box.innerHTML = `
-      <p class="lead">${t('A copy of your apps (settings and data) and VMs (disks and settings) in a folder on the NAS. Want them outside the house too? Create a task for that folder under Sync.')}</p>
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Tasks')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Tasks')} ${hint(t('A copy of your apps (settings and data) and VMs (disks and settings) in a folder on the NAS. Want them outside the house too? Create a task for that folder under Sync.'))}</h2>
         <button class="btn sm primary" type="button" data-sys-new>+ ${t('Task')}</button></div>
       <ul class="rows bk-rows" id="sysList">${s.jobs.map(row).join('') || `<li><span class="muted">${t('No tasks yet.')}</span></li>`}</ul>`;
     const job = (id) => s.jobs.find((j) => j.id === id);
@@ -6109,9 +6100,9 @@
       <h2 class="pane-title">${job ? t('Edit {name}', { name: esc(job.name) }) : t('New task')}</h2>
       <form class="form" id="sysForm" novalidate>
         <label class="fld"><span>${t('Name')}</span><input class="field" name="name" maxlength="60" value="${esc(j.name)}" autocomplete="off" placeholder="${t('e.g. Apps and Home Assistant')}"></label>
-        <label class="fld"><span>${t('Folder on the NAS')}</span><input class="field" name="dest" list="sysFolders" value="${esc(j.dest)}" spellcheck="false" autocomplete="off" placeholder="/tank/backups/systeem">
+        <label class="fld"><span>${t('Folder on the NAS')} ${hint(t('Each time a folder with the date is created here. Preferably choose a different pool than that of your apps and VMs.'))}</span><input class="field" name="dest" list="sysFolders" value="${esc(j.dest)}" spellcheck="false" autocomplete="off" placeholder="/tank/backups/systeem">
           <datalist id="sysFolders">${s.folders.map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
-          <small>${t('Each time a folder with the date is created here. Preferably choose a different pool than that of your apps and VMs.')}</small></label>
+          </label>
         <fieldset class="fld"><span>${t('Apps')}</span>
           ${s.apps.length ? `<div class="form" style="gap:6px">${s.apps.map(appRow).join('')}</div>` : `<span class="muted small">${t('No apps found.')}</span>`}
           <small>${t('Included: the compose files, folders in the app data and Docker volumes. Other mounted folders, such as your media, are not: keep those safe with Sync.')}</small></fieldset>
@@ -6270,10 +6261,9 @@
     const canAdd = d.pools.length && (k.enabled || d.samba);
     box.innerHTML = `
       ${bk.secret ? secretBox(bk.secret) : ''}
-      <p class="lead">${t('Backups of your PCs, Macs and phones on the NAS. With the Kopia backup app (Windows, Mac and Linux), or with a shared folder of their own: for Time Machine on a Mac and apps on your phone.')}</p>
       ${kopiaCard(d)}
       ${d.samba ? '' : `<div class="notice warn">${t('Samba is not installed yet. Run install.sh again, or on the server: sudo apt install samba')}</div>`}
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Devices', null, 'backup')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Devices', null, 'backup')} ${hint(t('Backups of your PCs, Macs and phones on the NAS. With the Kopia backup app (Windows, Mac and Linux), or with a shared folder of their own: for Time Machine on a Mac and apps on your phone.'))}</h2>
         <button class="btn sm primary" type="button" data-dev-new${canAdd ? '' : ` disabled title="${t('Create a pool first.')}"`}>+ ${t('Device', null, 'backup')}</button></div>
       <ul class="rows bk-rows">${d.devices.map(row).join('') || `<li><span class="muted">${t(d.pools.length ? 'No devices yet.' : 'No devices yet. First create a pool under Storage.')}</span></li>`}</ul>`;
     const on = $('#kopiaOn', box);
@@ -6345,12 +6335,12 @@
             <label class="fld"><span>${t('Maximum size (GB)')}</span><input class="field" type="number" name="quotaGb" min="1" step="1" placeholder="${t('no limit')}"></label>
           </div>
           <p class="muted small" style="margin-top:-6px" data-quota-help></p>
-          <label class="fld"><span>${t('Who makes the backups?')}</span><select class="field" name="user">${d.users.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}
+          <label class="fld"><span>${t('Who makes the backups?')} ${hint(t('The device signs in to the NAS with this user. Only that user can access the backups.'))}</span><select class="field" name="user">${d.users.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}
             <option value="">${t('New user…')}</option></select>
-            <small>${t('The device signs in to the NAS with this user. Only that user can access the backups.')}</small></label>
+            </label>
           <div class="fld-row" data-new-user hidden>
             <label class="fld"><span>${t('User name')}</span><input class="field" name="newName" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. lisa')}"></label>
-            <label class="fld"><span>${t('Password')}</span><input class="field" type="password" name="newPw" autocomplete="new-password"><small>${t('At least 8 characters.')}</small></label>
+            <label class="fld"><span>${t('Password')} ${hint(t('At least 8 characters.'))}</span><input class="field" type="password" name="newPw" autocomplete="new-password"></label>
             <label class="fld"><span>${t('Repeat password')}</span><input class="field" type="password" name="newPw2" autocomplete="new-password"></label>
           </div>
         </div>
@@ -6402,8 +6392,7 @@
   function bkRemotes(box, d, el) {
     if (!d.installed) { bkJobs(box, d, el); return; }
     box.innerHTML = `
-      <p class="lead">${t('A connection is a place outside this NAS: your cloud or another NAS. Passwords and keys stay on the server.')}</p>
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Connections')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Connections')} ${hint(t('A connection is a place outside this NAS: your cloud or another NAS. Passwords and keys stay on the server.'))}</h2>
         <button class="btn sm primary" type="button" data-rm-new>+ ${t('Connection')}</button></div>
       <ul class="rows bk-rows">${d.remotes.map((r) => `<li>
           <div><div class="row-title">${esc(r.name)}</div>
@@ -6468,8 +6457,8 @@
       <h2 class="pane-title">${reconnect ? t('Sign in again: {name}', { name: esc(reconnect) }) : esc(label)}</h2>
       <form class="form" id="bkRmForm" novalidate>
         ${reconnect ? `<input type="hidden" name="name" value="${esc(name)}"><p class="lead">${t('The tasks keep using this connection. Sign in with the same account, otherwise the files end up somewhere else.')}</p>` : `
-        <label class="fld"><span>${t('Connection name')}</span><input class="field" name="name" maxlength="32" value="${esc(name)}" autocomplete="off" spellcheck="false">
-          <small>${t('Letters, digits, - and _. This is how you\'ll see it in the tasks.')}</small></label>`}
+        <label class="fld"><span>${t('Connection name')} ${hint(t('Letters, digits, - and _. This is how you\'ll see it in the tasks.'))}</span><input class="field" name="name" maxlength="32" value="${esc(name)}" autocomplete="off" spellcheck="false">
+          </label>`}
         ${p.oauth ? `
         <ol class="bk-steps">
           <li>${t('Click Sign in. A new {label} tab opens.', { label: esc(label) })}
@@ -6578,8 +6567,7 @@
     box.innerHTML = `
       ${d.admin ? `<div class="notice"><div><b>${esc(d.admin)}</b> <span class="pill">${t('Administrator')}</span></div>
         <span class="muted small">${t('Signs in to this dashboard and manages everything. You change the password and two-step verification under {link}.', { link: `<a href="#settings/security">${t('Security')}</a>` })}</span></div>` : ''}
-      <p class="muted small">${t('With these users and their password you sign in to a shared folder and make backups. They can\'t sign in to the server itself or to this dashboard.')}</p>
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Users')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Users')} ${hint(t('With these users and their password you sign in to a shared folder and make backups. They can\'t sign in to the server itself or to this dashboard.'))}</h2>
         <button class="btn sm primary" type="button" data-unew>+ ${t('User')}</button></div>
       <div id="userNew"></div>
       <ul class="rows">${d.users.map(row).join('') || `<li><span class="muted">${t('No users yet.')}</span></li>`}</ul>`;
@@ -6630,9 +6618,9 @@
   function newUserForm(box, d, el) {
     box.innerHTML = `<form class="form" id="userForm" novalidate style="margin-bottom:14px">
         <div class="fld-row">
-          <label class="fld"><span>${t('User name')}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. lisa')}">
-            <small>${t('Lowercase letters, digits, - and _.')}</small></label>
-          <label class="fld"><span>${t('Password')}</span><input class="field" type="password" name="password" autocomplete="new-password"><small>${t('At least 8 characters.')}</small></label>
+          <label class="fld"><span>${t('User name')} ${hint(t('Lowercase letters, digits, - and _.'))}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. lisa')}">
+            </label>
+          <label class="fld"><span>${t('Password')} ${hint(t('At least 8 characters.'))}</span><input class="field" type="password" name="password" autocomplete="new-password"></label>
           <label class="fld"><span>${t('Repeat password')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label>
         </div>
         ${d.groups.length ? `<fieldset class="fld"><span>${t('Groups')}</span><div class="check-grid">${d.groups.map((g) => `<label class="check"><input type="checkbox" name="g:${esc(g.name)}"> ${esc(g.name)}</label>`).join('')}</div></fieldset>` : ''}
@@ -6657,8 +6645,7 @@
     if (opts.editGroup !== undefined) return groupForm(box, d, el, opts.editGroup);
     const rightsOf = (g) => d.shares.filter((sh) => sh.groups && sh.groups[g.name]).map((sh) => sh.name + ' (' + t(sh.groups[g.name] === 'rw' ? 'write' : 'read') + ')');
     box.innerHTML = `
-      <p class="muted small">${t('A group gives all its members the same permissions on shared folders, e.g. Family may read media, Parents may write documents. Someone can be in several groups; the highest permission counts.')}</p>
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Groups')}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Groups')} ${hint(t('A group gives all its members the same permissions on shared folders, e.g. Family may read media, Parents may write documents. Someone can be in several groups; the highest permission counts.'))}</h2>
         <button class="btn sm primary" type="button" data-gnew${d.users.length ? '' : ` disabled title="${t('Create a user first.')}"`}>+ ${t('Group')}</button></div>
       <ul class="rows">${d.groups.map((g) => `<li>
           <div><div class="row-title">${esc(g.name)}${g.comment ? ` <span class="muted small">${esc(g.comment)}</span>` : ''}</div>
@@ -6685,8 +6672,8 @@
     box.innerHTML = `<h2 class="pane-title">${editName ? t('Edit {name}', { name: esc(editName) }) : t('New group')}</h2>
       <form class="form" id="groupForm" novalidate>
         <div class="fld-row">
-          <label class="fld"><span>${t('Name')}</span><input class="field" name="name" maxlength="32" value="${esc(g.name)}" autocomplete="off" spellcheck="false" placeholder="${t('e.g. Family')}">
-            <small>${t('Letters, digits, -, _ and .')}</small></label>
+          <label class="fld"><span>${t('Name')} ${hint(t('Letters, digits, -, _ and .'))}</span><input class="field" name="name" maxlength="32" value="${esc(g.name)}" autocomplete="off" spellcheck="false" placeholder="${t('e.g. Family')}">
+            </label>
           <label class="fld"><span>${t('Description')} <em class="muted">${t('(optional)')}</em></span><input class="field" name="comment" maxlength="100" value="${esc(g.comment)}"></label>
         </div>
         <fieldset class="fld"><span>${t('Members')}</span>
@@ -6736,15 +6723,13 @@
         <p class="form-error" role="alert" data-pw-err></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Change password')}</button></div></form>` : ''}
       <div id="httpsBox"></div>
-      <h2 class="pane-title">${t('Terminal on the server')}</h2>
-      <p class="muted small">${t('The terminal icon at the top right opens a root shell on the server. Whoever can open the terminal can do anything on the server: delete files, format disks, read passwords.')}</p>
+      <h2 class="pane-title">${t('Terminal on the server')} ${hint(t('The terminal icon at the top right opens a root shell on the server. Whoever can open the terminal can do anything on the server: delete files, format disks, read passwords.'))}</h2>
       <div class="form" style="margin-top:12px">
         <label class="check"><input type="checkbox" name="terminal"${cur.terminal ? ' checked' : ''}> ${t('Allow the terminal on the server')}</label>
         <label class="check"><input type="checkbox" name="terminalPassword"${cur.terminalPassword ? ' checked' : ''}${cur.terminal ? '' : ' disabled'}> ${t('Ask for the password again when opening the terminal')}</label>
         <p class="muted small" style="margin-top:-4px">${t('Recommended. That way someone using a signed-in browser (e.g. a shared PC) cannot run root commands right away.')}</p>
       </div>
-      <h2 class="pane-title">${t('SSH')}</h2>
-      <p class="muted small">${t('SSH lets someone sign in to this server from another computer. Leave it off unless you need it.')}</p>
+      <h2 class="pane-title">${t('SSH')} ${hint(t('SSH lets someone sign in to this server from another computer. Leave it off unless you need it.'))}</h2>
       <div class="form" style="margin-top:12px">
         <label class="check"><input type="checkbox" name="ssh"${cur.ssh && (cur.sshState || {}).installed !== false ? ' checked' : ''}${(cur.sshState || {}).installed === false ? ' disabled' : ''}> ${t('Allow SSH')}</label>
         <p class="muted small" style="margin-top:-4px">${esc(sshNote(cur))}</p>
@@ -6820,8 +6805,7 @@
       t('Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate.'),
       t('Firefox has its own list: Settings → Privacy & Security → View Certificates → Authorities → Import.'),
     ];
-    box.innerHTML = `<h2 class="pane-title">${t('HTTPS')}</h2>
-      <p class="muted small">${t('The dashboard uses an encrypted connection with its own certificate. Browsers warn about it until you trust that certificate once on each device.')}</p>
+    box.innerHTML = `<h2 class="pane-title">${t('HTTPS')} ${hint(t('The dashboard uses an encrypted connection with its own certificate. Browsers warn about it until you trust that certificate once on each device.'))}</h2>
       <div class="form" style="margin-top:12px">
         <label class="check"><input type="checkbox" name="https"${on ? ' checked' : ''}> ${t('Use HTTPS')}</label>
         <p class="muted small" style="margin-top:-4px">${esc(state)}</p>
@@ -6839,8 +6823,7 @@
     let st;
     try { st = await api.get('/api/mfa'); } catch (e) { box.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; return; }
     if (!box.isConnected) return;
-    const head = box.dataset.noHead ? '' : `<h2 class="pane-title">${t('Two-step verification')}</h2>
-      <p class="muted small">${t('Besides your password, MajaOS then asks for a 6-digit code from an authenticator app on your phone (e.g. Google Authenticator, Microsoft Authenticator, 1Password or Aegis). Someone who only knows your password can\'t sign in.')}</p>`;
+    const head = box.dataset.noHead ? '' : `<h2 class="pane-title">${t('Two-step verification')} ${hint(t('Besides your password, MajaOS then asks for a 6-digit code from an authenticator app on your phone (e.g. Google Authenticator, Microsoft Authenticator, 1Password or Aegis). Someone who only knows your password can\'t sign in.'))}</h2>`;
     if (!st.available) { box.innerHTML = head + `<p class="muted small">${t('Set a password (APP_PASSWORD) first to use two-step verification.')}</p>`; return; }
     const demoHint = S.config.demo ? `<p class="muted small">${t('Demo: the password is {pw}.', { pw: '<b>demo</b>' })}</p>` : '';
     const since = st.since ? new Date(st.since).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -7091,7 +7074,7 @@ git pull
 sudo ./install.sh</pre></div>`}` : '') +
       (u.installed ? `<h2 class="pane-title">${t('Installed version')}</h2>${notes(u.installed)}` : '') +
       (older.length ? `<details class="upd-older"><summary>${t('Earlier versions')}</summary>${older.map(notes).join('')}</details>` : '') + `
-      <section id="debianBox" class="debian-box"><h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted">${t('Loading…')}</p></section>
+      <section id="debianBox" class="debian-box"><h2 class="pane-title">${t('Debian (the system)')} ${hint(t('Loading…'))}</h2></section>
       <h2 class="pane-title">${t('Settings')}</h2>
       <div class="form">
         <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Check for updates automatically (every 12 hours)')}</label>
@@ -8466,6 +8449,39 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (cfg.needsLogin) return showLogin();
     startDesk();
   }
+  // The tooltip of the ? buttons (hint()): one element, placed in the open window (a <dialog> lies above everything else).
+  (function hintTips() {
+    const tip = document.createElement('div');
+    tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
+    let owner = null;
+    const show = (el) => {
+      owner = el;
+      tip.textContent = el.dataset.tip;
+      (el.closest('dialog') || document.body).appendChild(tip);
+      tip.hidden = false;
+      const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, m = 8;
+      const x = Math.min(window.innerWidth - w - m, Math.max(m, r.left + r.width / 2 - w / 2));
+      const y = r.top - h - 8 >= m ? r.top - h - 8 : r.bottom + 8;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+      // In a window with a filter, position: fixed counts from the window: correct by how far off it landed.
+      const got = tip.getBoundingClientRect();
+      tip.style.left = (2 * x - got.left) + 'px'; tip.style.top = (2 * y - got.top) + 'px';
+    };
+    const hide = () => { owner = null; tip.hidden = true; };
+    document.addEventListener('pointerover', (e) => { const el = e.target.closest && e.target.closest('.hint'); if (el && e.pointerType === 'mouse') show(el); });
+    document.addEventListener('pointerout', (e) => { const el = e.target.closest && e.target.closest('.hint'); if (el && e.pointerType === 'mouse' && owner === el) hide(); });
+    document.addEventListener('focusin', (e) => { if (e.target.classList && e.target.classList.contains('hint')) show(e.target); });
+    document.addEventListener('focusout', (e) => { if (owner === e.target) hide(); });
+    // A tap (touch) opens and closes it; it never ticks a checkbox or submits a form it sits in.
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest && e.target.closest('.hint');
+      if (!el) { if (!tip.hidden) hide(); return; }
+      e.preventDefault(); e.stopPropagation();
+      if (owner === el && !tip.hidden) hide(); else show(el);
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+    document.addEventListener('scroll', () => { if (!tip.hidden) hide(); }, true);
+  })();
   $('#connLost button').addEventListener('click', () => location.reload());
   tickClock(); setInterval(tickClock, 1000 * 15);
   // The dashboard stays hidden (body.booting) until boot() has chosen: wizard, sign-in or dashboard.

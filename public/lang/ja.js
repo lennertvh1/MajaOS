@@ -2430,6 +2430,7 @@ window.TB_LANG.ja = {
   "Disks not in a pool": "プールに入っていないディスク",
   "There is no pool yet. Click Create pool to combine your disks.": "まだプールがありません。「プールを作成」をクリックしてディスクをまとめてください。",
   "{pct}% of {pool}": "{pool} の {pct}%",
+  "Shared folders for apps": "アプリ用の共有フォルダー",
   "Choose a disk.": "ディスクを選んでください。",
   "This disk is the installer. Choose another disk.": "これはインストーラーのディスクです。別のディスクを選んでください。",
   "Type the disk name to confirm.": "確認のためディスク名を入力してください。",

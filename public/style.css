@@ -1673,3 +1673,13 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .disk-item.p1 { --pc: var(--pool-1); } .disk-item.p2 { --pc: var(--pool-2); } .disk-item.p3 { --pc: var(--pool-3); }
 .disk-item.p4 { --pc: var(--pool-4); } .disk-item.p5 { --pc: var(--pool-5); }
 .disk-item[class*=" p"] .disk-kind.folder { color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, transparent); }
+
+/* ? next to a title, a field or a checkbox: the explanation as a tooltip (hint() in app.js). */
+.hint { display: inline-grid; place-items: center; width: 18px; height: 18px; margin: 0 0 0 6px; padding: 0; vertical-align: middle;
+  border-radius: 50%; border: 1px solid var(--glass-line); background: var(--track); color: var(--muted);
+  font: 700 11px/1 inherit; cursor: help; flex: none; }
+.hint:hover, .hint:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
+h2 .hint, h3 .hint { margin-left: 8px; }
+.tip { position: fixed; z-index: 10000; max-width: 300px; padding: 8px 11px; border-radius: 10px; pointer-events: none;
+  background: color-mix(in srgb, var(--body-bg) 94%, var(--text) 6%); color: var(--text); border: 1px solid var(--glass-line);
+  box-shadow: var(--shade); font-size: 13px; line-height: 1.45; font-weight: 400; text-transform: none; letter-spacing: 0; white-space: normal; }

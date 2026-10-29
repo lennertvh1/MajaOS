@@ -2430,6 +2430,7 @@ window.TB_LANG.zh = {
   "Disks not in a pool": "不在存储池中的磁盘",
   "There is no pool yet. Click Create pool to combine your disks.": "还没有存储池。点击“创建存储池”来组合你的磁盘。",
   "{pct}% of {pool}": "{pool} 的 {pct}%",
+  "Shared folders for apps": "应用的共享文件夹",
   "Choose a disk.": "请选择一块磁盘。",
   "This disk is the installer. Choose another disk.": "这是安装盘。请选择另一块磁盘。",
   "Type the disk name to confirm.": "输入磁盘名称以确认。",

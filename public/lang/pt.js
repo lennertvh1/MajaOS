@@ -2430,6 +2430,7 @@ window.TB_LANG.pt = {
   "Disks not in a pool": "Discos fora de uma pool",
   "There is no pool yet. Click Create pool to combine your disks.": "Ainda não há nenhuma pool. Clica em Criar pool para juntar os teus discos.",
   "{pct}% of {pool}": "{pct}% de {pool}",
+  "Shared folders for apps": "Pastas partilhadas para apps",
   "Choose a disk.": "Escolha um disco.",
   "This disk is the installer. Choose another disk.": "Este disco é o do instalador. Escolha outro disco.",
   "Type the disk name to confirm.": "Escreva o nome do disco para confirmar.",

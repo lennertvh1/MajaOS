@@ -2434,6 +2434,7 @@ window.TB_LANG.nl = {
   "Disks not in a pool": "Schijven die niet in een pool zitten",
   "There is no pool yet. Click Create pool to combine your disks.": "Er is nog geen pool. Klik op Pool aanmaken om je schijven samen te voegen.",
   "{pct}% of {pool}": "{pct}% van {pool}",
+  "Shared folders for apps": "Gedeelde mappen voor apps",
   "Choose a disk.": "Kies een schijf.",
   "This disk is the installer. Choose another disk.": "Dit is de schijf van het installatieprogramma. Kies een andere schijf.",
   "Type the disk name to confirm.": "Typ de schijfnaam om te bevestigen.",
