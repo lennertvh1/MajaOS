@@ -1856,6 +1856,52 @@
     }
     return undefined;
   }
+  // Managing a ZFS pool, like lib/zpool.js: check, disconnect (it can be imported again), delete. Not while something uses it.
+  const exported = [];
+  function demoPoolUsers(mp) {
+    const at = (x) => x && (x === mp || x.startsWith(mp + '/'));
+    const out = Object.entries(sp).filter(([, v]) => at(v)).map(([k]) => ({ appdata: 'app data', vms: 'virtual machines', isos: 'ISO files', shares: 'shared folders' })[k]);
+    shareList.filter((x) => at(x.path)).forEach((x) => out.push('shared folder ' + x.name));
+    return out;
+  }
+  // A check started in the demo takes ~30 s.
+  function demoScrub(p) {
+    const sc = p.scrub;
+    if (sc && sc.running && sc.started) {
+      sc.progress = Math.min(100, (Date.now() - sc.started) / 300);
+      if (sc.progress >= 100) p.scrub = { kind: 'scrub', running: false, progress: null, errors: 0, last: new Date().toISOString() };
+    }
+    return p;
+  }
+  function zpRoute(method, path, body, query) {
+    if (path === '/api/pools/importable') return { pools: exported.map((x) => ({ name: x.pool.name, id: x.id, state: 'ONLINE', status: '' })) };
+    if (path === '/api/pools/import') {
+      const i = exported.findIndex((x) => x.id === String(body.id));
+      if (i < 0) throw err('This pool is no longer on the disks. Open the list again.', 404);
+      const [x] = exported.splice(i, 1);
+      pools.push(x.pool); datasets.push(...x.datasets);
+      x.disks.forEach((n) => { const d = disks.find((y) => y.name === n); if (d) Object.assign(d, { pool: x.pool.name, role: 'data', vdev: x.pool.layout, state: 'ONLINE' }); });
+      return { name: x.pool.name, uses: [] };
+    }
+    const m = path.match(/^\/api\/pools\/([A-Za-z][A-Za-z0-9_.:-]{0,63})(?:\/(scrub|scrub-stop|export))?$/);
+    if (!m || ['options', 'importable', 'import'].includes(m[1])) return undefined;
+    const p = pools.find((x) => x.name === m[1] && x.kind !== 'mixed');
+    if (!p) throw err('This pool doesn\'t exist (anymore).', 404);
+    const act = m[2];
+    if (act === 'scrub') { p.scrub = { kind: 'scrub', running: true, progress: 1, errors: 0, last: null, started: Date.now() }; return { name: p.name, scrub: 'started' }; }
+    if (act === 'scrub-stop') { if (!p.scrub || !p.scrub.running) throw err('No check is running on this pool.', 409); p.scrub = { ...p.scrub, running: false, progress: null }; return { name: p.name, scrub: 'stopped' }; }
+    const users = demoPoolUsers('/' + p.name);
+    const what = act === 'export' ? 'disconnect' : 'delete';
+    if (users.length) throw err(p.name + ' is still used by ' + users.join(', ') + '. Move or remove that first, then ' + what + ' the pool.', 409);
+    if (!act && query.get('confirm') !== p.name) throw err('Type the pool name to confirm that everything on it may be erased.');
+    pools.splice(pools.indexOf(p), 1);
+    const own = datasets.filter((d) => d.name === p.name || d.name.startsWith(p.name + '/'));
+    for (const d of own) datasets.splice(datasets.indexOf(d), 1);
+    const used = disks.filter((d) => d.pool === p.name);
+    used.forEach((d) => Object.assign(d, { pool: null, role: null, vdev: null, state: null }));
+    if (act === 'export') { exported.push({ id: String(1e17 + Math.floor(Math.random() * 1e16)), pool: p, datasets: own, disks: used.map((d) => d.name) }); return { name: p.name, exported: true }; }
+    return { name: p.name, destroyed: true };
+  }
   function demoCreatePool(b) {
     if (b.kind === 'mixed') return demoCreateMixed(b);
     const name = String(b.name || '').trim();
@@ -2425,7 +2471,8 @@
     const dk = path.match(/^\/api\/disks\/([^/?]+)(\?wake=1)?$/);
     if (dk) { await wait(rnd(250, 600)); return demoDisk(decodeURIComponent(dk[1]), !!dk[2]); }
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('GET', path); if (r !== undefined) return r; }
-    if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : p))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
+    if (path === '/api/pools/importable') return zpRoute('GET', path);
+    if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
   }
@@ -2548,6 +2595,7 @@
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
+    if (path.startsWith('/api/pools/')) { await wait(rnd(400, 900)); const r = zpRoute('POST', path, body); if (r !== undefined) return r; }
     const vs = path.match(/^\/api\/vm-networks\/([^/]+)\/start$/);
     if (vs) { const n = vmNets.find((x) => x.name === decodeURIComponent(vs[1])); if (!n) throw err('This VM network no longer exists.', 404); n.active = true; return { ok: true }; }
     if (/\/exec$/.test(path)) { await wait(rnd(60, 180)); return demoExec(findApp(path.split('/')[3]), String(body.cmd || ''), body.cwd || '/'); }
@@ -2683,6 +2731,7 @@
   async function del(path) {
     await wait(400);
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('DELETE', path); if (r !== undefined) return r; }
+    if (path.startsWith('/api/pools/')) { const u = new URL(path, 'http://x'); const r = zpRoute('DELETE', u.pathname, null, u.searchParams); if (r !== undefined) return r; }
     { const lm = path.match(/^\/api\/share-links\/([0-9a-f]{8})$/); if (lm) {
       const i = demoLinks.findIndex((row) => row.id === lm[1]);
       if (i < 0) throw err('This link does not exist.', 404);

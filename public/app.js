@@ -37,7 +37,8 @@
     }
     for (const p of patterns) {
       const hit = m.match(p.re);
-      if (hit) return fill(p.out, Object.fromEntries(p.names.map((n, i) => [n, tr(hit[i + 1])])));
+      // A value that is a list ("app data, shared folder Films") is translated item by item.
+      if (hit) return fill(p.out, Object.fromEntries(p.names.map((n, i) => [n, hit[i + 1].split(', ').map(tr).join(', ')])));
     }
     return m;
   }
@@ -2505,6 +2506,33 @@
     draw();
   }
 
+  // Pools that are on the disks but not in use: after a new installation, or disks from another server (zpool import).
+  async function poolImportWindow() {
+    openWindow(t('Import pool'), `<p class="lead">${t('Looking for pools on the disks…')}</p>`);
+    let r;
+    try { r = await api.get('/api/pools/importable'); }
+    catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    const back = `<div class="btn-row"><button class="btn" type="button" data-pool-back>${t('Back to storage')}</button></div>`;
+    $('#winBody').innerHTML = `<p class="muted">${t('Pools that are on the disks of this server but not in use: for example after a new installation, or disks from another server.')}</p>
+      <ul class="rows">${r.pools.map((p) => {
+        const [label, cls] = poolHealth(p.state);
+        return `<li><div><div class="row-title">${esc(p.name)} <span class="pill ${cls}">${esc(label)}</span></div>
+            <div class="row-sub">${esc(p.status ? tr(p.status) : 'ID ' + p.id)}</div></div>
+          <div class="row-side"><button class="btn sm primary" type="button" data-pool-import-id="${esc(p.id)}" data-name="${esc(p.name)}">${t('Import')}</button></div></li>`;
+      }).join('') || `<li><span class="muted">${t('No pools found to import.')}</span></li>`}</ul>${back}`;
+    $('#winBody').onclick = async (e) => {
+      if (e.target.closest('[data-pool-back]')) { $('#winBody').onclick = null; storageWindow(); return; }
+      const b = e.target.closest('[data-pool-import-id]'); if (!b) return;
+      b.disabled = true; b.textContent = t('Importing…');
+      try {
+        const res = await api.post('/api/pools/import', { id: b.dataset.poolImportId });
+        toast(t('Pool {name} was imported.', { name: res.name }));
+        loadOverview().catch(() => {});
+        $('#winBody').onclick = null; storageWindow();
+      } catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = t('Import'); }
+    };
+  }
+
   // Pool with mixed disks: per free disk Data, Parity or not used. Same checks as plan() in lib/mixed.js.
   function mixedPoolForm(body, o, { onCreated = () => {}, onBack = null } = {}) {
     const free = o.disks.filter((d) => d.available);
@@ -2879,7 +2907,11 @@
               <div class="row-sub">${esc([p.layout, p.diskCount ? t(p.diskCount === 1 ? '{n} disk' : '{n} disks', { n: p.diskCount }) : null].filter(Boolean).join(' · '))}</div></div>
             <div class="row-side">${t('{used} of {total}', { used: bytes(p.used), total: bytes(p.total) })}</div>
             <div class="row-bar"><div class="bar"><span class="${level(used, 80, 92)}" style="width:${used.toFixed(1)}%"></span></div>
-              <div class="row-sub">${esc(scrubText(p.scrub))}</div></div>
+              <div class="row-sub">${esc(scrubText(p.scrub))}</div>
+              <div class="btn-row mx-acts" data-zp="${esc(p.name)}">
+                ${p.scrub && p.scrub.running ? `<button class="btn sm" type="button" data-zp-act="scrub-stop">${t('Stop check')}</button>` : `<button class="btn sm" type="button" data-zp-act="scrub">${t('Check now')}</button>`}
+                <button class="btn sm" type="button" data-zp-act="export">${t('Disconnect')}</button>
+                <button class="btn sm danger" type="button" data-zp-act="destroy">${t('Delete pool')}</button></div></div>
           </li>
           ${disks.map(diskRow).join('')}
         </ul>`;
@@ -2896,7 +2928,7 @@
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS reported an error: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
       ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
       ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('There is no ZFS pool yet. Click Create pool to combine your disks.')}</p>` : ''}
-      <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Create pool')}</button></div>
+      <div class="bays-head"><h3>${t('Pools')}</h3><span class="btn-row"><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm" type="button" data-pool-new>${t('Create pool')}</button></span></div>
       <div id="poolsBox">${s.pools.map(poolBlock).join('')}</div>
       ${loose.length ? `<h3>${t('Not in a pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
       <div class="bays-head"><h3>${t('Datasets')}</h3><button class="btn sm" type="button" data-open="shares">${t('Manage shared folders')}</button></div>
@@ -2905,6 +2937,7 @@
         <div class="row-side">${bytes(d.used)}</div></li>`).join('') || `<li><span class="muted">${t('No datasets')}</span></li>`}</ul>`;
     mountBays($('#baySec'), s);
     $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
+    $('[data-pool-import]').addEventListener('click', () => poolImportWindow());
     // Mixed disks: follow a running parity job in place, start/stop it, the schedule, removing the pool.
     const follow = (name) => {
       const ul = $(`[data-mx="${CSS.escape(name)}"]`);
@@ -2922,6 +2955,27 @@
       }).catch(() => {});
     };
     s.pools.filter((p) => p.kind === 'mixed' && p.job && !p.job.done).forEach((p) => follow(p.name));
+    // ZFS: check now / stop, disconnect (the files stay), delete (everything is erased).
+    $('#poolsBox').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-zp-act]'); if (!b) return;
+      const name = b.closest('[data-zp]').dataset.zp, act = b.dataset.zpAct, url = `/api/pools/${encodeURIComponent(name)}`;
+      try {
+        if (act === 'scrub') { await api.post(url + '/scrub'); toast(t('The check of {name} has started.', { name })); }
+        if (act === 'scrub-stop') { await api.post(url + '/scrub-stop'); toast(t('The check of {name} was stopped.', { name })); }
+        if (act === 'export') {
+          if (!(await ask(t('Disconnect the pool {name}? It stays on the disks with all its files, but is not available until you import it again (also possible on another server).', { name }), t('Disconnect')))) return;
+          await api.post(url + '/export'); toast(t('Pool {name} was disconnected. Import pool brings it back.', { name }));
+        }
+        if (act === 'destroy') {
+          const r = await ask(t('Delete the pool {name}? Everything on it is erased for good: files, folders and snapshots.', { name }), t('Delete pool'), t('I understand that all data on {name} will be erased', { name }));
+          if (!r) return;
+          if (!r.checked) { toast(t('Tick that the data on the pool may be erased.'), true); return; }
+          await api.del(`${url}?confirm=${encodeURIComponent(name)}`); toast(t('Pool {name} was deleted.', { name }));
+        }
+        loadOverview().catch(() => {});
+        storageWindow();
+      } catch (ex) { toast(ex.message, true); }
+    });
     $('#poolsBox').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-mx-act]'); if (!b) return;
       const name = b.closest('[data-mx]').dataset.mx, act = b.dataset.mxAct, url = `/api/mixed-pools/${encodeURIComponent(name)}`;

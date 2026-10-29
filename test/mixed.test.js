@@ -94,3 +94,36 @@ test('the schedule: a sync that is due starts once, and nothing without a parity
   assert.doesNotThrow(() => mixed.tick(Date.now()));
   assert.deepEqual(mixed.status(), []);
 });
+
+test('zpool import: the pools found on the disks', () => {
+  const zpool = require('../lib/zpool');
+  const out = `   pool: tank
+     id: 15532891293384729153
+  state: ONLINE
+ action: The pool can be imported using its name or numeric identifier.
+ config:
+
+	tank        ONLINE
+	  raidz1-0  ONLINE
+	    ata-WDC_1  ONLINE
+
+   pool: old
+     id: 702210496011390744
+  state: DEGRADED
+ status: One or more devices are missing from the system.
+         The pool can still be used.
+ action: The pool can be imported despite missing or damaged devices.
+ config:
+`;
+  const p = zpool.parseImportable(out);
+  assert.deepEqual(p.map((x) => [x.name, x.id, x.state]), [['tank', '15532891293384729153', 'ONLINE'], ['old', '702210496011390744', 'DEGRADED']]);
+  assert.match(p[1].status, /devices are missing from the system\. The pool can still be used\./);
+  assert.deepEqual(zpool.parseImportable('no pools available to import'), []);
+});
+
+test('what still uses a pool: folders, shared folders, apps and the backup app', async () => {
+  const { poolUsers } = require('../lib/poolusers');
+  const containers = [{ Names: ['/jellyfin'], Mounts: [{ Type: 'bind', Source: '/media/films' }] }, { Names: ['/other'], Mounts: [{ Type: 'bind', Source: '/mediaX/a' }] }];
+  assert.deepEqual(await poolUsers('/media', { containers }), ['app jellyfin']);
+  assert.deepEqual(await poolUsers('/', { containers }), []);
+});
