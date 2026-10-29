@@ -16,6 +16,8 @@ window.TB_LANGS = {
 window.TB_LANG = window.TB_LANG || {};
 // Load each translation right after this script, so it is there before the page's own scripts run.
 // The live installer loads languages on demand (see install.js); pulling every dictionary at once is slow in a VM.
+// The installer marks its script tag (no inline script: the Content Security Policy forbids it).
+if (document.currentScript && document.currentScript.hasAttribute('data-installer')) window.TB_INSTALLER = true;
 if (!window.TB_INSTALLER) {
   Object.keys(window.TB_LANGS).filter((code) => code !== 'en').forEach((code) => document.write('<script src="lang/' + code + '.js"><\/script>'));
 }

@@ -203,6 +203,7 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 - Little text on screen: an explanation goes behind a **?** (`hint(text)` in app.js: a tooltip on hover, focus or tap; `paneHint(text)` puts it next to a settings pane's title), next to the title, field or checkbox it explains. What the user must see stays visible: status, warnings, errors, what happens next. A section is a card with a clear heading (`.section-head`, `.pool-card`, `.disk-list`, `.usage` in Storage), not loose paragraphs.
 - Colours always via the CSS tokens on `:root`. Both themes (light = morning mist, dark = evening) must keep working.
 - Everything that comes from the server goes through `esc()` before it goes into `innerHTML`.
+- **Content Security Policy** (`pageCsp` in server.js for the pages, `API_CSP` for everything else, a sandbox for files opened in the browser in `lib/files.js`): no inline `<script>` and no `on…=` attributes in HTML (also not in `innerHTML` strings); use `addEventListener`. Scripts only from `public/`. `style="…"` attributes are allowed. A new external source (font, script, API the browser calls) must be added to `pageCsp`.
 - Don't use `confirm()`/`alert()`. Use the own `ask()` dialog in `app.js` (with a third argument you get a checkbox and `ask()` returns `{ checked }`).
 - Destructive actions (stop, shut down, delete) always ask for confirmation first.
 - Names on disk that existing installs already use stay as they are (e.g. the Dutch folder names of older backup tasks, `/etc/issue.d/homebaseos-wachtwoord.issue`).

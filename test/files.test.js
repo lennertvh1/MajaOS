@@ -243,3 +243,22 @@ test('a share link stays inside the chosen file', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a file opened in the browser runs in a sandbox without scripts (a PDF without the sandbox)', () => {
+  const root = tmpShare();
+  fs.writeFileSync(path.join(root, 'x.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  fs.writeFileSync(path.join(root, 'a.pdf'), '%PDF-1.4');
+  const headersOf = (name) => {
+    let head = null;
+    const res = new PassThrough();
+    res.writeHead = (status, h) => { head = h; };
+    files.sendFile(res, 'media', name, { inline: true });
+    return head;
+  };
+  const svg = headersOf('x.svg')['Content-Security-Policy'];
+  assert.match(svg, /default-src 'none'/);
+  assert.match(svg, /; sandbox$/);
+  const pdf = headersOf('a.pdf')['Content-Security-Policy'];
+  assert.match(pdf, /default-src 'none'/);
+  assert.doesNotMatch(pdf, /sandbox/);
+});

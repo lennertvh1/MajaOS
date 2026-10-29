@@ -703,6 +703,20 @@ async function handleApi(req, res, url) {
   return sendJson(res, 404, { error: 'Unknown endpoint' });
 }
 
+// Content Security Policy of the pages: only our own scripts (no inline code), the Google font, icons of apps from any
+// https/http address, the console in a frame of our own, WebSockets to this server. Inline style attributes stay allowed.
+function pageCsp(req) {
+  const host = /^[A-Za-z0-9.:[\]-]{1,255}$/.test(req.headers.host || '') ? req.headers.host : '';
+  return [
+    "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob: https: http:", "media-src 'self' blob:",
+    "connect-src 'self'" + (host ? ` ws://${host} wss://${host}` : ''), "frame-src 'self'", "worker-src 'self' blob:",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
+  ].join('; ');
+}
+// Everything else (JSON, errors, redirects): nothing may load or run, and no other site may frame it.
+const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
 function serveStatic(req, res, url) {
   let rel = decodeURIComponent(url.pathname);
   if (rel === '/' || !path.extname(rel)) rel = '/index.html';
@@ -716,7 +730,7 @@ function serveStatic(req, res, url) {
     // No other site may show these pages in a frame (clickjacking). The console window is the same origin.
     const headers = {
       'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
-      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'",
+      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': pageCsp(req),
     };
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
     fs.readFile(file, (err, buf) => {
@@ -786,6 +800,10 @@ let server;
 
 function onRequest(req, res) {
   const url = new URL(req.url, 'http://localhost');
+  // Defaults for every answer; pages, files and share links set their own policy.
+  res.setHeader('Content-Security-Policy', API_CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
   const shared = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{16,80})(?:\/(.*))?$/);
   Promise.resolve().then(() => {
     if (toHttps(req, res, url)) return;
