@@ -1670,6 +1670,19 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 }
 
 /* Create pool: ZFS or mixed disks, and the role of each disk in a pool with mixed disks. */
+/* Create pool: a wizard with numbered steps. */
+.wz { display: grid; gap: 14px; }
+.wz-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.wz-steps li { display: flex; align-items: center; gap: 7px; }
+.wz-steps li span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--glass-line); font-size: 12px; font-weight: 600; }
+.wz-steps li.now { color: var(--text); font-weight: 600; }
+.wz-steps li.now span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.wz-steps li.done span { border-color: var(--accent); color: var(--accent); }
+.wz-body { display: grid; gap: 12px; min-height: 220px; align-content: start; }
+.wz-q { margin: 0; font-size: 17px; }
+.wz-review { margin: 0; }
+.wz-confirm { padding: 12px; border-radius: 12px; border: 1px solid var(--warn); background: var(--glass); }
+.wz-btns { align-items: center; }
 .pool-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .mix-disks .row-side .seg button { font-size: 13px; }
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }

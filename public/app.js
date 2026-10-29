@@ -2545,25 +2545,209 @@
       </ul>`;
   }
 
+  // Create pool as a wizard: 1 kind (ZFS or mixed disks), 2 disks, 3 protection, 4 name and options, 5 overview with
+  // the confirmation, then the job's steps (createPoolJob). The same checks as lib/zpool.js and lib/mixed.js.
   async function poolCreateWindow(bays) {
     openWindow(t('Create pool'), `<p class="lead">${t('Looking for disks…')}</p>`);
     let o;
     try { o = await api.get('/api/pools/options'); }
     catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('The disks could not be read: {error}', { error: esc(e.message) })}</p>`; return; }
-    // Two kinds: ZFS (disks of the same size work together) or mixed disks (any size, parity on one or two disks).
-    let kind = 'zfs';
-    const kinds = [['zfs', t('ZFS pool'), t('Fast and self-healing. Works best with disks of the same size.')],
-      ['mixed', t('Mixed disks'), t('Disks of any size, each with its own files. One or two parity disks protect them.')]];
-    $('#winBody').innerHTML = `<div class="pool-kinds" role="radiogroup" aria-label="${t('Kind of pool')}">${kinds.map(([k, label, help]) =>
-      `<label class="layout${k === kind ? ' on' : ''}"><input type="radio" name="poolKind" value="${k}"${k === kind ? ' checked' : ''}><b>${esc(label)}</b><span class="small muted">${esc(help)}</span></label>`).join('')}</div>
-      <div id="poolKindBody"></div>`;
-    const draw = () => {
-      $$('.pool-kinds .layout').forEach((l) => l.classList.toggle('on', $('input', l).value === kind));
-      const box = $('#poolKindBody');
-      if (kind === 'mixed') mixedPoolForm(box, o, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
-      else poolForm(box, o, bays, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
+    const body = $('#winBody');
+    const beginner = experienceLevel() === 'beginner';
+    const free = o.disks.filter((d) => d.available);
+    const kindOf = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
+    const bayOf = (d) => {
+      const k = d.serial ? 's:' + d.serial : 'n:' + d.name;
+      const b = Object.keys((bays && bays.slots) || {}).find((x) => bays.slots[x].key === k);
+      return !b ? '' : b.startsWith('m') ? t('M.2 slot {n}', { n: b.slice(1) }) : b.startsWith('s') ? t('2.5" slot {n}', { n: b.slice(1) }) : t('bay {n}', { n: b });
     };
-    $('.pool-kinds').addEventListener('change', (e) => { if (e.target.name === 'poolKind') { kind = e.target.value; draw(); } });
+    const W = { step: 0, kind: 'zfs', picked: new Set(), role: new Map(), layout: 'stripe', layoutByUser: false,
+      name: '', nameByUser: false, compression: 'lz4', folders: true, ok: false };
+    const STEPS = [t('Kind'), t('Disks'), t('Protection'), t('Name'), t('Overview')];
+    const zfsDisks = () => free.filter((d) => W.picked.has(d.name));
+    const mixedOf = (r) => free.filter((d) => W.role.get(d.name) === r);
+    const chosen = () => (W.kind === 'zfs' ? zfsDisks() : [...mixedOf('data'), ...mixedOf('parity')]);
+    const defaultName = () => (W.kind === 'zfs' ? ['tank', 'fast', 'data', 'storage'] : ['media', 'data', 'storage', 'pool']).find((n) => !o.pools.includes(n)) || 'pool' + (o.pools.length + 1);
+    // Why the current step can't go on yet (null: it can).
+    const problem = () => {
+      if (W.step === 1) {
+        if (W.kind === 'zfs') return zfsDisks().length ? null : t('Tick the disks that go into the pool.');
+        return mixedOf('data').length ? null : t('Choose at least one data disk.');
+      }
+      if (W.step === 2) {
+        if (W.kind === 'zfs') {
+          if (poolCapacity(W.layout, zfsDisks().map((x) => x.size))) return null;
+          const L = POOL_LAYOUTS.find((x) => x[0] === W.layout);
+          return W.layout === 'mirrors' && zfsDisks().length >= L[2] ? t('Mirror pairs need an even number of disks.') : t('{layout} needs at least {n} disks.', { layout: t(L[1]), n: L[2] });
+        }
+        const data = mixedOf('data'), parity = mixedOf('parity');
+        if (parity.length > 2) return t('Choose at most two parity disks.');
+        const largest = Math.max(...data.map((d) => d.size));
+        const small = parity.find((d) => d.size < largest);
+        return small ? t('The parity disk {disk} is smaller than the largest data disk ({size}). A parity disk must be at least as large as every data disk.', { disk: small.name, size: bytes(largest) }) : null;
+      }
+      if (W.step === 3) {
+        if (W.kind === 'zfs' && !/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(W.name)) return t('Choose a name that starts with a letter, with letters, digits, - or _ (e.g. tank or fast). Names like mirror or raidz are not allowed.');
+        if (W.kind === 'mixed' && !/^[a-z][a-z0-9_-]{0,31}$/.test(W.name)) return t('Choose a name of lowercase letters, digits, - or _ that starts with a letter (e.g. media).');
+        if (o.pools.includes(W.name)) return t('A pool named {name} already exists.', { name: W.name });
+        return null;
+      }
+      if (W.step === 4) return W.ok ? null : t('Tick that the data on the disks may be lost.');
+      return null;
+    };
+    // What the pool gives: space and how many disks may fail.
+    const summary = () => {
+      if (W.kind === 'zfs') {
+        const d = zfsDisks(), c = poolCapacity(W.layout, d.map((x) => x.size));
+        if (!c) return { html: '', usable: null, safe: '' };
+        const warns = [];
+        if (W.layout === 'stripe' && d.length > 1) warns.push(t('No protection: if one disk fails, you lose the whole pool.'));
+        if (c.unused > 1e9) warns.push(t('{size} stays unused: with this layout, each disk only counts as much as the smallest one.', { size: bytes(c.unused) }));
+        if (d.some((x) => x.rotational) && d.some((x) => !x.rotational)) warns.push(t('You are mixing hard drives and SSDs: the pool is as slow as the hard drives. Better make two pools.'));
+        if (W.layout === 'raidz1' && d.length >= 6) warns.push(t('With 6 or more disks RAID-Z2 is safer: while a disk is being rebuilt, another one may still fail.'));
+        const safe = beginner ? beginnerPoolSafetyLine(c, d.length) : c.failures ? t(c.failures === 1 ? '{n} disk may fail without losing your data.' : '{n} disks may fail without losing your data.', { n: c.failures }) : t('No protection.');
+        return { usable: c.usable, safe, failures: c.failures, html: `<div class="pool-space-head"><b>${esc(bytes(c.usable))}</b><span class="muted">${beginner ? t('for your files (approximately)') : t('usable (approximately)')}</span></div>
+          ${poolSpaceBarHtml(c, beginner)}<p class="pool-space-note ${c.failures ? 'temp-ok' : 'temp-warn'}">${esc(safe)}</p>${warns.map((w) => `<p class="small temp-warn">${esc(w)}</p>`).join('')}` };
+      }
+      const data = mixedOf('data'), parity = mixedOf('parity');
+      const usable = Math.round(data.reduce((a, d) => a + d.size, 0) * 0.98);
+      const safe = parity.length ? t(parity.length === 1 ? 'If one disk stops working, its files can be rebuilt from the parity.' : 'If up to {n} disks stop working, their files can be rebuilt from the parity.', { n: parity.length })
+        : t('No parity disk: no protection. If a disk stops working, the files on that disk are lost; the other disks keep theirs.');
+      return { usable, safe, failures: parity.length, html: `<div class="pool-space-head"><b>${esc(bytes(usable))}</b><span class="muted">${t('room for your files (approximately)')}</span></div>
+        <p class="pool-space-note ${parity.length ? 'temp-ok' : 'temp-warn'}">${esc(safe)}</p>
+        ${data.some((d) => d.rotational) && data.some((d) => !d.rotational) ? `<p class="small temp-warn">${t('You are mixing hard drives and SSDs: new files go to the disk with the most free space, so some files will be slower than others.')}</p>` : ''}` };
+    };
+    const tile = (d, on, extra = '') => `<button type="button" class="pool-disk-tile${on ? ' on' : ''}" data-wz-disk="${esc(d.name)}" aria-pressed="${on ? 'true' : 'false'}">
+        ${poolDiskArt(d)}<span class="pool-disk-size">${esc(bytes(d.size))}</span><span class="pool-disk-kind">${esc(kindOf(d))}</span>
+        <span class="pool-disk-model muted small">${esc(d.model || d.name)}</span>${bayOf(d) ? `<span class="pool-disk-bay muted small">${esc(bayOf(d))}</span>` : ''}${extra}</button>`;
+    const stepHtml = () => {
+      if (W.step === 0) {
+        const kinds = [['zfs', t('ZFS pool'), t('Fast and self-healing. Works best with disks of the same size.')],
+          ['mixed', t('Mixed disks'), t('Disks of any size, each with its own files. One or two parity disks protect them.')]];
+        return `<h3 class="wz-q">${t('What kind of pool?')}</h3><div class="pool-kinds" role="radiogroup" aria-label="${esc(t('Kind of pool'))}">${kinds.map(([k, label, help]) =>
+          `<label class="layout${W.kind === k ? ' on' : ''}"><input type="radio" name="wzKind" value="${k}"${W.kind === k ? ' checked' : ''}><b>${esc(label)}</b><span class="small muted">${esc(help)}</span></label>`).join('')}</div>`;
+      }
+      if (W.step === 1) {
+        if (!free.length) return `<p class="lead">${t('There are no free disks. Every disk is already in a pool or holds the system.')}</p>`;
+        if (W.kind === 'zfs') {
+          return `<h3 class="wz-q">${t('Which disks go into the pool?')}</h3><p class="muted small">${t('Tap the disks you want to use together.')}</p>
+            <div class="pool-disk-tiles">${free.map((d) => tile(d, W.picked.has(d.name), d.warn && W.picked.has(d.name) ? `<span class="pool-disk-warn small temp-warn">${esc(tr(d.warn))}</span>` : '')).join('')}</div>`;
+        }
+        return `<h3 class="wz-q">${t('Which disks go into the pool?')}</h3><p class="muted small">${t('Mark each disk as Data or Parity.')} ${hint(t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.'))}</p>
+          <ul class="rows mix-disks">${free.map((d) => {
+            const r = W.role.get(d.name) || '';
+            const seg = [['', t('Not used')], ['data', t('Data', null, 'disk')], ['parity', t('Parity')]].map(([k, label]) =>
+              `<button type="button" role="radio" aria-checked="${r === k ? 'true' : 'false'}" data-wz-role="${esc(d.name)}" data-role="${k}">${esc(label)}</button>`).join('');
+            return `<li><div><div class="row-title">${esc(d.name)} · ${esc(bytes(d.size))}</div>
+              <div class="row-sub">${esc([d.model, kindOf(d), bayOf(d)].filter(Boolean).join(' · '))}${d.warn && r ? ` · <span class="temp-warn">${esc(tr(d.warn))}</span>` : ''}</div></div>
+              <div class="row-side"><div class="seg" role="radiogroup" aria-label="${esc(t('Role of {disk}', { disk: d.name }))}">${seg}</div></div></li>`;
+          }).join('')}</ul>`;
+      }
+      if (W.step === 2) {
+        if (W.kind === 'mixed') return `<h3 class="wz-q">${t('How are your files protected?')}</h3><div class="pool-sum">${summary().html}</div>`;
+        const n = zfsDisks().length;
+        let cards;
+        if (beginner) {
+          const choices = beginnerPoolLayoutChoices(n);
+          cards = n === 1 ? `<p class="muted">${t('With one disk there is no backup inside the server. Copy important files elsewhere (e.g. via Backups).')}</p>`
+            : `<div class="layout-grid layout-grid-simple">${choices.map(({ key, recommended }) => {
+              const { title, desc } = beginnerPoolLayoutCopy(key, recommended);
+              return `<label class="layout layout-simple${W.layout === key ? ' on' : ''}"><input type="radio" name="wzLayout" value="${key}"${W.layout === key ? ' checked' : ''}>
+                <span class="layout-simple-head"><b>${esc(title)}</b>${recommended ? `<span class="pill ok">${t('Recommended')}</span>` : ''}</span><span class="small muted">${esc(desc)}</span></label>`;
+            }).join('')}</div>`;
+        } else {
+          cards = `<div class="layout-grid">${POOL_LAYOUTS.map(([k, label, min, help]) => {
+            const short = n < min ? min - n : 0, odd = k === 'mirrors' && n >= min && n % 2;
+            return `<label class="layout${W.layout === k ? ' on' : ''}${short || odd ? ' short' : ''}"><input type="radio" name="wzLayout" value="${k}"${W.layout === k ? ' checked' : ''}${short || odd ? ' disabled' : ''}>
+              <b>${t(label)}</b><span class="small muted">${t(help)}</span>
+              <span class="small">${short ? t(short === 1 ? '{n} more disk needed' : '{n} more disks needed', { n: short }) : odd ? t('Choose an even number') : t(min === 1 ? 'At least {n} disk' : 'At least {n} disks', { n: min })}</span></label>`;
+          }).join('')}</div>`;
+        }
+        return `<h3 class="wz-q">${beginner ? t('How should your files be protected?') : t('Layout')}</h3>${cards}<div class="pool-sum">${summary().html}</div>`;
+      }
+      if (W.step === 3) {
+        return `<h3 class="wz-q">${t('Name and options')}</h3>
+          <label class="fld"><span>${t('Pool name')} ${hint(W.kind === 'zfs' ? t('For example tank for the hard drives and fast for the SSDs. The pool is mounted at /name.') : t('Lowercase letters, digits, - or _. The pool is mounted at /name.'))}</span>
+            <input class="field" data-wz-name value="${esc(W.name)}" maxlength="${W.kind === 'zfs' ? 64 : 32}" autocomplete="off" spellcheck="false"></label>
+          ${W.kind === 'zfs' && !beginner ? `<label class="fld"><span>${t('Compression')}</span><select class="field" data-wz-compression>
+            ${[['lz4', t('lz4 (recommended: fast and saves space)')], ['zstd', t('zstd (saves more, a bit slower)')], ['off', t('Off')]].map(([v, l]) => `<option value="${v}"${W.compression === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
+          <label class="check"><input type="checkbox" data-wz-folders${W.folders ? ' checked' : ''}> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
+            ${hint(t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.'))}</span></label>`;
+      }
+      // Overview: everything at a glance, and the confirmation that the disks are erased.
+      const d = chosen(), sum = summary();
+      const L = POOL_LAYOUTS.find((x) => x[0] === W.layout);
+      const how = W.kind === 'zfs' ? t('ZFS pool') + ' · ' + t(L[1]) : t('Mixed disks') + ' · ' + t('{data} data and {parity} parity disks', { data: mixedOf('data').length, parity: mixedOf('parity').length });
+      return `<h3 class="wz-q">${t('Check and create')}</h3>
+        <dl class="kv wz-review">
+          <dt>${t('Pool name')}</dt><dd><b>${esc(W.name)}</b> <span class="muted">/${esc(W.name)}</span></dd>
+          <dt>${t('Kind')}</dt><dd>${esc(how)}</dd>
+          <dt>${t('Disks')}</dt><dd>${d.map((x) => `${esc(x.name)} <span class="muted small">${esc([bytes(x.size), x.model, W.kind === 'mixed' ? (W.role.get(x.name) === 'parity' ? t('Parity') : t('Data', null, 'disk')) : null].filter(Boolean).join(' · '))}</span>`).join('<br>')}</dd>
+          <dt>${t('Space')}</dt><dd>${esc(bytes(sum.usable))}</dd>
+          <dt>${t('Protection')}</dt><dd class="${sum.failures ? '' : 'temp-warn'}">${esc(sum.safe)}</dd>
+          ${W.kind === 'zfs' ? `<dt>${t('Compression')}</dt><dd>${esc(W.compression)}</dd>` : ''}
+          <dt>${t('Folders')}</dt><dd>${W.folders ? 'appdata, media, backups, vms, isos' : '–'}</dd>
+        </dl>
+        ${d.some((x) => x.warn) ? d.filter((x) => x.warn).map((x) => `<p class="small temp-warn">${esc(x.name)}: ${esc(tr(x.warn))}</p>`).join('') : ''}
+        <label class="check wz-confirm"><input type="checkbox" data-wz-ok${W.ok ? ' checked' : ''}> <span>${esc(t('I understand that everything on {list} will be erased', { list: d.map((x) => x.name).join(', ') }))}</span></label>`;
+    };
+    const draw = () => {
+      if (!W.nameByUser) W.name = defaultName();
+      const last = W.step === STEPS.length - 1;
+      body.innerHTML = `<div class="wz" data-wz>
+        <ol class="wz-steps">${STEPS.map((label, i) => `<li class="${i < W.step ? 'done' : i === W.step ? 'now' : ''}"${i === W.step ? ' aria-current="step"' : ''}><span>${i + 1}</span>${esc(label)}</li>`).join('')}</ol>
+        <div class="wz-body">${stepHtml()}</div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row wz-btns">
+          ${W.step ? `<button class="btn" type="button" data-wz-back>${t('Back')}</button>` : `<button class="btn" type="button" data-wz-cancel>${t('Back to storage')}</button>`}
+          <span class="grow"></span>
+          <button class="btn primary" type="button" data-wz-next${problem() ? ' disabled' : ''}>${last ? t('Create pool') : t('Next')}</button>
+        </div></div>`;
+      const why = problem();
+      // A hint why Next is off, except on the first visit of a step where nothing has been chosen yet.
+      if (why && W.step === 2) $('.form-error', body).textContent = why;
+    };
+    body.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-wz-cancel]')) { storageWindow(); return; }
+      if (e.target.closest('[data-wz-back]')) { W.step--; draw(); return; }
+      const dk = e.target.closest('[data-wz-disk]');
+      if (dk) { const n = dk.dataset.wzDisk; if (W.picked.has(n)) W.picked.delete(n); else W.picked.add(n); if (!W.layoutByUser) W.layout = suggestLayout(W.picked.size); draw(); return; }
+      const rl = e.target.closest('[data-wz-role]');
+      if (rl) { if (rl.dataset.role) W.role.set(rl.dataset.wzRole, rl.dataset.role); else W.role.delete(rl.dataset.wzRole); draw(); return; }
+      if (!e.target.closest('[data-wz-next]')) return;
+      const why = problem();
+      if (why) { $('.form-error', body).textContent = why; return; }
+      if (W.step < STEPS.length - 1) { W.step++; draw(); return; }
+      // Create: the wizard makes way for the job's steps.
+      const next = $('[data-wz-next]', body); next.disabled = true; next.textContent = t('Creating…');
+      const d = chosen();
+      const payload = W.kind === 'zfs'
+        ? { name: W.name, layout: W.layout, disks: d.map((x) => x.name), compression: W.compression, confirm: W.name, folders: W.folders }
+        : { kind: 'mixed', name: W.name, confirm: W.name, folders: W.folders, disks: d.map((x) => ({ name: x.name, role: W.role.get(x.name) })) };
+      try {
+        const res = await createPoolJob($('[data-wz]', body), payload);
+        const folders = res.folders || [];
+        toast(folders.length ? t('Pool {name} was created with the folders {list}.', { name: W.name, list: folders.join(', ') }) : t('Pool {name} was created and is mounted at /{name}.', { name: W.name }));
+        if (res.warning) toast(tr(res.warning), true);
+        loadOverview().catch(() => {});
+        if (body.isConnected) storageWindow();
+      } catch (ex) { if (!body.isConnected) return; draw(); $('.form-error', body).textContent = ex.message; }
+    });
+    body.addEventListener('change', (e) => {
+      const tg = e.target;
+      if (tg.name === 'wzKind') { W.kind = tg.value; W.nameByUser = false; W.name = ''; draw(); return; }
+      if (tg.name === 'wzLayout') { W.layout = tg.value; W.layoutByUser = true; draw(); return; }
+      if (tg.matches('[data-wz-compression]')) { W.compression = tg.value; return; }
+      if (tg.matches('[data-wz-folders]')) { W.folders = tg.checked; return; }
+      if (tg.matches('[data-wz-ok]')) { W.ok = tg.checked; const n = $('[data-wz-next]', body); if (n) n.disabled = !!problem(); $('.form-error', body).textContent = ''; }
+    });
+    body.addEventListener('input', (e) => {
+      if (!e.target.matches('[data-wz-name]')) return;
+      W.name = e.target.value.trim(); W.nameByUser = true;
+      const n = $('[data-wz-next]', body), why = problem();
+      if (n) n.disabled = !!why;
+      $('.form-error', body).textContent = why && W.name ? why : '';
+    });
     draw();
   }
 
@@ -2836,86 +3020,6 @@
     }
   }
 
-  // Pool with mixed disks: per free disk Data, Parity or not used. Same checks as plan() in lib/mixed.js.
-  function mixedPoolForm(body, o, { onCreated = () => {}, onBack = null } = {}) {
-    const free = o.disks.filter((d) => d.available);
-    const name0 = ['media', 'data', 'storage', 'pool'].find((n) => !o.pools.includes(n)) || 'pool' + (o.pools.length + 1);
-    const role = new Map();
-    const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
-    body.innerHTML = `<form class="form" id="mixForm" novalidate>
-        <label class="fld"><span>${t('Pool name')} ${hint(t('Lowercase letters, digits, - or _. The pool is mounted at /name.'))}</span><input class="field" name="name" value="${esc(name0)}" maxlength="32" autocomplete="off" spellcheck="false">
-          </label>
-        <fieldset class="fld"><span>${t('Disks')} ${hint(t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.'))}</span><ul class="rows mix-disks" id="mixDisks"></ul></fieldset>
-        <div class="pool-sum" id="mixSum" aria-live="polite"></div>
-        <label class="check"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}</span></label>
-        <p class="form-error" role="alert"></p>
-        <div class="btn-row"><button class="btn primary" type="submit">${t('Create pool')}</button>${onBack ? `<button class="btn" type="button" data-pool-back>${t('Back to storage')}</button>` : ''}</div>
-      </form>`;
-    const form = $('#mixForm', body);
-    const chosen = (r) => free.filter((d) => role.get(d.name) === r);
-    const drawDisks = () => {
-      $('#mixDisks', form).innerHTML = free.map((d) => {
-        const r = role.get(d.name) || '';
-        const seg = [['', t('Not used')], ['data', t('Data', null, 'disk')], ['parity', t('Parity')]].map(([k, label]) =>
-          `<button type="button" role="radio" aria-checked="${r === k ? 'true' : 'false'}" data-mix-role="${esc(d.name)}" data-role="${k}">${esc(label)}</button>`).join('');
-        return `<li><div><div class="row-title">${esc(d.name)} · ${esc(bytes(d.size))}</div>
-            <div class="row-sub">${esc([d.model, kind(d)].filter(Boolean).join(' · '))}${d.warn && r ? ` · <span class="temp-warn">${esc(tr(d.warn))}</span>` : ''}</div></div>
-          <div class="row-side"><div class="seg" role="radiogroup" aria-label="${esc(t('Role of {disk}', { disk: d.name }))}">${seg}</div></div></li>`;
-      }).join('') || `<li><span class="muted">${t('There are no free disks. Every disk is already in a pool or holds the system.')}</span></li>`;
-    };
-    const problem = () => {
-      const data = chosen('data'), parity = chosen('parity');
-      if (!data.length) return t('Choose at least one data disk.');
-      if (parity.length > 2) return t('Choose at most two parity disks.');
-      const largest = Math.max(...data.map((d) => d.size));
-      const small = parity.find((d) => d.size < largest);
-      if (small) return t('The parity disk {disk} is smaller than the largest data disk ({size}). A parity disk must be at least as large as every data disk.', { disk: small.name, size: bytes(largest) });
-      return null;
-    };
-    const drawSum = () => {
-      const data = chosen('data'), parity = chosen('parity'), box = $('#mixSum', form);
-      if (!data.length && !parity.length) { box.innerHTML = `<p class="muted">${t('Mark each disk as Data or Parity.')}</p>`; return; }
-      const bad = problem();
-      const usable = Math.round(data.reduce((a, d) => a + d.size, 0) * 0.98);
-      box.innerHTML = `<div class="pool-big"><b>${bytes(usable)}</b> <span>${t('room for your files (approximately)')}</span></div>
-        <p class="${parity.length ? 'temp-ok' : 'temp-warn'}">${parity.length
-          ? esc(t(parity.length === 1 ? 'If one disk stops working, its files can be rebuilt from the parity.' : 'If up to {n} disks stop working, their files can be rebuilt from the parity.', { n: parity.length }))
-          : esc(t('No parity disk: no protection. If a disk stops working, the files on that disk are lost; the other disks keep theirs.'))}</p>
-        ${bad ? `<p class="small temp-bad">${esc(bad)}</p>` : ''}
-        ${data.some((d) => d.rotational) && data.some((d) => !d.rotational) ? `<p class="small temp-warn">${t('You are mixing hard drives and SSDs: new files go to the disk with the most free space, so some files will be slower than others.')}</p>` : ''}`;
-    };
-    const drawAll = () => { drawDisks(); drawSum(); };
-    drawAll();
-    form.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-mix-role]');
-      if (!b) return;
-      if (b.dataset.role) role.set(b.dataset.mixRole, b.dataset.role); else role.delete(b.dataset.mixRole);
-      drawAll();
-    });
-    if (onBack) body.addEventListener('click', (e) => { if (e.target.closest('[data-pool-back]')) onBack(); });
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
-      const name = form.elements.name.value.trim();
-      if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) { err.textContent = t('Choose a name of lowercase letters, digits, - or _ that starts with a letter (e.g. media).'); return; }
-      const bad = problem();
-      if (bad) { err.textContent = bad; return; }
-      const list = [...chosen('data'), ...chosen('parity')];
-      const r = await ask(t('Create pool {name} on {list}? Everything currently on these disks will be erased.', { name, list: list.map((x) => x.name).join(', ') }),
-        t('Create pool'), t('I understand that all data on these disks will be lost'));
-      if (!r) return;
-      if (!r.checked) { err.textContent = t('Tick that the data on the disks may be lost.'); return; }
-      btn.disabled = true; btn.textContent = t('Creating…');
-      try {
-        const res = await createPoolJob(form, { kind: 'mixed', name, confirm: name, folders: form.elements.folders.checked,
-          disks: [...chosen('data').map((d) => ({ name: d.name, role: 'data' })), ...chosen('parity').map((d) => ({ name: d.name, role: 'parity' }))] });
-        toast(t('Pool {name} was created and is mounted at /{name}.', { name }));
-        if (res.warning) toast(tr(res.warning), true);
-        loadOverview().catch(() => {});
-        if (form.isConnected) onCreated(res);
-      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Create pool'); }
-    });
-  }
   // Creating a pool is a job (POST /api/pools, then /api/pools/progress): its steps show in place of the form, a bar
   // and each disk, the pool and the folders. Returns the result; on an error the form is back and this throws.
   // How long a step has been running: "40 s", "2 min 5 s".
