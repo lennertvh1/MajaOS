@@ -5368,6 +5368,12 @@
     app: '<path d="M14.5 31.5 24 26l9.5 5.5v10L24 47l-9.5-5.5zM14.5 31.5 24 37l9.5-5.5M24 37v10"/>',
     font: '<path d="M16 46l8-19 8 19M19 39h10"/>',
   };
+  // A long name breaks after _ - . and before the extension, so ".pptx" stays in one piece.
+  function fileNameHtml(name) {
+    const n = String(name || ''), dot = n.lastIndexOf('.');
+    const stem = dot > 0 ? n.slice(0, dot) : n, ext = dot > 0 ? n.slice(dot) : '';
+    return esc(stem).replace(/([_\-.])/g, '$1<wbr>') + (ext ? '<wbr>' + esc(ext) : '');
+  }
   function fileGlyph(kind, name) {
     if (kind === 'dir') return '<svg class="files-glyph dir" viewBox="0 0 64 52" aria-hidden="true"><path d="M2 14a6 6 0 0 1 6-6h16l6 6h26a6 6 0 0 1 6 6v22a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6z"/></svg>';
     const k = name ? iconKind(name) : 'file';
@@ -5437,12 +5443,12 @@
     } else if (fx.view === 'list') {
       stage.innerHTML = `<table class="files-table"><thead><tr><th></th><th></th><th>${t('Name')}</th><th class="files-meta">${t('Size')}</th><th class="files-meta">${t('Modified')}</th></tr></thead><tbody>${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.picked.has(pth) ? 'is-sel' : ''}"><td class="files-tick">${fileCheck(pth, it.name)}</td><td>${fileGlyph(it.type, it.name)}</td><td><button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
+        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.picked.has(pth) ? 'is-sel' : ''}"><td class="files-tick">${fileCheck(pth, it.name)}</td><td>${fileGlyph(it.type, it.name)}</td><td><button type="button" class="files-name-btn" title="${esc(it.name)}"><span class="files-name">${fileNameHtml(it.name)}</span></button></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
       }).join('')}</tbody></table>`;
     } else {
       stage.innerHTML = `<div class="files-icons">${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<div class="files-icon${fx.picked.has(pth) ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}"><button type="button" class="files-hit" aria-label="${esc(it.name)}">${fileGlyph(it.type, it.name)}</button><span class="files-cap">${fileCheck(pth, it.name)}<button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></span></div>`;
+        return `<div class="files-icon${fx.picked.has(pth) ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}"><button type="button" class="files-hit" aria-label="${esc(it.name)}">${fileGlyph(it.type, it.name)}</button><span class="files-cap">${fileCheck(pth, it.name)}<button type="button" class="files-name-btn" title="${esc(it.name)}"><span class="files-name">${fileNameHtml(it.name)}</span></button></span></div>`;
       }).join('')}</div>`;
     }
     const shown = items.length, all = (fx.data && fx.data.items || []).length;

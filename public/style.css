@@ -1481,8 +1481,8 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .ft-font .ft-page { fill: var(--ft-font); }
 .files-table .files-glyph .ft-label { display: none; } /* too small to read in the list */
 .files-icon .files-name, .files-table .files-name {
-  font-size: 12px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  /* The whole name with its extension, over as many lines as it needs. */
+  font-size: 12px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; display: block;
 }
 .files-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .files-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; position: sticky; top: 0; background: var(--glass-strong); }
