@@ -1471,6 +1471,17 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .files-table tbody tr:hover td { background: var(--glass-hover); }
 .files-table .files-glyph { width: 22px; height: 18px; display: block; }
 .files-meta { color: var(--muted); white-space: nowrap; }
+.files-uploads { display: grid; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--glass-line); background: var(--glass); max-height: 40%; overflow: auto; }
+.files-uploads .up-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.files-uploads .up-head .btn { margin-left: auto; }
+.up-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.up-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; font-size: 13px; }
+.up-list .up-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-list .up-state { color: var(--muted); }
+.up-list .usage-bar { grid-column: 1 / -1; height: 4px; }
+.up-list .up-err { grid-column: 1 / -1; color: var(--bad); }
+.up-list li.done .up-state { color: var(--ok); }
+.up-list li.failed .up-state, .up-list li.stopped .up-state { color: var(--bad); }
 .files-status { padding: 6px 14px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--glass-line); }
 @media (max-width: 760px) {
   .finder { grid-template-columns: 1fr; grid-template-rows: auto minmax(240px, 1fr); min-height: 0; }

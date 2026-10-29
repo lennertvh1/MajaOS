@@ -2876,6 +2876,18 @@
     if (!q) throw err('Unknown endpoint', 404);
     return filesPut(q, body);
   }
+  // An upload with progress: about 60 MB/s, at most 6 seconds per file.
+  function upload(path, file, { onProgress = () => {}, signal } = {}) {
+    return new Promise((resolve, reject) => {
+      const size = file.size || 0, secs = Math.min(6, Math.max(0.6, size / 60e6)), start = Date.now();
+      const timer = setInterval(() => {
+        const f = Math.min(1, (Date.now() - start) / 1000 / secs);
+        onProgress(Math.round(size * f), size);
+        if (f >= 1) { clearInterval(timer); put(path, file).then(resolve, reject); }
+      }, 150);
+      if (signal) signal.addEventListener('abort', () => { clearInterval(timer); const e = err('The upload was stopped.', 499); reject(e); }, { once: true });
+    });
+  }
   async function download(path) {
     await wait(rnd(80, 180));
     const q = parseFilesApi(path);
@@ -2883,5 +2895,5 @@
     return filesDownload(q);
   }
 
-  window.MajaOSDemo = { get, post, del, stream, put, download, user: () => acct.user };
+  window.MajaOSDemo = { get, post, del, stream, put, upload, download, user: () => acct.user };
 })();

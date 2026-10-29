@@ -152,6 +152,26 @@
       if (!res.ok) { const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
       return data;
     },
+    // An upload with progress (fetch can't report it): onProgress(sent, total); signal (AbortController) stops it.
+    upload(p, file, { onProgress = () => {}, signal } = {}) {
+      return new Promise((resolve, reject) => {
+        const x = new XMLHttpRequest();
+        x.open('PUT', p);
+        x.withCredentials = true;
+        x.upload.onprogress = (e) => onProgress(e.loaded, e.lengthComputable ? e.total : file.size);
+        const fail = (msg, status) => { const e = new Error(msg); e.status = status; reject(e); };
+        x.onload = () => {
+          let data = {};
+          try { data = JSON.parse(x.responseText || '{}'); } catch (e) { /* not JSON */ }
+          if (x.status >= 200 && x.status < 300) resolve(data);
+          else { const e = new Error(tr(data.error) || t('Error {status}', { status: x.status })); e.status = x.status; e.data = data; reject(e); }
+        };
+        x.onerror = () => fail(t('The connection to the server was lost.'), 0);
+        x.onabort = () => fail(t('The upload was stopped.'), 499);
+        if (signal) { if (signal.aborted) { x.abort(); return; } signal.addEventListener('abort', () => x.abort(), { once: true }); }
+        x.send(file);
+      });
+    },
     async download(p) {
       const res = await fetch(p, { credentials: 'same-origin' });
       if (!res.ok) {
@@ -187,7 +207,7 @@
   // The demo throws the same (English) messages as the server: translate those too.
   function translatedApi(src) {
     const wrap = (fn) => async (...args) => { try { return await fn(...args); } catch (e) { e.message = tr(e.message); throw e; } };
-    return { get: wrap(src.get), post: wrap(src.post), del: wrap(src.del), stream: wrap(src.stream), put: wrap(src.put), download: wrap(src.download) };
+    return { get: wrap(src.get), post: wrap(src.post), del: wrap(src.del), stream: wrap(src.stream), put: wrap(src.put), upload: wrap(src.upload), download: wrap(src.download) };
   }
 
   /* ------------------------------------------------------------ state */
@@ -5580,24 +5600,93 @@
     m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
     m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
   }
+  // Uploads: one at a time, with a panel at the bottom of Files (a bar for everything and one per file, Stop). Each
+  // file shows up in the folder as soon as it is done. Files dropped while others upload join the queue.
+  const up = { queue: [], busy: false, ctrl: null, hideTimer: null };
   async function uploadFiles(list) {
     const arr = [...list].filter((f) => f && f.name);
     if (!arr.length || !fx.share) return;
-    let ok = 0;
+    const share = fx.share, folder = fx.path;
+    const here = new Set(((fx.data && fx.data.path === folder && fx.data.items) || []).map((it) => it.name));
     for (const f of arr) {
-      const dest = filesJoin(fx.path, f.name);
-      try { await api.put(filesApi(fx.share, dest), f); ok++; }
-      catch (e) {
-        if (e.status === 409) {
-          if (await ask(t('A file named {name} already exists. Overwrite it?', { name: f.name }), t('Overwrite'))) {
-            try { await api.put(filesApi(fx.share, dest, { overwrite: true }), f); ok++; } catch (e2) { toast(e2.message, true); }
-          }
-        } else toast(e.message, true);
+      let overwrite = false;
+      if (here.has(f.name) || up.queue.some((q) => q.share === share && q.folder === folder && q.file.name === f.name && q.state !== 'failed')) {
+        if (!(await ask(t('A file named {name} already exists. Overwrite it?', { name: f.name }), t('Overwrite')))) continue;
+        overwrite = true;
       }
+      up.queue.push({ file: f, share, folder, overwrite, sent: 0, state: 'waiting', error: '' });
     }
-    if (ok === 1) toast(t('Uploaded: {name}', { name: arr[0].name }));
-    else if (ok > 1) toast(t('{n} files uploaded.', { n: ok }));
-    if (ok) renderFiles();
+    clearTimeout(up.hideTimer);
+    drawUploads();
+    if (!up.busy) runUploads();
+  }
+  async function runUploads() {
+    up.busy = true;
+    let job;
+    while ((job = up.queue.find((q) => q.state === 'waiting'))) {
+      job.state = 'uploading'; job.started = Date.now();
+      up.ctrl = new AbortController();
+      const send = (overwrite) => api.upload(filesApi(job.share, filesJoin(job.folder, job.file.name), overwrite ? { overwrite: true } : undefined), job.file, {
+        signal: up.ctrl.signal, onProgress: (sent) => { job.sent = sent; drawUploads(); },
+      });
+      try {
+        try { await send(job.overwrite); }
+        catch (e) {
+          // Someone else put a file with that name there in the meantime.
+          if (e.status !== 409 || !(await ask(t('A file named {name} already exists. Overwrite it?', { name: job.file.name }), t('Overwrite')))) throw e;
+          job.sent = 0; await send(true);
+        }
+        job.state = 'done'; job.sent = job.file.size;
+        if (fx.share === job.share && fx.path === job.folder) reloadList();
+      } catch (e) {
+        job.state = e.status === 499 ? 'stopped' : 'failed'; job.error = e.message;
+      }
+      drawUploads();
+    }
+    up.busy = false; up.ctrl = null;
+    const done = up.queue.filter((q) => q.state === 'done');
+    if (done.length === 1) toast(t('Uploaded: {name}', { name: done[0].file.name }));
+    else if (done.length > 1) toast(t('{n} files uploaded.', { n: done.length }));
+    up.queue.filter((q) => q.state === 'failed').forEach((q) => toast(t('{name}: {error}', { name: q.file.name, error: q.error }), true));
+    // Everything went well: the panel goes away by itself. Otherwise it stays until it is closed.
+    if (up.queue.every((q) => q.state === 'done')) up.hideTimer = setTimeout(() => { up.queue = []; drawUploads(); }, 4000);
+  }
+  // The listing again, without "Loading…" in between.
+  async function reloadList() {
+    const gen = fx.gen, share = fx.share, path = fx.path;
+    try {
+      const d = await api.get(filesApi(share, path));
+      if (gen !== fx.gen || share !== fx.share || path !== fx.path) return;
+      fx.data = d; paintItems();
+    } catch (e) { /* the next visit shows it */ }
+  }
+  function drawUploads() {
+    const box = $('#filesUploads');
+    if (!box) return;
+    const q = up.queue;
+    box.hidden = !q.length;
+    window.onbeforeunload = up.busy || q.some((x) => x.state === 'waiting' || x.state === 'uploading') ? () => true : null;
+    if (!q.length) { box.innerHTML = ''; return; }
+    const total = q.reduce((a, x) => a + x.file.size, 0), sent = q.reduce((a, x) => a + (x.state === 'done' ? x.file.size : x.sent), 0);
+    const cur = q.find((x) => x.state === 'uploading');
+    const finished = q.filter((x) => x.state !== 'waiting' && x.state !== 'uploading').length;
+    const pct = total ? Math.min(100, Math.round((sent / total) * 100)) : 100;
+    const speed = cur && Date.now() - cur.started > 800 ? cur.sent / ((Date.now() - cur.started) / 1000) : 0;
+    const head = cur ? t('Uploading {n} of {total}', { n: finished + 1, total: q.length })
+      : q.every((x) => x.state === 'done') ? t('{n} files uploaded.', { n: q.length })
+        : q.some((x) => x.state === 'failed') ? t('Upload finished with errors.') : t('Upload stopped.');
+    const STATE = { waiting: t('Waiting'), done: t('Uploaded'), failed: t('Failed'), stopped: t('Stopped') };
+    box.innerHTML = `<div class="up-head"><b>${esc(head)}</b>
+        <span class="muted small">${esc(t('{done} of {total}', { done: bytes(sent), total: bytes(total) }))}${speed ? ' · ' + esc(bytes(speed)) + '/s' : ''}</span>
+        ${cur ? `<button class="btn sm" type="button" data-up-stop>${t('Stop')}</button>` : `<button class="btn sm" type="button" data-up-close>${t('Close')}</button>`}</div>
+      <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+      <ul class="up-list">${q.map((x) => {
+        const p = x.state === 'done' ? 100 : x.file.size ? Math.round((x.sent / x.file.size) * 100) : 0;
+        return `<li class="${x.state}"><span class="up-name" title="${esc(x.file.name)}">${esc(x.file.name)}</span>
+          <span class="up-state small">${x.state === 'uploading' ? esc(nf0.format(p) + '%') : esc(STATE[x.state] || '')}</span>
+          <div class="usage-bar"><span class="${x.state === 'failed' ? 'bad' : ''}" style="width:${p}%"></span></div>
+          ${x.state === 'failed' ? `<span class="up-err small">${esc(x.error)}</span>` : ''}</li>`;
+      }).join('')}</ul>`;
   }
   function showNameRow(mode, value) {
     const row = $('#filesNew'), field = $('#filesNewName');
@@ -5665,6 +5754,14 @@
     $('#filesFilter').addEventListener('input', (e) => { fx.filter = e.target.value; if (fx.data) paintItems(); });
     $('#filesUpload').addEventListener('click', () => $('#filesInput').click());
     $('#filesInput').addEventListener('change', () => { uploadFiles($('#filesInput').files); $('#filesInput').value = ''; });
+    $('#filesUploads').addEventListener('click', (e) => {
+      if (e.target.closest('[data-up-stop]')) {
+        up.queue.forEach((q) => { if (q.state === 'waiting') q.state = 'stopped'; });
+        if (up.ctrl) up.ctrl.abort();
+        drawUploads();
+      }
+      if (e.target.closest('[data-up-close]')) { clearTimeout(up.hideTimer); up.queue = []; drawUploads(); }
+    });
     $('#filesMkdir').addEventListener('click', () => showNameRow('mkdir'));
     $('#filesNewCancel').addEventListener('click', () => { $('#filesNew').hidden = true; fx.renameFrom = ''; });
     $('#filesNewName').addEventListener('keydown', (e) => {
