@@ -767,11 +767,19 @@ function toHttps(req, res, url) {
   res.end();
   return true;
 }
+// Node closes an idle keep-alive connection after 5 s. The browser polls every few seconds and sometimes sends its
+// next request on a connection Node is just closing: the request fails with "Failed to fetch". Keep them open longer
+// than any browser does (Chrome ~300 s idle in its pool, but it closes ours after this without a race).
+function tune(srv) {
+  srv.keepAliveTimeout = 75000;
+  srv.headersTimeout = 80000;
+  return srv;
+}
 async function startHttps() {
   const port = CFG.demo ? 0 : settings.httpsPort();
   if (!port) { if (secure) { secure.close(); secure = null; } return null; }
   const { key, cert } = await tlsCert.ensure();
-  const next = https.createServer({ key, cert }, onRequest);
+  const next = tune(https.createServer({ key, cert }, onRequest));
   next.on('upgrade', onUpgrade);
   await new Promise((resolve, reject) => { next.once('error', reject); next.listen(port, () => { next.removeListener('error', reject); resolve(); }); });
   const prev = secure;
@@ -861,7 +869,7 @@ async function onUpgrade(req, socket, head) {
 
 // Open a port. The previous port stays up until this one is listening, so a failed change does not drop the page.
 function bind(port) {
-  const next = http.createServer(onRequest);
+  const next = tune(http.createServer(onRequest));
   next.on('upgrade', onUpgrade);
   return new Promise((resolve, reject) => {
     const fail = (err) => { next.removeListener('listening', ok); reject(err); };

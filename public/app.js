@@ -128,16 +128,23 @@
     }, 1500);
   }
   function connectionBack() { const bar = document.getElementById('connLost'); if (bar && !bar.hidden) bar.hidden = true; }
+  // The browser's own "Failed to fetch" says nothing: say that the server can't be reached.
+  const offline = () => { const e = new Error(t('MajaOS can\'t be reached right now. Check the connection, or wait if the server is restarting.')); e.status = 0; e.offline = true; return e; };
   const realApi = {
     async req(method, path, body) {
       let res;
-      try {
-        res = await fetch(path, {
-          method, credentials: 'same-origin',
-          headers: body ? { 'Content-Type': 'application/json' } : {},
-          body: body ? JSON.stringify(body) : undefined,
-        });
-      } catch (e) { connectionLost(); throw e; }
+      const send = () => fetch(path, {
+        method, credentials: 'same-origin',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      try { res = await send(); }
+      catch (e) {
+        // A reading request is tried once more: a connection that closed just then, or a server that is restarting.
+        if (method !== 'GET') { connectionLost(); throw offline(); }
+        await new Promise((r) => setTimeout(r, 800));
+        try { res = await send(); } catch (e2) { connectionLost(); throw offline(); }
+      }
       connectionBack();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
@@ -147,7 +154,7 @@
     post(p, b) { return this.req('POST', p, b || {}); },
     del(p) { return this.req('DELETE', p); },
     async put(p, body) {
-      const res = await fetch(p, { method: 'PUT', credentials: 'same-origin', body });
+      const res = await fetch(p, { method: 'PUT', credentials: 'same-origin', body }).catch(() => { connectionLost(); throw offline(); });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e; }
       return data;
@@ -166,14 +173,14 @@
           if (x.status >= 200 && x.status < 300) resolve(data);
           else { const e = new Error(tr(data.error) || t('Error {status}', { status: x.status })); e.status = x.status; e.data = data; reject(e); }
         };
-        x.onerror = () => fail(t('The connection to the server was lost.'), 0);
+        x.onerror = () => { connectionLost(); fail(t('The connection to the server was lost.'), 0); };
         x.onabort = () => fail(t('The upload was stopped.'), 499);
         if (signal) { if (signal.aborted) { x.abort(); return; } signal.addEventListener('abort', () => x.abort(), { once: true }); }
         x.send(file);
       });
     },
     async download(p) {
-      const res = await fetch(p, { credentials: 'same-origin' });
+      const res = await fetch(p, { credentials: 'same-origin' }).catch(() => { connectionLost(); throw offline(); });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const e = new Error(tr(data.error) || t('Error {status}', { status: res.status })); e.status = res.status; e.data = data; throw e;
@@ -187,7 +194,7 @@
       return { blob, name };
     },
     async stream(path, body, onLine) {
-      const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => { connectionLost(); throw offline(); });
       if (!res.ok || !res.body) { const d = await res.json().catch(() => ({})); throw new Error(tr(d.error) || t('Error {status}', { status: res.status })); }
       const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
       for (;;) {
@@ -236,7 +243,10 @@
   // The windows are modal dialogs in the top layer: the toasts are a popover, shown again for every toast so they land
   // above the window that is open now.
   function toast(msg, bad) {
-    const box = $('#toasts'), el = document.createElement('div');
+    const box = $('#toasts');
+    // The same message once at a time (e.g. several requests failing while the server restarts).
+    if ([...box.children].some((x) => x.textContent === String(msg))) return;
+    const el = document.createElement('div');
     el.className = 'toast' + (bad ? ' bad' : '');
     el.textContent = msg;
     box.appendChild(el);
@@ -7742,7 +7752,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     const bad = results.find((r) => r.status === 'rejected');
     if (bad) {
       if (bad.reason && bad.reason.status === 401) return showLogin();
-      if (++failures === 1) toast(t('Server not reachable: {error}', { error: bad.reason.message }), true);
+      // Unreachable: the bar at the top says so (connectionLost) once it lasts; no toast every 10 s.
+      if (++failures === 1 && !bad.reason.offline) toast(t('Server not reachable: {error}', { error: bad.reason.message }), true);
     } else failures = 0;
     renderNotes();
   }

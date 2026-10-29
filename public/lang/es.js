@@ -2669,4 +2669,5 @@ window.TB_LANG.es = {
   "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "¿Eliminarlo de todos modos? Las apps que lo usan se detienen, y sus datos, carpetas compartidas y máquinas virtuales en {name} se pierden para siempre.",
   "Delete anyway": "Eliminar de todos modos",
   "{name} is still used by {list}.": "{list} todavía usa {name}.",
+  "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "MajaOS no está disponible ahora. Comprueba la conexión o espera si el servidor se está reiniciando.",
 };

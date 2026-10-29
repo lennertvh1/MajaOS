@@ -2669,4 +2669,5 @@ window.TB_LANG.de = {
   "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "Trotzdem löschen? Die Apps, die ihn nutzen, werden gestoppt, und ihre Daten, freigegebenen Ordner und VMs auf {name} sind endgültig weg.",
   "Delete anyway": "Trotzdem löschen",
   "{name} is still used by {list}.": "{name} wird noch verwendet von {list}.",
+  "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "MajaOS ist gerade nicht erreichbar. Prüfen Sie die Verbindung oder warten Sie, falls der Server neu startet.",
 };

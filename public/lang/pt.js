@@ -2669,4 +2669,5 @@ window.TB_LANG.pt = {
   "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "Eliminar mesmo assim? As apps que o usam são paradas, e os seus dados, pastas partilhadas e VMs em {name} desaparecem para sempre.",
   "Delete anyway": "Eliminar mesmo assim",
   "{name} is still used by {list}.": "{name} ainda é usado por {list}.",
+  "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "O MajaOS não está acessível agora. Verifique a ligação ou aguarde se o servidor estiver a reiniciar.",
 };
