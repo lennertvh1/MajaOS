@@ -2340,7 +2340,9 @@
       hostname: 'Demo', uptime: Math.round((Date.now() - bootTime) / 1000), version: 'Debian GNU/Linux 13 (trixie)',
       cpu: { brand: 'AMD Ryzen 7 5700X 8-Core Processor', cores: 8, threads: 16, percent: Math.round(rnd(6, 22)) },
       memory: { total: 32 * GB, used, zfsCache: 6 * GB, percent: Math.round((used / (32 * GB)) * 1000) / 10 },
-      storage: storageSummary(), gpu: gpu(),
+      // Like lib/system.js: nvidia-smi only answers once the driver is loaded; lspci always sees the card.
+      storage: storageSummary(), gpu: nvidia.loaded ? gpu() : null,
+      gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }],
     };
   }
 

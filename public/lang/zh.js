@@ -2789,4 +2789,5 @@ window.TB_LANG.zh = {
   "Apps and VMs can't use the GPU until its driver is installed.": "安装驱动之前，应用和虚拟机无法使用 GPU。",
   "Show progress": "查看进度",
   "The NVIDIA driver is being installed. Follow it in Software update.": "正在安装 NVIDIA 驱动。请在“软件更新”中查看进度。",
+  "no driver": "无驱动",
 };

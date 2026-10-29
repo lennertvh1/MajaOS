@@ -2793,4 +2793,5 @@ window.TB_LANG.nl = {
   "Apps and VMs can't use the GPU until its driver is installed.": "Apps en VM's kunnen de GPU pas gebruiken als de driver geïnstalleerd is.",
   "Show progress": "Voortgang tonen",
   "The NVIDIA driver is being installed. Follow it in Software update.": "De NVIDIA-driver wordt geïnstalleerd. Volg het in Software-update.",
+  "no driver": "geen driver",
 };

@@ -2789,4 +2789,5 @@ window.TB_LANG.fr = {
   "Apps and VMs can't use the GPU until its driver is installed.": "Les apps et VM ne peuvent pas utiliser le GPU tant que son pilote n'est pas installé.",
   "Show progress": "Voir la progression",
   "The NVIDIA driver is being installed. Follow it in Software update.": "Le pilote NVIDIA est en cours d'installation. Suivez-le dans Mise à jour logicielle.",
+  "no driver": "sans pilote",
 };

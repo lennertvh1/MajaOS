@@ -143,6 +143,7 @@ enable_now docker
 if [ "$NVIDIA" = 1 ]; then
   step "NVIDIA driver and GPU support for Docker"
   apt-get install -y nvidia-driver firmware-misc-nonfree
+  apt-get install -y nvidia-persistenced && enable_now nvidia-persistenced || true  # nvidia-smi answers right away
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /etc/apt/keyrings/nvidia-container-toolkit.gpg
   curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
     | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' \

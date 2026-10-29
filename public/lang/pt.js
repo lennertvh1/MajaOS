@@ -2789,4 +2789,5 @@ window.TB_LANG.pt = {
   "Apps and VMs can't use the GPU until its driver is installed.": "As apps e VMs só podem usar a GPU depois de instalado o controlador.",
   "Show progress": "Ver o progresso",
   "The NVIDIA driver is being installed. Follow it in Software update.": "O controlador NVIDIA está a ser instalado. Acompanhe em Atualização de software.",
+  "no driver": "sem controlador",
 };

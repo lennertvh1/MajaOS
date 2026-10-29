@@ -200,13 +200,13 @@ const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::fff
 /* ---------------------------------------------------------------- system */
 
 async function apiOverview() {
-  const [cpu, gpu, store, found] = await Promise.all([
-    sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null), replace.look().catch(() => null),
+  const [cpu, gpu, store, found, gpus] = await Promise.all([
+    sys.cpuPercent(), sys.gpuStats(), storage.storageSummary().catch(() => null), replace.look().catch(() => null), sys.gpuDevices(),
   ]);
   return {
     hostname: os.hostname(), uptime: sys.uptime(), version: sys.osName(),
     cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(),
-    storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu,
+    storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu, gpus,
   };
 }
 

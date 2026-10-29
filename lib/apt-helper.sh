@@ -72,6 +72,8 @@ case "$ACTION" in
     step apt-get install "${APT_OPTS[@]}" "linux-headers-$(uname -r)" linux-headers-amd64 || { st failed "The kernel headers could not be installed. See the log." 1; exit 1; }
     say "Installing the NVIDIA driver (this takes a few minutes)…"
     step apt-get install "${APT_OPTS[@]}" nvidia-driver firmware-misc-nonfree || { st failed "The NVIDIA driver could not be installed. Check that the contrib and non-free package sources are on. See the log." 1; exit 1; }
+    # Keeps the driver loaded between uses: nvidia-smi then answers right away (the dashboard asks every 10 s).
+    step apt-get install "${APT_OPTS[@]}" nvidia-persistenced && step systemctl enable --now nvidia-persistenced
     say "Installing GPU support for Docker…"
     install -m 0755 -d /etc/apt/keyrings
     { curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /etc/apt/keyrings/nvidia-container-toolkit.gpg &&

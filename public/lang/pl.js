@@ -2789,4 +2789,5 @@ window.TB_LANG.pl = {
   "Apps and VMs can't use the GPU until its driver is installed.": "Aplikacje i VM nie mogą używać GPU, dopóki sterownik nie zostanie zainstalowany.",
   "Show progress": "Pokaż postęp",
   "The NVIDIA driver is being installed. Follow it in Software update.": "Sterownik NVIDIA jest instalowany. Śledź postęp w Aktualizacji oprogramowania.",
+  "no driver": "brak sterownika",
 };

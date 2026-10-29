@@ -2789,4 +2789,5 @@ window.TB_LANG.ja = {
   "Apps and VMs can't use the GPU until its driver is installed.": "ドライバーをインストールするまで、アプリと VM は GPU を使えません。",
   "Show progress": "進行状況を表示",
   "The NVIDIA driver is being installed. Follow it in Software update.": "NVIDIA ドライバーをインストールしています。ソフトウェア・アップデートで進行状況を確認できます。",
+  "no driver": "ドライバーなし",
 };

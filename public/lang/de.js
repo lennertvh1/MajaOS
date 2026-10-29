@@ -2789,4 +2789,5 @@ window.TB_LANG.de = {
   "Apps and VMs can't use the GPU until its driver is installed.": "Apps und VMs können die GPU erst nutzen, wenn ihr Treiber installiert ist.",
   "Show progress": "Fortschritt zeigen",
   "The NVIDIA driver is being installed. Follow it in Software update.": "Der NVIDIA-Treiber wird installiert. Verfolgen Sie es unter Software-Update.",
+  "no driver": "kein Treiber",
 };

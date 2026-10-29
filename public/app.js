@@ -307,6 +307,8 @@
     if (o.cpu && o.cpu.brand) facts.push([t('Processor'), o.cpu.brand.replace(/\s+\d+-Core Processor/i, '').replace(/\(R\)|\(TM\)/g, '')]);
     if (o.memory) facts.push([t('Memory'), t('{used} of {total}', { used: bytes(o.memory.used), total: bytes(o.memory.total) })]);
     if (g) facts.push(['GPU', g.name.replace(/^NVIDIA (GeForce )?/, '') + (g.temp != null ? ' · ' + g.temp + ' °C' : '')]);
+    // Without nvidia-smi (no driver yet, or an AMD/Intel card): the card as lspci sees it.
+    else (o.gpus || []).slice(0, 2).forEach((c) => facts.push(['GPU', c.name.replace(/^(GeForce|Radeon)\s+/, '') + (c.ready ? '' : ' · ' + t('no driver'))]));
     if (o.version) facts.push([t('System'), o.version.replace(' GNU/Linux', '')]);
     $('#sysFacts').innerHTML = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd title="${esc(v)}">${esc(v)}</dd>`).join('');
 

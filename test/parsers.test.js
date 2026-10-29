@@ -228,3 +228,15 @@ test('run() gives up on a command that ignores its time-out (stuck on a disk)', 
   await assert.rejects(run('bash', ['-c', 'trap "" TERM; sleep 20'], { timeout: 300 }), (e) => e.status === 504 && /did not respond in time/.test(e.message));
   assert.ok(Date.now() - t0 < 10000);
 });
+
+test('graphics cards from lspci -vmmk: with and without a driver, the BMC video left out', () => {
+  const { parseGpuDevices } = require('../lib/system');
+  const out = parseGpuDevices([
+    'Slot:\t01:00.0\nClass:\tVGA compatible controller\nVendor:\tNVIDIA Corporation\nDevice:\tGA104 [GeForce RTX 3060 Ti Lite Hash Rate]\nSVendor:\tGigabyte Technology Co., Ltd\nRev:\ta1\nDriver:\tnouveau\nModule:\tnouveau',
+    'Slot:\t01:00.1\nClass:\tAudio device\nVendor:\tNVIDIA Corporation\nDevice:\tGA104 High Definition Audio Controller\nDriver:\tsnd_hda_intel',
+    'Slot:\t03:00.0\nClass:\tVGA compatible controller\nVendor:\tASPEED Technology, Inc.\nDevice:\tASPEED Graphics Family\nDriver:\tast',
+    'Slot:\t0a:00.0\nClass:\tVGA compatible controller\nVendor:\tAdvanced Micro Devices, Inc. [AMD/ATI]\nDevice:\tNavi 23 [Radeon RX 6600]\nDriver:\tamdgpu',
+    'Slot:\t0b:00.0\nClass:\t3D controller\nVendor:\tNVIDIA Corporation\nDevice:\tTU104GL [Tesla T4]',
+  ].join('\n\n'));
+  assert.deepEqual(out.map((g) => [g.name, g.vendor, g.ready]), [['GeForce RTX 3060 Ti Lite Hash Rate', 'nvidia', false], ['Radeon RX 6600', 'amd', true], ['Tesla T4', 'nvidia', false]]);
+});
