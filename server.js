@@ -81,6 +81,7 @@ const sysbackup = require('./lib/sysbackup');
 const ai = require('./lib/ai');
 const issue = require('./lib/issue');
 const keyboard = require('./lib/keyboard');
+const mixed = require('./lib/mixed');
 
 const CFG = {
   port: settings.listenPort(),
@@ -633,6 +634,23 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
   if (p === '/api/pools/options' && method === 'GET') return sendJson(res, 200, await zpool.poolOptions());
   if (p === '/api/pools' && method === 'POST') return sendJson(res, 200, await zpool.createPool(await readBody(req)));
+  // Pools with mixed disks: update or check the parity, the schedule, and removing the pool (the files stay on the disks).
+  const mx = p.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log))?$/);
+  if (mx) {
+    const [, name, act] = mx;
+    if (!mixed.find(name)) return sendJson(res, 404, { error: 'This pool doesn\'t exist (anymore).' });
+    if (act === 'log' && method === 'GET') return sendJson(res, 200, { job: mixed.jobView(name), last: mixed.find(name).last || {} });
+    if ((act === 'sync' || act === 'scrub') && method === 'POST') { const started = mixed.startJob(name, act); started.catch(() => {}); await new Promise((r) => setTimeout(r, 200)); return sendJson(res, 200, { started: true, job: mixed.jobView(name) }); }
+    if (act === 'stop' && method === 'POST') return sendJson(res, 200, mixed.stopJob(name));
+    if (act === 'schedule' && method === 'POST') return sendJson(res, 200, { schedule: mixed.setSchedule(name, await readBody(req)) });
+    if (!act && method === 'DELETE') {
+      // Not while something still points inside: app data, VMs, ISOs, shared folders or backup folders.
+      const mp = mixed.find(name).mountpoint, inside = (x) => x && (x === mp || x.startsWith(mp + '/'));
+      const used = Object.entries(paths.all()).filter(([, v]) => inside(v)).map(([k]) => k);
+      for (const sh of shares.shareRecords()) if (inside(sh.path)) used.push(sh.name);
+      return sendJson(res, 200, await mixed.remove(name, { inUse: used }));
+    }
+  }
   // Storage locations (Settings → Storage): move app data to another pool, or choose a pool for VMs, ISOs and shared folders.
   if (p === '/api/storage-paths' && method === 'GET') return sendJson(res, 200, await migrate.overview());
   if (p === '/api/storage-paths' && method === 'POST') {
@@ -846,6 +864,7 @@ bind(CFG.port).then(() => {
     sysbackup.startSchedule(); // scheduled backups of apps and VMs
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
+    mixed.startSchedule(); // parity of pools with mixed disks: sync and scrub on their schedule
   }
 }).catch((e) => {
   console.error(`MajaOS could not listen on port ${CFG.port}: ${e.message}`);

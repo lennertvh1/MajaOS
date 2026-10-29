@@ -2488,7 +2488,103 @@
     let o;
     try { o = await api.get('/api/pools/options'); }
     catch (e) { $('#winBody').innerHTML = `<p class="lead">${t('The disks could not be read: {error}', { error: esc(e.message) })}</p>`; return; }
-    poolForm($('#winBody'), o, bays, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
+    // Two kinds: ZFS (disks of the same size work together) or mixed disks (any size, parity on one or two disks).
+    let kind = 'zfs';
+    const kinds = [['zfs', t('ZFS pool'), t('Fast and self-healing. Works best with disks of the same size.')],
+      ['mixed', t('Mixed disks'), t('Disks of any size, each with its own files. One or two parity disks protect them.')]];
+    $('#winBody').innerHTML = `<div class="pool-kinds" role="radiogroup" aria-label="${t('Kind of pool')}">${kinds.map(([k, label, help]) =>
+      `<label class="layout${k === kind ? ' on' : ''}"><input type="radio" name="poolKind" value="${k}"${k === kind ? ' checked' : ''}><b>${esc(label)}</b><span class="small muted">${esc(help)}</span></label>`).join('')}</div>
+      <div id="poolKindBody"></div>`;
+    const draw = () => {
+      $$('.pool-kinds .layout').forEach((l) => l.classList.toggle('on', $('input', l).value === kind));
+      const box = $('#poolKindBody');
+      if (kind === 'mixed') mixedPoolForm(box, o, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
+      else poolForm(box, o, bays, { onCreated: () => storageWindow(), onBack: () => storageWindow() });
+    };
+    $('.pool-kinds').addEventListener('change', (e) => { if (e.target.name === 'poolKind') { kind = e.target.value; draw(); } });
+    draw();
+  }
+
+  // Pool with mixed disks: per free disk Data, Parity or not used. Same checks as plan() in lib/mixed.js.
+  function mixedPoolForm(body, o, { onCreated = () => {}, onBack = null } = {}) {
+    const free = o.disks.filter((d) => d.available);
+    const name0 = ['media', 'data', 'storage', 'pool'].find((n) => !o.pools.includes(n)) || 'pool' + (o.pools.length + 1);
+    const role = new Map();
+    const kind = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
+    body.innerHTML = `<form class="form" id="mixForm" novalidate>
+        <p class="muted small">${t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.')}</p>
+        <label class="fld"><span>${t('Pool name')}</span><input class="field" name="name" value="${esc(name0)}" maxlength="32" autocomplete="off" spellcheck="false">
+          <small>${t('Lowercase letters, digits, - or _. The pool is mounted at /name.')}</small></label>
+        <fieldset class="fld"><span>${t('Disks')}</span><ul class="rows mix-disks" id="mixDisks"></ul></fieldset>
+        <div class="pool-sum" id="mixSum" aria-live="polite"></div>
+        <label class="check"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}</span></label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Create pool')}</button>${onBack ? `<button class="btn" type="button" data-pool-back>${t('Back to storage')}</button>` : ''}</div>
+      </form>`;
+    const form = $('#mixForm', body);
+    const chosen = (r) => free.filter((d) => role.get(d.name) === r);
+    const drawDisks = () => {
+      $('#mixDisks', form).innerHTML = free.map((d) => {
+        const r = role.get(d.name) || '';
+        const seg = [['', t('Not used')], ['data', t('Data', null, 'disk')], ['parity', t('Parity')]].map(([k, label]) =>
+          `<button type="button" role="radio" aria-checked="${r === k ? 'true' : 'false'}" data-mix-role="${esc(d.name)}" data-role="${k}">${esc(label)}</button>`).join('');
+        return `<li><div><div class="row-title">${esc(d.name)} · ${esc(bytes(d.size))}</div>
+            <div class="row-sub">${esc([d.model, kind(d)].filter(Boolean).join(' · '))}${d.warn && r ? ` · <span class="temp-warn">${esc(tr(d.warn))}</span>` : ''}</div></div>
+          <div class="row-side"><div class="seg" role="radiogroup" aria-label="${esc(t('Role of {disk}', { disk: d.name }))}">${seg}</div></div></li>`;
+      }).join('') || `<li><span class="muted">${t('There are no free disks. Every disk is already in a pool or holds the system.')}</span></li>`;
+    };
+    const problem = () => {
+      const data = chosen('data'), parity = chosen('parity');
+      if (!data.length) return t('Choose at least one data disk.');
+      if (parity.length > 2) return t('Choose at most two parity disks.');
+      const largest = Math.max(...data.map((d) => d.size));
+      const small = parity.find((d) => d.size < largest);
+      if (small) return t('The parity disk {disk} is smaller than the largest data disk ({size}). A parity disk must be at least as large as every data disk.', { disk: small.name, size: bytes(largest) });
+      return null;
+    };
+    const drawSum = () => {
+      const data = chosen('data'), parity = chosen('parity'), box = $('#mixSum', form);
+      if (!data.length && !parity.length) { box.innerHTML = `<p class="muted">${t('Mark each disk as Data or Parity.')}</p>`; return; }
+      const bad = problem();
+      const usable = Math.round(data.reduce((a, d) => a + d.size, 0) * 0.98);
+      box.innerHTML = `<div class="pool-big"><b>${bytes(usable)}</b> <span>${t('room for your files (approximately)')}</span></div>
+        <p class="${parity.length ? 'temp-ok' : 'temp-warn'}">${parity.length
+          ? esc(t(parity.length === 1 ? 'If one disk stops working, its files can be rebuilt from the parity.' : 'If up to {n} disks stop working, their files can be rebuilt from the parity.', { n: parity.length }))
+          : esc(t('No parity disk: no protection. If a disk stops working, the files on that disk are lost; the other disks keep theirs.'))}</p>
+        ${bad ? `<p class="small temp-bad">${esc(bad)}</p>` : ''}
+        ${data.some((d) => d.rotational) && data.some((d) => !d.rotational) ? `<p class="small temp-warn">${t('You are mixing hard drives and SSDs: new files go to the disk with the most free space, so some files will be slower than others.')}</p>` : ''}`;
+    };
+    const drawAll = () => { drawDisks(); drawSum(); };
+    drawAll();
+    form.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mix-role]');
+      if (!b) return;
+      if (b.dataset.role) role.set(b.dataset.mixRole, b.dataset.role); else role.delete(b.dataset.mixRole);
+      drawAll();
+    });
+    if (onBack) body.addEventListener('click', (e) => { if (e.target.closest('[data-pool-back]')) onBack(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      const name = form.elements.name.value.trim();
+      if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) { err.textContent = t('Choose a name of lowercase letters, digits, - or _ that starts with a letter (e.g. media).'); return; }
+      const bad = problem();
+      if (bad) { err.textContent = bad; return; }
+      const list = [...chosen('data'), ...chosen('parity')];
+      const r = await ask(t('Create pool {name} on {list}? Everything currently on these disks will be erased.', { name, list: list.map((x) => x.name).join(', ') }),
+        t('Create pool'), t('I understand that all data on these disks will be lost'));
+      if (!r) return;
+      if (!r.checked) { err.textContent = t('Tick that the data on the disks may be lost.'); return; }
+      btn.disabled = true; btn.textContent = t('Creating…');
+      try {
+        const res = await api.post('/api/pools', { kind: 'mixed', name, confirm: name, folders: form.elements.folders.checked,
+          disks: [...chosen('data').map((d) => ({ name: d.name, role: 'data' })), ...chosen('parity').map((d) => ({ name: d.name, role: 'parity' }))] });
+        toast(t('Pool {name} was created and is mounted at /{name}.', { name }));
+        if (res.warning) toast(tr(res.warning), true);
+        loadOverview().catch(() => {});
+        onCreated(res);
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Create pool'); }
+    });
   }
   // Form to create a pool: in the Storage window and right in the welcome wizard (inline: without its own buttons,
   // the wizard calls submit() and hears through onPick whether disks were chosen).
@@ -2719,7 +2815,7 @@
     let s;
     try { s = await api.get('/api/storage'); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     const pct = s.total ? (s.used / s.total) * 100 : 0;
-    const ROLE = { cache: 'Read cache', log: 'Write log', spare: 'Spare', special: 'Metadata', dedup: 'Dedup' };
+    const ROLE = { cache: 'Read cache', log: 'Write log', spare: 'Spare', special: 'Metadata', dedup: 'Dedup', parity: 'Parity' };
     const diskRow = (d) => {
       const sub = [d.model, ROLE[d.role] && t(ROLE[d.role]), d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD',
         d.state && d.state !== 'ONLINE' ? d.state.toLowerCase() : null, d.errors ? t('{n} errors', { n: d.errors }) : null,
@@ -2730,7 +2826,49 @@
         <div class="row-side"><div>${bytes(d.size)}</div><div class="${tempClass(d.temp)}">${d.temp != null ? d.temp + ' °C' : t('Standby')}</div></div>
       </li>`;
     };
+    const when = (iso) => new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+    // A pool with mixed disks: the parity (last update, schedule, a running job) and its own buttons.
+    const parityLine = (p) => {
+      if (!p.parityCount) return t('No parity disk: no protection.');
+      const j = p.job;
+      if (j && !j.done) return t(j.action === 'scrub' ? 'Checking the parity: {pct}%' : 'Updating the parity: {pct}%', { pct: nf0.format(j.percent || 0) });
+      const ls = p.last && p.last.sync;
+      const base = !ls ? t('The parity has not been updated yet.')
+        : ls.ok ? t('Parity up to date since {when}.', { when: when(ls.at) }) : t('The last parity update failed ({when}): {error}', { when: when(ls.at), error: tr(ls.error || '') });
+      const sc = p.last && p.last.scrub;
+      return base + (sc ? ' ' + (sc.ok ? t('Last check {when}: no errors.', { when: when(sc.at) }) : t('Last check {when} failed: {error}', { when: when(sc.at), error: tr(sc.error || '') })) : '');
+    };
+    const mixedBlock = (p) => {
+      const used = p.total ? (p.used / p.total) * 100 : 0;
+      const [label, cls] = poolHealth(p.health);
+      const disks = s.disks.filter((d) => d.pool === p.name);
+      const missing = (p.members || []).filter((m) => !m.present || !m.mounted);
+      const busy = p.job && !p.job.done;
+      const every = (p.schedule && p.schedule.sync && p.schedule.sync.every) || 'daily';
+      return `<h3>${esc(p.name)} <span class="pill ${cls}">${esc(label)}</span> <span class="pill">${t('Mixed disks')}</span></h3>
+        <ul class="rows" data-mx="${esc(p.name)}">
+          <li>
+            <div><div class="row-title">${p.free != null ? t('{size} free', { size: bytes(p.free) }) : t('Not mounted')}</div>
+              <div class="row-sub">${esc(t('{data} data and {parity} parity disks', { data: p.diskCount, parity: p.parityCount }))}</div></div>
+            <div class="row-side">${p.total != null ? t('{used} of {total}', { used: bytes(p.used), total: bytes(p.total) }) : ''}</div>
+            <div class="row-bar"><div class="bar"><span class="${level(used, 80, 92)}" style="width:${used.toFixed(1)}%"></span></div>
+              <div class="row-sub" data-mx-line>${esc(parityLine(p))}</div>
+              ${missing.map((m) => `<div class="row-sub temp-bad">${esc(t(m.role === 'parity' ? 'Parity disk {n} is missing ({model}).' : 'Data disk {n} is missing ({model}): its files are not available.', { n: m.index, model: m.model || m.byId }))}</div>`).join('')}
+              ${p.parityCount ? `<div class="btn-row mx-acts">
+                <button class="btn sm" type="button" data-mx-act="sync"${busy ? ' hidden' : ''}>${t('Update parity now')}</button>
+                <button class="btn sm" type="button" data-mx-act="scrub"${busy ? ' hidden' : ''}>${t('Check parity')}</button>
+                <button class="btn sm" type="button" data-mx-act="stop"${busy ? '' : ' hidden'}>${t('Stop')}</button>
+                <label class="mx-sched small muted">${t('Update automatically')}
+                  <select class="field sm" data-mx-sched>${[['daily', t('Every night')], ['weekly', t('Every week')], ['manual', t('Only by hand')]].map(([k, l]) => `<option value="${k}"${k === every ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+                <button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>`
+                : `<div class="btn-row mx-acts"><button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>`}
+            </div>
+          </li>
+          ${disks.map(diskRow).join('')}
+        </ul>`;
+    };
     const poolBlock = (p) => {
+      if (p.kind === 'mixed') return mixedBlock(p);
       const used = p.total ? (p.used / p.total) * 100 : 0;
       const [label, cls] = poolHealth(p.health);
       const disks = s.disks.filter((d) => d.pool === p.name);
@@ -2759,7 +2897,7 @@
       ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
       ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('There is no ZFS pool yet. Click Create pool to combine your disks.')}</p>` : ''}
       <div class="bays-head"><h3>${t('Pools')}</h3><button class="btn sm" type="button" data-pool-new>${t('Create pool')}</button></div>
-      ${s.pools.map(poolBlock).join('')}
+      <div id="poolsBox">${s.pools.map(poolBlock).join('')}</div>
       ${loose.length ? `<h3>${t('Not in a pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
       <div class="bays-head"><h3>${t('Datasets')}</h3><button class="btn sm" type="button" data-open="shares">${t('Manage shared folders')}</button></div>
       <ul class="rows">${s.datasets.map((d) => `<li>
@@ -2767,6 +2905,42 @@
         <div class="row-side">${bytes(d.used)}</div></li>`).join('') || `<li><span class="muted">${t('No datasets')}</span></li>`}</ul>`;
     mountBays($('#baySec'), s);
     $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
+    // Mixed disks: follow a running parity job in place, start/stop it, the schedule, removing the pool.
+    const follow = (name) => {
+      const ul = $(`[data-mx="${CSS.escape(name)}"]`);
+      if (!ul || !document.body.contains(ul)) return;
+      api.get(`/api/mixed-pools/${encodeURIComponent(name)}/log`).then((r) => {
+        const p = s.pools.find((x) => x.name === name);
+        if (!p || !document.body.contains(ul)) return;
+        p.job = r.job; p.last = r.last;
+        $('[data-mx-line]', ul).textContent = parityLine(p);
+        const busy = r.job && !r.job.done;
+        $$('[data-mx-act="sync"], [data-mx-act="scrub"]', ul).forEach((b) => { b.hidden = busy; });
+        const stop = $('[data-mx-act="stop"]', ul); if (stop) stop.hidden = !busy;
+        if (busy) setTimeout(() => follow(name), 2000);
+        else if (r.job && r.job.done && r.job.ok === false && r.job.error) toast(tr(r.job.error), true);
+      }).catch(() => {});
+    };
+    s.pools.filter((p) => p.kind === 'mixed' && p.job && !p.job.done).forEach((p) => follow(p.name));
+    $('#poolsBox').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-mx-act]'); if (!b) return;
+      const name = b.closest('[data-mx]').dataset.mx, act = b.dataset.mxAct, url = `/api/mixed-pools/${encodeURIComponent(name)}`;
+      try {
+        if (act === 'remove') {
+          if (!(await ask(t('Remove the pool {name}? The files stay on the disks, but /{name} and its parity go away. Shared folders, apps and VMs on it must be moved first.', { name }), t('Remove pool')))) return;
+          await api.del(url); toast(t('Pool {name} was removed. The files are still on the disks.', { name })); storageWindow(); return;
+        }
+        if (act === 'stop') { await api.post(url + '/stop'); toast(t('Stopping…')); }
+        else { await api.post(url + '/' + act); toast(act === 'scrub' ? t('Checking the parity…') : t('Updating the parity…')); }
+        follow(name);
+      } catch (ex) { toast(ex.message, true); }
+    });
+    $('#poolsBox').addEventListener('change', async (e) => {
+      const sel = e.target.closest('[data-mx-sched]'); if (!sel) return;
+      const name = sel.closest('[data-mx]').dataset.mx;
+      try { await api.post(`/api/mixed-pools/${encodeURIComponent(name)}/schedule`, { sync: { every: sel.value, time: '03:00', day: 0 } }); toast(t('Saved.')); }
+      catch (ex) { toast(ex.message, true); }
+    });
   }
 
   /* --- VMs (own page at #vms) */

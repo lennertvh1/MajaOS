@@ -1620,3 +1620,9 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
   .app-row .row-status { grid-column: 2; grid-row: 1; justify-content: flex-end; }
   .app-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* Create pool: ZFS or mixed disks, and the role of each disk in a pool with mixed disks. */
+.pool-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.mix-disks .row-side .seg button { font-size: 13px; }
+.mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.mx-sched { display: inline-flex; align-items: center; gap: 6px; }

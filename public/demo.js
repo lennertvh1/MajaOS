@@ -1798,7 +1798,66 @@
     return { disks: list.sort((a, b) => Number(b.available) - Number(a.available) || a.name.localeCompare(b.name, undefined, { numeric: true })),
       pools: pools.map((p) => p.name), layouts: ['stripe', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'mirrors'], compression: ['lz4', 'zstd', 'off'] };
   }
+  // A pool with mixed disks (lib/mixed.js): the same checks; parity jobs take ~8 s.
+  const mxJobs = {};
+  function demoCreateMixed(b) {
+    const name = String(b.name || '').trim();
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) throw err('Choose a name of lowercase letters, digits, - or _ that starts with a letter (e.g. media).');
+    if (pools.some((p) => p.name === name)) throw err('A pool named ' + name + ' already exists.', 409);
+    const opts = poolOptions();
+    const chosen = (b.disks || []).map((x) => {
+      const d = opts.disks.find((y) => y.name === x.name);
+      if (!d) throw err('The disk ' + x.name + ' no longer exists. Open the window again.');
+      if (!d.available) throw err('You cannot use ' + x.name + ': ' + d.reason + '.', 409);
+      return { ...d, role: x.role === 'parity' ? 'parity' : 'data' };
+    });
+    const data = chosen.filter((d) => d.role === 'data'), parity = chosen.filter((d) => d.role === 'parity');
+    if (!data.length) throw err('Choose at least one data disk.');
+    if (parity.length > 2) throw err('Choose at most two parity disks.');
+    const largest = Math.max(...data.map((d) => d.size)), small = parity.find((d) => d.size < largest);
+    if (small) throw err('The parity disk ' + small.name + ' is smaller than the largest data disk. A parity disk must be at least as large as every data disk.');
+    if (b.confirm !== name) throw err('Type the pool name to confirm that the disks may be erased.');
+    const total = Math.round(data.reduce((a, d) => a + d.size, 0) * 0.98);
+    const members = [...data.map((d, i) => ({ ...d, index: i + 1, mount: '/mnt/' + name + '/disk' + (i + 1) })), ...parity.map((d, i) => ({ ...d, index: i + 1, mount: '/mnt/' + name + '/parity' + (i + 1) }))]
+      .map((d) => ({ key: 's:' + d.serial, byId: d.byId, role: d.role, index: d.index, mount: d.mount, model: d.model, size: d.size, present: true, device: d.name, mounted: true }));
+    pools.push({ name, kind: 'mixed', mountpoint: '/' + name, health: 'ONLINE', used: 0, free: total, total, layout: 'mixed', diskCount: data.length, parityCount: parity.length,
+      members, schedule: { sync: { every: 'daily', time: '03:00', day: 0 }, scrub: { every: 'weekly', time: '04:30', day: 0 } }, last: {}, job: null });
+    chosen.forEach((c) => { const d = disks.find((x) => x.name === c.name); Object.assign(d, { pool: name, role: c.role, vdev: null, state: 'ONLINE' }); });
+    datasets.push({ name, used: 0, free: total, mountpoint: '/' + name, compress: 1 });
+    if (parity.length) mxJobs[name] = { action: 'sync', start: Date.now() };
+    return { name, kind: 'mixed', folders: b.folders === false ? [] : ['appdata', 'media', 'backups', 'vms', 'isos'], uses: [] };
+  }
+  function mxJob(name) {
+    const p = pools.find((x) => x.name === name), j = mxJobs[name];
+    if (!j) return null;
+    const el = Date.now() - j.start, done = j.stopped || el > 8000;
+    const view = { action: j.action, started: new Date(j.start).toISOString(), percent: j.stopped ? j.percent : Math.min(100, Math.round(el / 80)), done, ok: done ? !j.stopped : null, error: j.stopped ? 'Stopped.' : null, lines: [] };
+    if (done && !j.recorded) { j.recorded = true; p.last = { ...(p.last || {}), [j.action]: { at: new Date().toISOString(), ok: view.ok, error: view.error } }; }
+    return view;
+  }
+  function mxRoute(method, path, body) {
+    const m = path.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log))?$/);
+    if (!m) return undefined;
+    const p = pools.find((x) => x.name === m[1] && x.kind === 'mixed');
+    if (!p) throw err('This pool doesn\'t exist (anymore).', 404);
+    const act = m[2], cur = mxJob(p.name);
+    if (act === 'log') return { job: cur, last: copy(p.last || {}) };
+    if (act === 'sync' || act === 'scrub') {
+      if (cur && !cur.done) throw err('The parity of this pool is already being updated or checked.', 409);
+      mxJobs[p.name] = { action: act, start: Date.now() }; return { started: true, job: mxJob(p.name) };
+    }
+    if (act === 'stop') { const j = mxJobs[p.name]; if (!cur || cur.done) throw err('Nothing is running for this pool.', 409); j.stopped = true; j.percent = cur.percent; return { stopping: true }; }
+    if (act === 'schedule') { p.schedule = { ...p.schedule, sync: { every: ['daily', 'weekly', 'manual'].includes(body.sync && body.sync.every) ? body.sync.every : 'daily', time: '03:00', day: 0 } }; return { schedule: copy(p.schedule) }; }
+    if (!act && method === 'DELETE') {
+      pools.splice(pools.indexOf(p), 1);
+      disks.forEach((d) => { if (d.pool === p.name) Object.assign(d, { pool: null, role: null, vdev: null, state: null }); });
+      for (let i = datasets.length - 1; i >= 0; i--) if (datasets[i].name === p.name) datasets.splice(i, 1);
+      return { removed: p.name };
+    }
+    return undefined;
+  }
   function demoCreatePool(b) {
+    if (b.kind === 'mixed') return demoCreateMixed(b);
     const name = String(b.name || '').trim();
     if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name) || /^(mirror|raidz\d?|draid\d?|spare|log|cache|special|dedup|c\d+)/i.test(name)) throw err('Choose a name that starts with a letter, with letters, digits, - or _ (e.g. tank or fast). Names like mirror or raidz are not allowed.');
     if (pools.some((p) => p.name === name)) throw err('A pool named ' + name + ' already exists.', 409);
@@ -2365,7 +2424,8 @@
     if (path === '/api/pools/options') return poolOptions();
     const dk = path.match(/^\/api\/disks\/([^/?]+)(\?wake=1)?$/);
     if (dk) { await wait(rnd(250, 600)); return demoDisk(decodeURIComponent(dk[1]), !!dk[2]); }
-    if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
+    if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('GET', path); if (r !== undefined) return r; }
+    if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : p))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
   }
@@ -2487,6 +2547,7 @@
     const dt = path.match(/^\/api\/disks\/([^/]+)\/test$/);
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
+    if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     const vs = path.match(/^\/api\/vm-networks\/([^/]+)\/start$/);
     if (vs) { const n = vmNets.find((x) => x.name === decodeURIComponent(vs[1])); if (!n) throw err('This VM network no longer exists.', 404); n.active = true; return { ok: true }; }
     if (/\/exec$/.test(path)) { await wait(rnd(60, 180)); return demoExec(findApp(path.split('/')[3]), String(body.cmd || ''), body.cwd || '/'); }
@@ -2621,6 +2682,7 @@
 
   async function del(path) {
     await wait(400);
+    if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('DELETE', path); if (r !== undefined) return r; }
     { const lm = path.match(/^\/api\/share-links\/([0-9a-f]{8})$/); if (lm) {
       const i = demoLinks.findIndex((row) => row.id === lm[1]);
       if (i < 0) throw err('This link does not exist.', 404);

@@ -63,6 +63,10 @@ else
   modprobe zfs
 fi
 
+step "Pools with mixed disks (mergerfs and SnapRAID)"
+# Disks of different sizes together, with one or two parity disks (Storage → Create pool → Mixed disks).
+apt-get install -y mergerfs snapraid
+
 step "Virtual machines (KVM/QEMU and libvirt)"
 apt-get install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients virtinst ovmf swtpm swtpm-tools
 enable_now libvirtd
