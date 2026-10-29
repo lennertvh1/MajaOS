@@ -19,7 +19,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
@@ -27,11 +27,14 @@ env:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Only from main (pre-releases also from dev)
         run: |
@@ -51,6 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then echo "The release $TAG already exists."; exit 0; fi
+          gh auth setup-git
           git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
           title="$(git tag -l --format='%(contents:subject)' "$TAG")"
           git tag -l --format='%(contents:body)' "$TAG" > notes.md
@@ -62,10 +66,13 @@ jobs:
     needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+          persist-credentials: false
 
       - name: Install tools
         run: sudo apt-get update -q && sudo apt-get install -y -q xorriso cpio debootstrap squashfs-tools
