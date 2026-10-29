@@ -2676,4 +2676,6 @@ window.TB_LANG.pl = {
   "Deleting {name} failed.": "Usuwanie {name} nie powiodło się.",
   "You can close this window: the pool is deleted anyway.": "Możesz zamknąć to okno: pula i tak zostanie usunięta.",
   "Another pool is being created or deleted. Wait until it is ready.": "Inna pula jest właśnie tworzona lub usuwana. Poczekaj, aż to się skończy.",
+  "ZFS did not finish deleting {name} within 5 minutes. A disk of the pool probably doesn't respond. Check the pool with zpool status {name}; restarting the server usually frees it.": "ZFS nie zakończył usuwania {name} w ciągu 5 minut. Prawdopodobnie dysk puli nie odpowiada. Sprawdź pulę poleceniem zpool status {name}; ponowne uruchomienie serwera zwykle ją zwalnia.",
+  "The disks of {name} no longer respond, so ZFS has frozen the pool. It can't be deleted while the server runs. Restart the server: a pool without working disks is not loaded again, and you can delete it then if it still shows.": "Dyski puli {name} nie odpowiadają, więc ZFS zamroził pulę. Nie można jej usunąć, dopóki serwer działa. Uruchom serwer ponownie: pula bez działających dysków nie zostanie już załadowana, a jeśli nadal będzie widoczna, możesz ją wtedy usunąć.",
 };

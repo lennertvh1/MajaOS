@@ -2664,6 +2664,8 @@
   }
   // Creating a pool is a job (POST /api/pools, then /api/pools/progress): its steps show in place of the form, a bar
   // and each disk, the pool and the folders. Returns the result; on an error the form is back and this throws.
+  // How long a step has been running: "40 s", "2 min 5 s".
+  const elapsed = (secs) => (secs < 60 ? t('{n} s', { n: secs }) : t('{m} min {s} s', { m: Math.floor(secs / 60), s: secs % 60 }));
   function drawPoolProgress(box, p) {
     const cur = (p.steps || []).find((x) => x.state === 'running' || x.state === 'failed');
     const del = p.kind === 'destroy';
@@ -2672,7 +2674,7 @@
     const pct = p.percent || 0;
     box.innerHTML = `<div class="pp-head"><b>${esc(head)}</b><span class="muted">${nf0.format(pct)}%</span></div>
       <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span class="${p.done && !p.ok ? 'bad' : ''}" style="width:${pct}%"></span></div>
-      <ol class="pp-steps">${(p.steps || []).map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}</li>`).join('')}</ol>
+      <ol class="pp-steps">${(p.steps || []).map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}${x.secs >= 5 ? ` <span class="muted small">${esc(elapsed(x.secs))}</span>` : ''}</li>`).join('')}</ol>
       ${p.done ? '' : `<p class="muted small">${t(del ? 'You can close this window: the pool is deleted anyway.' : 'You can close this window: the pool is created anyway.')}</p>`}`;
   }
   // Follows the job of /api/pools/progress in box until it is done; returns the last state.

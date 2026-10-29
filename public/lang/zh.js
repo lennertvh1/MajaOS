@@ -2676,4 +2676,6 @@ window.TB_LANG.zh = {
   "Deleting {name} failed.": "删除 {name} 失败。",
   "You can close this window: the pool is deleted anyway.": "你可以关闭此窗口：存储池仍会被删除。",
   "Another pool is being created or deleted. Wait until it is ready.": "另一个存储池正在创建或删除。请等待完成。",
+  "ZFS did not finish deleting {name} within 5 minutes. A disk of the pool probably doesn't respond. Check the pool with zpool status {name}; restarting the server usually frees it.": "ZFS 未能在 5 分钟内删除 {name}。可能是存储池中的某个磁盘没有响应。请用 zpool status {name} 检查存储池；重启服务器通常可以解除。",
+  "The disks of {name} no longer respond, so ZFS has frozen the pool. It can't be deleted while the server runs. Restart the server: a pool without working disks is not loaded again, and you can delete it then if it still shows.": "{name} 的磁盘已无响应，因此 ZFS 冻结了该存储池。服务器运行期间无法删除它。请重启服务器：没有可用磁盘的存储池将不再加载；如果它仍然显示，届时即可删除。",
 };

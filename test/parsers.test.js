@@ -221,3 +221,10 @@ test('console: the sh script returns output, new folder and exit code (real sh)'
   assert.equal(r.output, '/\na\nb'); // unknown folder: back to /
   assert.throws(() => dk.parseExec({ stdout: '', stderr: 'OCI runtime exec failed: exec: "sh": executable file not found in $PATH', code: 127 }, '/'), /has no shell/);
 });
+
+test('run() gives up on a command that ignores its time-out (stuck on a disk)', async () => {
+  const { run } = require('../lib/system');
+  const t0 = Date.now();
+  await assert.rejects(run('bash', ['-c', 'trap "" TERM; sleep 20'], { timeout: 300 }), (e) => e.status === 504 && /did not respond in time/.test(e.message));
+  assert.ok(Date.now() - t0 < 10000);
+});

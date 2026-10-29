@@ -2676,4 +2676,6 @@ window.TB_LANG.ja = {
   "Deleting {name} failed.": "{name} の削除に失敗しました。",
   "You can close this window: the pool is deleted anyway.": "このウィンドウは閉じてもかまいません。プールは削除されます。",
   "Another pool is being created or deleted. Wait until it is ready.": "別のプールを作成中または削除中です。完了するまでお待ちください。",
+  "ZFS did not finish deleting {name} within 5 minutes. A disk of the pool probably doesn't respond. Check the pool with zpool status {name}; restarting the server usually frees it.": "ZFS は 5 分以内に {name} を削除できませんでした。プールのディスクが応答していない可能性があります。zpool status {name} でプールを確認してください。サーバーを再起動すると通常は解放されます。",
+  "The disks of {name} no longer respond, so ZFS has frozen the pool. It can't be deleted while the server runs. Restart the server: a pool without working disks is not loaded again, and you can delete it then if it still shows.": "{name} のディスクが応答しないため、ZFS はプールを凍結しました。サーバーの稼働中は削除できません。サーバーを再起動してください。動作するディスクがないプールは読み込まれなくなります。まだ表示される場合は、その後で削除できます。",
 };

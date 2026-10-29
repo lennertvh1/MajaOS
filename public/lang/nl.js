@@ -2680,4 +2680,6 @@ window.TB_LANG.nl = {
   "Deleting {name} failed.": "{name} verwijderen is mislukt.",
   "You can close this window: the pool is deleted anyway.": "Je kan dit venster sluiten: de pool wordt toch verwijderd.",
   "Another pool is being created or deleted. Wait until it is ready.": "Er wordt al een andere pool gemaakt of verwijderd. Wacht tot dat klaar is.",
+  "ZFS did not finish deleting {name} within 5 minutes. A disk of the pool probably doesn't respond. Check the pool with zpool status {name}; restarting the server usually frees it.": "ZFS kon {name} niet binnen 5 minuten verwijderen. Waarschijnlijk antwoordt een schijf van de pool niet. Bekijk de pool met zpool status {name}; de server herstarten maakt hem meestal weer vrij.",
+  "The disks of {name} no longer respond, so ZFS has frozen the pool. It can't be deleted while the server runs. Restart the server: a pool without working disks is not loaded again, and you can delete it then if it still shows.": "De schijven van {name} antwoorden niet meer, dus ZFS heeft de pool bevroren. Zolang de server draait, kan hij niet verwijderd worden. Herstart de server: een pool zonder werkende schijven wordt dan niet meer geladen, en staat hij er nog, dan kan je hem daarna verwijderen.",
 };
