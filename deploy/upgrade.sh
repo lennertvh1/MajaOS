@@ -36,6 +36,13 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   } || echo "Installing cloudflared failed. Run sudo ./install.sh later to turn on remote access."
 fi
 
+# NVIDIA: a server that got its driver before MajaOS also installed nvidia-persistenced gets it now, so nvidia-smi
+# answers right away (the dashboard asks every 10 s). If it fails, the update carries on.
+if dpkg -s nvidia-driver >/dev/null 2>&1 && ! dpkg -s nvidia-persistenced >/dev/null 2>&1; then
+  echo "Installing nvidia-persistenced"
+  { apt-get install -y -q nvidia-persistenced && systemctl enable --now nvidia-persistenced; } || echo "Installing nvidia-persistenced failed; the GPU still works, nvidia-smi is just slower."
+fi
+
 # Automatic security updates (since 0.6): turned on once; whoever turns them off in Settings > Software update keeps them off.
 if [ ! -f /etc/apt/apt.conf.d/52majaos ] && [ -f "$(dirname "$0")/../lib/apt-helper.sh" ]; then
   echo "Turning on automatic security updates"
