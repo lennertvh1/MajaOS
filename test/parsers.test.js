@@ -257,3 +257,11 @@ test('per core from /proc/stat, and bytes per card from /proc/net/dev', () => {
     '    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0\n enp6s0: 812000 900 0 0 0 0 0 12 194000 700 0 0 0 0 0 0\n';
   assert.deepEqual(parseNetDev(dev), { lo: { rx: 1000, tx: 1000 }, enp6s0: { rx: 812000, tx: 194000 } });
 });
+
+test('hot plug: disks added and taken out, by serial number (a name can move to another disk)', () => {
+  const { diffDisks } = require('../lib/storage');
+  const a = { name: 'sda', serial: 'S1' }, b = { name: 'sdb', serial: 'S2' }, c = { name: 'sdb', serial: 'S3' }, v = { name: 'vda', serial: null };
+  assert.deepEqual(diffDisks([a, b], [a, b]), { added: [], removed: [] });
+  assert.deepEqual(diffDisks([a, b], [a, c]), { added: [c], removed: [b] }); // sdb is now another disk
+  assert.deepEqual(diffDisks([a], [a, v]), { added: [v], removed: [] });
+});

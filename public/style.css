@@ -210,7 +210,8 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .gpu-bar .nv-ico { color: var(--accent); }
 .gpu-bar-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .gpu-bar-text span { color: var(--muted); font-size: 13px; }
-.gpu-bar .toast-x { flex: none; }
+.gpu-bar .toast-act { flex: none; align-self: center; }
+.toast-x { flex: none; }
 @media (max-width: 640px) { .gpu-bar { flex-wrap: wrap; } .gpu-bar-text { flex-basis: calc(100% - 60px); } }
 #widgets[hidden] { display: none; }
 

@@ -243,14 +243,15 @@
   // The windows are modal dialogs in the top layer: the toasts are a popover, shown again for every toast so they land
   // above the window that is open now. Each has a × to close it. Errors and long messages stay until they are closed
   // (no time to read them otherwise); short confirmations go away by themselves.
-  function toast(msg, bad) {
+  // opts.action {label, run}: a button in the message (the message then stays until it is used or closed).
+  function toast(msg, bad, opts = {}) {
     const box = $('#toasts'), text = String(msg);
     // The same message once at a time (e.g. several requests failing while the server restarts).
     if ([...box.children].some((x) => ($('.toast-text', x) || x).textContent === text)) return;
     const el = document.createElement('div');
     el.className = 'toast' + (bad ? ' bad' : '');
     el.setAttribute('role', bad ? 'alert' : 'status');
-    el.innerHTML = `<span class="toast-text"></span><button class="toast-x" type="button" aria-label="${esc(t('Close'))}" title="${esc(t('Close'))}">
+    el.innerHTML = `<span class="toast-text"></span>${opts.action ? `<button class="btn sm toast-act" type="button">${esc(opts.action.label)}</button>` : ''}<button class="toast-x" type="button" aria-label="${esc(t('Close'))}" title="${esc(t('Close'))}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
     $('.toast-text', el).textContent = text;
     const close = () => {
@@ -258,9 +259,10 @@
       if (!box.children.length && box.hidePopover) { try { box.hidePopover(); } catch (e) { /* already hidden */ } }
     };
     $('.toast-x', el).addEventListener('click', close);
+    if (opts.action) $('.toast-act', el).addEventListener('click', () => { close(); opts.action.run(); });
     box.appendChild(el);
     if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
-    if (!bad && text.length <= 90) setTimeout(close, 3200);
+    if (!bad && !opts.action && text.length <= 90) setTimeout(close, 3200);
   }
 
   /* ------------------------------------------------------------ clock */
@@ -3330,8 +3332,8 @@
     const known = diskSig(s.disks);
     const changed = (list) => {
       const had = new Set(s.disks.map((d) => d.name)), has = new Set(list.map((d) => d.name));
-      list.filter((d) => !had.has(d.name)).forEach((d) => toast(t('New disk found: {name}', { name: [d.name, d.model].filter(Boolean).join(' · ') })));
-      s.disks.filter((d) => !has.has(d.name)).forEach((d) => toast(t('Disk {name} is no longer connected.', { name: d.name }), true));
+      // The message itself comes from the dashboard (diskEvents), also when this window is closed.
+      loadOverview().catch(() => {});
       storageWindow({ again: true });
     };
     let diskTimer = null;
@@ -8023,7 +8025,26 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); diskEventToasts(S.overview.diskEvents); }
+  // A disk plugged in or taken out while the server runs (lib/storage.js watchDisks): a message, once per event. What
+  // happened before this page was opened isn't shown again.
+  const diskSeen = { boot: null, seq: 0 };
+  function diskEventToasts(ev) {
+    if (!ev || !Array.isArray(ev.list)) return;
+    const max = ev.list.reduce((n, e) => Math.max(n, e.seq), 0);
+    if (diskSeen.boot !== ev.boot) {
+      const first = diskSeen.boot === null;
+      diskSeen.boot = ev.boot; diskSeen.seq = first ? max : 0;
+      if (first) return;
+    }
+    for (const e of ev.list.filter((x) => x.seq > diskSeen.seq)) {
+      const what = [e.name, e.model, e.size ? bytes(e.size) : null].filter(Boolean).join(' · ');
+      const open = { label: t('Open storage'), run: () => storageWindow() };
+      if (e.kind === 'added') toast(t('New disk found: {name}', { name: what }), false, { action: open });
+      else toast(t('Disk {name} is no longer connected.', { name: what }), true, { action: open });
+    }
+    diskSeen.seq = Math.max(diskSeen.seq, max);
+  }
   async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); if (S.apps.some(updating)) watchUpdates(); }
   async function loadVms() {
     try { S.vms = await api.get('/api/vms'); S.vmError = null; }

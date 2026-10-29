@@ -206,7 +206,7 @@ async function apiOverview() {
   return {
     hostname: os.hostname(), uptime: sys.uptime(), version: sys.osName(),
     cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(),
-    storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu, gpus, gpuError: sys.gpuError(),
+    storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu, gpus, gpuError: sys.gpuError(), diskEvents: storage.diskEvents(),
   };
 }
 
@@ -919,6 +919,7 @@ bind(CFG.port).then(() => {
     sysbackup.startSchedule(); // scheduled backups of apps and VMs
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
+    storage.watchDisks(); // a disk plugged in or taken out: a message on the dashboard
     mixed.startSchedule(); // parity of pools with mixed disks: sync and scrub on their schedule
   }
 }).catch((e) => {

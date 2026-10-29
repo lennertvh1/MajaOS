@@ -1969,11 +1969,13 @@
   }
   // Look for new disks: the first time the demo "finds" one that was plugged in while the server runs.
   let demoPlugged = false;
+  const diskEvents = { boot: 'demo', seq: 0, list: [] }; // like storage.diskEvents in lib/storage.js
   async function demoRescan() {
     await wait(1500);
     if (demoPlugged) return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })), added: [] };
     demoPlugged = true;
     disks.push(disk('sdj', 'TOSHIBA MG08ACA16TE', 16e12, true, 'sata', 28, null, null));
+    diskEvents.list.push({ seq: ++diskEvents.seq, kind: 'added', at: new Date().toISOString(), name: 'sdj', model: 'TOSHIBA MG08ACA16TE', size: 16e12, transport: 'sata' });
     // Like bays.placeNew in lib/bays.js: a new hard disk goes in the first free bay of the drawing.
     const free = Array.from({ length: bays.count }, (_, i) => String(i + 1)).find((id) => !bays.slots[id]);
     if (free) bays.slots[free] = { key: 's:DEMOSDJ', label: 'TOSHIBA MG08ACA16TE · DEMOSDJ' };
@@ -2357,6 +2359,7 @@
       // Like lib/system.js: nvidia-smi only answers once the driver is loaded; lspci always sees the card.
       storage: storageSummary(), gpu: nvidia.loaded ? gpu() : null,
       gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }],
+      diskEvents: copy(diskEvents),
     };
   }
 
