@@ -2849,11 +2849,14 @@
     return { submit, picked: () => picked.size > 0 };
   }
 
-  async function storageWindow() {
-    openWindow(t('Storage'), `<p class="lead">${t('Loading disks…')}</p>`);
-    win.classList.add('win-wide');
+  async function storageWindow(opt) {
+    // Refreshing (a disk came or went): no "Loading" in between, and the window keeps its scroll position.
+    const again = opt && opt.again;
+    const scroll = again ? $('#winBody').scrollTop : 0;
     let s;
-    try { s = await api.get('/api/storage'); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (!again) { openWindow(t('Storage'), `<p class="lead">${t('Loading disks…')}</p>`); win.classList.add('win-wide'); }
+    try { s = await api.get('/api/storage'); } catch (e) { if (!again) $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (again) { if (!win.open || !$('#poolsBox')) return; openWindow(t('Storage'), ''); win.classList.add('win-wide'); }
     const pct = s.total ? (s.used / s.total) * 100 : 0;
     const ROLE = { cache: 'Read cache', log: 'Write log', spare: 'Spare', special: 'Metadata', dedup: 'Dedup', parity: 'Parity' };
     const LAYOUT_NAME = { stripe: 'Stripe', mirror: 'Mirror', raidz1: 'RAID-Z1', raidz2: 'RAID-Z2', raidz3: 'RAID-Z3' };
@@ -2958,7 +2961,7 @@
       <section class="bays-sec" id="baySec"></section>
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS reported an error: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
       ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
-      <div class="section-head"><h2>${t('Pools')}</h2><span class="btn-row"><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm primary" type="button" data-pool-new>${t('Create pool')}</button></span></div>
+      <div class="section-head"><h2>${t('Pools')}</h2><span class="btn-row"><button class="btn sm" type="button" data-disk-rescan>${t('Look for new disks')}</button><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm primary" type="button" data-pool-new>${t('Create pool')}</button></span></div>
       <div id="poolsBox">${s.pools.map(poolBlock).join('') || `<p class="empty-card">${t('There is no pool yet. Click Create pool to combine your disks.')}</p>`}</div>
       ${loose.length ? `<div class="section-head"><h2>${t('Disks not in a pool')}</h2></div>
         <section class="pool-card loose"><ul class="disk-list">${loose.map((d) => diskItem(d)).join('')}</ul></section>` : ''}
@@ -2978,6 +2981,37 @@
     mountBays($('#baySec'), s);
     $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
     $('[data-pool-import]').addEventListener('click', () => poolImportWindow());
+    if (scroll) $('#winBody').scrollTop = scroll;
+    // A disk plugged in or taken out while the window is open: show it right away.
+    const diskSig = (list) => list.map((d) => d.name + ':' + (d.serial || '')).sort().join(',');
+    const known = diskSig(s.disks);
+    const changed = (list) => {
+      const had = new Set(s.disks.map((d) => d.name)), has = new Set(list.map((d) => d.name));
+      list.filter((d) => !had.has(d.name)).forEach((d) => toast(t('New disk found: {name}', { name: [d.name, d.model].filter(Boolean).join(' · ') })));
+      s.disks.filter((d) => !has.has(d.name)).forEach((d) => toast(t('Disk {name} is no longer connected.', { name: d.name }), true));
+      storageWindow({ again: true });
+    };
+    let diskTimer = null;
+    const watch = () => {
+      diskTimer = setTimeout(() => api.get('/api/storage/disks').then((r) => {
+        if (!win.open || !$('#poolsBox')) return;
+        if (diskSig(r.disks) !== known) changed(r.disks); else watch();
+      }, () => watch()), 5000);
+    };
+    watch();
+    onWinClose = () => clearTimeout(diskTimer);
+    $('[data-disk-rescan]').addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = t('Looking…');
+      clearTimeout(diskTimer);
+      try {
+        const r = await api.post('/api/storage/rescan');
+        if (diskSig(r.disks) !== known) { changed(r.disks); return; }
+        toast(t('No new disk found. Check that it has power and a data cable. Some servers only see a disk plugged in while running when hot plug is on for that port in the BIOS; otherwise restart the server.'), true);
+      } catch (ex) { toast(ex.message, true); }
+      b.disabled = false; b.textContent = t('Look for new disks');
+      watch();
+    });
     // Mixed disks: follow a running parity job in place, start/stop it, the schedule, removing the pool.
     const follow = (name) => {
       const ul = $(`[data-mx="${CSS.escape(name)}"]`);

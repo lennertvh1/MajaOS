@@ -1889,6 +1889,15 @@
     }
     return p;
   }
+  // Look for new disks: the first time the demo "finds" one that was plugged in while the server runs.
+  let demoPlugged = false;
+  async function demoRescan() {
+    await wait(1500);
+    if (demoPlugged) return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })), added: [] };
+    demoPlugged = true;
+    disks.push(disk('sdj', 'TOSHIBA MG08ACA16TE', 16e12, true, 'sata', 28, null, null));
+    return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })), added: ['sdj'] };
+  }
   function zpRoute(method, path, body, query) {
     if (path === '/api/pools/importable') return { pools: exported.map((x) => ({ name: x.pool.name, id: x.id, state: 'ONLINE', status: '' })) };
     if (path === '/api/pools/import') {
@@ -2489,6 +2498,7 @@
     if (dk) { await wait(rnd(250, 600)); return demoDisk(decodeURIComponent(dk[1]), !!dk[2]); }
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('GET', path); if (r !== undefined) return r; }
     if (path === '/api/pools/importable') return zpRoute('GET', path);
+    if (path === '/api/storage/disks') return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })) };
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
@@ -2612,6 +2622,7 @@
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
     if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
+    if (path === '/api/storage/rescan') return demoRescan();
     if (path.startsWith('/api/pools/')) { await wait(rnd(400, 900)); const r = zpRoute('POST', path, body); if (r !== undefined) return r; }
     const vs = path.match(/^\/api\/vm-networks\/([^/]+)\/start$/);
     if (vs) { const n = vmNets.find((x) => x.name === decodeURIComponent(vs[1])); if (!n) throw err('This VM network no longer exists.', 404); n.active = true; return { ok: true }; }

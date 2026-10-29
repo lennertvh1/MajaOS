@@ -631,6 +631,8 @@ async function handleApi(req, res, url) {
     const [body, repair] = await Promise.all([storage.storage(), replace.look().then((r) => r.repair, () => null)]);
     return sendJson(res, 200, { ...body, repair });
   }
+  if (p === '/api/storage/disks' && method === 'GET') return sendJson(res, 200, await storage.diskList());
+  if (p === '/api/storage/rescan' && method === 'POST') return sendJson(res, 200, await storage.rescan());
   if ((m = p.match(/^\/api\/disks\/([^/]+)$/)) && method === 'GET') return sendJson(res, 200, await disks.diskInfo(decodeURIComponent(m[1]), url.searchParams.get('wake') === '1'));
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
   if (p === '/api/pools/options' && method === 'GET') return sendJson(res, 200, await zpool.poolOptions());
