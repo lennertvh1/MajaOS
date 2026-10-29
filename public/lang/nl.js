@@ -2667,4 +2667,7 @@ window.TB_LANG.nl = {
   "Not every file could be restored: some changed after the last parity update. Those end in .unrecoverable. Update the parity now to protect the rest again.": "Niet elk bestand kon teruggezet worden: sommige zijn veranderd nadat de parity laatst bijgewerkt werd. Die eindigen op .unrecoverable. Werk de parity nu bij om de rest weer te beschermen.",
   "Restoring from the parity failed: {error}": "Terugzetten uit de parity is mislukt: {error}",
   "The disk is in place, but updating the parity failed: {error}": "De schijf zit op haar plaats, maar de parity bijwerken is mislukt: {error}",
+  "Disconnecting…": "Loskoppelen…",
+  "Deleting…": "Verwijderen…",
+  "Removing…": "Verwijderen…",
 };

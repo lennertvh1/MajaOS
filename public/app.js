@@ -233,12 +233,18 @@
   }
 
   /* ------------------------------------------------------------ notifications */
+  // The windows are modal dialogs in the top layer: the toasts are a popover, shown again for every toast so they land
+  // above the window that is open now.
   function toast(msg, bad) {
-    const el = document.createElement('div');
+    const box = $('#toasts'), el = document.createElement('div');
     el.className = 'toast' + (bad ? ' bad' : '');
     el.textContent = msg;
-    $('#toasts').appendChild(el);
-    setTimeout(() => el.remove(), bad ? 6000 : 3200);
+    box.appendChild(el);
+    if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
+    setTimeout(() => {
+      el.remove();
+      if (!box.children.length && box.hidePopover) { try { box.hidePopover(); } catch (e) { /* already hidden */ } }
+    }, bad ? 6000 : 3200);
   }
 
   /* ------------------------------------------------------------ clock */
@@ -3108,22 +3114,26 @@
     $('#poolsBox').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-zp-act]'); if (!b) return;
       const name = b.closest('[data-zp]').dataset.zp, act = b.dataset.zpAct, url = `/api/pools/${encodeURIComponent(name)}`;
+      const label = b.textContent;
+      const busy = (text) => { b.disabled = true; b.textContent = text; };
       try {
         if (act === 'scrub') { await api.post(url + '/scrub'); toast(t('The check of {name} has started.', { name })); }
         if (act === 'scrub-stop') { await api.post(url + '/scrub-stop'); toast(t('The check of {name} was stopped.', { name })); }
         if (act === 'export') {
           if (!(await ask(t('Disconnect the pool {name}? It stays on the disks with all its files, but is not available until you import it again (also possible on another server).', { name }), t('Disconnect')))) return;
+          busy(t('Disconnecting…'));
           await api.post(url + '/export'); toast(t('Pool {name} was disconnected. Import pool brings it back.', { name }));
         }
         if (act === 'destroy') {
           const r = await ask(t('Delete the pool {name}? Everything on it is erased for good: files, folders and snapshots.', { name }), t('Delete pool'), t('I understand that all data on {name} will be erased', { name }));
           if (!r) return;
           if (!r.checked) { toast(t('Tick that the data on the pool may be erased.'), true); return; }
+          busy(t('Deleting…'));
           await api.del(`${url}?confirm=${encodeURIComponent(name)}`); toast(t('Pool {name} was deleted.', { name }));
         }
         loadOverview().catch(() => {});
-        storageWindow();
-      } catch (ex) { toast(ex.message, true); }
+        storageWindow({ again: true });
+      } catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = label; }
     });
     $('#poolsBox').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-mx-act]'); if (!b) return;
@@ -3131,7 +3141,9 @@
       try {
         if (act === 'remove') {
           if (!(await ask(t('Remove the pool {name}? The files stay on the disks, but /{name} and its parity go away. Shared folders, apps and VMs on it must be moved first.', { name }), t('Remove pool')))) return;
-          await api.del(url); toast(t('Pool {name} was removed. The files are still on the disks.', { name })); storageWindow(); return;
+          b.disabled = true; b.textContent = t('Removing…');
+          try { await api.del(url); } catch (ex) { b.disabled = false; b.textContent = t('Remove pool'); throw ex; }
+          toast(t('Pool {name} was removed. The files are still on the disks.', { name })); loadOverview().catch(() => {}); storageWindow({ again: true }); return;
         }
         if (act === 'stop') { await api.post(url + '/stop'); toast(t('Stopping…')); }
         else { await api.post(url + '/' + act); toast(act === 'scrub' ? t('Checking the parity…') : t('Updating the parity…')); }

@@ -2663,4 +2663,7 @@ window.TB_LANG.fr = {
   "Not every file could be restored: some changed after the last parity update. Those end in .unrecoverable. Update the parity now to protect the rest again.": "Tous les fichiers n'ont pas pu être restaurés : certains ont changé après la dernière mise à jour de la parité. Ils se terminent par .unrecoverable. Mettez la parité à jour maintenant pour protéger à nouveau le reste.",
   "Restoring from the parity failed: {error}": "La restauration depuis la parité a échoué : {error}",
   "The disk is in place, but updating the parity failed: {error}": "Le disque est en place, mais la mise à jour de la parité a échoué : {error}",
+  "Disconnecting…": "Déconnexion…",
+  "Deleting…": "Suppression…",
+  "Removing…": "Retrait…",
 };

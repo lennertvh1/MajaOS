@@ -2663,4 +2663,7 @@ window.TB_LANG.zh = {
   "Not every file could be restored: some changed after the last parity update. Those end in .unrecoverable. Update the parity now to protect the rest again.": "并非所有文件都能恢复：有些文件在上次更新校验后发生了变化，它们以 .unrecoverable 结尾。请立即更新校验，重新保护其余文件。",
   "Restoring from the parity failed: {error}": "从校验恢复失败：{error}",
   "The disk is in place, but updating the parity failed: {error}": "磁盘已就位，但更新校验失败：{error}",
+  "Disconnecting…": "正在断开…",
+  "Deleting…": "正在删除…",
+  "Removing…": "正在移除…",
 };

@@ -2663,4 +2663,7 @@ window.TB_LANG.ja = {
   "Not every file could be restored: some changed after the last parity update. Those end in .unrecoverable. Update the parity now to protect the rest again.": "一部のファイルは復元できませんでした。前回パリティを更新した後に変更されたためです。それらは .unrecoverable で終わります。残りを再び保護するため、今すぐパリティを更新してください。",
   "Restoring from the parity failed: {error}": "パリティからの復元に失敗しました：{error}",
   "The disk is in place, but updating the parity failed: {error}": "ディスクは配置されましたが、パリティの更新に失敗しました：{error}",
+  "Disconnecting…": "切断しています…",
+  "Deleting…": "削除しています…",
+  "Removing…": "取り外しています…",
 };

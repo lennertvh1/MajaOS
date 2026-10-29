@@ -1062,6 +1062,9 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 
 /* ---- notifications */
 .toasts { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+/* As a popover (above modal windows): none of the browser's popover box. */
+.toasts[popover] { top: auto; right: auto; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; overflow: visible; height: auto; }
+@supports selector(:popover-open) { .toasts[popover]:not(:popover-open) { display: none; } }
 .toast { padding: 11px 16px; border-radius: 14px; background: var(--glass-strong); font-size: 14px; animation: pop .2s ease-out; }
 .toast.bad { border-color: var(--bad); }
 
