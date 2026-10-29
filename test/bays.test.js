@@ -33,3 +33,31 @@ test('2.5" slots for SSDs', () => {
   assert.throws(() => bays.validateBays({ count: 4, columns: 4, ssd: 17 }), /between 0 and 16 2\.5"/);
   assert.throws(() => bays.validateBays({ count: 4, columns: 4, ssd: 1, slots: { s1: { key: '?' } } }), /2\.5" slot 1/);
 });
+
+test('new disks in the drawing: the bay of a replaced disk, otherwise the first free bay of their kind', () => {
+  const hdd = (name, serial) => ({ name, serial, model: 'WDC', rotational: true, transport: 'sata' });
+  const base = { count: 4, columns: 4, m2: 1, ssd: 1, slots: { 1: { key: 's:A' }, 2: { key: 's:B' }, 3: { key: 's:C' } } };
+  // The first time it only remembers what is there.
+  let r = bays.placeNew(base, [hdd('sda', 'A'), hdd('sdb', 'B'), hdd('sdc', 'C'), hdd('sdd', 'LOOSE')]);
+  assert.deepEqual(r.placed, []);
+  assert.ok(r.changed);
+  const cfg = r.cfg;
+  // C is replaced by NEW: NEW takes bay 3, not the free bay 4.
+  r = bays.placeNew(cfg, [hdd('sda', 'A'), hdd('sdb', 'B'), hdd('sdd', 'LOOSE'), hdd('sde', 'NEW')]);
+  assert.deepEqual(r.placed, [{ name: 'sde', bay: '3' }]);
+  assert.deepEqual(r.cfg.slots[3], { key: 's:NEW', label: 'WDC · NEW' });
+  // A disk added next to them goes in the first free bay; an NVMe in the M.2 slot, a SATA SSD in the 2.5" slot.
+  r = bays.placeNew(cfg, [hdd('sda', 'A'), hdd('sdb', 'B'), hdd('sdc', 'C'), hdd('sdd', 'LOOSE'), hdd('sdf', 'X'),
+    { name: 'nvme0n1', serial: 'N', transport: 'nvme', rotational: false }, { name: 'sdg', serial: 'S', transport: 'sata', rotational: false }]);
+  assert.deepEqual(r.placed, [{ name: 'sdf', bay: '4' }, { name: 'nvme0n1', bay: 'm1' }, { name: 'sdg', bay: 's1' }]);
+  // A disk seen before (LOOSE, or one the user dragged out) is never put back; USB disks never go in a bay.
+  assert.ok(!Object.values(r.cfg.slots).some((v) => v.key === 's:LOOSE'));
+  r = bays.placeNew(cfg, [hdd('sda', 'A'), hdd('sdb', 'B'), hdd('sdc', 'C'), { name: 'sdh', serial: 'U', transport: 'usb', rotational: true }]);
+  assert.deepEqual(r.placed, []);
+  // Two new disks and one empty bay: unclear which one replaced it, so the empty bay keeps its old disk.
+  r = bays.placeNew(cfg, [hdd('sda', 'A'), hdd('sdb', 'B'), hdd('sde', 'NEW1'), hdd('sdf', 'NEW2')]);
+  assert.equal(r.cfg.slots[3].key, 's:C');
+  assert.deepEqual(r.placed, [{ name: 'sde', bay: '4' }]);
+  // Nothing new: nothing changes and nothing is written.
+  assert.equal(bays.placeNew(cfg, [hdd('sda', 'A')]).changed, false);
+});

@@ -1896,6 +1896,9 @@
     if (demoPlugged) return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })), added: [] };
     demoPlugged = true;
     disks.push(disk('sdj', 'TOSHIBA MG08ACA16TE', 16e12, true, 'sata', 28, null, null));
+    // Like bays.placeNew in lib/bays.js: a new hard disk goes in the first free bay of the drawing.
+    const free = Array.from({ length: bays.count }, (_, i) => String(i + 1)).find((id) => !bays.slots[id]);
+    if (free) bays.slots[free] = { key: 's:DEMOSDJ', label: 'TOSHIBA MG08ACA16TE · DEMOSDJ' };
     return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })), added: ['sdj'] };
   }
   function zpRoute(method, path, body, query) {
