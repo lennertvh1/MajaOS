@@ -64,6 +64,30 @@ case "$ACTION" in
   auto-off)
     printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "0";\n' > "$AUTO"
     ;;
+  nvidia)
+    # The NVIDIA driver (built with DKMS for every kernel, like ZFS) and GPU support for Docker, as install.sh --nvidia.
+    say "Fetching the package lists…"
+    step apt-get update -q || { st failed "Fetching the package lists failed. See the log." 1; exit 1; }
+    say "Installing the kernel headers…"
+    step apt-get install "${APT_OPTS[@]}" "linux-headers-$(uname -r)" linux-headers-amd64 || { st failed "The kernel headers could not be installed. See the log." 1; exit 1; }
+    say "Installing the NVIDIA driver (this takes a few minutes)…"
+    step apt-get install "${APT_OPTS[@]}" nvidia-driver firmware-misc-nonfree || { st failed "The NVIDIA driver could not be installed. Check that the contrib and non-free package sources are on. See the log." 1; exit 1; }
+    say "Installing GPU support for Docker…"
+    install -m 0755 -d /etc/apt/keyrings
+    { curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /etc/apt/keyrings/nvidia-container-toolkit.gpg &&
+      curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+        | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list; } >> "$LOG" 2>&1 \
+      || { st failed "NVIDIA's package source could not be reached. See the log." 1; exit 1; }
+    step apt-get update -q
+    step apt-get install "${APT_OPTS[@]}" nvidia-container-toolkit || { st failed "GPU support for Docker could not be installed. See the log." 1; exit 1; }
+    step nvidia-ctk runtime configure --runtime=docker
+    say "Restarting Docker (the apps are back in a moment)…"
+    step systemctl restart docker
+    # The driver loads at the next start: Software update shows that a restart is needed.
+    touch /var/run/reboot-required; echo nvidia-driver >> /var/run/reboot-required.pkgs
+    st done "Installed. Restart the server to load the driver." 0
+    exit 0
+    ;;
   *) st failed "Unknown action: ${ACTION}" 1; exit 1 ;;
 esac
 st done "Done." 0

@@ -48,3 +48,16 @@ test('dkms status and kernel versions', () => {
   assert.equal(d[1].state, 'built');
   assert.deepEqual(deb.sortKernels(['6.12.48+deb13-amd64', '6.12.52+deb13-amd64', '6.1.0-30-amd64']), ['6.12.52+deb13-amd64', '6.12.48+deb13-amd64', '6.1.0-30-amd64']);
 });
+
+test('NVIDIA: the graphics cards lspci shows, and the driver version', () => {
+  const { parseNvidiaCards, parseDriverVersion } = require('../lib/debian');
+  const lspci = [
+    '01:00.0 "VGA compatible controller" "NVIDIA Corporation" "GA104 [GeForce RTX 3060 Ti Lite Hash Rate]" -ra1 "Gigabyte Technology Co., Ltd" "Device 4073"',
+    '01:00.1 "Audio device" "NVIDIA Corporation" "GA104 High Definition Audio Controller" -ra1 "Gigabyte Technology Co., Ltd" "Device 4073"',
+    '02:00.0 "3D controller" "NVIDIA Corporation" "TU104GL [Tesla T4]" -ra1 "NVIDIA Corporation" "Device 12a2"',
+  ].join('\n');
+  assert.deepEqual(parseNvidiaCards(lspci), ['GeForce RTX 3060 Ti Lite Hash Rate', 'Tesla T4']);
+  assert.deepEqual(parseNvidiaCards(''), []);
+  assert.equal(parseDriverVersion('NVRM version: NVIDIA UNIX x86_64 Kernel Module  535.183.01  Sun May 12 19:39:15 UTC 2024\nGCC version:  gcc version 12.2.0'), '535.183.01');
+  assert.equal(parseDriverVersion(''), null);
+});

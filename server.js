@@ -514,7 +514,7 @@ async function handleApi(req, res, url) {
   // Debian itself: what is waiting, automatic security updates, reboot needed (lib/debian.js).
   if (p === '/api/system-updates' && method === 'GET') return sendJson(res, 200, await debian.status());
   if (p === '/api/system-updates/progress' && method === 'GET') return sendJson(res, 200, debian.progress());
-  if ((m = p.match(/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off)$/)) && method === 'POST') return sendJson(res, 200, await debian.start(m[1]));
+  if ((m = p.match(/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off|nvidia)$/)) && method === 'POST') return sendJson(res, 200, await debian.start(m[1]));
   if (p === '/api/update/check' && method === 'POST') return sendJson(res, 200, await release.check());
   // Change password (welcome wizard and Security). Other sessions are signed out, this one stays signed in.
   if (p === '/api/password' && method === 'POST') {

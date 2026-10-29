@@ -106,7 +106,12 @@
       ['tzdata', 'stable-updates', '2026b-0+deb13u1', '2026a-0+deb13u1'], ['linux-image-amd64', 'stable', '6.12.52-1', '6.12.48-1']] };
   const DEB_STEPS = { check: [[0, 'Fetching the package lists…'], [2500, null]],
     upgrade: [[0, 'Fetching the package lists…'], [2000, 'Installing the updates…'], [7000, 'Cleaning up…'], [8000, null]],
-    'auto-on': [[0, 'Installing unattended-upgrades and needrestart…'], [3000, null]], 'auto-off': [[0, null]] };
+    'auto-on': [[0, 'Installing unattended-upgrades and needrestart…'], [3000, null]], 'auto-off': [[0, null]],
+    nvidia: [[0, 'Fetching the package lists…'], [1500, 'Installing the kernel headers…'], [3000, 'Installing the NVIDIA driver (this takes a few minutes)…'],
+      [7000, 'Installing GPU support for Docker…'], [9000, 'Restarting Docker (the apps are back in a moment)…'], [10500, null]] };
+  // The RTX 3060 Ti of the demo has its driver; /?nvidia=0 shows a server where it still has to be installed.
+  const noDriver = (() => { try { return new URLSearchParams(location.search).get('nvidia') === '0'; } catch (e) { return false; } })();
+  const nvidia = { cards: ['GeForce RTX 3060 Ti'], installed: !noDriver, loaded: !noDriver, version: noDriver ? null : '550.163.01', toolkit: !noDriver, docker: !noDriver, secureBoot: false, reboot: false };
   function debProgress() {
     const j = deb.job; if (!j) return { state: 'idle', running: false, lines: [] };
     const el = Date.now() - j.start, steps = DEB_STEPS[j.action];
@@ -117,6 +122,7 @@
       if (j.action === 'upgrade') { deb.updates = []; deb.newKernel = '6.12.52+deb13-amd64'; }
       if (j.action === 'auto-on') deb.auto = true;
       if (j.action === 'auto-off') deb.auto = false;
+      if (j.action === 'nvidia') Object.assign(nvidia, { installed: true, toolkit: true, docker: true, reboot: true });
     }
     const lines = ['Hit:1 http://deb.debian.org/debian trixie InRelease', 'Get:2 http://security.debian.org/debian-security trixie-security InRelease [43.4 kB]', 'Reading package lists...'];
     if (j.action === 'upgrade' && el > 2000) lines.push(...deb.lastUpdates.map(([n, , v]) => `Setting up ${n} (${v}) ...`));
@@ -129,8 +135,8 @@
     return { os: 'Debian GNU/Linux 13 (trixie)', version: '13.7', kernel: deb.kernel, newestKernel: kernel, updates: list, security: list.filter((x) => x.security).length,
       listsAt: new Date(Date.now() - 5 * 3600000).toISOString(),
       auto: { installed: true, enabled: deb.auto, last: { at: new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 19), packages: ['libc6', 'libc-bin'], ok: true, nothing: false } }, needrestart: true,
-      reboot: { required: !!deb.newKernel, packages: deb.newKernel ? ['linux-image-6.12.52+deb13-amd64'] : [], zfsReady: true },
-      job: deb.job ? { ...debProgress() } : null };
+      reboot: { required: !!deb.newKernel || nvidia.reboot, packages: [...(deb.newKernel ? ['linux-image-6.12.52+deb13-amd64'] : []), ...(nvidia.reboot ? ['nvidia-driver'] : [])], zfsReady: true },
+      job: deb.job ? { ...debProgress() } : null, nvidia: (({ reboot, ...x }) => copy(x))(nvidia) };
   }
   function debStart(action) {
     if (!DEB_STEPS[action]) throw err('Unknown action.');
@@ -2751,7 +2757,7 @@
       upd.job = { start: Date.now(), version: body.version, from: g.current };
       return { started: true, version: body.version };
     }
-    if (/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off)$/.test(path)) { await wait(rnd(200, 400)); return debStart(path.split('/').pop()); }
+    if (/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off|nvidia)$/.test(path)) { await wait(rnd(200, 400)); return debStart(path.split('/').pop()); }
     if (path === '/api/update/check') { await wait(rnd(600, 1200)); upd.checked = new Date().toISOString(); return updGet(); }
     if (path === '/api/settings' && (body.updateCheck != null || body.updateChannel != null)) {
       if (body.updateCheck != null) upd.auto = !!body.updateCheck;

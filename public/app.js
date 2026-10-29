@@ -7632,6 +7632,21 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* --- Software update > Debian: what is waiting, automatic security updates, restart needed (lib/debian.js) */
+  // The NVIDIA driver: only when there is an NVIDIA card (or its driver). Installing goes through apt-helper (action nvidia).
+  function nvidiaCard(nv, busy) {
+    if (!nv || (!nv.cards.length && !nv.installed)) return '';
+    const name = nv.cards.join(', ') || t('No NVIDIA card found');
+    const ok = nv.loaded && nv.toolkit && nv.docker;
+    const state = !nv.installed ? t('No driver yet: apps and VMs can\'t use the GPU.')
+      : !nv.loaded ? t('Driver installed. Restart the server to load it.')
+      : !(nv.toolkit && nv.docker) ? t('Driver {v} works, but Docker can\'t use the GPU yet.', { v: nv.version })
+      : t('Driver {v} works; apps can use the GPU.', { v: nv.version });
+    const btn = !nv.installed ? t('Install driver') : nv.loaded && !(nv.toolkit && nv.docker) ? t('Install GPU support for Docker') : null;
+    return `<div class="upd-card nv-card${ok ? '' : ' new'}"><span class="nv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="16" cy="12" r="2.5"/><path d="M5 17v3M19 17v3"/></svg></span>
+      <div class="upd-text"><b>NVIDIA · ${esc(name)}</b><div class="muted small">${esc(state)}</div>
+        ${nv.secureBoot && !nv.loaded ? `<div class="small temp-warn">${t('Secure Boot is on: the driver won\'t load. Turn Secure Boot off in the BIOS.')}</div>` : ''}</div>
+      ${btn ? `<div class="btn-row"><button class="btn primary" type="button" data-deb="nvidia"${busy ? ' disabled' : ''}>${esc(btn)}</button></div>` : ''}</div>`;
+  }
   async function debianSection(box) {
     let d;
     try { d = await api.get('/api/system-updates'); }
@@ -7658,6 +7673,7 @@ sudo ./install.sh</pre></div>`}` : '') +
         <div class="btn-row"><button class="btn" type="button" data-deb="check"${busy ? ' disabled' : ''}>${t('Check now')}</button>
           ${n ? `<button class="btn primary" type="button" data-deb="upgrade"${busy ? ' disabled' : ''}>${t('Update Debian now')}</button>` : ''}</div></div>
       ${reboot}
+      ${nvidiaCard(d.nvidia, busy)}
       <label class="check"><input type="checkbox" data-deb-auto${d.auto.enabled ? ' checked' : ''}${busy ? ' disabled' : ''}> ${t('Install security updates automatically (every day, without restarting by itself)')}</label>
       <p class="muted small">${lastText}</p>
       ${n ? `<details class="upd-older"><summary>${t('Waiting updates ({n})', { n })}</summary><ul class="deb-list">${d.updates.map((x) =>
@@ -7668,7 +7684,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       let p;
       try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // MajaOS restarting (needrestart)
       if (!box.isConnected) return;
-      const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates') }[p.action] || '';
+      const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates'), nvidia: t('Installing the NVIDIA driver') }[p.action] || '';
       jobBox.innerHTML = p.state === 'idle' ? '' : `<div class="deb-job">
         <p class="small"><b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}</p>
         <details${p.state === 'failed' ? ' open' : ''}><summary>${t('Details')}</summary><pre class="logs">${esc(p.lines.join('\n'))}</pre></details></div>`;
@@ -7685,6 +7701,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       const b = e.target.closest('[data-deb]'); if (!b) return;
       if (b.dataset.deb === 'reboot') return powerAction('reboot');
       if (b.dataset.deb === 'upgrade' && !(await ask(t('Install {n} updates for Debian now? Apps and VMs keep running; some services restart briefly.', { n }), t('Update Debian now')))) return;
+      if (b.dataset.deb === 'nvidia' && !(await ask(t('Install the NVIDIA driver and GPU support for Docker? This takes a few minutes and downloads about 500 MB. At the end Docker restarts (your apps stop for a moment), and the server needs a restart to load the driver.'), t('Install driver')))) return;
       startJob(b.dataset.deb);
     };
     box.onchange = async (e) => {
@@ -8125,6 +8142,10 @@ sudo ./install.sh</pre></div>`}` : '') +
       const title = t(n === 1 ? '{n} update for Debian' : '{n} updates for Debian', { n })
         + (sec ? ' · ' + t(sec === 1 ? '{n} security update' : '{n} security updates', { n: sec }) : '');
       out.push({ id: 'deb', level: sec ? 'bad' : 'warn', title, detail: t('Debian (the system)'), go: () => { location.hash = '#settings/update'; } });
+    }
+    const nv = S.debian && S.debian.nvidia;
+    if (nv && nv.cards.length && !nv.installed) {
+      out.push({ id: 'nvidia', level: 'info', title: t('NVIDIA graphics card found: install its driver'), detail: nv.cards[0], go: () => { location.hash = '#settings/update'; } });
     }
     if (S.debian && S.debian.reboot && S.debian.reboot.required) {
       out.push({ id: 'reboot', level: 'warn', title: t('A restart is needed to finish the updates.'), detail: t('Debian (the system)'), go: () => { location.hash = '#settings/update'; } });
