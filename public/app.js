@@ -5338,9 +5338,42 @@
     if (media === 'sd') return strokeIcon('<path d="M7 3h7l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M9 8v3M12 8v3M15 8v3"/>');
     return strokeIcon('<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 12h18"/><circle cx="7.5" cy="15.2" r="1"/><circle cx="11" cy="15.2" r="1"/>');
   }
-  function fileGlyph(kind) {
+  // The kind of a file by its extension, for its icon: a coloured page with a symbol, or the extension as a label.
+  const ICON_KINDS = {
+    image: 'jpg jpeg png gif webp svg bmp avif heic heif tif tiff ico raw cr2 cr3 nef arw dng orf rw2 psd xcf',
+    video: 'mp4 m4v webm ogv mov mkv avi wmv flv mpg mpeg ts m2ts mts 3gp vob',
+    audio: 'mp3 flac wav aac m4a ogg oga opus wma aiff aif alac mid midi',
+    archive: 'zip rar 7z tar gz tgz bz2 tbz2 xz txz zst lz4 lzma cab',
+    pdf: 'pdf',
+    doc: 'doc docx odt rtf pages epub mobi',
+    sheet: 'xls xlsx xlsm ods csv tsv numbers',
+    slides: 'ppt pptx odp key',
+    code: 'js mjs cjs ts tsx jsx py sh bash zsh ps1 bat rb go rs php java kt c cc cpp h hpp cs swift css scss html htm vue json yaml yml xml toml sql ini conf env service dockerfile',
+    text: 'txt md markdown log cfg properties gitignore srt sub nfo',
+    disk: 'iso img qcow2 vmdk vdi vhd vhdx raw dmg',
+    app: 'exe msi deb rpm apk appimage pkg run',
+    font: 'ttf otf woff woff2',
+  };
+  const EXT_KIND = new Map(Object.entries(ICON_KINDS).flatMap(([k, list]) => list.split(' ').map((x) => [x, k])));
+  const iconKind = (name) => EXT_KIND.get(fileExt(name)) || (/^(dockerfile|makefile|compose)$/i.test(String(name)) ? 'code' : 'file');
+  // Symbols in the lower part of the page (viewBox 48 x 58), drawn in --ft-ink.
+  const FILE_SYM = {
+    image: '<path class="fill" d="M11 46l8.5-11 6 7 4-5 7.5 9z"/><circle class="fill" cx="31" cy="29" r="3"/>',
+    video: '<path class="fill" d="M18 27.5v17l14-8.5z"/>',
+    audio: '<path d="M28.5 41V26l7 2.5"/><circle class="fill" cx="24.5" cy="41.5" r="4"/>',
+    archive: '<path d="M24 20v2m0 3v2m0 3v2m0 3v2"/><rect x="20.5" y="38" width="7" height="8" rx="1.5"/>',
+    code: '<path d="M19 30l-6 6 6 6M29 30l6 6-6 6M26.5 27l-5 18"/>',
+    text: '<path d="M13 29h22M13 35h22M13 41h14"/>',
+    disk: '<circle cx="24" cy="37" r="9.5"/><circle class="fill" cx="24" cy="37" r="2.2"/>',
+    app: '<path d="M14.5 31.5 24 26l9.5 5.5v10L24 47l-9.5-5.5zM14.5 31.5 24 37l9.5-5.5M24 37v10"/>',
+    font: '<path d="M16 46l8-19 8 19M19 39h10"/>',
+  };
+  function fileGlyph(kind, name) {
     if (kind === 'dir') return '<svg class="files-glyph dir" viewBox="0 0 64 52" aria-hidden="true"><path d="M2 14a6 6 0 0 1 6-6h16l6 6h26a6 6 0 0 1 6 6v22a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6z"/></svg>';
-    return '<svg class="files-glyph file" viewBox="0 0 48 58" aria-hidden="true"><path d="M6 2h24l14 14v36a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z"/><path d="M30 2v14h14" fill="var(--glass-strong)"/></svg>';
+    const k = name ? iconKind(name) : 'file';
+    const ext = fileExt(name);
+    const label = FILE_SYM[k] ? '' : ext && ext.length <= 4 ? `<text class="ft-label" x="24" y="44" text-anchor="middle">${esc(ext.toUpperCase())}</text>` : '';
+    return `<svg class="files-glyph file ft-${k}" viewBox="0 0 48 58" aria-hidden="true"><path class="ft-page" d="M6 2h24l14 14v36a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z"/><path class="ft-fold" d="M30 2v14h14"/><g class="ft-sym">${FILE_SYM[k] || ''}</g>${label}</svg>`;
   }
   function filesWhen(iso) {
     const dt = iso ? new Date(iso) : null;
@@ -5404,12 +5437,12 @@
     } else if (fx.view === 'list') {
       stage.innerHTML = `<table class="files-table"><thead><tr><th></th><th></th><th>${t('Name')}</th><th class="files-meta">${t('Size')}</th><th class="files-meta">${t('Modified')}</th></tr></thead><tbody>${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.picked.has(pth) ? 'is-sel' : ''}"><td class="files-tick">${fileCheck(pth, it.name)}</td><td>${fileGlyph(it.type)}</td><td><button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
+        return `<tr data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}" class="${fx.picked.has(pth) ? 'is-sel' : ''}"><td class="files-tick">${fileCheck(pth, it.name)}</td><td>${fileGlyph(it.type, it.name)}</td><td><button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></td><td class="files-meta">${it.type === 'file' && it.size != null ? esc(bytes(it.size)) : '—'}</td><td class="files-meta">${esc(filesWhen(it.mtime))}</td></tr>`;
       }).join('')}</tbody></table>`;
     } else {
       stage.innerHTML = `<div class="files-icons">${items.map((it) => {
         const pth = filesJoin(fx.data.path, it.name);
-        return `<div class="files-icon${fx.picked.has(pth) ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}"><button type="button" class="files-hit" aria-label="${esc(it.name)}">${fileGlyph(it.type)}</button><span class="files-cap">${fileCheck(pth, it.name)}<button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></span></div>`;
+        return `<div class="files-icon${fx.picked.has(pth) ? ' is-sel' : ''}" data-files-item="${esc(pth)}" data-files-kind="${esc(it.type)}" data-files-name="${esc(it.name)}"><button type="button" class="files-hit" aria-label="${esc(it.name)}">${fileGlyph(it.type, it.name)}</button><span class="files-cap">${fileCheck(pth, it.name)}<button type="button" class="files-name-btn"><span class="files-name">${esc(it.name)}</span></button></span></div>`;
       }).join('')}</div>`;
     }
     const shown = items.length, all = (fx.data && fx.data.items || []).length;

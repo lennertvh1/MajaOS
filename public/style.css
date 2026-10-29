@@ -24,6 +24,10 @@
   --pool-1: #12786b; --pool-2: #2f63c8; --pool-3: #7c45c4; --pool-4: #a55a12; --pool-5: #a8306f;
   --folder-bg: rgba(255, 255, 255, .5); --folder-ring: rgba(255, 255, 255, .55); /* folder icon: frosted glass */
   --m2-pcb: #1d3b34; --m2-pcb-2: #142b26; --m2-chip: #0d1412; --m2-gold: #c9a227; --m2-ink: #e3efe9; --m2-ink-2: #9fb8ae;
+  /* File icons in Files: a page per kind, the symbol on it in --ft-ink. */
+  --ft-ink: #ffffff; --ft-fold: rgba(255, 255, 255, .38); --ft-file: #6b7c8a; --ft-text: #5d6f7e;
+  --ft-image: #1f8a5c; --ft-video: #7a45c2; --ft-audio: #c03a78; --ft-archive: #a8670f; --ft-pdf: #c2392d; --ft-doc: #2d64c8;
+  --ft-sheet: #1d7d3f; --ft-slides: #d0581c; --ft-code: #34495e; --ft-disk: #4b5866; --ft-app: #5a4fb0; --ft-font: #8a5a3c;
   /* One size for the whole interface: it grows with the window instead of jumping at a breakpoint. */
   --ui: clamp(13px, 0.42vw + 9.2px, 17.5px);
 }
@@ -47,6 +51,9 @@
     --nas-tray-edge: #3c4552; --nas-vent: rgba(0, 0, 0, .55); --nas-ink: #e8eef4; --nas-ink-2: #9aa7b6; --led-off: #3d4651;
     --pool-1: #6fd3c3; --pool-2: #7aa7ff; --pool-3: #c29bff; --pool-4: #f2b35b; --pool-5: #f28bc5;
     --folder-bg: rgba(255, 255, 255, .16); --folder-ring: rgba(255, 255, 255, .22);
+    --ft-ink: #ffffff; --ft-fold: rgba(255, 255, 255, .3); --ft-file: #66788a; --ft-text: #5f7385;
+    --ft-image: #2a9e6b; --ft-video: #8a58d6; --ft-audio: #d0508a; --ft-archive: #b97a1c; --ft-pdf: #d24a3d; --ft-doc: #3d76dc;
+    --ft-sheet: #2a9150; --ft-slides: #e06a2c; --ft-code: #4d6378; --ft-disk: #5d6b7a; --ft-app: #6c61c6; --ft-font: #9c6c4c;
   }
 }
 :root[data-theme="dark"] {
@@ -64,6 +71,9 @@
   --nas-tray-edge: #3c4552; --nas-vent: rgba(0, 0, 0, .55); --nas-ink: #e8eef4; --nas-ink-2: #9aa7b6; --led-off: #3d4651;
   --pool-1: #6fd3c3; --pool-2: #7aa7ff; --pool-3: #c29bff; --pool-4: #f2b35b; --pool-5: #f28bc5;
   --folder-bg: rgba(255, 255, 255, .16); --folder-ring: rgba(255, 255, 255, .22);
+  --ft-ink: #ffffff; --ft-fold: rgba(255, 255, 255, .3); --ft-file: #66788a; --ft-text: #5f7385;
+  --ft-image: #2a9e6b; --ft-video: #8a58d6; --ft-audio: #d0508a; --ft-archive: #b97a1c; --ft-pdf: #d24a3d; --ft-doc: #3d76dc;
+  --ft-sheet: #2a9150; --ft-slides: #e06a2c; --ft-code: #4d6378; --ft-disk: #5d6b7a; --ft-app: #6c61c6; --ft-font: #9c6c4c;
 }
 
 * { box-sizing: border-box; }
@@ -1459,7 +1469,17 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .files-icon.is-sel, .files-table tr.is-sel td { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .files-glyph { width: 58px; height: 48px; }
 .files-glyph.dir { fill: var(--accent); }
-.files-glyph.file { fill: var(--muted); }
+.files-glyph .ft-page { fill: var(--ft-file); }
+.files-glyph .ft-fold { fill: var(--ft-fold); }
+.files-glyph .ft-sym { fill: none; stroke: var(--ft-ink); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.files-glyph .ft-sym .fill { fill: var(--ft-ink); stroke: none; }
+.files-glyph .ft-label { fill: var(--ft-ink); font: 800 10.5px/1 system-ui, sans-serif; letter-spacing: .02em; }
+.ft-image .ft-page { fill: var(--ft-image); } .ft-video .ft-page { fill: var(--ft-video); } .ft-audio .ft-page { fill: var(--ft-audio); }
+.ft-archive .ft-page { fill: var(--ft-archive); } .ft-pdf .ft-page { fill: var(--ft-pdf); } .ft-doc .ft-page { fill: var(--ft-doc); }
+.ft-sheet .ft-page { fill: var(--ft-sheet); } .ft-slides .ft-page { fill: var(--ft-slides); } .ft-code .ft-page { fill: var(--ft-code); }
+.ft-text .ft-page { fill: var(--ft-text); } .ft-disk .ft-page { fill: var(--ft-disk); } .ft-app .ft-page { fill: var(--ft-app); }
+.ft-font .ft-page { fill: var(--ft-font); }
+.files-table .files-glyph .ft-label { display: none; } /* too small to read in the list */
 .files-icon .files-name, .files-table .files-name {
   font-size: 12px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
