@@ -1930,6 +1930,29 @@
     if (act === 'export') { exported.push({ id: String(1e17 + Math.floor(Math.random() * 1e16)), pool: p, datasets: own, disks: used.map((d) => d.name) }); return { name: p.name, exported: true }; }
     return { name: p.name, destroyed: true };
   }
+  // Like startCreate/progress in lib/zpool.js: the pool is made right away (so errors come back at once), the steps
+  // run on the clock: about a second per disk, two for the pool, one for the folders.
+  let demoCreating = null;
+  function demoStartCreate(b) {
+    if (demoCreating && !demoProgress().done) throw err('A pool is already being created. Wait until it is ready.', 409);
+    const isMixed = b.kind === 'mixed';
+    const disks = isMixed ? (b.disks || []).map((d) => d.name) : [...new Set(b.disks || [])];
+    const result = demoCreatePool(b);
+    const steps = [...disks.map((n) => ({ id: 'disk:' + n, label: isMixed ? 'Formatting disk {name}' : 'Erasing disk {name}', name: n, secs: isMixed ? 2 : 1 })),
+      { id: 'create', label: isMixed ? 'Mounting the disks' : 'Creating the pool', secs: 2 },
+      ...(b.folders !== false ? [{ id: 'folders', label: 'Creating the folders', secs: 1 }] : [])];
+    demoCreating = { name: result.name, kind: isMixed ? 'mixed' : 'zfs', steps, result, at: Date.now(), started: new Date().toISOString() };
+    return { started: true, name: result.name, progress: demoProgress() };
+  }
+  function demoProgress() {
+    if (!demoCreating) return { state: 'idle' };
+    const c = demoCreating, total = c.steps.reduce((a, x) => a + x.secs, 0);
+    let left = (Date.now() - c.at) / 1000;
+    const steps = c.steps.map(({ secs, ...x }) => { const state = left >= secs ? 'done' : left > 0 ? 'running' : 'waiting'; left -= secs; return { ...x, state }; });
+    const done = steps.every((x) => x.state === 'done');
+    const percent = done ? 100 : Math.min(99, Math.round(((Date.now() - c.at) / 1000 / total) * 100));
+    return { name: c.name, kind: c.kind, steps, percent, done, ok: done ? true : null, error: null, result: done ? c.result : null, started: c.started, state: done ? 'done' : 'running' };
+  }
   function demoCreatePool(b) {
     if (b.kind === 'mixed') return demoCreateMixed(b);
     const name = String(b.name || '').trim();
@@ -2501,6 +2524,7 @@
     if (dk) { await wait(rnd(250, 600)); return demoDisk(decodeURIComponent(dk[1]), !!dk[2]); }
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('GET', path); if (r !== undefined) return r; }
     if (path === '/api/pools/importable') return zpRoute('GET', path);
+    if (path === '/api/pools/progress') return demoProgress();
     if (path === '/api/storage/disks') return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })) };
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
@@ -2623,7 +2647,7 @@
     if (path === '/api/apps/compose') { await wait(rnd(300, 600)); return demoInstallCompose(body); }
     const dt = path.match(/^\/api\/disks\/([^/]+)\/test$/);
     if (dt) return demoDiskTest(decodeURIComponent(dt[1]), body.type);
-    if (path === '/api/pools') { await wait(rnd(1500, 2200)); return demoCreatePool(body); }
+    if (path === '/api/pools') { await wait(rnd(300, 600)); return demoStartCreate(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/storage/rescan') return demoRescan();
     if (path.startsWith('/api/pools/')) { await wait(rnd(400, 900)); const r = zpRoute('POST', path, body); if (r !== undefined) return r; }

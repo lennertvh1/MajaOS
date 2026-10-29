@@ -2617,14 +2617,46 @@
       if (!r.checked) { err.textContent = t('Tick that the data on the disks may be lost.'); return; }
       btn.disabled = true; btn.textContent = t('Creating…');
       try {
-        const res = await api.post('/api/pools', { kind: 'mixed', name, confirm: name, folders: form.elements.folders.checked,
+        const res = await createPoolJob(form, { kind: 'mixed', name, confirm: name, folders: form.elements.folders.checked,
           disks: [...chosen('data').map((d) => ({ name: d.name, role: 'data' })), ...chosen('parity').map((d) => ({ name: d.name, role: 'parity' }))] });
         toast(t('Pool {name} was created and is mounted at /{name}.', { name }));
         if (res.warning) toast(tr(res.warning), true);
         loadOverview().catch(() => {});
-        onCreated(res);
+        if (form.isConnected) onCreated(res);
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Create pool'); }
     });
+  }
+  // Creating a pool is a job (POST /api/pools, then /api/pools/progress): its steps show in place of the form, a bar
+  // and each disk, the pool and the folders. Returns the result; on an error the form is back and this throws.
+  function drawPoolProgress(box, p) {
+    const cur = (p.steps || []).find((x) => x.state === 'running' || x.state === 'failed');
+    const head = p.done ? (p.ok ? t('Pool {name} is ready.', { name: p.name }) : t('Creating {name} failed.', { name: p.name }))
+      : cur ? t(cur.label, { name: cur.name }) : t('Starting…');
+    const pct = p.percent || 0;
+    box.innerHTML = `<div class="pp-head"><b>${esc(head)}</b><span class="muted">${nf0.format(pct)}%</span></div>
+      <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span class="${p.done && !p.ok ? 'bad' : ''}" style="width:${pct}%"></span></div>
+      <ol class="pp-steps">${(p.steps || []).map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}</li>`).join('')}</ol>
+      ${p.done ? '' : `<p class="muted small">${t('You can close this window: the pool is created anyway.')}</p>`}`;
+  }
+  async function createPoolJob(form, payload) {
+    const r = await api.post('/api/pools', payload);
+    // The form and the ZFS / mixed disks choice above it make way for the steps.
+    const kinds = (form.closest('#winBody') || form).querySelector('.pool-kinds');
+    const kids = [...form.children, ...(kinds && !kinds.hidden ? [kinds] : [])].filter((x) => !x.hidden);
+    kids.forEach((x) => { x.hidden = true; });
+    const box = document.createElement('div');
+    box.className = 'pool-progress'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+    form.prepend(box);
+    let p = r.progress;
+    for (;;) {
+      drawPoolProgress(box, p);
+      if (p.done) break;
+      await new Promise((res) => setTimeout(res, 1000));
+      try { p = await api.get('/api/pools/progress'); } catch (e) { /* the server is busy: ask again */ }
+    }
+    if (p.ok) return p.result;
+    box.remove(); kids.forEach((x) => { x.hidden = false; });
+    throw new Error(tr(p.error || 'Creating the pool failed.'));
   }
   // Form to create a pool: in the Storage window and right in the welcome wizard (inline: without its own buttons,
   // the wizard calls submit() and hears through onPick whether disks were chosen).
@@ -2836,12 +2868,12 @@
       if (!r.checked) { err.textContent = t('Tick that the data on the disks may be lost.'); return false; }
       if (btn) { btn.disabled = true; btn.textContent = t('Creating…'); }
       try {
-        const res = await api.post('/api/pools', { name, layout, disks: d.map((x) => x.name), compression: form.elements.compression.value, confirm: name, folders: form.elements.folders.checked });
+        const res = await createPoolJob(form, { name, layout, disks: d.map((x) => x.name), compression: form.elements.compression.value, confirm: name, folders: form.elements.folders.checked });
         const folders = res.folders || [];
         toast(folders.length ? t('Pool {name} was created with the folders {list}.', { name, list: folders.join(', ') }) : t('Pool {name} was created and is mounted at /{name}.', { name }));
         if (res.warning) toast(tr(res.warning), true);
         loadOverview().catch(() => {});
-        onCreated(res);
+        if (form.isConnected) onCreated(res); // closed in the meantime: don't open it again
         return true;
       } catch (ex) { err.textContent = ex.message; if (btn) { btn.disabled = false; btn.textContent = t('Create pool'); } return false; }
     }

@@ -636,7 +636,8 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/disks\/([^/]+)$/)) && method === 'GET') return sendJson(res, 200, await disks.diskInfo(decodeURIComponent(m[1]), url.searchParams.get('wake') === '1'));
   if ((m = p.match(/^\/api\/disks\/([^/]+)\/test$/)) && method === 'POST') return sendJson(res, 200, await disks.selfTest(decodeURIComponent(m[1]), (await readBody(req)).type));
   if (p === '/api/pools/options' && method === 'GET') return sendJson(res, 200, await zpool.poolOptions());
-  if (p === '/api/pools' && method === 'POST') return sendJson(res, 200, await zpool.createPool(await readBody(req)));
+  if (p === '/api/pools' && method === 'POST') return sendJson(res, 200, await zpool.startCreate(await readBody(req)));
+  if (p === '/api/pools/progress' && method === 'GET') return sendJson(res, 200, zpool.progress());
   // Managing a ZFS pool: check (scrub), stop the check, disconnect (export), delete (destroy), import one from the disks.
   if (p === '/api/pools/importable' && method === 'GET') return sendJson(res, 200, await zpool.importable());
   if (p === '/api/pools/import' && method === 'POST') return sendJson(res, 200, await zpool.importPool((await readBody(req)).id));

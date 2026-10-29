@@ -1646,6 +1646,19 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .usage-bar span { display: block; height: 100%; border-radius: inherit; background: var(--pc, var(--accent)); transition: width .6s ease; }
 .usage-bar span.warn { background: var(--warn); } .usage-bar span.bad { background: var(--bad); }
 .usage.big .usage-bar { height: 14px; }
+.pool-progress { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--glass); }
+.pool-progress .pp-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.pool-progress .usage-bar { height: 10px; }
+.pp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.pp-steps li { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.pp-steps li.running, .pp-steps li.done { color: var(--text); }
+.pp-steps li.failed { color: var(--bad); }
+.pp-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--glass-line); box-sizing: border-box; flex: none; }
+.pp-steps .done .pp-dot { background: var(--ok); border-color: var(--ok); }
+.pp-steps .running .pp-dot { border-color: var(--accent); border-right-color: transparent; animation: pp-spin .8s linear infinite; }
+.pp-steps .failed .pp-dot { background: var(--bad); border-color: var(--bad); }
+@keyframes pp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pp-steps .running .pp-dot { animation: none; border-right-color: var(--accent); } }
 .usage-nums { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .usage-nums b { color: var(--text); font-weight: 600; }
 .usage.big .usage-nums { font-size: 14px; margin-top: 8px; }

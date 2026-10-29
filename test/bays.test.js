@@ -2,6 +2,11 @@
 /* Tests for the disk bays: key per disk and checking the layout. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+process.env.SYS_BLOCK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'sysblock-'));
 const bays = require('../lib/bays');
 
 test('recognise a disk by serial number, otherwise by name', () => {
@@ -60,4 +65,21 @@ test('new disks in the drawing: the bay of a replaced disk, otherwise the first 
   assert.deepEqual(r.placed, [{ name: 'sde', bay: '4' }]);
   // Nothing new: nothing changes and nothing is written.
   assert.equal(bays.placeNew(cfg, [hdd('sda', 'A')]).changed, false);
+});
+
+test('the serial number from the kernel when udev has none for a moment (zpool create)', () => {
+  const dir = process.env.SYS_BLOCK_DIR;
+  fs.mkdirSync(path.join(dir, 'sdb', 'device'), { recursive: true });
+  // VPD page 0x80: 4 header bytes, byte 3 = the length, then the serial number (padded with spaces).
+  const sn = '  WD-WX12A3456789';
+  fs.writeFileSync(path.join(dir, 'sdb', 'device', 'vpd_pg80'), Buffer.concat([Buffer.from([0, 0x80, 0, sn.length]), Buffer.from(sn)]));
+  fs.mkdirSync(path.join(dir, 'nvme0n1', 'device'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'nvme0n1', 'device', 'serial'), 'S5GXNX0R123456      \n');
+  assert.equal(bays.sysSerial('sdb'), 'WD-WX12A3456789');
+  assert.equal(bays.sysSerial('nvme0n1'), 'S5GXNX0R123456');
+  assert.equal(bays.sysSerial('sdz'), null);
+  assert.equal(bays.sysSerial('../etc'), null);
+  // Only filled in when lsblk has none, so the key stays the same as before.
+  assert.equal(bays.diskKey(bays.withSerial({ name: 'sdb', serial: null })), 's:WD-WX12A3456789');
+  assert.equal(bays.withSerial({ name: 'sdb', serial: 'OTHER' }).serial, 'OTHER');
 });
