@@ -5607,6 +5607,7 @@
     const arr = [...list].filter((f) => f && f.name);
     if (!arr.length || !fx.share) return;
     const share = fx.share, folder = fx.path;
+    if (!up.busy) { clearTimeout(up.hideTimer); up.queue = []; } // a new series: the finished one goes away
     const here = new Set(((fx.data && fx.data.path === folder && fx.data.items) || []).map((it) => it.name));
     for (const f of arr) {
       let overwrite = false;
@@ -5672,21 +5673,24 @@
     const finished = q.filter((x) => x.state !== 'waiting' && x.state !== 'uploading').length;
     const pct = total ? Math.min(100, Math.round((sent / total) * 100)) : 100;
     const speed = cur && Date.now() - cur.started > 800 ? cur.sent / ((Date.now() - cur.started) / 1000) : 0;
-    const head = cur ? t('Uploading {n} of {total}', { n: finished + 1, total: q.length })
-      : q.every((x) => x.state === 'done') ? t('{n} files uploaded.', { n: q.length })
-        : q.some((x) => x.state === 'failed') ? t('Upload finished with errors.') : t('Upload stopped.');
     const STATE = { waiting: t('Waiting'), done: t('Uploaded'), failed: t('Failed'), stopped: t('Stopped') };
-    box.innerHTML = `<div class="up-head"><b>${esc(head)}</b>
-        <span class="muted small">${esc(t('{done} of {total}', { done: bytes(sent), total: bytes(total) }))}${speed ? ' · ' + esc(bytes(speed)) + '/s' : ''}</span>
+    // One bar: for one file that file, for several the total, with each file and its state (or %) below it.
+    const one = q.length === 1 ? q[0] : null;
+    const head = one ? one.file.name
+      : cur ? t('Uploading {n} of {total}', { n: finished + 1, total: q.length })
+        : q.every((x) => x.state === 'done') ? t('{n} files uploaded.', { n: q.length })
+          : q.some((x) => x.state === 'failed') ? t('Upload finished with errors.') : t('Upload stopped.');
+    const stateOf = (x) => (x.state === 'uploading' ? nf0.format(x.file.size ? Math.round((x.sent / x.file.size) * 100) : 0) + '%' : STATE[x.state] || '');
+    const failed = q.some((x) => x.state === 'failed');
+    box.innerHTML = `<div class="up-head"><b class="up-name" title="${esc(head)}">${esc(head)}</b>
+        <span class="muted small">${one && one.state !== 'uploading' ? esc(stateOf(one))
+          : esc(t('{done} of {total}', { done: bytes(sent), total: bytes(total) })) + (speed ? ' · ' + esc(bytes(speed)) + '/s' : '')}</span>
         ${cur ? `<button class="btn sm" type="button" data-up-stop>${t('Stop')}</button>` : `<button class="btn sm" type="button" data-up-close>${t('Close')}</button>`}</div>
-      <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
-      <ul class="up-list">${q.map((x) => {
-        const p = x.state === 'done' ? 100 : x.file.size ? Math.round((x.sent / x.file.size) * 100) : 0;
-        return `<li class="${x.state}"><span class="up-name" title="${esc(x.file.name)}">${esc(x.file.name)}</span>
-          <span class="up-state small">${x.state === 'uploading' ? esc(nf0.format(p) + '%') : esc(STATE[x.state] || '')}</span>
-          <div class="usage-bar"><span class="${x.state === 'failed' ? 'bad' : ''}" style="width:${p}%"></span></div>
-          ${x.state === 'failed' ? `<span class="up-err small">${esc(x.error)}</span>` : ''}</li>`;
-      }).join('')}</ul>`;
+      <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span class="${one && failed ? 'bad' : ''}" style="width:${pct}%"></span></div>
+      ${one ? (one.state === 'failed' ? `<p class="up-err small">${esc(one.error)}</p>` : '')
+        : `<ul class="up-list">${q.map((x) => `<li class="${x.state}"><span class="up-name" title="${esc(x.file.name)}">${esc(x.file.name)}</span>
+          <span class="up-state small">${esc(stateOf(x))}</span>
+          ${x.state === 'failed' ? `<span class="up-err small">${esc(x.error)}</span>` : ''}</li>`).join('')}</ul>`}`;
   }
   function showNameRow(mode, value) {
     const row = $('#filesNew'), field = $('#filesNewName');

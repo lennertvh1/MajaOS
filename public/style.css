@@ -1474,11 +1474,12 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .files-uploads { display: grid; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--glass-line); background: var(--glass); max-height: 40%; overflow: auto; }
 .files-uploads .up-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .files-uploads .up-head .btn { margin-left: auto; }
+.files-uploads .up-head .up-name { min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-uploads > .up-err { margin: 0; color: var(--bad); }
 .up-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .up-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; font-size: 13px; }
 .up-list .up-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .up-list .up-state { color: var(--muted); }
-.up-list .usage-bar { grid-column: 1 / -1; height: 4px; }
 .up-list .up-err { grid-column: 1 / -1; color: var(--bad); }
 .up-list li.done .up-state { color: var(--ok); }
 .up-list li.failed .up-state, .up-list li.stopped .up-state { color: var(--bad); }
