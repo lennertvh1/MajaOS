@@ -2790,4 +2790,5 @@ window.TB_LANG.pl = {
   "Show progress": "Pokaż postęp",
   "The NVIDIA driver is being installed. Follow it in Software update.": "Sterownik NVIDIA jest instalowany. Śledź postęp w Aktualizacji oprogramowania.",
   "no driver": "brak sterownika",
+  "nvidia-smi doesn't answer": "nvidia-smi nie odpowiada",
 };

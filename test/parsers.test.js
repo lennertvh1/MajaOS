@@ -240,3 +240,11 @@ test('graphics cards from lspci -vmmk: with and without a driver, the BMC video 
   ].join('\n\n'));
   assert.deepEqual(out.map((g) => [g.name, g.vendor, g.ready]), [['GeForce RTX 3060 Ti Lite Hash Rate', 'nvidia', false], ['Radeon RX 6600', 'amd', true], ['Tesla T4', 'nvidia', false]]);
 });
+
+test('nvidia-smi: memory in bytes, [N/A] values stay empty', () => {
+  const { parseNvidiaSmi } = require('../lib/system');
+  assert.deepEqual(parseNvidiaSmi('NVIDIA GeForce RTX 3060 Ti, 7, 812, 8192, 44, 21.37\n'),
+    [{ name: 'NVIDIA GeForce RTX 3060 Ti', util: 7, memUsed: 812 * 1048576, memTotal: 8192 * 1048576, temp: 44, power: 21.37 }]);
+  assert.deepEqual(parseNvidiaSmi('NVIDIA GeForce RTX 3060 Ti, 0, 5, 8192, 38, [N/A]').map((g) => g.power), [null]);
+  assert.equal(parseNvidiaSmi(''), null);
+});

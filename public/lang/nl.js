@@ -2794,4 +2794,5 @@ window.TB_LANG.nl = {
   "Show progress": "Voortgang tonen",
   "The NVIDIA driver is being installed. Follow it in Software update.": "De NVIDIA-driver wordt geïnstalleerd. Volg het in Software-update.",
   "no driver": "geen driver",
+  "nvidia-smi doesn't answer": "nvidia-smi antwoordt niet",
 };

@@ -2790,4 +2790,5 @@ window.TB_LANG.es = {
   "Show progress": "Ver el progreso",
   "The NVIDIA driver is being installed. Follow it in Software update.": "Se está instalando el controlador NVIDIA. Síguelo en Actualización de software.",
   "no driver": "sin controlador",
+  "nvidia-smi doesn't answer": "nvidia-smi no responde",
 };

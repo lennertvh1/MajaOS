@@ -2790,4 +2790,5 @@ window.TB_LANG.ja = {
   "Show progress": "進行状況を表示",
   "The NVIDIA driver is being installed. Follow it in Software update.": "NVIDIA ドライバーをインストールしています。ソフトウェア・アップデートで進行状況を確認できます。",
   "no driver": "ドライバーなし",
+  "nvidia-smi doesn't answer": "nvidia-smi が応答しません",
 };

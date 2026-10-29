@@ -2790,4 +2790,5 @@ window.TB_LANG.zh = {
   "Show progress": "查看进度",
   "The NVIDIA driver is being installed. Follow it in Software update.": "正在安装 NVIDIA 驱动。请在“软件更新”中查看进度。",
   "no driver": "无驱动",
+  "nvidia-smi doesn't answer": "nvidia-smi 无响应",
 };

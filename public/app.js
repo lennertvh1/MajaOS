@@ -300,17 +300,19 @@
     setRing('#cpuRing', cpu); $('#cpuPct').textContent = cpu == null ? '–' : Math.round(cpu) + '%';
     setRing('#memRing', mem); $('#memPct').textContent = mem == null ? '–' : Math.round(mem) + '%';
     const g = o.gpu && o.gpu[0];
-    $('#gpuRingWrap').hidden = !g;
-    if (g) { const vp = (g.memUsed / g.memTotal) * 100; setRing('#gpuRing', vp); $('#gpuPct').textContent = Math.round(vp) + '%'; }
+    const vp = g && g.memTotal ? (g.memUsed / g.memTotal) * 100 : null;
+    $('#gpuRingWrap').hidden = vp == null;
+    if (vp != null) { setRing('#gpuRing', vp); $('#gpuPct').textContent = Math.round(vp) + '%'; }
     $('#uptime').textContent = o.uptime != null ? t('Up for {time}', { time: duration(o.uptime) }) : '';
     const facts = [];
     if (o.cpu && o.cpu.brand) facts.push([t('Processor'), o.cpu.brand.replace(/\s+\d+-Core Processor/i, '').replace(/\(R\)|\(TM\)/g, '')]);
     if (o.memory) facts.push([t('Memory'), t('{used} of {total}', { used: bytes(o.memory.used), total: bytes(o.memory.total) })]);
     if (g) facts.push(['GPU', g.name.replace(/^NVIDIA (GeForce )?/, '') + (g.temp != null ? ' · ' + g.temp + ' °C' : '')]);
     // Without nvidia-smi (no driver yet, or an AMD/Intel card): the card as lspci sees it.
-    else (o.gpus || []).slice(0, 2).forEach((c) => facts.push(['GPU', c.name.replace(/^(GeForce|Radeon)\s+/, '') + (c.ready ? '' : ' · ' + t('no driver'))]));
+    // A driver that is there but nvidia-smi doesn't answer: say so (its message on hover).
+    else (o.gpus || []).slice(0, 2).forEach((c) => facts.push(['GPU', c.name.replace(/^(GeForce|Radeon)\s+/, '') + (!c.ready ? ' · ' + t('no driver') : c.vendor === 'nvidia' && o.gpuError ? ' · ' + t('nvidia-smi doesn\'t answer') : ''), c.vendor === 'nvidia' ? o.gpuError : null]));
     if (o.version) facts.push([t('System'), o.version.replace(' GNU/Linux', '')]);
-    $('#sysFacts').innerHTML = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd title="${esc(v)}">${esc(v)}</dd>`).join('');
+    $('#sysFacts').innerHTML = facts.map(([k, v, why]) => `<dt>${esc(k)}</dt><dd title="${esc(why ? v + ' – ' + why : v)}">${esc(v)}</dd>`).join('');
 
     const s = o.storage;
     const st = $('#arrayState');
