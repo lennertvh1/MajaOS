@@ -1673,6 +1673,26 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mix-disks .row-side .seg button { font-size: 13px; }
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
+/* System in detail: a row per thread, memory as one stacked bar, GPU and network rows. */
+.sysd-sec { display: grid; gap: 10px; margin-bottom: 14px; }
+.sysd-sec .usage-bar span:not(.warn):not(.bad) { background: var(--accent); }
+.sysd-cores, .sysd-rows, .sysd-legend, .sysd-net { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sysd-cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
+.sysd-cores li, .sysd-rows li { display: grid; grid-template-columns: 72px 1fr 44px 62px; align-items: center; gap: 10px; font-size: 13px; }
+.sysd-rows li { grid-template-columns: 72px 1fr auto; }
+.sysd-cores b, .sysd-rows b { text-align: right; font-variant-numeric: tabular-nums; }
+.sysd-core { color: var(--muted); }
+.sysd-stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--glass); }
+.sysd-stack span { height: 100%; }
+.sysd-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.sysd-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.mem-apps { background: var(--accent); }
+.mem-zfs { background: var(--pool-2, var(--warn)); }
+.mem-cache { background: var(--faint); }
+.mem-free { background: transparent; border: 1px solid var(--glass-line); }
+.sysd-stack .mem-free { border: 0; }
+.sysd-net li { display: grid; grid-template-columns: minmax(80px, 140px) 120px 120px 1fr; gap: 10px; align-items: baseline; font-size: 13px; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .sysd-net li { grid-template-columns: 1fr 1fr; } .sysd-cores li { grid-template-columns: 64px 1fr 40px 56px; } }
 /* Move from Unraid: one card per kind, a row per disk, share, user, app or VM. */
 .mig-card { display: flex; align-items: center; gap: 14px; }
 .mig-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--glass); color: var(--accent); }

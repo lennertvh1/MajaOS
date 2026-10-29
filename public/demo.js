@@ -2021,6 +2021,20 @@
   }
   // Like startCreate/progress in lib/zpool.js: the pool is made right away (so errors come back at once), the steps
   // run on the clock: about a second per disk, two for the pool, one for the folders.
+  // The system window (sys.details in lib/system.js): a Ryzen 7 5700X with 16 threads, memory split up, two cards.
+  const netTotals = { enp6s0: { rx: 812e9, tx: 1.94e12 }, br0: { rx: 640e9, tx: 1.81e12 } };
+  function systemDetails() {
+    const o = (() => { const used = rnd(15.2, 16.6) * GB; return { used }; })();
+    const cores = Array.from({ length: 16 }, (_, i) => { const p = Math.max(0, Math.min(100, rnd(1, i % 5 === 0 ? 38 : 14))); return { id: i, percent: Math.round(p * 10) / 10, mhz: Math.round(p > 20 ? rnd(4300, 4650) : rnd(2200, 3600)) }; });
+    const net = Object.entries(netTotals).map(([name, v]) => { const rx = rnd(0.2e6, 9e6), tx = rnd(0.1e6, 2.5e6); v.rx += rx * 2; v.tx += tx * 2; return { name, rx, tx, rxTotal: v.rx, txTotal: v.tx }; });
+    return {
+      hostname: 'Demo', os: 'Debian GNU/Linux 13 (trixie)', kernel: '6.12.48+deb13-amd64', uptime: Math.round((Date.now() - bootTime) / 1000),
+      load: [rnd(0.4, 1.6), rnd(0.5, 1.3), rnd(0.6, 1.1)].map((x) => Math.round(x * 100) / 100),
+      cpu: { brand: 'AMD Ryzen 7 5700X 8-Core Processor', cores: cores, threads: 16, physical: 8, percent: Math.round(cores.reduce((a, c) => a + c.percent, 0) / 16), temp: Math.round(rnd(44, 52) * 10) / 10 },
+      memory: { total: 32 * GB, available: 32 * GB - o.used - 6 * GB, zfsCache: 6 * GB, apps: o.used, cache: 3.4 * GB, swapTotal: 0, swapUsed: 0 },
+      gpu: nvidia.loaded ? gpu() : null, gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }], gpuError: null, net,
+    };
+  }
   /* ---- moving from Unraid (lib/unraid.js): a stick and three disks of an old server, the steps run on the clock */
   const unraidScan = () => ({
     found: true, name: 'Tower', version: '6.12.13', flash: 'sdk', warnings: [],
@@ -2709,6 +2723,7 @@
     if (path === '/api/storage/disks') return { disks: disks.map((d) => ({ name: d.name, serial: d.serial, model: d.model, size: d.size })) };
     if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidSsh ? unraidSshScan() : unraidScan();
     if (path === '/api/unraid/progress') return unraidProgress();
+    if (path === '/api/system/details') { await wait(rnd(150, 300)); return systemDetails(); }
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);

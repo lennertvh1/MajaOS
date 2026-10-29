@@ -248,3 +248,12 @@ test('nvidia-smi: memory in bytes, [N/A] values stay empty', () => {
   assert.deepEqual(parseNvidiaSmi('NVIDIA GeForce RTX 3060 Ti, 0, 5, 8192, 38, [N/A]').map((g) => g.power), [null]);
   assert.equal(parseNvidiaSmi(''), null);
 });
+
+test('per core from /proc/stat, and bytes per card from /proc/net/dev', () => {
+  const { parseCpuCores, parseNetDev } = require('../lib/system');
+  const stat = 'cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 60 0 30 400 10 0 0 0 0 0\ncpu1 40 0 20 400 40 0 0 0 0 0\nintr 12345\n';
+  assert.deepEqual(parseCpuCores(stat), [{ idle: 410, total: 500 }, { idle: 440, total: 500 }]);
+  const dev = 'Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n' +
+    '    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0\n enp6s0: 812000 900 0 0 0 0 0 12 194000 700 0 0 0 0 0 0\n';
+  assert.deepEqual(parseNetDev(dev), { lo: { rx: 1000, tx: 1000 }, enp6s0: { rx: 812000, tx: 194000 } });
+});

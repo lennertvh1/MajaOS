@@ -2592,6 +2592,66 @@
     };
   }
 
+  // System in detail (a click on the System widget): every core with its clock, the CPU's temperature and load,
+  // memory split up, the GPU and the network per card. Refreshes every 2 s while it is open.
+  async function systemWindow() {
+    openWindow(t('System'), `<p class="lead">${t('Loading…')}</p>`);
+    win.classList.add('win-wide');
+    const body = $('#winBody');
+    let timer = null;
+    const pctClass = (p) => level(p || 0, 70, 90);
+    const bar = (p, cls) => `<div class="usage-bar"><span class="${cls || pctClass(p)}" style="width:${Math.max(0, Math.min(100, p || 0)).toFixed(1)}%"></span></div>`;
+    const ghz = (mhz) => (mhz ? nf.format(mhz / 1000) + ' GHz' : '');
+    const rate = (b) => (b == null ? '–' : bytes(b) + '/s');
+    const draw = (d) => {
+      const m = d.memory, c = d.cpu;
+      const memParts = m ? [['apps', t('Apps and system'), m.apps], ['zfs', t('ZFS cache'), m.zfsCache], ['cache', t('Other cache'), Math.max(0, m.cache)],
+        ['free', t('free'), Math.max(0, m.total - m.apps - m.zfsCache - Math.max(0, m.cache))]] : [];
+      const g = d.gpu && d.gpu[0];
+      body.innerHTML = `
+        <div class="stat-strip">
+          <div class="stat"><b>${c.percent == null ? '–' : nf0.format(c.percent) + '%'}</b><span>CPU</span></div>
+          <div class="stat"><b>${c.temp == null ? '–' : nf.format(c.temp) + ' °C'}</b><span>${t('CPU temperature')}</span></div>
+          <div class="stat"><b>${d.load.map((x) => nf.format(x)).join(' · ')}</b><span>${t('Load (1, 5, 15 min)')} ${hint(t('How many tasks were waiting for the processor on average. Below the number of threads ({n}) the server keeps up easily.', { n: c.threads }))}</span></div>
+          <div class="stat"><b>${d.uptime != null ? esc(duration(d.uptime)) : '–'}</b><span>${t('Up for')}</span></div>
+        </div>
+        <section class="pool-card plain sysd-sec">
+          <div class="sub-head">${t('Processor')}</div>
+          <p class="muted small">${esc([c.brand, c.physical && c.threads ? t('{cores} cores, {threads} threads', { cores: c.physical, threads: c.threads }) : null].filter(Boolean).join(' · '))}</p>
+          <ul class="sysd-cores">${c.cores.map((x) => `<li><span class="sysd-core">${esc(t('Thread {n}', { n: x.id }))}</span>${bar(x.percent)}<b>${x.percent == null ? '–' : nf0.format(x.percent) + '%'}</b><span class="muted small">${esc(ghz(x.mhz))}</span></li>`).join('')}</ul>
+        </section>
+        ${m ? `<section class="pool-card plain sysd-sec">
+          <div class="sub-head">${t('Memory')}</div>
+          <div class="sysd-stack" role="img" aria-label="${esc(memParts.map(([, l, v]) => l + ' ' + bytes(v)).join(', '))}">${memParts.map(([k, , v]) => `<span class="mem-${k}" style="width:${((v / m.total) * 100).toFixed(2)}%"></span>`).join('')}</div>
+          <ul class="sysd-legend">${memParts.map(([k, l, v]) => `<li><span class="dot mem-${k}"></span>${esc(l)} <b>${esc(bytes(v))}</b></li>`).join('')}
+            <li class="muted">${esc(t('{used} of {total}', { used: bytes(m.total - m.available - m.zfsCache), total: bytes(m.total) }))} ${hint(t('The ZFS cache is given back as soon as apps need the memory, so it doesn\'t count as used.'))}</li></ul>
+          ${m.swapTotal ? `<p class="muted small">${esc(t('Swap: {used} of {total}', { used: bytes(m.swapUsed), total: bytes(m.swapTotal) }))}</p>` : ''}
+        </section>` : ''}
+        ${g ? `<section class="pool-card plain sysd-sec">
+          <div class="sub-head">GPU</div>
+          <p class="muted small">${esc([g.name, g.temp != null ? g.temp + ' °C' : null, g.power != null ? nf0.format(g.power) + ' W' : null].filter(Boolean).join(' · '))}</p>
+          <ul class="sysd-rows">
+            <li><span>${t('Usage')}</span>${bar(g.util)}<b>${g.util == null ? '–' : nf0.format(g.util) + '%'}</b></li>
+            ${g.memTotal ? `<li><span>VRAM</span>${bar((g.memUsed / g.memTotal) * 100)}<b>${esc(bytes(g.memUsed))} / ${esc(bytes(g.memTotal))}</b></li>` : ''}
+          </ul></section>`
+        : (d.gpus || []).length ? `<section class="pool-card plain sysd-sec"><div class="sub-head">GPU</div>
+          ${d.gpus.map((x) => `<p class="small">${esc(x.name)} · <span class="${x.ready ? 'muted' : 'temp-warn'}">${esc(!x.ready ? t('no driver') : d.gpuError ? t('nvidia-smi doesn\'t answer') : t('no measurements'))}</span></p>`).join('')}</section>` : ''}
+        ${(d.net || []).length ? `<section class="pool-card plain sysd-sec">
+          <div class="sub-head">${t('Network')}</div>
+          <ul class="sysd-net">${d.net.map((n) => `<li><b>${esc(n.name)}</b><span title="${esc(t('Received'))}">↓ ${esc(rate(n.rx))}</span><span title="${esc(t('Sent'))}">↑ ${esc(rate(n.tx))}</span>
+            <span class="muted small">${esc(t('since start: {rx} in, {tx} out', { rx: bytes(n.rxTotal), tx: bytes(n.txTotal) }))}</span></li>`).join('')}</ul>
+        </section>` : ''}`;
+    };
+    const tick = async () => {
+      if (!win.open || !body.isConnected) return;
+      try { draw(await api.get('/api/system/details')); }
+      catch (e) { if (!body.querySelector('.stat-strip')) body.innerHTML = `<p class="lead">${esc(e.message)}</p>`; }
+      if (win.open && body.isConnected) timer = setTimeout(tick, 2000);
+    };
+    onWinClose = () => clearTimeout(timer);
+    tick();
+  }
+
   // Moving from Unraid: the stick and the old disks are in this server. Choose what comes along (disks, shared folders,
   // users, apps with or without their data, VMs), then one job with steps (lib/unraid.js).
   // Settings → Migration: where to move from (now Unraid). A running move shows its steps right away.
@@ -8898,7 +8958,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (open) {
       if (open.dataset.open === 'ai' && S.ai && S.ai.enabled === false) return;
       closeFolder();
-      ({ home: goHome, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
+      ({ home: goHome, system: systemWindow, storage: storageWindow, shares: sharesWindow, files: () => filesOpen('', ''), backup: () => backupWindow(), vms: () => { location.hash = 'vms'; }, store: () => { if (location.hash !== '#store') location.hash = 'store'; else showPop('store'); }, ai: aiWindow })[open.dataset.open]();
       return;
     }
     const fo = e.target.closest('[data-folder-open]');

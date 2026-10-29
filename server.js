@@ -314,6 +314,7 @@ async function handleApi(req, res, url) {
   }
 
   let m;
+  if (p === '/api/system/details' && method === 'GET') return sendJson(res, 200, await sys.details());
   if (p === '/api/overview' && method === 'GET') return sendJson(res, 200, await apiOverview());
   // Restart or shut down the server. Answer first, only then the command (otherwise the answer never arrives).
   if (p === '/api/system/power' && method === 'POST') {
