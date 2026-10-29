@@ -2006,7 +2006,12 @@
     const used = disks.filter((d) => d.pool === p.name);
     used.forEach((d) => Object.assign(d, { pool: null, role: null, vdev: null, state: null }));
     if (act === 'export') { exported.push({ id: String(1e17 + Math.floor(Math.random() * 1e16)), pool: p, datasets: own, disks: used.map((d) => d.name) }); return { name: p.name, exported: true }; }
-    return { name: p.name, destroyed: true };
+    // Like startDestroy in lib/zpool.js: a job with steps (the demo already removed the pool; the steps run on the clock).
+    const onPool = force ? apps.filter((a) => /running/i.test(a.state)).slice(0, 2).map((a) => a.name) : [];
+    const steps = [...onPool.map((n) => ({ id: 'app:' + n, label: 'Stopping app {name}', name: n, secs: 2 })), { id: 'destroy', label: 'Deleting the pool', secs: 3 },
+      ...(force ? [{ id: 'cleanup', label: 'Updating folders and shared folders', secs: 1 }] : [])];
+    demoCreating = { name: p.name, kind: 'destroy', steps, result: { name: p.name, destroyed: true }, at: Date.now(), started: new Date().toISOString() };
+    return { started: true, name: p.name, progress: demoProgress() };
   }
   // Like startCreate/progress in lib/zpool.js: the pool is made right away (so errors come back at once), the steps
   // run on the clock: about a second per disk, two for the pool, one for the folders.

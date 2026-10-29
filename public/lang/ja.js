@@ -2670,4 +2670,10 @@ window.TB_LANG.ja = {
   "Delete anyway": "それでも削除",
   "{name} is still used by {list}.": "{name} はまだ {list} で使用されています。",
   "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "現在 MajaOS に接続できません。接続を確認するか、サーバーが再起動中の場合はお待ちください。",
+  "Stopping app {name}": "アプリ {name} を停止しています",
+  "Deleting the pool": "プールを削除しています",
+  "Updating folders and shared folders": "フォルダーと共有フォルダーを更新しています",
+  "Deleting {name} failed.": "{name} の削除に失敗しました。",
+  "You can close this window: the pool is deleted anyway.": "このウィンドウは閉じてもかまいません。プールは削除されます。",
+  "Another pool is being created or deleted. Wait until it is ready.": "別のプールを作成中または削除中です。完了するまでお待ちください。",
 };

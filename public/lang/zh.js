@@ -2670,4 +2670,10 @@ window.TB_LANG.zh = {
   "Delete anyway": "仍然删除",
   "{name} is still used by {list}.": "{name} 仍被 {list} 使用。",
   "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "目前无法连接 MajaOS。请检查连接；如果服务器正在重启，请稍候。",
+  "Stopping app {name}": "正在停止应用 {name}",
+  "Deleting the pool": "正在删除存储池",
+  "Updating folders and shared folders": "正在更新文件夹和共享文件夹",
+  "Deleting {name} failed.": "删除 {name} 失败。",
+  "You can close this window: the pool is deleted anyway.": "你可以关闭此窗口：存储池仍会被删除。",
+  "Another pool is being created or deleted. Wait until it is ready.": "另一个存储池正在创建或删除。请等待完成。",
 };

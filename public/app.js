@@ -2666,13 +2666,23 @@
   // and each disk, the pool and the folders. Returns the result; on an error the form is back and this throws.
   function drawPoolProgress(box, p) {
     const cur = (p.steps || []).find((x) => x.state === 'running' || x.state === 'failed');
-    const head = p.done ? (p.ok ? t('Pool {name} is ready.', { name: p.name }) : t('Creating {name} failed.', { name: p.name }))
+    const del = p.kind === 'destroy';
+    const head = p.done ? (p.ok ? t(del ? 'Pool {name} was deleted.' : 'Pool {name} is ready.', { name: p.name }) : t(del ? 'Deleting {name} failed.' : 'Creating {name} failed.', { name: p.name }))
       : cur ? t(cur.label, { name: cur.name }) : t('Starting…');
     const pct = p.percent || 0;
     box.innerHTML = `<div class="pp-head"><b>${esc(head)}</b><span class="muted">${nf0.format(pct)}%</span></div>
       <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span class="${p.done && !p.ok ? 'bad' : ''}" style="width:${pct}%"></span></div>
       <ol class="pp-steps">${(p.steps || []).map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}</li>`).join('')}</ol>
-      ${p.done ? '' : `<p class="muted small">${t('You can close this window: the pool is created anyway.')}</p>`}`;
+      ${p.done ? '' : `<p class="muted small">${t(del ? 'You can close this window: the pool is deleted anyway.' : 'You can close this window: the pool is created anyway.')}</p>`}`;
+  }
+  // Follows the job of /api/pools/progress in box until it is done; returns the last state.
+  async function followPoolJob(box, p) {
+    for (;;) {
+      drawPoolProgress(box, p);
+      if (p.done || !box.isConnected) return p;
+      await new Promise((res) => setTimeout(res, 1000));
+      try { p = await api.get('/api/pools/progress'); } catch (e) { /* the server is busy: ask again */ }
+    }
   }
   async function createPoolJob(form, payload) {
     const r = await api.post('/api/pools', payload);
@@ -2683,13 +2693,7 @@
     const box = document.createElement('div');
     box.className = 'pool-progress'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
     form.prepend(box);
-    let p = r.progress;
-    for (;;) {
-      drawPoolProgress(box, p);
-      if (p.done) break;
-      await new Promise((res) => setTimeout(res, 1000));
-      try { p = await api.get('/api/pools/progress'); } catch (e) { /* the server is busy: ask again */ }
-    }
+    const p = await followPoolJob(box, r.progress);
     if (p.ok) return p.result;
     box.remove(); kids.forEach((x) => { x.hidden = false; });
     throw new Error(tr(p.error || 'Creating the pool failed.'));
@@ -3139,15 +3143,27 @@
           if (!r) return;
           if (!r.checked) { toast(t('Tick that the data on the pool may be erased.'), true); return; }
           busy(t('Deleting…'));
-          try { await api.del(`${url}?confirm=${encodeURIComponent(name)}`); }
+          let res;
+          try { res = await api.del(`${url}?confirm=${encodeURIComponent(name)}`); }
           catch (ex) {
             // Still in use: say what, and let the user decide to go on anyway.
             if (!(ex.status === 409 && ex.data && ex.data.canForce)) throw ex;
             const list = (ex.data.inUse || []).map((x) => tr(x)).join(', ');
             const go = await ask(`${t('{name} is still used by {list}.', { name, list })} ${t('Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.', { name })}`, t('Delete anyway'));
             if (!go) { b.disabled = false; b.textContent = label; return; }
-            await api.del(`${url}?confirm=${encodeURIComponent(name)}&force=1`);
+            res = await api.del(`${url}?confirm=${encodeURIComponent(name)}&force=1`);
           }
+          // The steps in place of the pool's card, until it is gone.
+          const card = b.closest('[data-zp]');
+          const box = document.createElement('div');
+          box.className = 'pool-progress'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+          [...card.children].forEach((x) => { x.hidden = true; });
+          card.append(box);
+          drawPoolProgress(box, res.progress);
+          box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          const p = await followPoolJob(box, res.progress);
+          if (!p.done) return; // the window was closed: it goes on on the server
+          if (!p.ok) { toast(tr(p.error || ''), true); storageWindow({ again: true }); return; }
           toast(t('Pool {name} was deleted.', { name }));
         }
         loadOverview().catch(() => {});

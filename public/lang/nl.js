@@ -2674,4 +2674,10 @@ window.TB_LANG.nl = {
   "Delete anyway": "Toch verwijderen",
   "{name} is still used by {list}.": "{name} wordt nog gebruikt door {list}.",
   "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "MajaOS is nu niet bereikbaar. Controleer de verbinding, of wacht even als de server herstart.",
+  "Stopping app {name}": "App {name} stoppen",
+  "Deleting the pool": "De pool verwijderen",
+  "Updating folders and shared folders": "Mappen en gedeelde mappen bijwerken",
+  "Deleting {name} failed.": "{name} verwijderen is mislukt.",
+  "You can close this window: the pool is deleted anyway.": "Je kan dit venster sluiten: de pool wordt toch verwijderd.",
+  "Another pool is being created or deleted. Wait until it is ready.": "Er wordt al een andere pool gemaakt of verwijderd. Wacht tot dat klaar is.",
 };

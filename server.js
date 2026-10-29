@@ -647,7 +647,7 @@ async function handleApi(req, res, url) {
     if (act === 'scrub' && method === 'POST') return sendJson(res, 200, await zpool.scrub(name));
     if (act === 'scrub-stop' && method === 'POST') return sendJson(res, 200, await zpool.scrub(name, true));
     if (act === 'export' && method === 'POST') return sendJson(res, 200, await zpool.exportPool(name));
-    if (!act && method === 'DELETE') return sendJson(res, 200, await zpool.destroyPool(name, url.searchParams.get('confirm'), { force: url.searchParams.get('force') === '1' }));
+    if (!act && method === 'DELETE') return sendJson(res, 200, await zpool.startDestroy(name, url.searchParams.get('confirm'), { force: url.searchParams.get('force') === '1' }));
   }
   // Pools with mixed disks: update or check the parity, the schedule, replacing a disk, and removing the pool (the files
   // stay on the disks).

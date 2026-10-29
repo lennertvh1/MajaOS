@@ -2670,4 +2670,10 @@ window.TB_LANG.pl = {
   "Delete anyway": "Usuń mimo to",
   "{name} is still used by {list}.": "{name} jest nadal używana przez {list}.",
   "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "MajaOS jest teraz nieosiągalny. Sprawdź połączenie lub poczekaj, jeśli serwer się uruchamia ponownie.",
+  "Stopping app {name}": "Zatrzymywanie aplikacji {name}",
+  "Deleting the pool": "Usuwanie puli",
+  "Updating folders and shared folders": "Aktualizowanie folderów i folderów udostępnionych",
+  "Deleting {name} failed.": "Usuwanie {name} nie powiodło się.",
+  "You can close this window: the pool is deleted anyway.": "Możesz zamknąć to okno: pula i tak zostanie usunięta.",
+  "Another pool is being created or deleted. Wait until it is ready.": "Inna pula jest właśnie tworzona lub usuwana. Poczekaj, aż to się skończy.",
 };

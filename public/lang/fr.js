@@ -2670,4 +2670,10 @@ window.TB_LANG.fr = {
   "Delete anyway": "Supprimer quand même",
   "{name} is still used by {list}.": "{name} est encore utilisé par {list}.",
   "MajaOS can't be reached right now. Check the connection, or wait if the server is restarting.": "MajaOS est injoignable pour le moment. Vérifiez la connexion, ou patientez si le serveur redémarre.",
+  "Stopping app {name}": "Arrêt de l'app {name}",
+  "Deleting the pool": "Suppression du pool",
+  "Updating folders and shared folders": "Mise à jour des dossiers et dossiers partagés",
+  "Deleting {name} failed.": "La suppression de {name} a échoué.",
+  "You can close this window: the pool is deleted anyway.": "Vous pouvez fermer cette fenêtre : le pool sera quand même supprimé.",
+  "Another pool is being created or deleted. Wait until it is ready.": "Un autre pool est en cours de création ou de suppression. Attendez la fin.",
 };
