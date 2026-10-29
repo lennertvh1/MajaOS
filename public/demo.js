@@ -2140,19 +2140,14 @@
     { name: 'sdb', model: 'WDC WD20EFRX-68EUZN0', size: 2 * TB, rotational: true, tran: 'sata', install: false },
     { name: 'sdc', model: 'SanDisk Ultra Fit', size: 32 * GB, rotational: false, tran: 'usb', install: true },
   ];
-  // The same steps as iso/run-install.sh: Debian, then MajaOS itself with install.sh in the chroot.
+  // The same steps as iso/run-install.sh: the live system with MajaOS in it is copied to the disk and set up.
   const instSteps = [
-    [12, 'Preparing the installation'],
-    [18, 'Partitioning the disk'],
-    [35, 'Installing Debian'],
-    [52, 'Installing the boot loader'],
-    [60, 'Installing MajaOS'],
-    [72, 'Installing ZFS (this takes a few minutes)'],
-    [82, 'Installing virtual machines'],
-    [85, 'Installing shared folders'],
-    [88, 'Installing backups and remote access'],
-    [91, 'Installing Docker'],
-    [97, 'Finishing MajaOS'],
+    [8, 'Preparing the installation'],
+    [14, 'Partitioning the disk'],
+    [30, 'Copying MajaOS to the disk'],
+    [55, 'Copying MajaOS to the disk'],
+    [72, 'Setting up MajaOS'],
+    [80, 'Installing the boot loader'],
     [100, 'MajaOS is installed. After the restart the address appears on the screen.'],
   ];
   let instJob = null;

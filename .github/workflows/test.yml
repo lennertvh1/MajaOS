@@ -52,7 +52,7 @@ jobs:
     needs: test
     if: needs.test.outputs.iso == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
 

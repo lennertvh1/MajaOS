@@ -6,15 +6,15 @@
 #   ./iso/build-iso.sh --iso debian.iso     use your own Debian ISO (no download)
 #   ./iso/build-iso.sh --out folder         write somewhere else
 #   ./iso/build-iso.sh --worktree           use the current files instead of the last commit
-#   ./iso/build-iso.sh --live               also build the graphical installer (root, debootstrap; the release ISO)
+#   ./iso/build-iso.sh --live               the release ISO: the graphical installer with MajaOS fully installed in it
+#                                           (root, debootstrap; it copies itself to the disk)
 #
-# What changes in the Debian ISO (the rest stays identical byte for byte):
+# Without --live (the Debian installer with a preseed), what changes in the Debian ISO:
 #   /majaos/initrd.gz      copy of install.amd/initrd.gz with preseed.cfg in it
 #   /majaos/*              MajaOS (tar.gz), late.sh, the first-boot service, screen text
-#   /live/                     with --live: the graphical installer (language, disk, confirm)
-#   /boot/grub/grub.cfg        UEFI: Install MajaOS first (the live screen with --live, otherwise the Debian installer)
-#   /isolinux/*.cfg            BIOS: the same in the isolinux menu
-#   /md5sum.txt                updated for the changed and new files
+#   /boot/grub/grub.cfg, /isolinux/*.cfg   Install MajaOS first
+# With --live only Debian's boot files stay (GRUB, isolinux, the EFI image); the Debian installer and its packages
+# (/pool, /dists, /install.amd, /firmware) go, and /live/ holds the live system. The boot menu has only MajaOS.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -87,7 +87,7 @@ cp "$HERE/late.sh" "$HERE/majaos-firstboot.service" "$HERE/installing.issue" "$H
   "$HERE/serve.js" "$HERE/kiosk.sh" "$HERE/run-install.sh" "$WORK/hb/"
 if [ "$LIVE" = 1 ]; then
   step "Building the graphical installer"
-  bash "$HERE/build-live.sh" "$WORK/live"
+  bash "$HERE/build-live.sh" "$WORK/live" "$WORK/hb/majaos.tar.gz"
 fi
 
 # 4. Boot menus: MajaOS at the top and the default; the normal Debian installation stays below.
@@ -95,7 +95,7 @@ step "Changing the boot menus"
 KERNEL=/install.amd/vmlinuz
 if [ -f "$WORK/live/vmlinuz" ]; then
   cat > "$WORK/grub-entries.cfg" <<EOF
-# Start the installer right away. Hold Esc while it starts for the menu (recovery, plain Debian).
+# Start the installer right away (hold Esc while it starts for the menu).
 set default=0
 set timeout_style=hidden
 set timeout=1
@@ -103,11 +103,6 @@ menuentry --hotkey=h 'Install MajaOS $VERSION' {
     set background_color=black
     linux    /live/vmlinuz boot=live components quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0 live-media-path=/live
     initrd   /live/initrd.img
-}
-menuentry 'Install MajaOS $VERSION (recovery)' {
-    set background_color=black
-    linux    $KERNEL vga=788 --- quiet
-    initrd   /majaos/initrd.gz
 }
 EOF
 else
@@ -125,7 +120,12 @@ menuentry --hotkey=n 'Install MajaOS $VERSION with the NVIDIA driver' {
 EOF
 fi
 grep -q '^menuentry' "$WORK/grub.cfg" || { echo "Unexpected grub.cfg: no menuentry found."; exit 1; }
-awk -v f="$WORK/grub-entries.cfg" '!done && /^menuentry/ { while ((getline l < f) > 0) print l; done = 1 } { print }' "$WORK/grub.cfg" > "$WORK/grub.cfg.new"
+if [ -f "$WORK/live/vmlinuz" ]; then
+  # Debian's own entries point at the installer that is no longer on the ISO: keep only its header (fonts, theme).
+  awk -v f="$WORK/grub-entries.cfg" '/^(menuentry|submenu)/ { while ((getline l < f) > 0) print l; exit } { print }' "$WORK/grub.cfg" > "$WORK/grub.cfg.new"
+else
+  awk -v f="$WORK/grub-entries.cfg" '!done && /^menuentry/ { while ((getline l < f) > 0) print l; done = 1 } { print }' "$WORK/grub.cfg" > "$WORK/grub.cfg.new"
+fi
 mv "$WORK/grub.cfg.new" "$WORK/grub.cfg"
 if [ -f "$WORK/live/vmlinuz" ]; then
   # While the installer loads: the house on the same blue as the boot logo, not Debian's splash. No beep either.
@@ -144,10 +144,6 @@ label majaos
 	menu default
 	kernel /live/vmlinuz
 	append boot=live components quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0 live-media-path=/live initrd=/live/initrd.img
-label majaos-recovery
-	menu label Install MajaOS $VERSION (recovery)
-	kernel $KERNEL
-	append vga=788 initrd=/majaos/initrd.gz --- quiet
 EOF
   else
     cat > "$WORK/majaos.cfg" <<EOF
@@ -163,9 +159,13 @@ label majaos-nvidia
 EOF
   fi
   grep -q '^include gtk.cfg' "$WORK/menu.cfg" || { echo "Unexpected isolinux/menu.cfg."; exit 1; }
-  # BIOS: the same, after one second (isolinux counts in tenths).
-  awk -v title="menu title MajaOS $VERSION (Debian 13)" \
-    '/^include gtk.cfg/ { print "include majaos.cfg"; if (live) print "timeout 10" } /^menu title / { print title; next } { print }' live="$([ -f "$WORK/live/vmlinuz" ] && echo 1 || echo 0)" "$WORK/menu.cfg" > "$WORK/menu.cfg.new"
+  if [ -f "$WORK/live/vmlinuz" ]; then
+    # BIOS: only MajaOS, after one second (isolinux counts in tenths). Debian's own menus point at the removed installer.
+    { grep -E '^menu (hshift|width) ' "$WORK/menu.cfg" || true; echo "menu title MajaOS $VERSION"; echo 'include stdmenu.cfg'; echo 'include majaos.cfg'; echo 'timeout 10'; } > "$WORK/menu.cfg.new"
+  else
+    awk -v title="menu title MajaOS $VERSION (Debian 13)" \
+      '/^include gtk.cfg/ { print "include majaos.cfg" } /^menu title / { print title; next } { print }' "$WORK/menu.cfg" > "$WORK/menu.cfg.new"
+  fi
   mv "$WORK/menu.cfg.new" "$WORK/menu.cfg"
   awk '!/^[[:space:]]*menu default/' "$WORK/gtk.cfg" > "$WORK/gtk.cfg.new"   # the default choice is now MajaOS
   mv "$WORK/gtk.cfg.new" "$WORK/gtk.cfg"
@@ -177,6 +177,14 @@ fi
 # 5. md5sum.txt (the installer can use it to check the USB stick).
 sum_line() { printf '%s  ./%s\n' "$(md5sum < "$1" | cut -d' ' -f1)" "$2"; }
 grep -v -e ' \./boot/grub/grub\.cfg$' -e ' \./majaos/' "$WORK/md5sum.txt" > "$WORK/md5sum.new" || true
+REMOVE=()
+if [ -d "$WORK/live" ]; then
+  # The Debian installer and its packages: the live system replaces them (and the ISO must stay under GitHub's 2 GB).
+  REMOVE=(-rm_r /pool /dists /install.amd /firmware --)
+  grep -v -E ' \./(pool|dists|install\.amd|firmware)/' "$WORK/md5sum.new" > "$WORK/md5sum.trim" || true
+  mv "$WORK/md5sum.trim" "$WORK/md5sum.new"
+  rm -f "$WORK/hb/initrd.gz" "$WORK/hb/preseed.cfg" "$WORK/hb/late.sh"   # only for the Debian installer
+fi
 sum_line "$WORK/grub.cfg" boot/grub/grub.cfg >> "$WORK/md5sum.new"
 for f in "$WORK"/hb/*; do sum_line "$f" "majaos/$(basename "$f")" >> "$WORK/md5sum.new"; done
 if [ -d "$WORK/live" ]; then
@@ -191,11 +199,14 @@ MAPS+=(-map "$WORK/md5sum.new" /md5sum.txt -map "$WORK/hb" /majaos)
 step "Writing the ISO"
 ISO_OUT="$OUT/majaos-$VERSION-amd64.iso"
 rm -f "$ISO_OUT"
-xorriso -indev "$SRC_ISO" -outdev "$ISO_OUT" -boot_image any replay "${MAPS[@]}" -compliance no_emul_toc 2>&1 | grep -v -e '^xorriso : UPDATE' || true
+xorriso -indev "$SRC_ISO" -outdev "$ISO_OUT" -boot_image any replay "${REMOVE[@]}" "${MAPS[@]}" -compliance no_emul_toc 2>&1 | grep -v -e '^xorriso : UPDATE' || true
 [ -s "$ISO_OUT" ] || { echo "Writing the ISO failed."; exit 1; }
 
 # Check: are our files in it, and is the boot setup still there?
-xorriso -indev "$ISO_OUT" -find /majaos -type f 2>/dev/null | grep -q initrd.gz || { echo "Check failed: /majaos is missing."; exit 1; }
+xorriso -indev "$ISO_OUT" -find /majaos -type f 2>/dev/null | grep -q majaos.tar.gz || { echo "Check failed: /majaos is missing."; exit 1; }
+SIZE="$(stat -c %s "$ISO_OUT")"
+echo "ISO size: $((SIZE / 1024 / 1024)) MiB"
+[ "$SIZE" -lt $((2 * 1024 * 1024 * 1024)) ] || echo "Note: the ISO is larger than 2 GiB; GitHub can't attach it to a release."
 xorriso -indev "$ISO_OUT" -report_el_torito plain 2>/dev/null | grep -i -E 'El Torito boot img|Boot record' | head -5 || true
 (cd "$OUT" && sha256sum "$(basename "$ISO_OUT")" > "$(basename "$ISO_OUT").sha256")
 

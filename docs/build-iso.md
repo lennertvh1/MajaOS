@@ -33,7 +33,7 @@ Same as `./iso/build.sh` or `npm run build:iso`.
 
 | Command | Result | Run as root? | Time (typical) |
 |--------|--------|--------------|----------------|
-| `sudo ./iso/build-iso.sh --live` | Graphical installer + recovery Debian install entry | **Yes** for `--live` | 45–90 minutes |
+| `sudo ./iso/build-iso.sh --live` | Graphical installer with MajaOS fully installed in it: it copies itself to the disk (no internet needed) | **Yes** for `--live` | 45–90 minutes (much longer with Docker on Apple Silicon) |
 | `./iso/build-iso.sh` | Text-based Debian installer only (no live kiosk) | No | 10–20 minutes |
 
 Output (default): `dist/majaos-<version>-amd64.iso` and `.sha256` (`<version>` from `package.json`).
@@ -162,7 +162,7 @@ Test servers on the **dev** channel use *Settings → Software update → Develo
 - **UEFI** enabled (matches the release ISO).
 - **Secure Boot** off (same as on real hardware for ZFS/NVIDIA later).
 - Enough RAM (e.g. 4 GB+ for the live installer).
-- First menu entry: **Install MajaOS** (live). **Recovery** uses the classic Debian installer.
+- The only menu entry: **Install MajaOS**. The installation copies the live system to the disk in a few minutes.
 
 If the screen stays black after the house logo: disable **3D/GPU acceleration** in the VM. If the mouse or keyboard does nothing: use a USB tablet as the VM's pointer. On the live system, **Ctrl+Alt+F2** opens a root shell: check `/tmp/majaos-installer.log` and `journalctl -u majaos-kiosk`. **Ctrl+Alt+F1** goes back to the installer. If the screen takes no keys at all, the serial port has the same shell: on Unraid or another libvirt host, run `virsh console <vm name>` (leave with Ctrl+]).
 

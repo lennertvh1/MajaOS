@@ -1,10 +1,14 @@
 #!/bin/bash
-# A small Debian live system whose only job is the MajaOS installer screen.
+# The Debian live system of the installer: the installer screen, and (with majaos.tar.gz) MajaOS itself, fully installed.
+# The installer then copies this system to the disk (iso/run-install.sh): no internet and no compiling on the server.
+# MajaOS's services are enabled but don't run on the stick (ConditionKernelCommandLine=!boot=live, removed on the disk).
 # Needs root, debootstrap and squashfs-tools. build-iso.sh calls this with --live.
-#   ./iso/build-live.sh /path/to/output
+#   ./iso/build-live.sh /path/to/output [majaos.tar.gz]
 set -euo pipefail
 OUT="${1:-}"
-[ -n "$OUT" ] || { echo "Usage: build-live.sh <output folder>"; exit 1; }
+TAR="${2:-}"
+[ -n "$OUT" ] || { echo "Usage: build-live.sh <output folder> [majaos.tar.gz]"; exit 1; }
+[ -z "$TAR" ] || [ -f "$TAR" ] || { echo "Not found: $TAR"; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "build-live.sh needs root (debootstrap)."; exit 1; }
 command -v debootstrap >/dev/null || { echo "Missing: debootstrap"; exit 1; }
 command -v mksquashfs >/dev/null || { echo "Missing: mksquashfs (squashfs-tools)"; exit 1; }
@@ -12,7 +16,7 @@ command -v mksquashfs >/dev/null || { echo "Missing: mksquashfs (squashfs-tools)
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HERE="$ROOT/iso"
 R="$(mktemp -d)"
-trap 'umount "$R/dev" "$R/proc" "$R/sys" 2>/dev/null || true; rm -rf "$R"' EXIT
+trap 'umount "$R/run" "$R/dev" "$R/proc" "$R/sys" 2>/dev/null || true; rm -rf "$R"' EXIT
 mkdir -p "$OUT"
 
 echo "==> debootstrap Debian 13 (trixie), amd64"
@@ -31,7 +35,9 @@ DEBIAN_FRONTEND=noninteractive chroot "$R" apt-get install -y -q \
   cog cage libgl1-mesa-dri libegl1 adwaita-icon-theme fonts-dejavu-core fonts-noto-cjk \
   plymouth plymouth-themes plymouth-label \
   debootstrap parted dosfstools openssl cpio gzip zstd \
-  ifupdown dhcpcd-base firmware-realtek firmware-misc-nonfree firmware-bnx2 firmware-bnx2x
+  ifupdown dhcpcd-base firmware-realtek firmware-misc-nonfree firmware-bnx2 firmware-bnx2x firmware-amd-graphics \
+  locales keyboard-configuration console-setup sudo curl ca-certificates systemd-timesyncd rsync \
+  grub-efi-amd64-bin grub-pc-bin grub2-common efibootmgr
 # gzip, not zstd: the installer's GRUB must be able to load this initrd. Trixie defaults to zstd; replace, don't append a second COMPRESS line.
 CONF="$R/etc/initramfs-tools/initramfs.conf"
 if grep -q '^COMPRESS=' "$CONF"; then sed -i 's/^COMPRESS=.*/COMPRESS=gzip/' "$CONF"; else echo 'COMPRESS=gzip' >> "$CONF"; fi
@@ -99,6 +105,32 @@ EOF
 mkdir -p "$R/etc/systemd/system/multi-user.target.wants"
 ln -sf /etc/systemd/system/majaos-kiosk.service "$R/etc/systemd/system/multi-user.target.wants/majaos-kiosk.service"
 
+if [ -n "$TAR" ]; then
+  echo "==> MajaOS itself: install.sh in the live system (ZFS, libvirt, Samba, Docker, the web interface)"
+  # What install.sh enables (services, sockets, timers): compared before and after.
+  enabled() { find "$R/etc/systemd/system" -path '*.wants/*' -printf '%f\n' | sort -u; }
+  BEFORE="$(enabled)"
+  mkdir -p "$R/opt/majaos-setup"
+  tar -xzf "$TAR" -C "$R/opt/majaos-setup"
+  # /run as an empty tmpfs: package scripts need /run/lock, and without /run/systemd/system nothing starts here.
+  mount -t tmpfs tmpfs "$R/run" && mkdir -p "$R/run/lock"
+  chroot "$R" env MAJAOS_CHROOT=1 bash /opt/majaos-setup/install.sh
+  umount "$R/run"
+  # On the stick they stay off (they'd only use memory and time); run-install.sh removes this on the disk.
+  comm -13 <(printf '%s\n' "$BEFORE") <(enabled) | while read -r unit; do
+    [ -n "$unit" ] || continue
+    mkdir -p "$R/etc/systemd/system/$unit.d"
+    printf '[Unit]\nConditionKernelCommandLine=!boot=live\n' > "$R/etc/systemd/system/$unit.d/majaos-live.conf"
+  done
+  # The boot loader of the disk: both packages ready, the installer picks the one for UEFI or BIOS (they conflict).
+  mkdir -p "$R/var/cache/majaos/grub"
+  chroot "$R" sh -c 'cd /var/cache/majaos/grub && apt-get download grub-efi-amd64 grub-pc'
+  # /opt/majaos-setup stays: the NVIDIA driver (online) and the first-boot fallback use install.sh from there.
+fi
+# Smaller: no downloaded packages and no package lists (the server fetches fresh ones).
+chroot "$R" apt-get clean
+rm -rf "$R"/var/lib/apt/lists/*
+
 echo "==> initramfs and squashfs"
 VMLINUZ="$(ls "$R"/boot/vmlinuz-* | head -1)"
 KVER="$(basename "$VMLINUZ" | sed 's/^vmlinuz-//')"
@@ -117,6 +149,9 @@ cp "$INITRD" "$OUT/initrd.img"
 # Chromium otherwise rebuilds the font list on first start. The CJK fonts make that slow.
 chroot "$R" fc-cache -fr >/dev/null 2>&1 || true
 umount "$R/dev" "$R/proc" "$R/sys"
+# mktemp -d made the root folder 0700: as / that stops every service that doesn't run as root (dbus, timesyncd).
+chmod 755 "$R"
 # zstd unpacks much faster than xz. On a VM the CPU is the limit, not the size.
-mksquashfs "$R" "$OUT/filesystem.squashfs" -comp zstd -Xcompression-level 15 -e boot -noappend
+# The kernel stays in /boot (the disk boots it); the live initrd doesn't (the disk gets its own, without live-boot).
+mksquashfs "$R" "$OUT/filesystem.squashfs" -comp zstd -Xcompression-level 15 -wildcards -e 'boot/initrd.img*' -noappend
 echo "==> live system in $OUT"

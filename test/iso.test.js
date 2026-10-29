@@ -105,3 +105,30 @@ test('install.sh in the chroot only enables services and builds modules for the 
   assert.match(sh, /dkms autoinstall -k "\$KVER"/);
   assert.match(sh, /\[ "\$CHROOT" = 1 \] && \{ step "Done/);
 });
+
+test('the image: MajaOS is installed in the live system and copied to the disk, cleaned and made unique', () => {
+  const live = read('build-live.sh'), run = read('run-install.sh'), iso = read('build-iso.sh');
+  // Built in: install.sh in the live system, its services off on the stick, both GRUB packages ready.
+  assert.match(live, /chroot "\$R" env MAJAOS_CHROOT=1 bash \/opt\/majaos-setup\/install\.sh/);
+  assert.match(live, /ConditionKernelCommandLine=!boot=live/);
+  assert.match(live, /apt-get download grub-efi-amd64 grub-pc/);
+  assert.match(live, /-e 'boot\/initrd\.img\*'/);
+  // Copied with rsync, without the installer itself.
+  assert.match(run, /rsync -aHAX[^\n]*\n[^\n]*\n[^\n]*--exclude='\/opt\/majaos-installer'/);
+  // Nothing of the stick's root shells or kiosk stays on the disk, the stick-only conditions go.
+  for (const f of ['getty@tty2.service.d', 'serial-getty@ttyS0.service.d', 'majaos-kiosk.service', 'majaos-live.conf']) assert.ok(run.includes(f), f);
+  assert.match(run, /systemctl unmask getty@tty1\.service plymouth-quit\.service plymouth-quit-wait\.service/);
+  // Unique per server.
+  for (const f of ['/etc/machine-id', 'ssh-keygen -A', 'SESSION_SECRET=', 'zgenhostid', 'secrets.tdb']) assert.ok(run.includes(f), f);
+  assert.match(run, /dpkg --purge live-boot live-boot-initramfs-tools live-tools/);
+  // / stays 0755 (else dbus and timesyncd can't start), and the initramfs really exists afterwards.
+  assert.match(live, /chmod 755 "\$R"\n[^\n]*\n?mksquashfs|chmod 755 "\$R"/);
+  assert.match(run, /chmod 755 "\$TARGET"/);
+  assert.match(run, /\[ -s "\$TARGET\/boot\/initrd\.img-\$KVER" \] \|\| fail/);
+  assert.match(run, /COMPRESS=zstd/);
+  // Only NVIDIA needs the internet with the image.
+  assert.match(run, /\[ "\$IMAGE" = 1 \] && \[ "\$NVIDIA" != 1 \] && NEED_NET=0/);
+  // The ISO: without Debian's installer (under GitHub's 2 GiB), the live system gets MajaOS.
+  assert.match(iso, /REMOVE=\(-rm_r \/pool \/dists \/install\.amd \/firmware --\)/);
+  assert.match(iso, /build-live\.sh" "\$WORK\/live" "\$WORK\/hb\/majaos\.tar\.gz"/);
+});

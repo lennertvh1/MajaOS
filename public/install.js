@@ -325,7 +325,13 @@
       const r = await api.post('/api/install/network', { cards: list });
       state.net = { ...state.net, ...r };
       state.netBusy = false;
-      if (!r.online) { state.error = t('There is no internet connection with these settings. Check the cable and the settings.'); draw(); return; }
+      // No internet: MajaOS installs without it (only the NVIDIA driver needs it). Warn once, then the same settings go on.
+      const asked = JSON.stringify(list);
+      if (!r.online && state.netOffline !== asked) {
+        state.netOffline = asked;
+        state.error = t('There is no internet connection with these settings. MajaOS installs without it: choose Continue again, or check the cable and the settings.');
+        draw(); return;
+      }
       state.step = 'disk'; draw(); await loadDisks(); draw();
     } catch (e) {
       state.netBusy = false; state.error = t(e.message);
