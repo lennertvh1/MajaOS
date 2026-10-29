@@ -2784,4 +2784,9 @@ window.TB_LANG.zh = {
   "The NVIDIA driver could not be installed. Check that the contrib and non-free package sources are on. See the log.": "无法安装 NVIDIA 驱动。请检查 contrib 和 non-free 软件源是否已开启。请查看日志。",
   "NVIDIA's package source could not be reached. See the log.": "无法连接 NVIDIA 的软件源。请查看日志。",
   "GPU support for Docker could not be installed. See the log.": "无法安装 Docker 的 GPU 支持。请查看日志。",
+  "NVIDIA {card} found, without a driver": "发现 NVIDIA {card}，但没有驱动",
+  "The driver is being installed…": "正在安装驱动…",
+  "Apps and VMs can't use the GPU until its driver is installed.": "安装驱动之前，应用和虚拟机无法使用 GPU。",
+  "Show progress": "查看进度",
+  "The NVIDIA driver is being installed. Follow it in Software update.": "正在安装 NVIDIA 驱动。请在“软件更新”中查看进度。",
 };

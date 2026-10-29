@@ -204,6 +204,14 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 }
 .disk-alert b { color: var(--bad); font-weight: 650; }
 .disk-alert span { color: var(--muted); font-size: 13px; }
+/* An NVIDIA card without a driver: a bar at the top of the dashboard with the button to install it. */
+.gpu-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 12px 10px 12px 16px; border-radius: 16px; border: 1px solid var(--accent); background: var(--glass); }
+.gpu-bar[hidden] { display: none; }
+.gpu-bar .nv-ico { color: var(--accent); }
+.gpu-bar-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.gpu-bar-text span { color: var(--muted); font-size: 13px; }
+.gpu-bar .toast-x { flex: none; }
+@media (max-width: 640px) { .gpu-bar { flex-wrap: wrap; } .gpu-bar-text { flex-basis: calc(100% - 60px); } }
 #widgets[hidden] { display: none; }
 
 /* ---- widgets */

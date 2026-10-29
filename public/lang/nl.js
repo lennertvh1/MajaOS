@@ -2306,7 +2306,7 @@ window.TB_LANG.nl = {
   "Installing shared folders": "Gedeelde mappen installeren",
   "Installing backups and remote access": "Back-ups en toegang van buitenaf installeren",
   "Installing Docker": "Docker installeren",
-  "Installing the NVIDIA driver": "Het NVIDIA-stuurprogramma installeren",
+  "Installing the NVIDIA driver": "De NVIDIA-driver installeren",
   "Finishing MajaOS": "MajaOS afwerken",
   "MajaOS is installed. After the restart the address appears on the screen.": "MajaOS is geïnstalleerd. Na de herstart verschijnt het adres op het scherm.",
   "Debian is installed. MajaOS finishes installing after the restart (5 to 15 minutes).": "Debian is geïnstalleerd. MajaOS wordt na de herstart verder geïnstalleerd (5 tot 15 minuten).",
@@ -2788,4 +2788,9 @@ window.TB_LANG.nl = {
   "The NVIDIA driver could not be installed. Check that the contrib and non-free package sources are on. See the log.": "De NVIDIA-driver kon niet geïnstalleerd worden. Controleer of de pakketbronnen contrib en non-free aanstaan. Bekijk het logboek.",
   "NVIDIA's package source could not be reached. See the log.": "De pakketbron van NVIDIA was niet bereikbaar. Bekijk het logboek.",
   "GPU support for Docker could not be installed. See the log.": "GPU-ondersteuning voor Docker kon niet geïnstalleerd worden. Bekijk het logboek.",
+  "NVIDIA {card} found, without a driver": "NVIDIA {card} gevonden, zonder driver",
+  "The driver is being installed…": "De driver wordt geïnstalleerd…",
+  "Apps and VMs can't use the GPU until its driver is installed.": "Apps en VM's kunnen de GPU pas gebruiken als de driver geïnstalleerd is.",
+  "Show progress": "Voortgang tonen",
+  "The NVIDIA driver is being installed. Follow it in Software update.": "De NVIDIA-driver wordt geïnstalleerd. Volg het in Software-update.",
 };

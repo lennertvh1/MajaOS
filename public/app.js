@@ -7651,6 +7651,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     let d;
     try { d = await api.get('/api/system-updates'); }
     catch (e) { box.innerHTML = `<h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted small">${esc(e.message)}</p>`; return; }
+    S.debian = d; renderNotes(); renderGpuBar();
     if (!box.isConnected) return;
     const busy = d.job && d.job.running;
     const sec = d.security, n = d.updates.length;
@@ -7685,10 +7686,17 @@ sudo ./install.sh</pre></div>`}` : '') +
       try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // MajaOS restarting (needrestart)
       if (!box.isConnected) return;
       const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates'), nvidia: t('Installing the NVIDIA driver') }[p.action] || '';
-      jobBox.innerHTML = p.state === 'idle' ? '' : `<div class="deb-job">
-        <p class="small"><b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}</p>
-        <details${p.state === 'failed' ? ' open' : ''}><summary>${t('Details')}</summary><pre class="logs">${esc(p.lines.join('\n'))}</pre></details></div>`;
-      const pre = $('pre', jobBox); if (pre) pre.scrollTop = pre.scrollHeight;
+      // Only the text changes while it runs: Details stays open (or closed) as the user left it, and the log keeps its
+      // place unless it was at the bottom.
+      if (p.state === 'idle') { jobBox.innerHTML = ''; }
+      else {
+        if (!$('.deb-job', jobBox)) jobBox.innerHTML = `<div class="deb-job"><p class="small"></p><details><summary>${t('Details')}</summary><pre class="logs"></pre></details></div>`;
+        $('.deb-job p', jobBox).innerHTML = `<b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}`;
+        if (p.state === 'failed') $('details', jobBox).open = true;
+        const pre = $('pre', jobBox), atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
+        const text = p.lines.join('\n');
+        if (pre.textContent !== text) { pre.textContent = text; if (atEnd) pre.scrollTop = pre.scrollHeight; }
+      }
       if (p.running) setTimeout(follow, 1500);
       else if (busy || jobBox.dataset.waiting) { delete jobBox.dataset.waiting; debianSection(box); }
     };
@@ -8190,9 +8198,40 @@ sudo ./install.sh</pre></div>`}` : '') +
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#noteSide').hidden) { e.preventDefault(); closeNotes(true); } });
   async function loadDebianNote() {
-    try { S.debian = await api.get('/api/system-updates'); renderNotes(); }
+    try { S.debian = await api.get('/api/system-updates'); renderNotes(); renderGpuBar(); }
     catch (e) { /* keep the last Debian status */ }
   }
+  // An NVIDIA card without a driver: a bar at the top of the dashboard with Install driver (until it is installed, or
+  // closed on this device for this card). While it installs, the bar says so and leads to the progress.
+  const NV_ICON = '<span class="nv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="16" cy="12" r="2.5"/><path d="M5 17v3M19 17v3"/></svg></span>';
+  function renderGpuBar() {
+    const bar = $('#gpuBar'); if (!bar) return;
+    const nv = S.debian && S.debian.nvidia, job = S.debian && S.debian.job;
+    const card = nv && nv.cards[0];
+    let closed = '';
+    try { closed = localStorage.getItem('tb-gpu-bar-closed') || ''; } catch (e) { /* no storage */ }
+    const installing = job && job.running && job.action === 'nvidia';
+    if (!card || nv.installed || (closed === card && !installing)) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML = `${NV_ICON}<div class="gpu-bar-text"><b>${esc(t('NVIDIA {card} found, without a driver', { card }))}</b>
+        <span>${esc(installing ? t('The driver is being installed…') : t('Apps and VMs can\'t use the GPU until its driver is installed.'))}</span></div>
+      <button class="btn ${installing ? '' : 'primary'}" type="button" data-gpu="${installing ? 'show' : 'install'}">${esc(installing ? t('Show progress') : t('Install driver'))}</button>
+      ${installing ? '' : `<button class="toast-x" type="button" data-gpu="close" aria-label="${esc(t('Close'))}" title="${esc(t('Close'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`}`;
+  }
+  $('#gpuBar').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-gpu]'); if (!b) return;
+    const card = S.debian && S.debian.nvidia && S.debian.nvidia.cards[0];
+    if (b.dataset.gpu === 'close') { try { localStorage.setItem('tb-gpu-bar-closed', card || ''); } catch (x) { /* no storage */ } renderGpuBar(); return; }
+    if (b.dataset.gpu === 'show') { location.hash = '#settings/update'; return; }
+    if (!(await ask(t('Install the NVIDIA driver and GPU support for Docker? This takes a few minutes and downloads about 500 MB. At the end Docker restarts (your apps stop for a moment), and the server needs a restart to load the driver.'), t('Install driver')))) return;
+    b.disabled = true;
+    try {
+      await api.post('/api/system-updates/nvidia');
+      toast(t('The NVIDIA driver is being installed. Follow it in Software update.'));
+      await loadDebianNote();
+      location.hash = '#settings/update';
+    } catch (ex) { toast(ex.message, true); b.disabled = false; }
+  });
 
   /* --- small menus under a button at the top (power, feedback): arrows, Escape, click elsewhere closes */
   function topMenu(btn, menu, attr, pick) {

@@ -2784,4 +2784,9 @@ window.TB_LANG.de = {
   "The NVIDIA driver could not be installed. Check that the contrib and non-free package sources are on. See the log.": "Der NVIDIA-Treiber konnte nicht installiert werden. Prüfen Sie, ob die Paketquellen contrib und non-free aktiv sind. Siehe Protokoll.",
   "NVIDIA's package source could not be reached. See the log.": "Die Paketquelle von NVIDIA war nicht erreichbar. Siehe Protokoll.",
   "GPU support for Docker could not be installed. See the log.": "Die GPU-Unterstützung für Docker konnte nicht installiert werden. Siehe Protokoll.",
+  "NVIDIA {card} found, without a driver": "NVIDIA {card} gefunden, ohne Treiber",
+  "The driver is being installed…": "Der Treiber wird installiert…",
+  "Apps and VMs can't use the GPU until its driver is installed.": "Apps und VMs können die GPU erst nutzen, wenn ihr Treiber installiert ist.",
+  "Show progress": "Fortschritt zeigen",
+  "The NVIDIA driver is being installed. Follow it in Software update.": "Der NVIDIA-Treiber wird installiert. Verfolgen Sie es unter Software-Update.",
 };
