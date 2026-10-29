@@ -710,7 +710,8 @@ function pageCsp(req) {
   return [
     "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob: https: http:", "media-src 'self' blob:",
-    "connect-src 'self'" + (host ? ` ws://${host} wss://${host}` : ''), "frame-src 'self'", "worker-src 'self' blob:",
+    // ws:// only for a dashboard opened over http; over https the browser uses wss://.
+    "connect-src 'self'" + (host ? ` ws://${host} wss://${host}` : ''), "frame-src 'self'", "worker-src 'self' blob:", // nosec
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
   ].join('; ');
 }

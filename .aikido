@@ -1,0 +1,7 @@
+# Aikido code scanning: paths it skips (plain substring match).
+exclude:
+  paths:
+    # Tests: sample output with made-up keys and tokens.
+    - test/
+    # Third-party code, shipped unchanged (xterm.js, noVNC).
+    - public/vendor/

@@ -19,5 +19,6 @@ window.TB_LANG = window.TB_LANG || {};
 // The installer marks its script tag (no inline script: the Content Security Policy forbids it).
 if (document.currentScript && document.currentScript.hasAttribute('data-installer')) window.TB_INSTALLER = true;
 if (!window.TB_INSTALLER) {
-  Object.keys(window.TB_LANGS).filter((code) => code !== 'en').forEach((code) => document.write('<script src="lang/' + code + '.js"><\/script>'));
+  // Only fixed file names from TB_LANGS above; document.write keeps them loading before the page's scripts.
+  Object.keys(window.TB_LANGS).filter((code) => code !== 'en').forEach((code) => document.write('<script src="lang/' + code + '.js"><\/script>')); // nosec
 }
