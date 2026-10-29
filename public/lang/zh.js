@@ -2743,4 +2743,7 @@ window.TB_LANG.zh = {
   "The VM's disk was not found on the disks of the old server.": "在旧服务器的磁盘上找不到该虚拟机的磁盘。",
   "A move from Unraid is running. Wait until it is done.": "Unraid 迁移正在进行。请等待完成。",
   "The disk {name} has no file system MajaOS can take over ({fs}).": "磁盘 {name} 没有 MajaOS 可接管的文件系统（{fs}）。",
+  "Migration": "迁移",
+  "Take over what you had on another system. Nothing on its disks changes until you choose what comes along.": "迁移你在其他系统上的内容。在你选择要迁移的内容之前，其磁盘上不会有任何改动。",
+  "Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.": "Unraid 服务器的磁盘、共享文件夹、用户、应用和虚拟机。请先将其 U 盘和磁盘装入本服务器。",
 };

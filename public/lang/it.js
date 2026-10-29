@@ -2743,4 +2743,7 @@ window.TB_LANG.it = {
   "The VM's disk was not found on the disks of the old server.": "Il disco della VM non è stato trovato sui dischi del vecchio server.",
   "A move from Unraid is running. Wait until it is done.": "È in corso una migrazione da Unraid. Attendi che finisca.",
   "The disk {name} has no file system MajaOS can take over ({fs}).": "Il disco {name} non ha un file system che MajaOS possa usare ({fs}).",
+  "Migration": "Migrazione",
+  "Take over what you had on another system. Nothing on its disks changes until you choose what comes along.": "Trasferisci ciò che avevi su un altro sistema. Sui suoi dischi non cambia nulla finché non scegli cosa portare.",
+  "Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.": "Dischi, cartelle condivise, utenti, app e VM di un server Unraid. Inserisci prima la sua chiavetta USB e i suoi dischi in questo server.",
 };

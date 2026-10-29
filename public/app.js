@@ -2590,16 +2590,31 @@
 
   // Moving from Unraid: the stick and the old disks are in this server. Choose what comes along (disks, shared folders,
   // users, apps with or without their data, VMs), then one job with steps (lib/unraid.js).
-  async function unraidWindow(fresh) {
-    openWindow(t('Move from Unraid'), `<p class="lead">${t('Looking for the Unraid USB stick and its disks…')}</p>`);
+  // Settings → Migration: where to move from (now Unraid). A running move shows its steps right away.
+  async function migrationPane(el) {
+    el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+    const p = await api.get('/api/unraid/progress').catch(() => ({ state: 'idle' }));
+    if (settingsTab() !== 'migration') return;
+    if (p.state === 'running') { unraidFlow(el); return; }
+    el.innerHTML = `${paneHint(t('Take over what you had on another system. Nothing on its disks changes until you choose what comes along.'))}
+      <section class="pool-card plain mig-card">
+        <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/></svg></span>
+        <div class="mig-text"><b>Unraid</b><div class="muted small">${t('Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.')}</div></div>
+        <button class="btn primary" type="button" data-mig-unraid>${t('Start')}</button>
+      </section>`;
+    $('[data-mig-unraid]', el).addEventListener('click', () => unraidFlow(el));
+  }
+  async function unraidFlow(el, fresh) {
+    el.innerHTML = `<div class="ur-root"><p class="lead">${t('Looking for the Unraid USB stick and its disks…')}</p></div>`;
+    const body = $('.ur-root', el);
     let r;
     try { r = await api.get('/api/unraid' + (fresh ? '?fresh=1' : '')); }
-    catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
-    const body = $('#winBody');
-    const back = `<button class="btn" type="button" data-ur-back>${t('Back to storage')}</button>`;
+    catch (e) { body.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (!body.isConnected) return;
+    const back = `<button class="btn" type="button" data-ur-back>${t('Back')}</button>`;
     body.onclick = (e) => {
-      if (e.target.closest('[data-ur-back]')) { body.onclick = null; api.post('/api/unraid/close').catch(() => {}); storageWindow(); }
-      if (e.target.closest('[data-ur-again]')) unraidWindow(true);
+      if (e.target.closest('[data-ur-back]')) { body.onclick = null; api.post('/api/unraid/close').catch(() => {}); migrationPane(el); }
+      if (e.target.closest('[data-ur-again]')) unraidFlow(el, true);
     };
     if (r.running) { unraidProgress(body); return; }
     if (!r.found) {
@@ -2715,7 +2730,7 @@
         ${(p.lines || []).length ? `<details class="job-log"${p.done && !p.ok ? ' open' : ''}><summary>${t('Details')}</summary><pre>${esc(p.lines.map((l) => tr(l)).join('\n'))}</pre></details>` : ''}
         ${p.done ? '' : `<p class="muted small">${t('You can close this window: it goes on on the server.')}</p>`}`;
       if (p.done) {
-        $('[data-ur-btns]', body).innerHTML = `<button class="btn primary" type="button" data-ur-back>${t('Back to storage')}</button>`;
+        $('[data-ur-btns]', body).innerHTML = `<button class="btn primary" type="button" data-ur-back>${t('Back')}</button>`;
         loadOverview().catch(() => {}); loadApps().catch(() => {});
         return;
       }
@@ -3193,7 +3208,7 @@
       <section class="bays-sec" id="baySec"></section>
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS reported an error: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
       ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
-      <div class="section-head"><h2>${t('Pools')}</h2><span class="btn-row"><button class="btn sm" type="button" data-disk-rescan>${t('Look for new disks')}</button><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm" type="button" data-unraid>${t('Move from Unraid')}</button><button class="btn sm primary" type="button" data-pool-new>${t('Create pool')}</button></span></div>
+      <div class="section-head"><h2>${t('Pools')}</h2><span class="btn-row"><button class="btn sm" type="button" data-disk-rescan>${t('Look for new disks')}</button><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm primary" type="button" data-pool-new>${t('Create pool')}</button></span></div>
       <div id="poolsBox">${s.pools.map(poolBlock).join('') || `<p class="empty-card">${t('There is no pool yet. Click Create pool to combine your disks.')}</p>`}</div>
       ${loose.length ? `<div class="section-head"><h2>${t('Disks not in a pool')}</h2></div>
         <section class="pool-card loose"><ul class="disk-list">${loose.map((d) => diskItem(d)).join('')}</ul></section>` : ''}
@@ -3213,7 +3228,6 @@
     mountBays($('#baySec'), s);
     $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
     $('[data-pool-import]').addEventListener('click', () => poolImportWindow());
-    $('[data-unraid]').addEventListener('click', () => unraidWindow());
     if (scroll) $('#winBody').scrollTop = scroll;
     // A disk plugged in or taken out while the window is open: show it right away.
     const diskSig = (list) => list.map((d) => d.name + ':' + (d.serial || '')).sort().join(',');
@@ -4648,17 +4662,17 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', migration: 'Migration', about: 'About' }[tab]);
     if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
   }
 
   // Settings and the wizard only offer a language once its dictionary covers the interface.
@@ -8276,6 +8290,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/ai', 'AI', ['ollama', 'claude', 'lm studio', 'llama', t('AI')]],
       ['settings/mcp', 'MCP', ['mcp', 'cursor', 'claude', 'vscode', 'codex', 'token', t('MCP')]],
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
+      ['settings/migration', 'Migration', ['unraid', 'migrate', 'import', t('Migration'), t('Move from Unraid')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));
     const apps = S.apps.map((a) => {

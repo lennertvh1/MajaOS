@@ -1666,6 +1666,10 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
 /* Move from Unraid: one card per kind, a row per disk, share, user, app or VM. */
+.mig-card { display: flex; align-items: center; gap: 14px; }
+.mig-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--glass); color: var(--accent); }
+.mig-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mig-text { flex: 1; min-width: 0; }
 .ur-sec { display: grid; gap: 10px; margin-bottom: 14px; }
 .ur-sec.muted .ur-item { opacity: .55; }
 .ur-item { display: flex; align-items: center; gap: 10px; min-width: 0; }

@@ -2747,4 +2747,7 @@ window.TB_LANG.nl = {
   "The VM's disk was not found on the disks of the old server.": "De schijf van de VM werd niet gevonden op de schijven van de oude server.",
   "A move from Unraid is running. Wait until it is done.": "Er loopt een overstap van Unraid. Wacht tot die klaar is.",
   "The disk {name} has no file system MajaOS can take over ({fs}).": "De schijf {name} heeft geen bestandssysteem dat MajaOS kan overnemen ({fs}).",
+  "Migration": "Migratie",
+  "Take over what you had on another system. Nothing on its disks changes until you choose what comes along.": "Neem over wat je op een ander systeem had. Op de schijven verandert niets tot je kiest wat er meekomt.",
+  "Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.": "Schijven, gedeelde mappen, gebruikers, apps en VM's van een Unraid-server. Steek eerst de USB-stick en de schijven in deze server.",
 };

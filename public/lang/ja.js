@@ -2743,4 +2743,7 @@ window.TB_LANG.ja = {
   "The VM's disk was not found on the disks of the old server.": "古いサーバーのディスクに VM のディスクが見つかりませんでした。",
   "A move from Unraid is running. Wait until it is done.": "Unraid からの移行が実行中です。完了するまでお待ちください。",
   "The disk {name} has no file system MajaOS can take over ({fs}).": "ディスク {name} には MajaOS が引き継げるファイルシステムがありません（{fs}）。",
+  "Migration": "移行",
+  "Take over what you had on another system. Nothing on its disks changes until you choose what comes along.": "別のシステムにあったものを引き継ぎます。何を引き継ぐか選ぶまで、そのディスクは変更されません。",
+  "Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.": "Unraid サーバーのディスク、共有フォルダー、ユーザー、アプリ、VM。先に USB メモリとディスクをこのサーバーに取り付けてください。",
 };

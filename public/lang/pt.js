@@ -2743,4 +2743,7 @@ window.TB_LANG.pt = {
   "The VM's disk was not found on the disks of the old server.": "O disco da VM não foi encontrado nos discos do servidor antigo.",
   "A move from Unraid is running. Wait until it is done.": "Está em curso uma migração do Unraid. Aguarde até terminar.",
   "The disk {name} has no file system MajaOS can take over ({fs}).": "O disco {name} não tem um sistema de ficheiros que o MajaOS possa usar ({fs}).",
+  "Migration": "Migração",
+  "Take over what you had on another system. Nothing on its disks changes until you choose what comes along.": "Traga o que tinha noutro sistema. Nada muda nos discos até escolher o que vem.",
+  "Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.": "Discos, pastas partilhadas, utilizadores, apps e VMs de um servidor Unraid. Ligue primeiro a pen USB e os discos a este servidor.",
 };
