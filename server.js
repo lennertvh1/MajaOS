@@ -882,6 +882,8 @@ bind(CFG.port).then(() => {
     // A new address (DHCP, Settings → Network) needs a new certificate. openssl only runs when something changed.
     setInterval(() => refreshHttps().catch((e) => console.error('HTTPS certificate: ' + e.message)), 10 * 60000);
     refreshIssue(); // the logo and the address on the server's own screen
+    // Another card with the default route (Settings → Network, a bridge, another cable): only written when it changed.
+    setInterval(refreshIssue, 30000);
     paths.detect().catch(() => {}); // pools that already have an appdata/vms/isos folder
     ssh.enforce(settings.getSettings().ssh).catch((e) => console.error('SSH: ' + e.message));
     vms.bootAutostart();

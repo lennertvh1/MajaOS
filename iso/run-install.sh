@@ -327,7 +327,9 @@ firstboot_fallback() {
 }
 done_majaos() {
   # The logo and the address on the server's screen (lib/issue.js; MajaOS rewrites it at every start).
-  chroot "$TARGET" node /opt/majaos/lib/issue.js >>"$LOG" 2>&1 || true
+  # The card with the internet route now: the installed system has the same cards (lib/issue.js shows its address).
+  ISSUE_IFACE="$(ip -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+  chroot "$TARGET" env MAJAOS_IFACE="$ISSUE_IFACE" node /opt/majaos/lib/issue.js >>"$LOG" 2>&1 || true
   rm -rf "$TARGET/opt/majaos-setup"
   cleanup
   status done 100 "MajaOS is installed. After the restart the address appears on the screen."
