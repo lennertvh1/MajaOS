@@ -1675,9 +1675,10 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .disk-item[class*=" p"] .disk-kind.folder { color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, transparent); }
 
 /* ? next to a title, a field or a checkbox: the explanation as a tooltip (hint() in app.js). */
-.hint { display: inline-grid; place-items: center; width: 18px; height: 18px; margin: 0 0 0 6px; padding: 0; vertical-align: middle;
-  border-radius: 50%; border: 1px solid var(--glass-line); background: var(--track); color: var(--muted);
-  font: 700 11px/1 inherit; cursor: help; flex: none; }
+.hint { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 18px; height: 18px;
+  margin: 0 0 0 6px; padding: 0; vertical-align: middle; border-radius: 50%; border: 1px solid var(--glass-line);
+  background: var(--track); color: var(--muted); line-height: 0; cursor: help; flex: none; }
+.hint svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
 .hint:hover, .hint:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
 h2 .hint, h3 .hint { margin-left: 8px; }
 .tip { position: fixed; z-index: 10000; max-width: 300px; padding: 8px 11px; border-radius: 10px; pointer-events: none;

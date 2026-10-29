@@ -7,7 +7,9 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   // A question mark that shows an explanation on hover, focus or tap, instead of a paragraph of text (tooltip below).
-  const hint = (text) => `<button type="button" class="hint" data-tip="${esc(text)}" aria-label="${esc(text)}">?</button>`;
+  // A drawn question mark: a letter sits off-centre depending on the font.
+  const HINT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9.2a2.9 2.9 0 1 1 4 2.7c-.8.35-1.2 1-1.2 1.8v.6"/><circle cx="12" cy="17.4" r=".4"/></svg>';
+  const hint = (text) => `<button type="button" class="hint" data-tip="${esc(text)}" aria-label="${esc(text)}">${HINT_ICON}</button>`;
   // The explanation of a settings pane: a ? next to the pane's title (the title is filled in again for every tab).
   const paneHint = (text) => {
     const h = document.getElementById('setWinTitle');
