@@ -626,13 +626,27 @@
     { id: '@dphotos', name: 'PHOTOS', kind: 'disk', eject: true, media: 'usb' },
     { id: '@dsd', name: 'SD card', kind: 'disk', generic: true, eject: true, media: 'sd' },
   ];
-  const filePlaces = () => shareList.map((s) => ({ id: s.name, name: s.name, kind: 'share' })).concat([
-    { id: '@zdocker', name: 'docker', kind: 'folder' },
-    { id: '@appdata', name: 'App data', kind: 'system' },
-    { id: '@vms', name: 'VMs', kind: 'system' },
-    { id: '@isos', name: 'ISOs', kind: 'system' },
-    { id: '@backups', name: 'Backups', kind: 'system' },
-  ], demoDisks);
+  // Like buildPlaces in lib/volumes.js; the path stays in the demo (the server doesn't send it either).
+  const placePaths = () => shareList.map((s) => ({ id: s.name, name: s.name, kind: 'share', path: s.path })).concat([
+    { id: '@zdocker', name: 'docker', kind: 'folder', path: '/fast/docker' },
+    { id: '@appdata', name: 'App data', kind: 'system', path: sp.appdata },
+    { id: '@vms', name: 'VMs', kind: 'system', path: sp.vms },
+    { id: '@isos', name: 'ISOs', kind: 'system', path: sp.isos },
+    { id: '@backups', name: 'Backups', kind: 'system', path: '/tank/backups' },
+  ], pools.map((p) => ({ id: '@p' + p.name, name: p.name, kind: 'pool', path: p.mountpoint || '/' + p.name })), demoDisks);
+  const filePlaces = () => placePaths().map(({ path, ...p }) => p);
+  function filesLocate(abs) {
+    const target = String(abs || '').replace(/\/+$/, '') || '/';
+    let best = null;
+    if (target.startsWith('/') && !target.split('/').includes('..')) {
+      for (const p of placePaths()) {
+        if (!p.path || !(target === p.path || target.startsWith(p.path + '/')) || (best && best.path.length >= p.path.length)) continue;
+        best = p;
+      }
+    }
+    if (!best) throw err('The file browser cannot open this folder.', 404);
+    return { place: best.id, rel: target.slice(best.path.length + 1) };
+  }
   function parseFilesApi(urlPath) {
     const u = new URL(urlPath, 'http://demo.local');
     const m = u.pathname.match(/^\/api\/shares\/([^/]+)\/files$/);
@@ -1986,9 +2000,9 @@
     return spGet();
   }
   const pools = [
-    { name: 'tank', health: 'ONLINE', used: 3.3 * TB, free: 2.05 * TB, layout: 'raidz1', diskCount: 4,
+    { name: 'tank', mountpoint: '/tank', health: 'ONLINE', used: 3.3 * TB, free: 2.05 * TB, layout: 'raidz1', diskCount: 4,
       scrub: { kind: 'scrub', running: false, progress: null, errors: 0, last: new Date(Date.now() - 9 * 86400000).toISOString() } },
-    { name: 'fast', health: 'ONLINE', used: 190 * GB, free: 271 * GB, layout: 'mirror', diskCount: 2,
+    { name: 'fast', mountpoint: '/fast', health: 'ONLINE', used: 190 * GB, free: 271 * GB, layout: 'mirror', diskCount: 2,
       scrub: { kind: 'scrub', running: false, progress: null, errors: 0, last: new Date(Date.now() - 9 * 86400000).toISOString() } },
   ].map((p) => ({ ...p, total: p.used + p.free }));
   const datasets = [
@@ -2425,6 +2439,7 @@
     if (path === '/api/layout') return copy(layout);
     if (path === '/api/shortcuts') return shortcuts.map(cutPublic);
     if (path === '/api/shares') return sharesGet();
+    if (path.startsWith('/api/files/locate?')) return filesLocate(new URL(path, 'http://demo.local').searchParams.get('path'));
     { const q = parseFilesApi(path); if (q) { if (q.text) return filesText(q); if (q.dl || q.zip) throw err('Choose a file to download.', 400); return filesList(q); } }
     if (path === '/api/overview') return overview();
     if (path === '/api/apps') {

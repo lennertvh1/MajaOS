@@ -2,7 +2,7 @@
 /* Which folders and disks the file browser lists, and which disks may be ejected. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseVolumes, buildPlaces, ejectTarget, ejectFailure, safeMount } = require('../lib/volumes');
+const { parseVolumes, buildPlaces, locate, ejectTarget, ejectFailure, safeMount } = require('../lib/volumes');
 
 const lsblk = {
   blockdevices: [
@@ -43,7 +43,7 @@ test('parseVolumes keeps USB sticks and SD cards, not the system disk or a ZFS m
   assert.ok(vols.every((v) => v.id.startsWith('@d')));
 });
 
-test('buildPlaces shows datasets and system folders once, then disks', () => {
+test('buildPlaces shows datasets, system folders and pools once, then disks', () => {
   const places = buildPlaces({
     shares: [{ name: 'media', path: '/tank/media' }],
     datasets: [
@@ -60,11 +60,21 @@ test('buildPlaces shows datasets and system folders once, then disks', () => {
   const ids = places.map((p) => p.kind + ':' + p.name);
   assert.deepEqual(ids, [
     'share:media', 'folder:docker', 'folder:photos',
-    'system:App data', 'system:VMs', 'system:ISOs', 'system:Backups',
+    'system:App data', 'system:VMs', 'system:ISOs', 'system:Backups', 'pool:tank',
     'disk:PHOTOS', 'disk:USB drive', 'disk:SD card',
   ]);
   assert.equal(places.find((p) => p.name === 'Backups').id, '@backups');
-  assert.ok(!places.some((p) => p.path === '/tank'));
+  assert.equal(places.filter((p) => p.path === '/tank').length, 1);
+
+  // A folder on the server opens in the deepest place that holds it.
+  assert.deepEqual(locate(places, '/tank/media/Movies/2024'), { place: 'media', rel: 'Movies/2024' });
+  assert.deepEqual(locate(places, '/fast/appdata'), { place: '@appdata', rel: '' });
+  assert.deepEqual(locate(places, '/tank/vms/haos/'), { place: '@vms', rel: 'haos' });
+  assert.deepEqual(locate(places, '/tank/other/x'), { place: places.find((p) => p.kind === 'pool').id, rel: 'other/x' });
+  assert.deepEqual(locate(places, '/tank/../tank/media'), { place: 'media', rel: '' });
+  assert.equal(locate(places, '/tankX/a'), null);
+  assert.equal(locate(places, '/etc'), null);
+  assert.equal(locate(places, 'tank/media'), null);
 });
 
 test('eject only unmounts a removable disk from a media folder', () => {

@@ -10,6 +10,10 @@
   // A drawn question mark: a letter sits off-centre depending on the font.
   const HINT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9.2a2.9 2.9 0 1 1 4 2.7c-.8.35-1.2 1-1.2 1.8v.6"/><circle cx="12" cy="17.4" r=".4"/></svg>';
   const hint = (text) => `<button type="button" class="hint" data-tip="${esc(text)}" aria-label="${esc(text)}">${HINT_ICON}</button>`;
+  // A folder on the server: a small button that opens it in Files (/api/files/locate finds the place).
+  const DIR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><path d="m11 11.5 2.5 2-2.5 2"/></svg>';
+  const dirLink = (dir) => (dir && String(dir).startsWith('/')
+    ? `<button type="button" class="dir-link" data-open-dir="${esc(dir)}" data-tip="${esc(t('Open in Files'))}" aria-label="${esc(t('Open {path} in Files', { path: dir }))}">${DIR_ICON}</button>` : '');
   // The explanation of a settings pane: a ? next to the pane's title (the title is filled in again for every tab).
   const paneHint = (text) => {
     const h = document.getElementById('setWinTitle');
@@ -2894,7 +2898,7 @@
     const poolHead = (p, kindLabel, detail) => {
       const [label, cls] = poolHealth(p.health);
       return `<header class="pool-head"><span class="pool-ico">${POOL_ICON}</span>
-        <div class="pool-title"><h3>${esc(p.name)}</h3><div class="muted small">${esc([kindLabel, detail].filter(Boolean).join(' · '))}</div></div>
+        <div class="pool-title"><h3>${esc(p.name)}${p.health === 'UNAVAIL' ? '' : dirLink(p.mountpoint)}</h3><div class="muted small">${esc([kindLabel, detail].filter(Boolean).join(' · '))}</div></div>
         <span class="pill ${cls}">${esc(label)}</span></header>`;
     };
     const when = (iso) => new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() });
@@ -2966,7 +2970,7 @@
         return `<li class="disk-item${pool ? ' p' + colorOf(poolName) : ''}">
         <span class="disk-kind folder"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
         <div class="disk-main"><div class="disk-name"><b>${esc(d.name)}</b>${d.compress > 1.01 ? `<span class="pill">${esc(t('compression {x}×', { x: nf.format(d.compress) }))}</span>` : ''}</div>
-          <div class="muted small">${esc(d.mountpoint || '')}</div>
+          <div class="muted small">${esc(d.mountpoint || '')}${dirLink(d.mountpoint)}</div>
           ${share != null ? `<div class="usage"><div class="usage-bar"><span style="width:${share.toFixed(1)}%"></span></div>
             <div class="usage-nums"><span><b>${esc(bytes(d.used))}</b> ${t('used')}</span><span class="muted">${esc(t('{pct}% of {pool}', { pct: nf0.format(share), pool: poolName }))}</span></div></div>` : ''}</div>
         <div class="disk-side"><b>${esc(bytes(d.used))}</b></div></li>`;
@@ -3388,7 +3392,7 @@
             <label class="disk-size"><input class="field" type="number" min="${k.size ? Math.ceil(k.size / GIB) : 1}" max="16384" step="1" data-disk="${i}:sizeGb" value="${esc(k.sizeGb)}"${k.remove ? ' disabled' : ''} aria-label="${t('Size in GB')}"> GB</label>
             <label class="check small"><input type="checkbox" data-disk="${i}:remove"${k.remove ? ' checked' : ''}> ${t('Detach')}</label></div>`).join('')}
           ${st.add.map((k, i) => `<div class="cf-row disk-row is-new">
-            <div><div class="row-title">${t('New disk')}</div><div class="row-sub">${t('Goes in {dir}', { dir: esc(opts.vmDir) })}</div></div>
+            <div><div class="row-title">${t('New disk')}</div><div class="row-sub">${t('Goes in {dir}', { dir: esc(opts.vmDir) })}${opts.vmDirMissing ? '' : dirLink(opts.vmDir)}</div></div>
             <label class="disk-size"><input class="field" type="number" min="1" max="16384" step="1" data-add="${i}:sizeGb" value="${esc(k.sizeGb)}" aria-label="${t('Size in GB')}"> GB</label>
             <div class="disk-new-side"><select class="field cf-small" data-add="${i}:bus" aria-label="${t('Interface')}"><option value="virtio"${k.bus !== 'sata' ? ' selected' : ''}>virtio</option><option value="sata"${k.bus === 'sata' ? ' selected' : ''}>SATA</option></select>
             <button class="cf-del" type="button" data-add-del="${i}" aria-label="${t('Remove')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div>`).join('')}</div>
@@ -3398,7 +3402,7 @@
             <option value="">${t('Empty')}</option>
             ${cur && !isoKnown ? `<option value="=" selected>${esc(cur)}</option>` : ''}
             ${opts.isos.map((f) => `<option value="${esc(f.name)}"${f.name === curIso ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
-            <small>${t('ISOs from {dir}', { dir: esc(opts.isoDir) })}</small></label>
+            <small>${t('ISOs from {dir}', { dir: esc(opts.isoDir) })}${opts.isoDirMissing ? '' : dirLink(opts.isoDir)}</small></label>
           <label class="fld"><span>${t('Boot from')} ${hint(t('Choose the CD-ROM to install an operating system.'))}</span><select class="field" name="boot">
             <option value="disk"${d.boot !== 'cdrom' ? ' selected' : ''}>${t('Disk first')}</option>
             <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('CD-ROM first')}</option></select>
@@ -3590,8 +3594,8 @@
             ${files.length ? `<select class="field" name="source" required>${files.map((f) =>
               `<option value="${esc(f.name)}"${keep && keep.source === f.name ? ' selected' : ''}>${esc(f.name)} (${bytes(f.size)})</option>`).join('')}</select>`
             : `<p class="muted small">${t(media === 'disk' ? 'There are no disk files (.qcow2, .img, .raw) in {dir} yet.' : 'There are no ISO files in {dir} yet.', { dir: esc(opts.isoDir) })}
-                ${t('Put one there, for example via the shared folder or with scp, and open this window again.')}</p>`}
-            <small>${t('From {dir}', { dir: esc(opts.isoDir) })}</small></label>
+                ${t('Put one there, for example via the shared folder or with scp, and open this window again.')}${opts.isoDirMissing ? '' : dirLink(opts.isoDir)}</p>`}
+            <small>${t('From {dir}', { dir: esc(opts.isoDir) })}${opts.isoDirMissing ? '' : dirLink(opts.isoDir)}</small></label>
           ${(() => { const v = { name: keep ? keep.name : '', vcpus: k.vcpus, memory: k.memoryGb * 1073741824, diskGb: media === 'disk' ? undefined : (k.diskGb || 32),
             autostart: false, delay: 0, description: keep ? keep.description : '' }; return vmNameField(v) + vmSizeFields(v, opts) + `
           <label class="fld"><span>${t('Network')}</span><select class="field" name="network">${vmNetOptions(opts, keep && keep.network || opts.network)}</select>
@@ -3868,7 +3872,7 @@
     const core = `
         <label class="fld"><span>${t('Name')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
-          <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
+          <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}${dirLink(d.stacksDir)}</small></label>
         ${dataDirHtml(d, d.suggestedName)}
         ${advToggleHtml()}
         <div class="form" data-basic>
@@ -4155,7 +4159,7 @@
         <div class="form">`}
         <div class="fld-row">
           <label class="fld"><span>${t('Name')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.name)}">
-            <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}</small></label>
+            <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}${dirLink(d.stacksDir)}</small></label>
           <label class="fld"><span>${t('Icon')} <em class="muted">${t('(optional)')}</em></span><input class="field" name="__icon" value="${esc(d.icon)}" placeholder="https://…" spellcheck="false" autocomplete="off"></label>
         </div>
         <label class="fld"><span>${t('Web interface address (WebUI)')} <em class="muted">${t('(optional)')}</em> ${hint(t('[IP] becomes your server\'s address, [PORT:80] the server port linked to port 80 in the app.'))}</span><input class="field" name="__webui" value="${esc(d.webui)}" placeholder="http://[IP]:[PORT:8080]/" spellcheck="false" autocomplete="off">
@@ -4608,7 +4612,7 @@
     catch (e) { el.innerHTML = `<p class="lead">${t('The storage locations could not be loaded: {error}', { error: esc(e.message) })}</p>`; return; }
     if (settingsTab() !== 'storage') return;
     const poolOf = (dir) => (dir ? d.pools.find((p) => dir === p.mountpoint || dir.startsWith(p.mountpoint + '/')) : null);
-    const where = (k) => (d.paths[k] ? `<code>${esc(d.paths[k])}</code>${d.exists[k] ? '' : ` <span class="pill warn">${t('does not exist')}</span>`}` : `<span class="muted">${t('Not set yet')}</span>`);
+    const where = (k) => (d.paths[k] ? `<code>${esc(d.paths[k])}</code>${d.exists[k] ? dirLink(d.paths[k]) : ` <span class="pill warn">${t('does not exist')}</span>`}` : `<span class="muted">${t('Not set yet')}</span>`);
     const select = (k) => {
       const cur = poolOf(d.paths[k]);
       return `<select class="field sm" data-sp-pool="${k}" aria-label="${t('Pool')}">${d.pools.map((p) => `<option value="${esc(p.name)}"${cur && cur.name === p.name ? ' selected' : ''}>${esc(p.name)} · ${esc(t('{size} free', { size: bytes(p.free) }))}</option>`).join('')}</select>`;
@@ -5111,7 +5115,7 @@
         <button class="btn sm primary" type="button" data-share-new>+ ${t('Shared folder')}</button></div>
       <ul class="rows">${d.shares.map((sh) => `<li>
           <div><div class="row-title">${esc(sh.name)}</div>
-            <div class="row-sub">${esc([sh.path, sh.comment].filter(Boolean).join(' · '))}</div>
+            <div class="row-sub">${esc(sh.path || '')}${dirLink(sh.path)}${sh.comment ? ' · ' + esc(sh.comment) : ''}</div>
             <div class="share-access">${Object.entries(sh.users).map(([u, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${esc(u)} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${Object.entries(sh.groups || {}).map(([g, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${t('group {name}', { name: esc(g) })} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${sh.guest ? `<span class="pill warn">${t('guests · read')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
@@ -5265,7 +5269,7 @@
   }
   function placeText(p) {
     if (!p) return '';
-    const base = (p.kind === 'share' || p.kind === 'folder' || (p.kind === 'disk' && !p.generic)) ? p.name : t(p.name);
+    const base = (p.kind === 'share' || p.kind === 'folder' || p.kind === 'pool' || (p.kind === 'disk' && !p.generic)) ? p.name : t(p.name);
     const extra = p.detail || (p.generic ? p.model : '');
     return extra ? base + ' · ' + extra : base;
   }
@@ -5277,6 +5281,7 @@
     const groups = [
       ['Folders', places.filter((p) => p.kind === 'share' || p.kind === 'folder')],
       ['System', places.filter((p) => p.kind === 'system')],
+      ['Pools', places.filter((p) => p.kind === 'pool')],
       ['Disks', places.filter((p) => p.kind === 'disk')],
     ].filter(([, list]) => list.length);
     const side = $('#filesSide');
@@ -5816,12 +5821,13 @@
     const remote = (n) => d.remotes.find((r) => r.name === n);
     const row = (j) => {
       const dest = j.remote + ':' + (j.remotePath || '/');
-      const route = j.direction === 'pull' ? `${dest} → ${j.localPath}` : `${j.localPath} → ${dest}`;
+      const here = esc(j.localPath) + dirLink(j.localPath);
+      const route = j.direction === 'pull' ? `${esc(dest)} → ${here}` : `${here} → ${esc(dest)}`;
       const r = remote(j.remote), l = j.lastRun;
       const tags = [t(j.mode === 'sync' ? 'Sync' : 'Copy'), j.encrypt ? t('Encrypted') : null, j.versions ? t('Versions {n} days', { n: j.keepDays }) : null].filter(Boolean);
       return `<li>
         <div><div class="row-title">${esc(j.name)} ${runPill(j)}</div>
-          <div class="row-sub">${esc(route)}${r ? ' · ' + esc(tr(r.label)) : ''}</div>
+          <div class="row-sub">${route}${r ? ' · ' + esc(tr(r.label)) : ''}</div>
           <div class="row-sub">${esc(scheduleText(j.schedule))}${j.next ? ' · ' + esc(t('next: {when}', { when: when(j.next) })) : ''} · ${esc(tags.join(' · '))}</div>
           ${!j.running && l ? `<div class="row-sub">${esc(t('Last: {when}', { when: ago(l.ended) }))}${l.state === 'ok' ? ' · ' + esc(runSummary(l)) : ''}</div>` : ''}
           ${!j.running && l && l.state === 'failed' && l.error ? `<div class="row-sub temp-bad">${esc(tr(l.error))}</div>` : ''}</div>
@@ -6050,7 +6056,7 @@
       const what = [...j.apps.map(label), ...j.vms].join(', ');
       return `<li>
         <div><div class="row-title">${esc(j.name)} ${runPill(j)}</div>
-          <div class="row-sub">${esc(what)} → ${esc(j.dest)}</div>
+          <div class="row-sub">${esc(what)} → ${esc(j.dest)}${dirLink(j.dest)}</div>
           <div class="row-sub">${esc(scheduleText(j.schedule))}${j.next ? ' · ' + esc(t('next: {when}', { when: when(j.next) })) : ''} · ${esc(t('keep the last {n}', { n: j.keep }))}</div>
           ${!j.running && l ? `<div class="row-sub">${esc(t('Last: {when}', { when: ago(l.ended) }))} · ${esc(sysSummary(l))}</div>` : ''}
           ${!j.running && l && l.state === 'failed' && l.error ? `<div class="row-sub temp-bad">${esc(tr(l.error))}</div>` : ''}</div>
@@ -6238,7 +6244,7 @@
     return `<div class="notice">${head} <span class="pill ${k.running ? 'ok' : 'bad'}" style="justify-self:start">${t(k.running ? 'Active' : 'Not running')}</span>
       <dl class="kv" style="margin:0"><dt>${t('Address')}</dt><dd><code>${esc(kopiaUrl(k, d))}</code></dd>
         <dt>${t('Fingerprint')}</dt><dd><code>${esc(k.fingerprint || '–')}</code></dd>
-        <dt>${t('Archive')}</dt><dd>${esc(k.path)}${k.used != null ? ' · ' + esc(bytes(k.used)) : ''}</dd></dl>
+        <dt>${t('Archive')}</dt><dd>${esc(k.path)}${dirLink(k.path)}${k.used != null ? ' · ' + esc(bytes(k.used)) : ''}</dd></dl>
       <div class="btn-row"><button class="btn sm" type="button" data-kopia-off>${t('Turn off')}</button></div></div>`;
   }
   function bkDevices(box, d, el) {
@@ -8470,9 +8476,10 @@ sudo ./install.sh</pre></div>`}` : '') +
       tip.style.left = (2 * x - got.left) + 'px'; tip.style.top = (2 * y - got.top) + 'px';
     };
     const hide = () => { owner = null; tip.hidden = true; };
-    document.addEventListener('pointerover', (e) => { const el = e.target.closest && e.target.closest('.hint'); if (el && e.pointerType === 'mouse') show(el); });
-    document.addEventListener('pointerout', (e) => { const el = e.target.closest && e.target.closest('.hint'); if (el && e.pointerType === 'mouse' && owner === el) hide(); });
-    document.addEventListener('focusin', (e) => { if (e.target.classList && e.target.classList.contains('hint')) show(e.target); });
+    const TIPPED = '.hint, .dir-link';
+    document.addEventListener('pointerover', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse') show(el); });
+    document.addEventListener('pointerout', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse' && owner === el) hide(); });
+    document.addEventListener('focusin', (e) => { if (e.target.matches && e.target.matches(TIPPED)) show(e.target); });
     document.addEventListener('focusout', (e) => { if (owner === e.target) hide(); });
     // A tap (touch) opens and closes it; it never ticks a checkbox or submits a form it sits in.
     document.addEventListener('click', (e) => {
@@ -8484,6 +8491,21 @@ sudo ./install.sh</pre></div>`}` : '') +
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
     document.addEventListener('scroll', () => { if (!tip.hidden) hide(); }, true);
   })();
+  // A folder button anywhere: close the window or settings it sits in, then show that folder in Files.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest && e.target.closest('[data-open-dir]');
+    if (!btn) return;
+    e.preventDefault(); e.stopPropagation();
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const at = await api.get('/api/files/locate?path=' + encodeURIComponent(btn.dataset.openDir));
+      if (setWin.open) closeSettings();
+      if (win.open) win.close();
+      filesOpen(at.place, at.rel);
+    } catch (ex) { toast(ex.message, true); }
+    finally { btn.disabled = false; }
+  });
   $('#connLost button').addEventListener('click', () => location.reload());
   tickClock(); setInterval(tickClock, 1000 * 15);
   // The dashboard stays hidden (body.booting) until boot() has chosen: wizard, sign-in or dashboard.

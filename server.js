@@ -558,6 +558,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), places: await files.places(), admin: auth.userName() });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
+  if (p === '/api/files/locate' && method === 'GET') return sendJson(res, 200, await files.locate(url.searchParams.get('path') || ''));
   if (p === '/api/files/eject' && method === 'POST') return sendJson(res, 200, await files.eject((await readBody(req)).id));
   if (p === '/api/remote' && method === 'GET') return sendJson(res, 200, await tunnel.status());
   if (p === '/api/remote' && method === 'POST') return sendJson(res, 200, await tunnel.apply(await readBody(req)));
