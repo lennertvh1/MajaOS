@@ -2666,4 +2666,7 @@ window.TB_LANG.ja = {
   "Disconnecting…": "切断しています…",
   "Deleting…": "削除しています…",
   "Removing…": "取り外しています…",
+  "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "それでも削除しますか？使用中のアプリは停止され、{name} 上のデータ、共有フォルダー、VM は完全に失われます。",
+  "Delete anyway": "それでも削除",
+  "{name} is still used by {list}.": "{name} はまだ {list} で使用されています。",
 };

@@ -2666,4 +2666,7 @@ window.TB_LANG.es = {
   "Disconnecting…": "Desconectando…",
   "Deleting…": "Eliminando…",
   "Removing…": "Quitando…",
+  "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "¿Eliminarlo de todos modos? Las apps que lo usan se detienen, y sus datos, carpetas compartidas y máquinas virtuales en {name} se pierden para siempre.",
+  "Delete anyway": "Eliminar de todos modos",
+  "{name} is still used by {list}.": "{list} todavía usa {name}.",
 };

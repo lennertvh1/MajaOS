@@ -2666,4 +2666,7 @@ window.TB_LANG.zh = {
   "Disconnecting…": "正在断开…",
   "Deleting…": "正在删除…",
   "Removing…": "正在移除…",
+  "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "仍要删除吗？使用它的应用将被停止，{name} 上的应用数据、共享文件夹和虚拟机将永久消失。",
+  "Delete anyway": "仍然删除",
+  "{name} is still used by {list}.": "{name} 仍被 {list} 使用。",
 };

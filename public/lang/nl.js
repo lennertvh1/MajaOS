@@ -2670,4 +2670,7 @@ window.TB_LANG.nl = {
   "Disconnecting…": "Loskoppelen…",
   "Deleting…": "Verwijderen…",
   "Removing…": "Verwijderen…",
+  "Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.": "Toch verwijderen? De apps die de pool gebruiken worden gestopt, en hun data, gedeelde mappen en VM's op {name} zijn voorgoed weg.",
+  "Delete anyway": "Toch verwijderen",
+  "{name} is still used by {list}.": "{name} wordt nog gebruikt door {list}.",
 };

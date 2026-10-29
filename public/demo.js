@@ -1992,7 +1992,13 @@
     if (act === 'scrub-stop') { if (!p.scrub || !p.scrub.running) throw err('No check is running on this pool.', 409); p.scrub = { ...p.scrub, running: false, progress: null }; return { name: p.name, scrub: 'stopped' }; }
     const users = demoPoolUsers('/' + p.name);
     const what = act === 'export' ? 'disconnect' : 'delete';
-    if (users.length) throw err(p.name + ' is still used by ' + users.join(', ') + '. Move or remove that first, then ' + what + ' the pool.', 409);
+    const force = !act && query.get('force') === '1';
+    if (users.length && !force) { const e = err(p.name + ' is still used by ' + users.join(', ') + '. Move or remove that first, then ' + what + ' the pool.', 409); e.data = { inUse: users, canForce: !act }; throw e; }
+    if (force) {
+      // Like letGo in lib/zpool.js: the folders and shared folders on the pool are let go.
+      for (const k of Object.keys(sp)) if (sp[k] && (sp[k] === '/' + p.name || sp[k].startsWith('/' + p.name + '/'))) sp[k] = null;
+      for (let i = shareList.length - 1; i >= 0; i--) if (shareList[i].path === '/' + p.name || String(shareList[i].path).startsWith('/' + p.name + '/')) shareList.splice(i, 1);
+    }
     if (!act && query.get('confirm') !== p.name) throw err('Type the pool name to confirm that everything on it may be erased.');
     pools.splice(pools.indexOf(p), 1);
     const own = datasets.filter((d) => d.name === p.name || d.name.startsWith(p.name + '/'));

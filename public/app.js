@@ -3129,7 +3129,16 @@
           if (!r) return;
           if (!r.checked) { toast(t('Tick that the data on the pool may be erased.'), true); return; }
           busy(t('Deleting…'));
-          await api.del(`${url}?confirm=${encodeURIComponent(name)}`); toast(t('Pool {name} was deleted.', { name }));
+          try { await api.del(`${url}?confirm=${encodeURIComponent(name)}`); }
+          catch (ex) {
+            // Still in use: say what, and let the user decide to go on anyway.
+            if (!(ex.status === 409 && ex.data && ex.data.canForce)) throw ex;
+            const list = (ex.data.inUse || []).map((x) => tr(x)).join(', ');
+            const go = await ask(`${t('{name} is still used by {list}.', { name, list })} ${t('Delete it anyway? The apps that use it are stopped, and their data, shared folders and VMs on {name} are gone for good.', { name })}`, t('Delete anyway'));
+            if (!go) { b.disabled = false; b.textContent = label; return; }
+            await api.del(`${url}?confirm=${encodeURIComponent(name)}&force=1`);
+          }
+          toast(t('Pool {name} was deleted.', { name }));
         }
         loadOverview().catch(() => {});
         storageWindow({ again: true });
