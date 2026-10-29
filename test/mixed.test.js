@@ -127,3 +127,33 @@ test('what still uses a pool: folders, shared folders, apps and the backup app',
   assert.deepEqual(await poolUsers('/media', { containers }), ['app jellyfin']);
   assert.deepEqual(await poolUsers('/', { containers }), []);
 });
+
+test('replacing a disk: the checks per role, and what the window offers', () => {
+  const pool = { name: 'media', disks: [
+    { role: 'data', index: 1, size: 2 * TB, key: 's:A', byId: '/nope/a', mount: '/mnt/media/disk1' },
+    { role: 'data', index: 2, size: 1 * TB, key: 's:B', byId: '/nope/b', mount: '/mnt/media/disk2' },
+    { role: 'parity', index: 1, size: 4 * TB, key: 's:C', byId: '/nope/c', mount: '/mnt/media/parity1' },
+  ] };
+  const [d1, d2, p1] = pool.disks;
+  assert.deepEqual(pool.disks.map(mixed.memberId), ['d1', 'd2', 'p1']);
+  assert.deepEqual(pool.disks.map(mixed.snapName), ['d1', 'd2', 'parity']);
+  const fails = (member, d) => { try { mixed.checkReplacement(pool, member, d); } catch (e) { return e.message; } return null; };
+  assert.equal(fails(d2, disk('sdx', 2 * TB)), null); // larger than the old one, not larger than the parity
+  assert.match(fails(d1, disk('sdx', 1 * TB)), /smaller than the disk it replaces \(2000 GB\)/);
+  assert.match(fails(d1, disk('sdx', 6 * TB)), /larger than the parity disk.*at most 4000 GB/);
+  assert.match(fails(p1, disk('sdx', 1.5 * TB)), /smaller than the largest data disk/);
+  assert.equal(fails(p1, disk('sdx', 2 * TB)), null);
+  assert.match(fails(d1, disk('sde', 4 * TB, { available: false, reason: 'In pool tank' })), /You cannot use sde: In pool tank/);
+  assert.match(fails(d1, null), /Choose the new disk/);
+
+  fs.writeFileSync(path.join(process.env.DATA_DIR, 'mixed.json'), JSON.stringify({ pools: [{ ...pool, mountpoint: '/media', created: new Date().toISOString(), schedule: mixed.DEFAULT_SCHEDULE, last: {} }] }));
+  const o = mixed.replaceOptions('media', 'd1', { disks: [disk('sdx', 3 * TB), disk('sdy', 1 * TB), disk('sdz', 3 * TB, { available: false, reason: 'x' })] });
+  assert.equal(o.mode, 'fix'); // the old disk isn't there: its files come back from the parity
+  assert.equal(o.parity, true);
+  assert.deepEqual(o.candidates.map((c) => [c.name, c.ok]), [['sdx', true], ['sdy', false]]);
+  const start = (body) => { try { mixed.startReplace('media', body, { disks: [disk('sdx', 3 * TB)] }); } catch (e) { return e.message; } return null; };
+  assert.match(start({ disk: 'd9', with: 'sdx', confirm: 'media' }), /Choose the disk to replace/);
+  assert.match(start({ disk: 'd1', with: 'sdx', confirm: 'nope' }), /Type the pool name/);
+  assert.match(start({ disk: 'd1' }), /Choose the new disk/); // restoring again only when the disk is in place
+  fs.rmSync(path.join(process.env.DATA_DIR, 'mixed.json'));
+});

@@ -2942,10 +2942,11 @@
         d.smartOk === false ? `<span class="pill bad">${esc(t('SMART reports a problem'))}</span>` : '',
       ].join('');
       const own = member && member.total ? usage(member.total - member.free, member.total, false) : '';
+      const swap = member ? `<button class="btn sm" type="button" data-mx-replace="${esc(mxId(member))}">${t('Replace disk')}</button>` : '';
       return `<li class="disk-item${bad ? ' bad' : ''}">
         <span class="disk-kind ${kind}" title="${kind.toUpperCase()}">${DISK_ICON[kind]}</span>
         <div class="disk-main"><div class="disk-name"><b>${esc(d.name)}</b>${pills}</div>
-          <div class="muted small">${esc([d.model, kind === 'nvme' ? 'NVMe' : kind.toUpperCase()].filter(Boolean).join(' · '))}</div>${own}</div>
+          <div class="muted small">${esc([d.model, kind === 'nvme' ? 'NVMe' : kind.toUpperCase()].filter(Boolean).join(' · '))}</div>${own}${swap}</div>
         <div class="disk-side"><b>${esc(bytes(d.size))}</b><span class="${tempClass(d.temp)}">${d.temp != null ? d.temp + ' °C' : t('Standby')}</span></div>
       </li>`;
     };
@@ -2958,9 +2959,17 @@
     };
     const when = (iso) => new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() });
     // A pool with mixed disks: the parity (last update, schedule, a running job) and its own buttons.
+    const mxId = (m) => (m.role === 'parity' ? 'p' : 'd') + m.index;
+    const mxName = (id) => t(id[0] === 'p' ? 'parity disk {n}' : 'data disk {n}', { n: id.slice(1) });
+    const REPLACE_PHASE = {
+      prepare: 'Replacing {disk}: preparing the new disk…', swap: 'Replacing {disk}: putting the new disk in place…',
+      copy: 'Replacing {disk}: copying the files: {pct}%', fix: 'Replacing {disk}: restoring the files from the parity: {pct}%',
+      sync: 'Replacing {disk}: updating the parity: {pct}%',
+    };
     const parityLine = (p) => {
-      if (!p.parityCount) return t('No parity disk: no protection.');
       const j = p.job;
+      if (j && !j.done && j.action === 'replace') return t(REPLACE_PHASE[j.phase] || REPLACE_PHASE.prepare, { disk: mxName(j.disk), pct: nf0.format(j.percent || 0) });
+      if (!p.parityCount) return t('No parity disk: no protection.');
       if (j && !j.done) return t(j.action === 'scrub' ? 'Checking the parity: {pct}%' : 'Updating the parity: {pct}%', { pct: nf0.format(j.percent || 0) });
       const ls = p.last && p.last.sync;
       const base = !ls ? t('The parity has not been updated yet.')
@@ -2973,17 +2982,25 @@
       const missing = (p.members || []).filter((m) => !m.present || !m.mounted);
       const busy = p.job && !p.job.done;
       const every = (p.schedule && p.schedule.sync && p.schedule.sync.every) || 'daily';
-      return `<section class="pool-card p${colorOf(p.name)}" data-mx="${esc(p.name)}">
+      // A replacement that failed: restoring again is possible once the new disk is in place (it is then mounted).
+      const lr = p.last && p.last.replace;
+      const lrMember = lr && (p.members || []).find((m) => mxId(m) === lr.disk);
+      const retry = lrMember && lrMember.present && lrMember.mounted && p.parityCount;
+      return `<section class="pool-card p${colorOf(p.name)}${busy ? ' mx-busy' : ''}" data-mx="${esc(p.name)}">
         ${poolHead(p, t('Mixed disks'), t('{data} data and {parity} parity disks', { data: p.diskCount, parity: p.parityCount }))}
         ${p.total != null ? usage(p.used, p.total, true) : `<p class="temp-bad">${t('Not mounted')}</p>`}
         <p class="pool-status${p.parityCount ? '' : ' temp-warn'}" data-mx-line>${esc(parityLine(p))}</p>
-        ${missing.map((m) => `<p class="pool-status temp-bad">${esc(t(m.role === 'parity' ? 'Parity disk {n} is missing ({model}).' : 'Data disk {n} is missing ({model}): its files are not available.', { n: m.index, model: m.model || m.byId }))}</p>`).join('')}
+        ${missing.map((m) => `<p class="pool-status temp-bad mx-missing">${esc(t(m.role === 'parity' ? 'Parity disk {n} is missing ({model}).' : 'Data disk {n} is missing ({model}): its files are not available.', { n: m.index, model: m.model || m.byId }))}
+          <button class="btn sm" type="button" data-mx-replace="${esc(mxId(m))}"${busy ? ' hidden' : ''}>${t('Replace disk')}</button></p>`).join('')}
+        ${lr && lr.ok === false && !busy ? `<p class="pool-status temp-bad">${esc(t('Replacing {disk} failed: {error}', { disk: mxName(lr.disk), error: tr(lr.error || '') }))}
+          ${retry ? `<button class="btn sm" type="button" data-mx-retry="${esc(lr.disk)}">${t('Restore again')}</button>` : ''}</p>` : ''}
+        <div class="mx-form" data-mx-form hidden></div>
         <div class="pool-acts">
           ${p.parityCount ? `<button class="btn sm" type="button" data-mx-act="sync"${busy ? ' hidden' : ''}>${t('Update parity now')}</button>
           <button class="btn sm" type="button" data-mx-act="scrub"${busy ? ' hidden' : ''}>${t('Check parity')}</button>
           <button class="btn sm" type="button" data-mx-act="stop"${busy ? '' : ' hidden'}>${t('Stop')}</button>
           <label class="mx-sched small muted">${t('Update automatically')}
-            <select class="field sm" data-mx-sched>${[['daily', t('Every night')], ['weekly', t('Every week')], ['manual', t('Only by hand')]].map(([k, l]) => `<option value="${k}"${k === every ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
+            <select class="field sm" data-mx-sched>${[['hourly', t('Every hour')], ['daily', t('Every night')], ['weekly', t('Every week')], ['manual', t('Only by hand')]].map(([k, l]) => `<option value="${k}"${k === every ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
           <span class="grow"></span><button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>
         ${diskList(disks, p.members)}
       </section>`;
@@ -3071,9 +3088,15 @@
       api.get(`/api/mixed-pools/${encodeURIComponent(name)}/log`).then((r) => {
         const p = s.pools.find((x) => x.name === name);
         if (!p || !document.body.contains(ul)) return;
+        const was = p.job;
         p.job = r.job; p.last = r.last;
         $('[data-mx-line]', ul).textContent = parityLine(p);
         const busy = r.job && !r.job.done;
+        if (!busy && r.job && r.job.action === 'replace') {
+          if (was && !was.done) toast(r.job.ok ? t('{name}: {disk} was replaced and the parity is up to date.', { disk: mxName(r.job.disk), name }) : tr(r.job.error || ''), !r.job.ok);
+          storageWindow({ again: true });
+          return;
+        }
         $$('[data-mx-act="sync"], [data-mx-act="scrub"]', ul).forEach((b) => { b.hidden = busy; });
         const stop = $('[data-mx-act="stop"]', ul); if (stop) stop.hidden = !busy;
         if (busy) setTimeout(() => follow(name), 2000);
@@ -3113,6 +3136,51 @@
         if (act === 'stop') { await api.post(url + '/stop'); toast(t('Stopping…')); }
         else { await api.post(url + '/' + act); toast(act === 'scrub' ? t('Checking the parity…') : t('Updating the parity…')); }
         follow(name);
+      } catch (ex) { toast(ex.message, true); }
+    });
+    // Replacing a disk of a pool with mixed disks: choose the new disk in the card, type the name, go.
+    const replaceForm = async (card, name, id) => {
+      const box = $('[data-mx-form]', card);
+      box.hidden = false;
+      box.innerHTML = `<p class="muted small">${t('Loading…')}</p>`;
+      let o;
+      try { o = await api.get(`/api/mixed-pools/${encodeURIComponent(name)}/replace?disk=${encodeURIComponent(id)}`); }
+      catch (ex) { box.innerHTML = `<p class="small temp-bad">${esc(ex.message)}</p>`; return; }
+      const how = o.mode === 'copy' ? t('The old disk still works: its files are copied to the new disk. Then the parity is updated.')
+        : t('The files come back from the parity, as they were at the last parity update. Then the parity is updated.');
+      box.innerHTML = `<div class="sub-head">${esc(t('Replace {disk}', { disk: mxName(id) }))}</div>
+        ${o.candidates.length ? `<ul class="rows mx-cands">${o.candidates.map((c) => `<li><label class="check${c.ok ? '' : ' muted'}">
+          <input type="radio" name="mxWith-${esc(name)}" value="${esc(c.name)}"${c.ok ? '' : ' disabled'}>
+          <span><b>${esc(c.name)}</b> ${esc([c.model, bytes(c.size)].filter(Boolean).join(' · '))}${c.reason ? `<br><span class="small temp-warn">${esc(tr(c.reason))}</span>` : ''}</span></label></li>`).join('')}</ul>`
+          : `<p class="small temp-warn">${t('No free disk found. Put the new disk in the server and click Look for new disks.')}</p>`}
+        <p class="small">${esc(how)}</p>
+        <label class="fld"><span>${esc(t('The new disk will be erased. Type {name} to confirm.', { name }))}</span>
+          <input class="field" data-mx-confirm autocomplete="off" spellcheck="false"></label>
+        <div class="pool-acts"><button class="btn sm" type="button" data-mx-cancel>${t('Cancel')}</button>
+          <button class="btn sm primary" type="button" data-mx-go disabled>${t('Replace disk')}</button></div>`;
+      const go = $('[data-mx-go]', box), conf = $('[data-mx-confirm]', box);
+      const pick = () => $('input[type=radio]:checked', box);
+      const check = () => { go.disabled = !pick() || conf.value.trim() !== name; };
+      box.addEventListener('input', check); box.addEventListener('change', check);
+      $('[data-mx-cancel]', box).addEventListener('click', () => { box.hidden = true; box.innerHTML = ''; });
+      go.addEventListener('click', async () => {
+        go.disabled = true;
+        try {
+          await api.post(`/api/mixed-pools/${encodeURIComponent(name)}/replace`, { disk: id, with: pick().value, confirm: conf.value.trim() });
+          toast(t('Replacing {disk}…', { disk: mxName(id) }));
+          storageWindow({ again: true });
+        } catch (ex) { toast(ex.message, true); check(); }
+      });
+    };
+    $('#poolsBox').addEventListener('click', async (e) => {
+      const rep = e.target.closest('[data-mx-replace]'), again = e.target.closest('[data-mx-retry]');
+      if (!rep && !again) return;
+      const card = e.target.closest('[data-mx]'), name = card.dataset.mx;
+      if (rep) { replaceForm(card, name, rep.dataset.mxReplace); return; }
+      try {
+        await api.post(`/api/mixed-pools/${encodeURIComponent(name)}/replace`, { disk: again.dataset.mxRetry });
+        toast(t('Replacing {disk}…', { disk: mxName(again.dataset.mxRetry) }));
+        storageWindow({ again: true });
       } catch (ex) { toast(ex.message, true); }
     });
     $('#poolsBox').addEventListener('change', async (e) => {

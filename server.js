@@ -649,8 +649,9 @@ async function handleApi(req, res, url) {
     if (act === 'export' && method === 'POST') return sendJson(res, 200, await zpool.exportPool(name));
     if (!act && method === 'DELETE') return sendJson(res, 200, await zpool.destroyPool(name, url.searchParams.get('confirm')));
   }
-  // Pools with mixed disks: update or check the parity, the schedule, and removing the pool (the files stay on the disks).
-  const mx = p.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log))?$/);
+  // Pools with mixed disks: update or check the parity, the schedule, replacing a disk, and removing the pool (the files
+  // stay on the disks).
+  const mx = p.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log|replace))?$/);
   if (mx) {
     const [, name, act] = mx;
     if (!mixed.find(name)) return sendJson(res, 404, { error: 'This pool doesn\'t exist (anymore).' });
@@ -658,6 +659,11 @@ async function handleApi(req, res, url) {
     if ((act === 'sync' || act === 'scrub') && method === 'POST') { const started = mixed.startJob(name, act); started.catch(() => {}); await new Promise((r) => setTimeout(r, 200)); return sendJson(res, 200, { started: true, job: mixed.jobView(name) }); }
     if (act === 'stop' && method === 'POST') return sendJson(res, 200, mixed.stopJob(name));
     if (act === 'schedule' && method === 'POST') return sendJson(res, 200, { schedule: mixed.setSchedule(name, await readBody(req)) });
+    if (act === 'replace' && method === 'GET') return sendJson(res, 200, mixed.replaceOptions(name, url.searchParams.get('disk') || '', { disks: (await zpool.poolOptions()).disks }));
+    if (act === 'replace' && method === 'POST') {
+      const body = await readBody(req);
+      return sendJson(res, 200, { started: true, job: mixed.startReplace(name, body, { disks: body.with ? (await zpool.poolOptions()).disks : [] }) });
+    }
     if (!act && method === 'DELETE') {
       // Not while something still uses it: app data, VMs, ISOs, shared folders, apps, the backup app (lib/poolusers.js).
       return sendJson(res, 200, await mixed.remove(name, { inUse: await require('./lib/poolusers').poolUsers(mixed.find(name).mountpoint) }));

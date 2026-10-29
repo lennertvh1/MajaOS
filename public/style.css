@@ -1658,6 +1658,14 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mix-disks .row-side .seg button { font-size: 13px; }
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
+/* Replacing a disk of a pool with mixed disks: a button on the disk, the form inside the pool card. */
+.disk-main [data-mx-replace] { margin-top: 6px; }
+.mx-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mx-busy [data-mx-replace] { display: none; }
+.mx-form { display: grid; gap: 10px; margin: 10px 0; padding: 14px; border: 1px solid var(--glass-line); border-radius: 12px; background: var(--glass); }
+.mx-form[hidden] { display: none; }
+.mx-cands { display: grid; gap: 6px; }
+.mx-cands label { display: flex; gap: 8px; align-items: flex-start; }
 
 /* Storage: every pool a card in its own colour (the same as in the drawing of the case), with a clear usage bar,
    its status, its actions and its disks as a separate list. */

@@ -1843,16 +1843,86 @@
     if (parity.length) mxJobs[name] = { action: 'sync', start: Date.now() };
     return { name, kind: 'mixed', folders: b.folders === false ? [] : ['appdata', 'media', 'backups', 'vms', 'isos'], uses: [] };
   }
+  // Replacing a disk, like startReplace in lib/mixed.js: prepare ~2 s, copy or restore ~6 s, sync ~3 s.
+  const mxId = (m) => (m.role === 'parity' ? 'p' : 'd') + m.index;
+  const mxGb = (n) => Math.round(n / 1e9) + ' GB';
+  function mxCheck(p, member, d) {
+    if (!d) throw err('Choose the new disk.');
+    if (!d.available) throw err('You cannot use ' + d.name + ': ' + d.reason + '.', 409);
+    const others = p.members.filter((m) => mxId(m) !== mxId(member));
+    if (member.role === 'parity') {
+      if (d.size < Math.max(0, ...others.filter((m) => m.role === 'data').map((m) => m.size))) throw err('The disk ' + d.name + ' is smaller than the largest data disk. A parity disk must be at least as large as every data disk.');
+    } else {
+      if (d.size < member.size * 0.99) throw err('The disk ' + d.name + ' is smaller than the disk it replaces (' + mxGb(member.size) + ').');
+      const par = others.filter((m) => m.role === 'parity').map((m) => m.size);
+      if (par.length && d.size > Math.min(...par)) throw err('The disk ' + d.name + ' is larger than the parity disk. Choose one of at most ' + mxGb(Math.min(...par)) + ', or replace the parity disk first.');
+    }
+  }
+  const mxMode = (m) => (m.present && m.mounted ? 'copy' : 'fix');
+  function mxReplaceOptions(p, id) {
+    const member = p.members.find((m) => mxId(m) === id);
+    if (!member) throw err('This disk isn\'t part of the pool (anymore).', 404);
+    const candidates = poolOptions().disks.filter((d) => d.available).map((d) => {
+      let reason = null; try { mxCheck(p, member, d); } catch (e) { reason = e.message; }
+      return { name: d.name, model: d.model, serial: d.serial, size: d.size, rotational: d.rotational, transport: d.transport, ok: !reason, reason };
+    });
+    return { disk: { id, role: member.role, index: member.index, model: member.model, size: member.size }, mode: mxMode(member), parity: p.parityCount > 0, candidates };
+  }
+  function mxReplace(p, b) {
+    const member = p.members.find((m) => mxId(m) === String(b.disk || ''));
+    if (!member) throw err('Choose the disk to replace.');
+    const cur = mxJob(p.name);
+    if (cur && !cur.done) throw err('The parity of this pool is already being updated or checked.', 409);
+    let mode = mxMode(member), neu = null;
+    if (b.with) {
+      neu = poolOptions().disks.find((d) => d.name === b.with);
+      mxCheck(p, member, neu);
+      if (b.confirm !== p.name) throw err('Type the pool name to confirm that the new disk may be erased.');
+    } else { if (mode !== 'copy') throw err('Choose the new disk.'); mode = 'fix'; }
+    if (mode === 'fix' && !p.parityCount) throw err('This pool has no parity disk, so the files of a missing disk can\'t be restored.', 409);
+    mxJobs[p.name] = { action: 'replace', disk: mxId(member), mode, with: neu ? neu.name : null, start: Date.now() - (neu ? 0 : 2000) };
+    return { started: true, job: mxJob(p.name) };
+  }
+  // The replacement is done: the new disk takes the member's place (and its bay), the old one is free.
+  function mxSwap(p, j) {
+    if (!j.with) return;
+    const i = p.members.findIndex((m) => mxId(m) === j.disk), old = p.members[i];
+    const d = disks.find((x) => x.name === j.with);
+    const was = disks.find((x) => x.name === old.device);
+    if (was) Object.assign(was, { pool: null, role: null, vdev: null, state: null });
+    Object.assign(d, { pool: p.name, role: old.role, vdev: null, state: 'ONLINE' });
+    const total = Math.round(d.size * 0.98), used = old.total != null ? old.total - old.free : Math.round(d.size * 0.3);
+    p.members[i] = { ...old, key: d.key, byId: '/dev/disk/by-id/ata-' + d.model.replace(/\s+/g, '_') + '_' + d.serial, model: d.model, size: d.size, present: true, device: d.name, mounted: true, total, free: total - used };
+    const slot = Object.keys(bays.slots).find((k) => bays.slots[k] && bays.slots[k].key === old.key);
+    if (slot) { for (const k of Object.keys(bays.slots)) if (bays.slots[k] && bays.slots[k].key === d.key) delete bays.slots[k]; bays.slots[slot] = { key: d.key, label: d.serial }; }
+    if (p.members.every((m) => m.present && m.mounted)) p.health = 'ONLINE';
+  }
   function mxJob(name) {
     const p = pools.find((x) => x.name === name), j = mxJobs[name];
     if (!j) return null;
+    if (j.action === 'replace') {
+      const el = Date.now() - j.start, done = j.stopped || el > 11000;
+      const phase = el < 2000 ? 'prepare' : el < 8000 ? j.mode : el < 11000 ? 'sync' : 'done';
+      const pct = phase === 'prepare' ? 0 : phase === 'sync' ? Math.round((el - 8000) / 30) : Math.round((el - 2000) / 60);
+      const view = { action: 'replace', disk: j.disk, mode: j.mode, phase, with: j.with, started: new Date(j.start).toISOString(), percent: done ? (j.stopped ? j.percent : 100) : Math.min(99, pct),
+        done, ok: done ? !j.stopped : null, error: j.stopped ? 'Stopped.' : null, lines: [] };
+      if (done && !j.recorded) {
+        j.recorded = true;
+        if (!j.stopped) mxSwap(p, j);
+        const at = new Date().toISOString();
+        p.last = { ...(p.last || {}), replace: { at, ok: view.ok, error: view.error, disk: j.disk }, ...(view.ok && p.parityCount ? { sync: { at, ok: true, error: null } } : {}) };
+      }
+      if (!done) j.percent = view.percent;
+      return view;
+    }
     const el = Date.now() - j.start, done = j.stopped || el > 8000;
     const view = { action: j.action, started: new Date(j.start).toISOString(), percent: j.stopped ? j.percent : Math.min(100, Math.round(el / 80)), done, ok: done ? !j.stopped : null, error: j.stopped ? 'Stopped.' : null, lines: [] };
     if (done && !j.recorded) { j.recorded = true; p.last = { ...(p.last || {}), [j.action]: { at: new Date().toISOString(), ok: view.ok, error: view.error } }; }
     return view;
   }
   function mxRoute(method, path, body) {
-    const m = path.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log))?$/);
+    const u = new URL(path, 'http://demo.local');
+    const m = u.pathname.match(/^\/api\/mixed-pools\/([a-z][a-z0-9_-]{0,31})(?:\/(sync|scrub|stop|schedule|log|replace))?$/);
     if (!m) return undefined;
     const p = pools.find((x) => x.name === m[1] && x.kind === 'mixed');
     if (!p) throw err('This pool doesn\'t exist (anymore).', 404);
@@ -1862,8 +1932,10 @@
       if (cur && !cur.done) throw err('The parity of this pool is already being updated or checked.', 409);
       mxJobs[p.name] = { action: act, start: Date.now() }; return { started: true, job: mxJob(p.name) };
     }
+    if (act === 'replace' && method === 'GET') return mxReplaceOptions(p, u.searchParams.get('disk') || '');
+    if (act === 'replace' && method === 'POST') return mxReplace(p, body || {});
     if (act === 'stop') { const j = mxJobs[p.name]; if (!cur || cur.done) throw err('Nothing is running for this pool.', 409); j.stopped = true; j.percent = cur.percent; return { stopping: true }; }
-    if (act === 'schedule') { p.schedule = { ...p.schedule, sync: { every: ['daily', 'weekly', 'manual'].includes(body.sync && body.sync.every) ? body.sync.every : 'daily', time: '03:00', day: 0 } }; return { schedule: copy(p.schedule) }; }
+    if (act === 'schedule') { p.schedule = { ...p.schedule, sync: { every: ['hourly', 'daily', 'weekly', 'manual'].includes(body.sync && body.sync.every) ? body.sync.every : 'daily', time: '03:00', day: 0 } }; return { schedule: copy(p.schedule) }; }
     if (!act && method === 'DELETE') {
       pools.splice(pools.indexOf(p), 1);
       disks.forEach((d) => { if (d.pool === p.name) Object.assign(d, { pool: null, role: null, vdev: null, state: null }); });
