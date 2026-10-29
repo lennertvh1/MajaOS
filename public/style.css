@@ -1626,3 +1626,50 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .mix-disks .row-side .seg button { font-size: 13px; }
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Storage: every pool a card in its own colour (the same as in the drawing of the case), with a clear usage bar,
+   its status, its actions and its disks as a separate list. */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 10px; }
+.section-head h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.pool-card { --pc: var(--accent); background: var(--glass); border: 1px solid var(--glass-line); border-left: 5px solid var(--pc);
+  border-radius: 18px; padding: 16px 18px; margin-bottom: 14px; }
+.pool-card.p1 { --pc: var(--pool-1); } .pool-card.p2 { --pc: var(--pool-2); } .pool-card.p3 { --pc: var(--pool-3); }
+.pool-card.p4 { --pc: var(--pool-4); } .pool-card.p5 { --pc: var(--pool-5); }
+.pool-card.loose, .pool-card.plain { --pc: var(--glass-line); border-left-width: 1px; padding: 6px; }
+.pool-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.pool-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, transparent); }
+.pool-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pool-title { flex: 1; min-width: 0; }
+.pool-title h3 { margin: 0 0 2px; font-size: 18px; font-weight: 650; }
+.usage-bar { height: 6px; border-radius: 99px; background: var(--track); overflow: hidden; }
+.usage-bar span { display: block; height: 100%; border-radius: inherit; background: var(--pc, var(--accent)); transition: width .6s ease; }
+.usage-bar span.warn { background: var(--warn); } .usage-bar span.bad { background: var(--bad); }
+.usage.big .usage-bar { height: 14px; }
+.usage-nums { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.usage-nums b { color: var(--text); font-weight: 600; }
+.usage.big .usage-nums { font-size: 14px; margin-top: 8px; }
+.usage-nums .muted { margin-left: auto; }
+.pool-status { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.pool-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--glass-line); }
+.pool-acts .grow { flex: 1; }
+.sub-head { margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.disk-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--glass-line); border-radius: 14px; overflow: hidden; }
+.pool-card.loose .disk-list, .pool-card.plain .disk-list { border: 0; }
+.disk-item { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; }
+.disk-item + .disk-item { border-top: 1px solid var(--glass-line); }
+.disk-kind { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--track); color: var(--muted); }
+.disk-kind svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.disk-kind.folder { color: var(--pc, var(--accent)); }
+.disk-item.bad .disk-kind { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.disk-main { min-width: 0; }
+.disk-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.disk-item .usage { margin-top: 6px; max-width: 420px; }
+.disk-side { display: grid; text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.disk-side b { color: var(--text); font-weight: 600; }
+.pill.role-parity { color: var(--pc, var(--accent)); background: color-mix(in srgb, var(--pc, var(--accent)) 16%, transparent); }
+.empty-card { padding: 22px; border: 1px dashed var(--glass-line); border-radius: 18px; color: var(--muted); text-align: center; }
+@media (max-width: 560px) { .disk-item { grid-template-columns: 32px 1fr; } .disk-side { grid-column: 2; text-align: left; display: flex; gap: 10px; } .usage-nums .muted { margin-left: 0; } }
+.disk-item.p1 { --pc: var(--pool-1); } .disk-item.p2 { --pc: var(--pool-2); } .disk-item.p3 { --pc: var(--pool-3); }
+.disk-item.p4 { --pc: var(--pool-4); } .disk-item.p5 { --pc: var(--pool-5); }
+.disk-item[class*=" p"] .disk-kind.folder { color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, transparent); }

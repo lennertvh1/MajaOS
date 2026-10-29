@@ -1819,8 +1819,10 @@
     if (b.confirm !== name) throw err('Type the pool name to confirm that the disks may be erased.');
     const total = Math.round(data.reduce((a, d) => a + d.size, 0) * 0.98);
     const members = [...data.map((d, i) => ({ ...d, index: i + 1, mount: '/mnt/' + name + '/disk' + (i + 1) })), ...parity.map((d, i) => ({ ...d, index: i + 1, mount: '/mnt/' + name + '/parity' + (i + 1) }))]
-      .map((d) => ({ key: 's:' + d.serial, byId: d.byId, role: d.role, index: d.index, mount: d.mount, model: d.model, size: d.size, present: true, device: d.name, mounted: true }));
-    pools.push({ name, kind: 'mixed', mountpoint: '/' + name, health: 'ONLINE', used: 0, free: total, total, layout: 'mixed', diskCount: data.length, parityCount: parity.length,
+      .map((d) => ({ key: 's:' + d.serial, byId: d.byId, role: d.role, index: d.index, mount: d.mount, model: d.model, size: d.size, present: true, device: d.name, mounted: true,
+        total: Math.round(d.size * 0.98), free: Math.round(d.size * 0.98) - (d.role === 'data' ? Math.round(d.size * (d.index === 1 ? 0.41 : 0.18)) : Math.round(d.size * 0.52)) }));
+    const usedNow = members.filter((m) => m.role === 'data').reduce((n, m) => n + (m.total - m.free), 0);
+    pools.push({ name, kind: 'mixed', mountpoint: '/' + name, health: 'ONLINE', used: usedNow, free: total - usedNow, total, layout: 'mixed', diskCount: data.length, parityCount: parity.length,
       members, schedule: { sync: { every: 'daily', time: '03:00', day: 0 }, scrub: { every: 'weekly', time: '04:30', day: 0 } }, last: {}, job: null });
     chosen.forEach((c) => { const d = disks.find((x) => x.name === c.name); Object.assign(d, { pool: name, role: c.role, vdev: null, state: 'ONLINE' }); });
     datasets.push({ name, used: 0, free: total, mountpoint: '/' + name, compress: 1 });

@@ -2844,15 +2844,50 @@
     try { s = await api.get('/api/storage'); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     const pct = s.total ? (s.used / s.total) * 100 : 0;
     const ROLE = { cache: 'Read cache', log: 'Write log', spare: 'Spare', special: 'Metadata', dedup: 'Dedup', parity: 'Parity' };
-    const diskRow = (d) => {
-      const sub = [d.model, ROLE[d.role] && t(ROLE[d.role]), d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD',
-        d.state && d.state !== 'ONLINE' ? d.state.toLowerCase() : null, d.errors ? t('{n} errors', { n: d.errors }) : null,
-        d.smartOk === false ? t('SMART reports a problem') : null].filter(Boolean).join(' · ');
+    const LAYOUT_NAME = { stripe: 'Stripe', mirror: 'Mirror', raidz1: 'RAID-Z1', raidz2: 'RAID-Z2', raidz3: 'RAID-Z3' };
+    const layoutName = (l) => String(l || '').split(' + ').map((x) => t(LAYOUT_NAME[x] || x)).join(' + ');
+    // Each pool has the same colour as in the drawing of the case (p1…p5 by position).
+    const colorOf = (name) => (s.pools.findIndex((x) => x.name === name) % 5) + 1;
+    const DISK_ICON = {
+      hdd: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="10.5" r="4"/><circle cx="12" cy="10.5" r=".8"/><path d="M8 18h3"/></svg>',
+      ssd: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h6M7 14h3"/></svg>',
+      nvme: '<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 11h5v2H6zM14 11h1M17 11h1M14 13h1M17 13h1"/></svg>',
+    };
+    const POOL_ICON = '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>';
+    const diskKind = (d) => (d.transport === 'nvme' ? 'nvme' : d.rotational ? 'hdd' : 'ssd');
+    // A bar with the numbers next to it: used, free and the share. big = the pool itself.
+    const usage = (used, total, big) => {
+      if (total == null || !(total > 0)) return '';
+      const pc = Math.max(0, Math.min(100, (used / total) * 100));
+      return `<div class="usage${big ? ' big' : ''}">
+        <div class="usage-bar" role="img" aria-label="${esc(t('{pct}% used', { pct: nf0.format(pc) }))}"><span class="${level(pc, 80, 92)}" style="width:${pc.toFixed(1)}%"></span></div>
+        <div class="usage-nums"><span><b>${esc(bytes(used))}</b> ${t('used')}</span><span><b>${esc(bytes(Math.max(0, total - used)))}</b> ${t('free')}</span><span class="muted">${esc(t('{pct}% of {total}', { pct: nf0.format(pc), total: bytes(total) }))}</span></div></div>`;
+    };
+    // One disk: kind, name with its role, model, its own usage (only a pool with mixed disks knows it), size and temperature.
+    const diskItem = (d, member) => {
+      const kind = diskKind(d);
       const bad = (d.state && d.state !== 'ONLINE') || d.errors || d.smartOk === false;
-      return `<li>
-        <div><div class="row-title">${esc(d.name)}</div><div class="row-sub${bad ? ' temp-bad' : ''}">${esc(sub)}</div></div>
-        <div class="row-side"><div>${bytes(d.size)}</div><div class="${tempClass(d.temp)}">${d.temp != null ? d.temp + ' °C' : t('Standby')}</div></div>
+      const pills = [
+        d.role && d.role !== 'data' && ROLE[d.role] ? `<span class="pill role-${esc(d.role)}">${esc(t(ROLE[d.role]))}</span>` : '',
+        member && d.role === 'data' ? `<span class="pill">${esc(t('Data', null, 'disk'))} ${esc(String(member.index))}</span>` : '',
+        d.state && d.state !== 'ONLINE' ? `<span class="pill bad">${esc(d.state.toLowerCase())}</span>` : '',
+        d.errors ? `<span class="pill bad">${esc(t('{n} errors', { n: d.errors }))}</span>` : '',
+        d.smartOk === false ? `<span class="pill bad">${esc(t('SMART reports a problem'))}</span>` : '',
+      ].join('');
+      const own = member && member.total ? usage(member.total - member.free, member.total, false) : '';
+      return `<li class="disk-item${bad ? ' bad' : ''}">
+        <span class="disk-kind ${kind}" title="${kind.toUpperCase()}">${DISK_ICON[kind]}</span>
+        <div class="disk-main"><div class="disk-name"><b>${esc(d.name)}</b>${pills}</div>
+          <div class="muted small">${esc([d.model, kind === 'nvme' ? 'NVMe' : kind.toUpperCase()].filter(Boolean).join(' · '))}</div>${own}</div>
+        <div class="disk-side"><b>${esc(bytes(d.size))}</b><span class="${tempClass(d.temp)}">${d.temp != null ? d.temp + ' °C' : t('Standby')}</span></div>
       </li>`;
+    };
+    const diskList = (disks, members) => `<div class="sub-head">${t('Disks')}</div><ul class="disk-list">${disks.map((d) => diskItem(d, (members || []).find((m) => m.device === d.name))).join('')}</ul>`;
+    const poolHead = (p, kindLabel, detail) => {
+      const [label, cls] = poolHealth(p.health);
+      return `<header class="pool-head"><span class="pool-ico">${POOL_ICON}</span>
+        <div class="pool-title"><h3>${esc(p.name)}</h3><div class="muted small">${esc([kindLabel, detail].filter(Boolean).join(' · '))}</div></div>
+        <span class="pill ${cls}">${esc(label)}</span></header>`;
     };
     const when = (iso) => new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() });
     // A pool with mixed disks: the parity (last update, schedule, a running job) and its own buttons.
@@ -2867,54 +2902,38 @@
       return base + (sc ? ' ' + (sc.ok ? t('Last check {when}: no errors.', { when: when(sc.at) }) : t('Last check {when} failed: {error}', { when: when(sc.at), error: tr(sc.error || '') })) : '');
     };
     const mixedBlock = (p) => {
-      const used = p.total ? (p.used / p.total) * 100 : 0;
-      const [label, cls] = poolHealth(p.health);
       const disks = s.disks.filter((d) => d.pool === p.name);
       const missing = (p.members || []).filter((m) => !m.present || !m.mounted);
       const busy = p.job && !p.job.done;
       const every = (p.schedule && p.schedule.sync && p.schedule.sync.every) || 'daily';
-      return `<h3>${esc(p.name)} <span class="pill ${cls}">${esc(label)}</span> <span class="pill">${t('Mixed disks')}</span></h3>
-        <ul class="rows" data-mx="${esc(p.name)}">
-          <li>
-            <div><div class="row-title">${p.free != null ? t('{size} free', { size: bytes(p.free) }) : t('Not mounted')}</div>
-              <div class="row-sub">${esc(t('{data} data and {parity} parity disks', { data: p.diskCount, parity: p.parityCount }))}</div></div>
-            <div class="row-side">${p.total != null ? t('{used} of {total}', { used: bytes(p.used), total: bytes(p.total) }) : ''}</div>
-            <div class="row-bar"><div class="bar"><span class="${level(used, 80, 92)}" style="width:${used.toFixed(1)}%"></span></div>
-              <div class="row-sub" data-mx-line>${esc(parityLine(p))}</div>
-              ${missing.map((m) => `<div class="row-sub temp-bad">${esc(t(m.role === 'parity' ? 'Parity disk {n} is missing ({model}).' : 'Data disk {n} is missing ({model}): its files are not available.', { n: m.index, model: m.model || m.byId }))}</div>`).join('')}
-              ${p.parityCount ? `<div class="btn-row mx-acts">
-                <button class="btn sm" type="button" data-mx-act="sync"${busy ? ' hidden' : ''}>${t('Update parity now')}</button>
-                <button class="btn sm" type="button" data-mx-act="scrub"${busy ? ' hidden' : ''}>${t('Check parity')}</button>
-                <button class="btn sm" type="button" data-mx-act="stop"${busy ? '' : ' hidden'}>${t('Stop')}</button>
-                <label class="mx-sched small muted">${t('Update automatically')}
-                  <select class="field sm" data-mx-sched>${[['daily', t('Every night')], ['weekly', t('Every week')], ['manual', t('Only by hand')]].map(([k, l]) => `<option value="${k}"${k === every ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-                <button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>`
-                : `<div class="btn-row mx-acts"><button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>`}
-            </div>
-          </li>
-          ${disks.map(diskRow).join('')}
-        </ul>`;
+      return `<section class="pool-card p${colorOf(p.name)}" data-mx="${esc(p.name)}">
+        ${poolHead(p, t('Mixed disks'), t('{data} data and {parity} parity disks', { data: p.diskCount, parity: p.parityCount }))}
+        ${p.total != null ? usage(p.used, p.total, true) : `<p class="temp-bad">${t('Not mounted')}</p>`}
+        <p class="pool-status${p.parityCount ? '' : ' temp-warn'}" data-mx-line>${esc(parityLine(p))}</p>
+        ${missing.map((m) => `<p class="pool-status temp-bad">${esc(t(m.role === 'parity' ? 'Parity disk {n} is missing ({model}).' : 'Data disk {n} is missing ({model}): its files are not available.', { n: m.index, model: m.model || m.byId }))}</p>`).join('')}
+        <div class="pool-acts">
+          ${p.parityCount ? `<button class="btn sm" type="button" data-mx-act="sync"${busy ? ' hidden' : ''}>${t('Update parity now')}</button>
+          <button class="btn sm" type="button" data-mx-act="scrub"${busy ? ' hidden' : ''}>${t('Check parity')}</button>
+          <button class="btn sm" type="button" data-mx-act="stop"${busy ? '' : ' hidden'}>${t('Stop')}</button>
+          <label class="mx-sched small muted">${t('Update automatically')}
+            <select class="field sm" data-mx-sched>${[['daily', t('Every night')], ['weekly', t('Every week')], ['manual', t('Only by hand')]].map(([k, l]) => `<option value="${k}"${k === every ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
+          <span class="grow"></span><button class="btn sm danger" type="button" data-mx-act="remove">${t('Remove pool')}</button></div>
+        ${diskList(disks, p.members)}
+      </section>`;
     };
     const poolBlock = (p) => {
       if (p.kind === 'mixed') return mixedBlock(p);
-      const used = p.total ? (p.used / p.total) * 100 : 0;
-      const [label, cls] = poolHealth(p.health);
       const disks = s.disks.filter((d) => d.pool === p.name);
-      return `<h3>${esc(p.name)} <span class="pill ${cls}">${esc(label)}</span></h3>
-        <ul class="rows">
-          <li>
-            <div><div class="row-title">${t('{size} free', { size: bytes(p.free) })}</div>
-              <div class="row-sub">${esc([p.layout, p.diskCount ? t(p.diskCount === 1 ? '{n} disk' : '{n} disks', { n: p.diskCount }) : null].filter(Boolean).join(' · '))}</div></div>
-            <div class="row-side">${t('{used} of {total}', { used: bytes(p.used), total: bytes(p.total) })}</div>
-            <div class="row-bar"><div class="bar"><span class="${level(used, 80, 92)}" style="width:${used.toFixed(1)}%"></span></div>
-              <div class="row-sub">${esc(scrubText(p.scrub))}</div>
-              <div class="btn-row mx-acts" data-zp="${esc(p.name)}">
-                ${p.scrub && p.scrub.running ? `<button class="btn sm" type="button" data-zp-act="scrub-stop">${t('Stop check')}</button>` : `<button class="btn sm" type="button" data-zp-act="scrub">${t('Check now')}</button>`}
-                <button class="btn sm" type="button" data-zp-act="export">${t('Disconnect')}</button>
-                <button class="btn sm danger" type="button" data-zp-act="destroy">${t('Delete pool')}</button></div></div>
-          </li>
-          ${disks.map(diskRow).join('')}
-        </ul>`;
+      return `<section class="pool-card p${colorOf(p.name)}" data-zp="${esc(p.name)}">
+        ${poolHead(p, t('ZFS pool'), [layoutName(p.layout), p.diskCount ? t(p.diskCount === 1 ? '{n} disk' : '{n} disks', { n: p.diskCount }) : null].filter(Boolean).join(' · '))}
+        ${usage(p.used, p.total, true)}
+        <p class="pool-status">${esc(scrubText(p.scrub))}</p>
+        <div class="pool-acts">
+          ${p.scrub && p.scrub.running ? `<button class="btn sm" type="button" data-zp-act="scrub-stop">${t('Stop check')}</button>` : `<button class="btn sm" type="button" data-zp-act="scrub">${t('Check now')}</button>`}
+          <button class="btn sm" type="button" data-zp-act="export">${t('Disconnect')}</button>
+          <span class="grow"></span><button class="btn sm danger" type="button" data-zp-act="destroy">${t('Delete pool')}</button></div>
+        ${diskList(disks)}
+      </section>`;
     };
     const loose = s.disks.filter((d) => !d.pool);
     $('#winBody').innerHTML = `
@@ -2927,14 +2946,23 @@
       <section class="bays-sec" id="baySec"></section>
       ${s.zfsError ? `<p class="lead temp-bad">${t('ZFS reported an error: {error}', { error: esc(tr(s.zfsError)) })}</p>` : ''}
       ${!s.zfsError && repairLine(s.repair) ? `<p class="lead temp-warn">${esc(repairLine(s.repair))}</p>` : ''}
-      ${!s.zfsError && !s.pools.length ? `<p class="lead">${t('There is no ZFS pool yet. Click Create pool to combine your disks.')}</p>` : ''}
-      <div class="bays-head"><h3>${t('Pools')}</h3><span class="btn-row"><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm" type="button" data-pool-new>${t('Create pool')}</button></span></div>
-      <div id="poolsBox">${s.pools.map(poolBlock).join('')}</div>
-      ${loose.length ? `<h3>${t('Not in a pool')}</h3><ul class="rows">${loose.map(diskRow).join('')}</ul>` : ''}
-      <div class="bays-head"><h3>${t('Datasets')}</h3><button class="btn sm" type="button" data-open="shares">${t('Manage shared folders')}</button></div>
-      <ul class="rows">${s.datasets.map((d) => `<li>
-        <div><div class="row-title">${esc(d.name)}</div><div class="row-sub">${esc([d.mountpoint, d.compress > 1.01 ? t('compression {x}×', { x: nf.format(d.compress) }) : null].filter(Boolean).join(' · '))}</div></div>
-        <div class="row-side">${bytes(d.used)}</div></li>`).join('') || `<li><span class="muted">${t('No datasets')}</span></li>`}</ul>`;
+      <div class="section-head"><h2>${t('Pools')}</h2><span class="btn-row"><button class="btn sm" type="button" data-pool-import>${t('Import pool')}</button><button class="btn sm primary" type="button" data-pool-new>${t('Create pool')}</button></span></div>
+      <div id="poolsBox">${s.pools.map(poolBlock).join('') || `<p class="empty-card">${t('There is no pool yet. Click Create pool to combine your disks.')}</p>`}</div>
+      ${loose.length ? `<div class="section-head"><h2>${t('Disks not in a pool')}</h2></div>
+        <section class="pool-card loose"><ul class="disk-list">${loose.map((d) => diskItem(d)).join('')}</ul></section>` : ''}
+      <div class="section-head"><h2>${t('Datasets')}</h2><button class="btn sm" type="button" data-open="shares">${t('Manage shared folders')}</button></div>
+      <section class="pool-card plain"><ul class="disk-list">${s.datasets.map((d) => {
+        // A dataset shares its pool's free space: show its part of the pool, in the pool's colour.
+        const poolName = String(d.name).split('/')[0], pool = s.pools.find((x) => x.name === poolName);
+        const share = pool && pool.total ? Math.min(100, (d.used / pool.total) * 100) : null;
+        return `<li class="disk-item${pool ? ' p' + colorOf(poolName) : ''}">
+        <span class="disk-kind folder"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+        <div class="disk-main"><div class="disk-name"><b>${esc(d.name)}</b>${d.compress > 1.01 ? `<span class="pill">${esc(t('compression {x}×', { x: nf.format(d.compress) }))}</span>` : ''}</div>
+          <div class="muted small">${esc(d.mountpoint || '')}</div>
+          ${share != null ? `<div class="usage"><div class="usage-bar"><span style="width:${share.toFixed(1)}%"></span></div>
+            <div class="usage-nums"><span><b>${esc(bytes(d.used))}</b> ${t('used')}</span><span class="muted">${esc(t('{pct}% of {pool}', { pct: nf0.format(share), pool: poolName }))}</span></div></div>` : ''}</div>
+        <div class="disk-side"><b>${esc(bytes(d.used))}</b></div></li>`;
+      }).join('') || `<li class="disk-item"><span class="muted">${t('No datasets')}</span></li>`}</ul></section>`;
     mountBays($('#baySec'), s);
     $('[data-pool-new]').addEventListener('click', () => poolCreateWindow(s.bays));
     $('[data-pool-import]').addEventListener('click', () => poolImportWindow());
