@@ -240,8 +240,24 @@
   }
 
   /* ------------------------------------------------------------ notifications */
-  // The windows are modal dialogs in the top layer: the toasts are a popover, shown again for every toast so they land
-  // above the window that is open now. Each has a × to close it. Errors and long messages stay until they are closed
+  // The windows are modal dialogs: everything outside the topmost one is inert, also a popover above it (you see it, but
+  // can't click it). So the toasts live inside the topmost open modal dialog (or the body without one), and move along
+  // when a dialog opens or closes. showModal is wrapped once to know the order the dialogs opened in.
+  const modalStack = [];
+  function placeToasts() {
+    const box = $('#toasts'); if (!box) return;
+    for (let i = modalStack.length - 1; i >= 0; i--) if (!modalStack[i].open) modalStack.splice(i, 1);
+    const host = modalStack[modalStack.length - 1] || document.body;
+    if (box.parentElement !== host) host.appendChild(box); // moving a popover closes it: shown again below
+    if (box.children.length && box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
+  }
+  if (window.HTMLDialogElement && !HTMLDialogElement.prototype.showModal.majaos) {
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); };
+    HTMLDialogElement.prototype.showModal.majaos = true;
+  }
+  document.addEventListener('close', (e) => { if (e.target instanceof HTMLDialogElement) placeToasts(); }, true);
+  // Each toast has a × to close it. Errors and long messages stay until they are closed
   // (no time to read them otherwise); short confirmations go away by themselves.
   // opts.action {label, run}: a button in the message (the message then stays until it is used or closed).
   function toast(msg, bad, opts = {}) {
@@ -261,7 +277,7 @@
     $('.toast-x', el).addEventListener('click', close);
     if (opts.action) $('.toast-act', el).addEventListener('click', () => { close(); opts.action.run(); });
     box.appendChild(el);
-    if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch (e) { /* no popovers */ } }
+    placeToasts();
     if (!bad && !opts.action && text.length <= 90) setTimeout(close, 3200);
   }
 
