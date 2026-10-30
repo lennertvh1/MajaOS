@@ -3020,8 +3020,9 @@
     el.innerHTML = `${paneHint(t('Move from Unraid to MajaOS. Choose whether to connect the Unraid USB stick and disks here, or copy from a running Unraid server over the network.'))}
       <section class="pool-card plain mig-card">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/></svg></span>
-        <div class="mig-text"><b>${t('Unraid to MajaOS with USB and disks')}</b><div class="muted small">${t('Move data from an Unraid USB stick and its disks installed in this server. Choose which disks, shares, users, apps and VMs to bring into MajaOS.')}</div></div>
-        <button class="btn primary" type="button" data-mig-unraid>${t('Start')}</button>
+        <div class="mig-text"><b>${t('Migrate from Unraid to MajaOS')}</b><div class="muted small">${t('Choose how to connect to your Unraid server.')}
+          <div class="btn-row" style="margin-top:12px"><button class="btn primary" type="button" data-mig-usb>${t('USB stick and disks')}</button><button class="btn" type="button" data-mig-network>${t('Over the network')}</button></div>
+        </div></div>
       </section>
       <section class="pool-card plain mig-card mig-hardware">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3"/></svg></span>
@@ -3036,18 +3037,9 @@
           <button class="btn primary" type="button" data-mig-hardware>${t('Prepare migration')}</button>
           <p class="form-error" role="alert" data-mig-hardware-msg></p></div>
       </section>
-      <section class="pool-card plain mig-card mig-net">
-        <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>
-        <div class="mig-text"><b>${t('Unraid to MajaOS over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
-          <div class="muted small">${t('Your Unraid server keeps running; nothing has to move.')}</div>
-          <form class="mig-form" data-mig-ssh novalidate>
-            <input class="field" name="host" placeholder="${esc(t('Address, e.g. 192.168.1.10'))}" aria-label="${esc(t('Address'))}" autocomplete="off" spellcheck="false">
-            <input class="field" name="user" value="root" aria-label="${esc(t('User name'))}" autocomplete="off" spellcheck="false">
-            <input class="field" name="password" type="password" placeholder="${esc(t('Password'))}" aria-label="${esc(t('Password'))}" autocomplete="off">
-            <button class="btn primary" type="submit">${t('Connect')}</button>
-          </form><p class="form-error" role="alert"></p></div>
-      </section>`;
-    $('[data-mig-unraid]', el).addEventListener('click', () => unraidFlow(el));
+`;
+    $('[data-mig-usb]', el).addEventListener('click', () => unraidFlow(el));
+    $('[data-mig-network]', el).addEventListener('click', () => { $('[data-mig-choice]', el).hidden = false; });
     $('[data-mig-hardware]', el).addEventListener('click', () => {
       backupWindow('system');
       toast(t('Create app and VM backups on storage the new server can reach, then restore them there.'));

@@ -2921,4 +2921,8 @@ window.TB_LANG.nl = {
   "Unraid to MajaOS with USB and disks": "Van Unraid naar MajaOS met USB en schijven",
   "Move data from an Unraid USB stick and its disks installed in this server. Choose which disks, shares, users, apps and VMs to bring into MajaOS.": "Zet gegevens over van een Unraid-USB-stick en de bijbehorende schijven in deze server. Kies welke schijven, gedeelde mappen, gebruikers, apps en VM's naar MajaOS komen.",
   "Unraid to MajaOS over the network": "Van Unraid naar MajaOS via het netwerk",
+  "Migrate from Unraid to MajaOS": "Migreer van Unraid naar MajaOS",
+  "Choose how to connect to your Unraid server.": "Kies hoe je met je Unraid-server verbindt.",
+  "USB stick and disks": "USB-stick en schijven",
+  "Over the network": "Via het netwerk",
 };
