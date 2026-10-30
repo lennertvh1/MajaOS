@@ -2905,4 +2905,13 @@ window.TB_LANG.nl = {
   "You can't take away your own sign-in.": "Je kan je eigen aanmelding niet afnemen.",
   "You can't remove your own account.": "Je kan je eigen account niet verwijderen.",
   "With these users and their password you sign in to a shared folder and make backups. Tick May sign in to MajaOS to also let someone sign in here, as User (only Files) or as Administrator.": "Met deze gebruikers en hun wachtwoord meld je je aan op een gedeelde map en maak je backups. Vink Mag aanmelden op MajaOS aan om iemand ook hier te laten aanmelden, als Gebruiker (alleen Bestanden) of als Beheerder.",
+  "Move MajaOS to new hardware": "MajaOS naar nieuwe hardware verhuizen",
+  "Set up a fresh MajaOS server with new disks, then bring your apps, virtual machines and settings across.": "Installeer MajaOS op een nieuwe server met nieuwe schijven en zet daarna je apps, virtuele machines en instellingen over.",
+  "How the move works": "Zo verloopt de migratie",
+  "Install MajaOS on the new boot drive and create a pool on the new data drives.": "Installeer MajaOS op de nieuwe opstartschijf en maak een pool op de nieuwe dataschijven.",
+  "On the old server, back up apps and virtual machines to storage both servers can reach.": "Maak op de oude server een back-up van apps en virtuele machines op opslag die beide servers kunnen bereiken.",
+  "On the new server, restore those backups and set storage paths, network addresses and hardware options.": "Herstel die back-ups op de nieuwe server en stel opslagpaden, netwerkadressen en hardwareopties in.",
+  "New disks do not contain the old data automatically. Copy shared files separately and keep the old server until you have checked the new one.": "Nieuwe schijven bevatten je oude gegevens niet vanzelf. Kopieer gedeelde bestanden apart en houd de oude server bij tot je de nieuwe hebt gecontroleerd.",
+  "Prepare migration": "Migratie voorbereiden",
+  "Create app and VM backups on storage the new server can reach, then restore them there.": "Maak back-ups van apps en VM's op opslag die de nieuwe server kan bereiken en herstel ze daar.",
 };

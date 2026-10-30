@@ -3023,6 +3023,19 @@
         <div class="mig-text"><b>Unraid</b><div class="muted small">${t('Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.')}</div></div>
         <button class="btn primary" type="button" data-mig-unraid>${t('Start')}</button>
       </section>
+      <section class="pool-card plain mig-card mig-hardware">
+        <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3"/></svg></span>
+        <div class="mig-text"><b>${t('Move MajaOS to new hardware')}</b>
+          <div class="muted small">${t('Set up a fresh MajaOS server with new disks, then bring your apps, virtual machines and settings across.')}</div>
+          <details class="mig-hardware-details"><summary>${t('How the move works')}</summary>
+            <ol><li>${t('Install MajaOS on the new boot drive and create a pool on the new data drives.')}</li>
+            <li>${t('On the old server, back up apps and virtual machines to storage both servers can reach.')}</li>
+            <li>${t('On the new server, restore those backups and set storage paths, network addresses and hardware options.')}</li></ol>
+            <p class="muted small">${t('New disks do not contain the old data automatically. Copy shared files separately and keep the old server until you have checked the new one.')}</p>
+          </details>
+          <button class="btn primary" type="button" data-mig-hardware>${t('Prepare migration')}</button>
+          <p class="form-error" role="alert" data-mig-hardware-msg></p></div>
+      </section>
       <section class="pool-card plain mig-card mig-net">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>
         <div class="mig-text"><b>${t('Unraid over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
@@ -3035,6 +3048,10 @@
           </form><p class="form-error" role="alert"></p></div>
       </section>`;
     $('[data-mig-unraid]', el).addEventListener('click', () => unraidFlow(el));
+    $('[data-mig-hardware]', el).addEventListener('click', () => {
+      backupWindow('system');
+      toast(t('Create app and VM backups on storage the new server can reach, then restore them there.'));
+    });
     $('[data-mig-ssh]', el).addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.currentTarget, err = $('.mig-net .form-error', el), btn = $('[type=submit]', f);
