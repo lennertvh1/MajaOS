@@ -777,7 +777,10 @@ video.file-view { width: 100%; background: #000; }
 .minimized-windows { pointer-events: none; position: fixed; inset: auto 12px 10px; margin: 0; z-index: 10000; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 8px; padding: 8px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--glass-strong); backdrop-filter: blur(18px); box-shadow: var(--shade); }
 .minimized-windows > * { pointer-events: auto; }
 .minimized-windows[hidden] { display: none; }
-.window > .minimized-windows { position: absolute; inset: auto 12px 10px; width: auto; z-index: 10002; }
+.window:has(> .minimized-windows:not([hidden])) { overflow: visible; }
+.window > .minimized-windows { position: fixed; inset: auto 12px 10px; width: auto; z-index: 10002; }
+.window:has(> .minimized-windows:not([hidden])) .win-body { padding-bottom: 72px; }
+.window:has(> .minimized-windows:not([hidden])) .pop-body { padding-bottom: 72px; }
 .window-minimized { display: none !important; }
 .window[open] { display: flex; flex-direction: column; animation: pop .18s ease-out; }
 .window::backdrop { background: rgba(5, 10, 20, .35); backdrop-filter: blur(3px); }
