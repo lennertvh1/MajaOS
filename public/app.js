@@ -6584,6 +6584,10 @@
     rememberLoc(loc);
     paintSide(shares);
     paintChrome();
+    // A folder the account may only read (role user, lib/auth.js): no new folder, no upload. The server refuses it anyway.
+    const ro = !!(shares.find((s0) => s0.id === loc.share) || {}).readOnly;
+    $('#filesMkdir').hidden = ro; $('#filesUpload').hidden = ro;
+    document.body.classList.toggle('files-ro', ro);
     if (!shares.some((s) => s.id === loc.share)) {
       stage.innerHTML = `<p class="files-empty">${esc(t('This folder no longer exists.'))}</p>`;
       return;
@@ -7414,20 +7418,22 @@
       const rights = d.shares.map((sh) => ({ sh, ...accessOf(sh, d.groups, u.name) })).filter((x) => x.level);
       const open = opts.open === u.name;
       return `<li>
-        <div><div class="row-title">${esc(u.name)}${u.managed ? '' : ` <span class="pill">${t('already existed')}</span>`} ${u.groups.map((g) => `<span class="pill ok">${esc(g)}</span>`).join(' ')}</div>
+        <div><div class="row-title">${esc(u.name)}${u.managed ? '' : ` <span class="pill">${t('already existed')}</span>`} ${u.groups.map((g) => `<span class="pill ok">${esc(g)}</span>`).join(' ')}
+          ${u.dashboard ? `<span class="pill ${u.dashboard.role === 'admin' ? 'warn' : ''}">${esc(u.dashboard.role === 'admin' ? t('Administrator') : t('Signs in'))}</span>${u.dashboard.mfa ? ' <span class="pill ok">MFA</span>' : u.dashboard.mfaRequired ? ` <span class="pill">${t('MFA required')}</span>` : ''}${u.dashboard.mustChange ? ` <span class="pill">${t('new password at sign-in')}</span>` : ''}` : ''}</div>
           <div class="row-sub">${rights.length ? esc(rights.map((x) => x.sh.name + ' (' + t(x.level === 'rw' ? 'write' : 'read') + ')').join(', ')) : t('No access yet')}</div></div>
         <div class="row-side btn-row"><button class="btn sm" type="button" data-uedit="${esc(u.name)}" aria-expanded="${open}">${t('Permissions')}</button>
           <button class="btn sm" type="button" data-upw="${esc(u.name)}">${t('Password')}</button>
           ${u.managed ? `<button class="btn sm danger" type="button" data-udel="${esc(u.name)}">${t('Remove')}</button>` : ''}</div>
         <form class="inline-form user-edit" data-pw-form="${esc(u.name)}" hidden>
-          <input class="field" type="password" name="password" autocomplete="new-password" placeholder="${t('New password (at least 8 characters)')}" aria-label="${t('New password')}">
+          <input class="field" type="password" name="password" autocomplete="new-password" placeholder="${u.dashboard ? t('New password (at least 10 characters)') : t('New password (at least 8 characters)')}" aria-label="${t('New password')}">
+          ${u.dashboard ? `<label class="check"><input type="checkbox" name="mustChange" checked> ${t('Choose a new one at the next sign-in')}</label>` : ''}
           <button class="btn sm primary" type="submit">${t('Save')}</button></form>
         ${open ? userRightsForm(u, d) : ''}</li>`;
     };
     box.innerHTML = `
       ${d.admin ? `<div class="notice"><div><b>${esc(d.admin)}</b> <span class="pill">${t('Administrator')}</span></div>
         <span class="muted small">${t('Signs in to this dashboard and manages everything. You change the password and two-step verification under {link}.', { link: `<a href="#settings/security">${t('Security')}</a>` })}</span></div>` : ''}
-      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Users')} ${hint(t('With these users and their password you sign in to a shared folder and make backups. They can\'t sign in to the server itself or to this dashboard.'))}</h2>
+      <div class="bays-head"><h2 class="pane-title" style="margin:0">${t('Users')} ${hint(t('With these users and their password you sign in to a shared folder and make backups. Tick May sign in to MajaOS to also let someone sign in here, as User (only Files) or as Administrator.'))}</h2>
         <button class="btn sm primary" type="button" data-unew>+ ${t('User')}</button></div>
       <div id="userNew"></div>
       <ul class="rows">${d.users.map(row).join('') || `<li><span class="muted">${t('No users yet.')}</span></li>`}</ul>`;
@@ -7444,18 +7450,28 @@
     };
     $$('[data-pw-form]', box).forEach((f) => f.addEventListener('submit', async (e) => {
       e.preventDefault();
-      try { await api.post('/api/share-users/' + encodeURIComponent(f.dataset.pwForm) + '/password', { password: f.elements.password.value }); toast(t('Password of {name} changed.', { name: f.dataset.pwForm })); f.hidden = true; f.reset(); }
+      try { await api.post('/api/share-users/' + encodeURIComponent(f.dataset.pwForm) + '/password', { password: f.elements.password.value, mustChange: !!(f.elements.mustChange && f.elements.mustChange.checked) }); toast(t('Password of {name} changed.', { name: f.dataset.pwForm })); f.hidden = true; f.reset(); usersPane(el); }
       catch (ex) { toast(ex.message, true); }
     }));
     const rf = $('[data-rights-form]', box);
+    if (rf) wireDashboardFields(rf);
     if (rf) rf.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = rf.dataset.rightsForm, F = rf.elements;
+      const name = rf.dataset.rightsForm, F = rf.elements, u = d.users.find((x) => x.name === name);
       const body = { groups: d.groups.filter((g) => F['g:' + g.name].checked).map((g) => g.name), access: {} };
       d.shares.forEach((sh) => { body.access[sh.name] = F['s:' + sh.name].value; });
       const btn = $('[type=submit]', rf); btn.disabled = true;
-      try { await api.post('/api/share-users/' + encodeURIComponent(name), body); toast(t('Permissions of {name} saved.', { name })); usersPane(el, { open: name }); }
-      catch (ex) { $('.form-error', rf).textContent = ex.message; btn.disabled = false; }
+      try {
+        await api.post('/api/share-users/' + encodeURIComponent(name), body);
+        // Signing in: only when something changed.
+        const want = F.dash.checked, had = !!(u && u.dashboard);
+        const dash = { enabled: want, role: F.role.value, mustChange: F.mustChange.checked, mfaRequired: F.mfaRequired.checked, ...(F.dashPassword ? { password: F.dashPassword.value } : {}) };
+        if (want !== had || (want && (dash.role !== u.dashboard.role || dash.mustChange !== u.dashboard.mustChange || dash.mfaRequired !== u.dashboard.mfaRequired))) {
+          if (!want && !(await ask(t('Take away signing in to MajaOS from {name}? The shared folders stay as they are.', { name }), t('Take away')))) { btn.disabled = false; return; }
+          await api.post('/api/share-users/' + encodeURIComponent(name) + '/dashboard', dash);
+        }
+        toast(t('Permissions of {name} saved.', { name })); usersPane(el, { open: name });
+      } catch (ex) { $('.form-error', rf).textContent = ex.message; btn.disabled = false; }
     });
   }
 
@@ -7471,31 +7487,62 @@
           <td>${a.level ? `${t(LEVEL[a.level])} <span class="via">${esc(a.via.join(', '))}</span>` : `<span class="via">${t('No access')}</span>`}</td></tr>`; }).join('')}</tbody></table>
         <p class="muted small" style="margin-top:-4px">${t('"Together" is what the user may really do: directly or via a group, the highest permission counts. What you change here shows after saving.')}</p>`
         : `<p class="muted small">${t('No shared folders yet.')}</p>`}
+      ${dashboardFields(u.dashboard)}
       <p class="form-error" role="alert"></p>
       <div class="btn-row"><button class="btn primary" type="submit">${t('Save')}</button></div></form>`;
   }
 
+  // Sign-in to MajaOS for a user: on/off, role, a new password at the first sign-in, two-step verification required.
+  function dashboardFields(dash, { isNew = false } = {}) {
+    const on = !!dash, role = (dash && dash.role) || 'user';
+    return `<fieldset class="fld dash-fields"><span>${t('Signing in to MajaOS')} ${hint(t('Without this the user only reaches the shared folders (and backups). With it, the user also signs in here: as User only to Files, with the folders they may use; as Administrator to everything.'))}</span>
+      <label class="check"><input type="checkbox" name="dash"${on ? ' checked' : ''}> ${t('May sign in to MajaOS')}</label>
+      <div class="dash-more"${on ? '' : ' hidden'}>
+        <div class="seg" role="radiogroup" aria-label="${esc(t('Role'))}">${[['user', t('User: only Files')], ['admin', t('Administrator: everything')]].map(([k, l]) =>
+          `<button type="button" role="radio" aria-checked="${role === k ? 'true' : 'false'}" data-dash-role="${k}">${esc(l)}</button>`).join('')}</div>
+        <input type="hidden" name="role" value="${esc(role)}">
+        <label class="check"><input type="checkbox" name="mustChange"${(dash ? dash.mustChange : isNew) ? ' checked' : ''}> ${t('Choose a new password at the first sign-in')}</label>
+        <label class="check"><input type="checkbox" name="mfaRequired"${dash && dash.mfaRequired ? ' checked' : ''}> ${t('Two-step verification required')}</label>
+        ${!on && !isNew ? `<label class="fld"><span>${t('Password to sign in with')} ${hint(t('At least 10 characters. It becomes the password for the shared folders too.'))}</span><input class="field" type="password" name="dashPassword" autocomplete="new-password"></label>` : ''}
+      </div></fieldset>`;
+  }
+  function wireDashboardFields(form) {
+    form.addEventListener('change', (e) => { if (e.target.name === 'dash') $('.dash-more', form).hidden = !e.target.checked; });
+    form.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dash-role]'); if (!b) return;
+      form.elements.role.value = b.dataset.dashRole;
+      $$('[data-dash-role]', form).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    });
+  }
   function newUserForm(box, d, el) {
     box.innerHTML = `<form class="form" id="userForm" novalidate style="margin-bottom:14px">
         <div class="fld-row">
           <label class="fld"><span>${t('User name')} ${hint(t('Lowercase letters, digits, - and _.'))}</span><input class="field" name="name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="${t('e.g. lisa')}">
             </label>
-          <label class="fld"><span>${t('Password')} ${hint(t('At least 8 characters.'))}</span><input class="field" type="password" name="password" autocomplete="new-password"></label>
+          <label class="fld"><span>${t('Password')} ${hint(t('At least 8 characters; at least 10 when the user may also sign in to MajaOS.'))}</span><input class="field" type="password" name="password" autocomplete="new-password"></label>
           <label class="fld"><span>${t('Repeat password')}</span><input class="field" type="password" name="password2" autocomplete="new-password"></label>
         </div>
         ${d.groups.length ? `<fieldset class="fld"><span>${t('Groups')}</span><div class="check-grid">${d.groups.map((g) => `<label class="check"><input type="checkbox" name="g:${esc(g.name)}"> ${esc(g.name)}</label>`).join('')}</div></fieldset>` : ''}
+        ${d.shares.length ? `<fieldset class="fld"><span>${t('Permissions')} ${hint(t('Directly on a folder. Through a group comes on top of this: the highest permission counts.'))}</span>
+          <table class="rights"><thead><tr><th>${t('Shared folder')}</th><th>${t('Directly')}</th></tr></thead><tbody>
+          ${d.shares.map((sh) => `<tr><td><b>${esc(sh.name)}</b>${sh.guest ? ` <span class="pill warn">${t('guests')}</span>` : ''}</td><td>${levelSelect('s:' + sh.name, '', t('Direct permission on {name}', { name: sh.name }))}</td></tr>`).join('')}</tbody></table></fieldset>` : ''}
+        ${dashboardFields(null, { isNew: true })}
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit">${t('Add user')}</button><button class="btn" type="button" data-ucancel>${t('Cancel')}</button></div></form>`;
     const f = $('#userForm', box), F = f.elements;
+    wireDashboardFields(f);
     $('[data-ucancel]', f).addEventListener('click', () => { box.innerHTML = ''; });
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = $('.form-error', f); err.textContent = '';
       if (F.password.value !== F.password2.value) { err.textContent = t('The two passwords do not match.'); return; }
       const name = F.name.value.trim(), btn = $('[type=submit]', f); btn.disabled = true;
+      const access = Object.fromEntries(d.shares.map((sh) => [sh.name, F['s:' + sh.name].value]).filter(([, v]) => v));
+      const dashboard = F.dash.checked ? { role: F.role.value, mustChange: F.mustChange.checked, mfaRequired: F.mfaRequired.checked } : null;
+      if (dashboard && F.password.value.length < 10) { err.textContent = t('Choose a password of at least 10 characters.'); btn.disabled = false; return; }
       try {
-        await api.post('/api/share-users', { name, password: F.password.value, groups: d.groups.filter((g) => F['g:' + g.name].checked).map((g) => g.name) });
-        toast(t('User {name} added.', { name })); usersPane(el, { open: name });
+        await api.post('/api/share-users', { name, password: F.password.value, groups: d.groups.filter((g) => F['g:' + g.name].checked).map((g) => g.name), access, dashboard });
+        toast(t('User {name} added.', { name })); usersPane(el);
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
     F.name.focus();
@@ -7570,6 +7617,23 @@
   }
 
   async function securityPane(el) {
+    if (isUserRole()) {
+      el.innerHTML = `<div id="mfaBox"><p class="lead">${t('Loading…')}</p></div>
+        <h2 class="pane-title">${t('Password')} ${hint(t('The same password works for the shared folders.'))}</h2><p class="muted small" id="pwChanged"></p>
+        <form class="form" id="pwForm" style="max-width:440px">${passwordFields()}<p class="form-error" role="alert" data-pw-err></p>
+          <div class="btn-row"><button class="btn primary" type="submit">${t('Change password')}</button></div></form>`;
+      mfaSection($('#mfaBox', el));
+      const pwForm = $('#pwForm', el);
+      wirePasswordMeter(pwForm);
+      api.get('/api/mfa').then((m) => { if ($('#pwChanged', el) && m.passwordChanged) $('#pwChanged', el).textContent = t('Last changed on {date}.', { date: longDate(m.passwordChanged) }); }, () => {});
+      pwForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('button[type="submit"]', pwForm); btn.disabled = true;
+        try { await submitPassword(pwForm); toast(t('Your new password is set. Other browsers were signed out.')); securityPane(el); }
+        catch (ex) { $('[data-pw-err]', pwForm).textContent = ex.message; btn.disabled = false; }
+      });
+      return;
+    }
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
     let cur;
     try { cur = await api.get('/api/settings'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
@@ -8382,6 +8446,11 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   let pageLoaded = false;
   function route() {
+    // A user account: Files and its own Security, nothing else.
+    if (isUserRole()) {
+      if (settingsHash() && location.hash !== '#settings/security') { location.replace('#settings/security'); return; }
+      if (!settingsHash() && !location.hash.startsWith('#files')) { location.replace('#files'); return; }
+    }
     const inSettings = settingsHash();
     const view = currentView();
     const popKind = popKindOf(location.hash);
@@ -8449,7 +8518,22 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   let timers = [];
+  // An account with the role user (lib/auth.js): only Files, with the shared folders it may use, and its own password
+  // and two-step verification (Settings → Security). The rest of the dashboard isn't loaded.
+  const isUserRole = () => !!(S.config && S.config.role === 'user');
+  function userDesk() {
+    document.body.classList.add('role-user');
+    $('#loginScreen').hidden = true; setChrome(true);
+    $('#logoutBtn').hidden = false;
+    ['#powerBtn', '#feedbackBtn', '#termBtn', '#noteBtn', '#spot'].forEach((x) => { const e = $(x); if (e) e.hidden = true; });
+    timers.forEach(clearInterval); timers = [];
+    if (setWin.open) setWin.close();
+    if (!location.hash.startsWith('#files')) location.replace('#files'); // always starts in Files
+    route();
+  }
   function startDesk() {
+    if (isUserRole()) return userDesk();
+    document.body.classList.remove('role-user');
     applyExperienceLevel();
     showDesk();
     $('#demoBadge').hidden = api === realApi;
@@ -9309,7 +9393,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   let mfaPending = null, mfaRecovery = false;
   function loginStep(step) {
     const two = step === 'mfa';
-    $('#loginForm').hidden = two; $('#mfaForm').hidden = !two;
+    $('#loginForm').hidden = two; $('#mfaForm').hidden = !two; $('#loginExtra').hidden = true; $('#loginExtra').innerHTML = '';
     $('#loginTitle').textContent = two ? t('Two-step verification') : t('Welcome back');
     $('#loginSub').textContent = two ? t('Type the 6-digit code from your authenticator app.') : t('Sign in to manage your server.');
     $('#loginError').textContent = ''; $('#mfaError').textContent = '';
@@ -9332,16 +9416,74 @@ sudo ./install.sh</pre></div>`}` : '') +
     c.focus();
   }
   function shake() { const c = $('.login-card'); c.classList.remove('login-shake'); void c.offsetWidth; c.classList.add('login-shake'); }
+  // The extra steps of an account an administrator made: choose an own password, link an authenticator app (with the
+  // recovery codes after it). Each answer of the server says what comes next (nextLogin).
+  function loginExtra(kind, r) {
+    const box = $('#loginExtra');
+    $('#loginForm').hidden = true; $('#mfaForm').hidden = true; box.hidden = false;
+    const expired = (err) => { loginStep('password'); $('#loginError').textContent = err.message; };
+    if (kind === 'password') {
+      $('#loginTitle').textContent = t('Choose your own password');
+      $('#loginSub').textContent = t('Your administrator gave you a first password. Choose one only you know, of at least 10 characters.');
+      box.innerHTML = `<label for="newPw1">${t('New password')}</label><input id="newPw1" class="field" type="password" autocomplete="new-password" required>
+        <label for="newPw2">${t('Repeat password')}</label><input id="newPw2" class="field" type="password" autocomplete="new-password" required>
+        <p class="form-error" role="alert"></p><button class="btn primary login-go" type="button" data-login-next>${t('Save and continue')}</button>`;
+      $('#newPw1', box).focus();
+      const go = async () => {
+        const btn = $('[data-login-next]', box), err = $('.form-error', box); err.textContent = '';
+        if ($('#newPw1', box).value !== $('#newPw2', box).value) { err.textContent = t('The two passwords do not match.'); return; }
+        btn.disabled = true;
+        try { nextLogin(await loginApi().post('/api/login/password', { pending: r.pending, password: $('#newPw1', box).value, repeat: $('#newPw2', box).value, remember: $('#remember').checked })); }
+        catch (ex) { if (ex.data && ex.data.expired) return expired(ex); err.textContent = ex.message; shake(); btn.disabled = false; }
+      };
+      $('[data-login-next]', box).addEventListener('click', go);
+      box.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+      return;
+    }
+    if (kind === 'setup') {
+      $('#loginTitle').textContent = t('Turn on two-step verification');
+      $('#loginSub').textContent = t('Your account needs it. Scan the QR code with an authenticator app, then type the code it shows.');
+      box.innerHTML = `<div class="mfa-qr login-qr">${window.TBQR.svg(r.uri, { size: 170 })}</div>
+        <p class="muted small">${t('Can\'t scan? Type this key into the app instead:')} <code class="mfa-secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</code></p>
+        <label for="setupCode">${t('Code from your authenticator app')}</label>
+        <input id="setupCode" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required spellcheck="false">
+        <p class="form-error" role="alert"></p><button class="btn primary login-go" type="button" data-login-next>${t('Confirm')}</button>`;
+      $('#setupCode', box).focus();
+      const go = async () => {
+        const btn = $('[data-login-next]', box), err = $('.form-error', box); err.textContent = ''; btn.disabled = true;
+        try { const out = await loginApi().post('/api/login/mfa-setup', { pending: r.pending, code: $('#setupCode', box).value, remember: $('#remember').checked }); loginExtra('codes', out); }
+        catch (ex) { if (ex.data && ex.data.expired) return expired(ex); err.textContent = ex.message; shake(); btn.disabled = false; $('#setupCode', box).select(); }
+      };
+      $('[data-login-next]', box).addEventListener('click', go);
+      $('#setupCode', box).addEventListener('input', (e) => { if (/^\d{6}$/.test(e.target.value.replace(/\s/g, ''))) go(); });
+      box.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+      return;
+    }
+    // The recovery codes, once: then the dashboard.
+    $('#loginTitle').textContent = t('Two-step verification is on');
+    $('#loginSub').textContent = t('Keep these recovery codes somewhere safe. If you lose your phone, sign in with one of them. Each works once.');
+    box.innerHTML = `<ul class="recovery-list">${(r.recovery || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+      <button class="btn primary login-go" type="button" data-login-next>${t('I\'ve saved them')}</button>`;
+    $('[data-login-next]', box).addEventListener('click', () => loggedIn({ ok: true }));
+    box.onkeydown = null;
+  }
+  // What the server answered after a step: the next step, or signed in.
+  function nextLogin(r) {
+    if (r.mfa) { mfaPending = r.pending; loginStep('mfa'); return; }
+    if (r.changePassword) return loginExtra('password', r);
+    if (r.setupMfa) return loginExtra('setup', r);
+    loggedIn(r);
+  }
   function loggedIn(r) {
     if (r && r.recovery) toast(t('Signed in with a recovery code. You have {n} left.', { n: r.recoveryLeft }), r.recoveryLeft < 3);
-    if (S.config.demo) { $('#pw').value = ''; startDesk(); } else boot();
+    // The demo asks its config again: who signed in decides what the dashboard shows (role).
+    if (S.config.demo) { $('#pw').value = ''; api.get('/api/config').then((c) => { S.config = c; startDesk(); }, () => startDesk()); } else boot();
   }
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault(); $('#loginError').textContent = '';
     const btn = $('#loginForm .login-go'); btn.disabled = true;
     try {
-      const r = await loginApi().post('/api/login', { user: $('#user').value.trim(), password: $('#pw').value, remember: $('#remember').checked });
-      if (r.mfa) { mfaPending = r.pending; loginStep('mfa'); } else loggedIn(r);
+      nextLogin(await loginApi().post('/api/login', { user: $('#user').value.trim(), password: $('#pw').value, remember: $('#remember').checked }));
     } catch (err) { $('#loginError').textContent = err.message; shake(); $('#pw').select(); }
     finally { btn.disabled = false; }
   });
@@ -9349,7 +9491,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     e.preventDefault();
     const btn = $('#mfaForm .login-go'); if (btn.disabled) return;
     $('#mfaError').textContent = ''; btn.disabled = true;
-    try { loggedIn(await loginApi().post('/api/login/mfa', { pending: mfaPending, code: $('#mfaCode').value, remember: $('#remember').checked })); }
+    try { nextLogin(await loginApi().post('/api/login/mfa', { pending: mfaPending, code: $('#mfaCode').value, remember: $('#remember').checked })); }
     catch (err) {
       if (err.expired || (err.data && err.data.expired)) { loginStep('password'); $('#loginError').textContent = err.message; return; }
       $('#mfaError').textContent = err.message; shake(); $('#mfaCode').select();

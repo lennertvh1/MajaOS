@@ -244,46 +244,112 @@
     for (let d = -1; d <= 1; d++) if (base + d > last && (await hotp(secret, base + d)) === c) return base + d;
     return null;
   }
-  async function mfaCheck(code) {
-    const ctr = await totpCheck(mfa.secret, code, mfa.lastCounter);
-    if (ctr != null) { mfa.lastCounter = ctr; return { ok: true }; }
-    const norm = String(code || '').toLowerCase().replace(/[^a-z0-9]/g, ''), i = mfa.recovery.findIndex((x) => x.replace('-', '') === norm);
-    if (norm.length === 10 && i >= 0) { mfa.recovery.splice(i, 1); return { ok: true, recovery: true, recoveryLeft: mfa.recovery.length }; }
+  async function mfaCheck(code, m = mfa) {
+    const ctr = await totpCheck(m.secret, code, m.lastCounter);
+    if (ctr != null) { m.lastCounter = ctr; return { ok: true }; }
+    const norm = String(code || '').toLowerCase().replace(/[^a-z0-9]/g, ''), i = m.recovery.findIndex((x) => x.replace('-', '') === norm);
+    if (norm.length === 10 && i >= 0) { m.recovery.splice(i, 1); return { ok: true, recovery: true, recoveryLeft: m.recovery.length }; }
     return { ok: false };
+  }
+  // Other accounts (lib/auth.js accounts): users of Settings → Users that may also sign in, with a role.
+  const demoAccounts = {}; // name → {role, password, mustChange, mfaRequired, mfa: {enabled, secret, setup, recovery, lastCounter, since}}
+  let demoWho = { name: null, role: 'owner' }; // who is signed in
+  let demoPend = null; // {id, who, step: mfa|password|setup, until, tries}
+  const newMfa = () => ({ enabled: false, secret: null, setup: null, recovery: [], lastCounter: -1, since: null });
+  const accountView = (name) => { const a = demoAccounts[name]; return a ? { name, role: a.role, mustChange: !!a.mustChange, mfaRequired: !!a.mfaRequired, mfa: !!a.mfa.enabled, created: a.created, passwordChanged: a.changed } : null; };
+  const ownMfa = () => (demoWho.role === 'owner' ? mfa : demoAccounts[demoWho.name].mfa);
+  const pend = (who, step) => { demoPend = { id: Math.random().toString(36).slice(2), who, step, until: Date.now() + 600000, tries: 0 }; return demoPend.id; };
+  // After a step: the next one, or signed in (like next() in server.js).
+  function nextStep(who, extra = {}) {
+    const a = who ? demoAccounts[who] : null;
+    if (a && a.mustChange) return { changePassword: true, pending: pend(who, 'password'), ...extra };
+    if (a && a.mfaRequired && !a.mfa.enabled) {
+      a.mfa.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
+      return { setupMfa: true, pending: pend(who, 'setup'), secret: a.mfa.setup, uri: `otpauth://totp/MajaOS:${who}?secret=${a.mfa.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30`, ...extra };
+    }
+    demoWho = a ? { name: who, role: a.role } : { name: acct.user, role: 'owner' };
+    return { ok: true, ...extra };
+  }
+  const expired = () => Object.assign(err('Your sign-in expired. Type your password again.', 401), { expired: true, data: { expired: true } });
+  // What a user account may do here (the same as USER_ROUTES in server.js).
+  const USER_ROUTES = /^\/api\/(config|logout|login(\/.*)?|mfa(\/(setup|enable|disable|recovery))?|password|shares|shares\/[^/]+\/files|files\/locate)(\?.*)?$/;
+  function demoAccessFor(name) {
+    const out = {};
+    shareList.forEach((x) => { const l = shareEffective(x)[name] || (x.guest ? 'ro' : null); if (l) out[x.name] = l; });
+    return out;
+  }
+  function userGate(method, path) {
+    if (demoWho.role !== 'user') return;
+    if (!USER_ROUTES.test(path)) throw err('Your account can\'t do this. Ask an administrator.', 403);
+    const m = path.match(/^\/api\/shares\/([^/?]+)\/files/);
+    if (m) {
+      const level = demoAccessFor(demoWho.name)[decodeURIComponent(m[1])];
+      if (!level) throw err('This folder doesn\'t exist, or you have no access to it.', 404);
+      if (method !== 'GET' && level !== 'rw') throw err('You may only read this folder.', 403);
+    }
   }
   async function authPost(path, body) {
     if (path === '/api/login') {
-      const pwOk = String(body.password || '') === DEMO_PW || (acct.password && body.password === acct.password);
-      if (!pwOk || String(body.user || '').trim().toLowerCase() !== acct.user) { await wait(800); throw err('Wrong user name or password', 401); }
-      if (mfa.enabled) { mfa.pending = { id: Math.random().toString(36).slice(2), until: Date.now() + 300000, tries: 0 }; return { mfa: true, pending: mfa.pending.id }; }
-      return { ok: true };
+      const name = String(body.user || '').trim().toLowerCase(), a = demoAccounts[name];
+      let who = null;
+      if (a) {
+        if (String(body.password || '') !== a.password) { await wait(800); throw err('Wrong user name or password', 401); }
+        who = name;
+      } else {
+        const pwOk = String(body.password || '') === DEMO_PW || (acct.password && body.password === acct.password);
+        if (!pwOk || name !== acct.user) { await wait(800); throw err('Wrong user name or password', 401); }
+      }
+      if ((who ? a.mfa : mfa).enabled) return { mfa: true, pending: pend(who, 'mfa') };
+      return nextStep(who);
     }
     if (path === '/api/login/mfa') {
-      const p = mfa.pending;
-      if (!p || p.id !== body.pending || p.until < Date.now()) throw Object.assign(err('Your sign-in expired. Type your password again.', 401), { expired: true });
-      const r = await mfaCheck(body.code);
-      if (!r.ok) { if (++p.tries >= 5) mfa.pending = null; await wait(800); throw err('That code is not correct.', 401); }
-      mfa.pending = null;
-      return { ok: true, recovery: !!r.recovery, recoveryLeft: r.recoveryLeft };
+      const p = demoPend;
+      if (!p || p.id !== body.pending || p.until < Date.now() || p.step !== 'mfa') throw expired();
+      const r = await mfaCheck(body.code, p.who ? demoAccounts[p.who].mfa : mfa);
+      if (!r.ok) { if (++p.tries >= 5) demoPend = null; await wait(800); throw err('That code is not correct.', 401); }
+      demoPend = null;
+      return nextStep(p.who, { recovery: !!r.recovery, recoveryLeft: r.recoveryLeft });
     }
-    const action = path.slice('/api/mfa/'.length);
-    if (action === 'enable') {
-      if (!mfa.setup) throw err('Linking took too long. Start again.', 410);
-      const ctr = await totpCheck(mfa.setup, body.code);
+    if (path === '/api/login/password' || path === '/api/login/mfa-setup') {
+      const p = demoPend;
+      if (!p || p.id !== body.pending || p.until < Date.now() || p.step !== (path === '/api/login/password' ? 'password' : 'setup')) throw expired();
+      const a = demoAccounts[p.who];
+      if (path === '/api/login/password') {
+        if (body.password !== body.repeat) throw err('The two passwords do not match.');
+        if (String(body.password || '').length < 10) throw err('Choose a password of at least 10 characters.');
+        if (body.password === a.password) throw err('Choose a password that is different from the old one.');
+        Object.assign(a, { password: body.password, mustChange: false, changed: new Date().toISOString() });
+        demoPend = null;
+        return nextStep(p.who);
+      }
+      const ctr = await totpCheck(a.mfa.setup, body.code);
       if (ctr == null) throw err('That code is not correct. Check the clock on your phone and type the code the app shows now.');
       const codes = newCodes();
-      Object.assign(mfa, { enabled: true, secret: mfa.setup, setup: null, recovery: codes.slice(), lastCounter: ctr, since: new Date().toISOString() });
+      Object.assign(a.mfa, { enabled: true, secret: a.mfa.setup, setup: null, recovery: codes.slice(), lastCounter: ctr, since: new Date().toISOString() });
+      demoPend = null;
+      demoWho = { name: p.who, role: a.role };
+      return { ok: true, recovery: codes };
+    }
+    const action = path.slice('/api/mfa/'.length), m = ownMfa();
+    const pwOk = demoWho.role === 'owner' ? String(body.password || '') === DEMO_PW : body.password === demoAccounts[demoWho.name].password;
+    if (action === 'enable') {
+      if (!m.setup) throw err('Linking took too long. Start again.', 410);
+      const ctr = await totpCheck(m.setup, body.code);
+      if (ctr == null) throw err('That code is not correct. Check the clock on your phone and type the code the app shows now.');
+      const codes = newCodes();
+      Object.assign(m, { enabled: true, secret: m.setup, setup: null, recovery: codes.slice(), lastCounter: ctr, since: new Date().toISOString() });
       return { recovery: codes };
     }
-    if (String(body.password || '') !== DEMO_PW) { await wait(800); throw err('Wrong password', 401); }
+    if (!pwOk) { await wait(800); throw err('Wrong password', 401); }
     if (action === 'setup') {
-      if (mfa.enabled) throw err('Two-step verification is already on. Turn it off first to link again.', 409);
-      mfa.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
-      return { secret: mfa.setup, uri: `otpauth://totp/MajaOS:demo?secret=${mfa.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30` };
+      if (m.enabled) throw err('Two-step verification is already on. Turn it off first to link again.', 409);
+      m.setup = b32enc(crypto.getRandomValues(new Uint8Array(20)));
+      return { secret: m.setup, uri: `otpauth://totp/MajaOS:${demoWho.name || 'demo'}?secret=${m.setup}&issuer=MajaOS&algorithm=SHA1&digits=6&period=30` };
     }
-    if (!(await mfaCheck(body.code)).ok) { await wait(800); throw err('That code is not correct.', 401); }
-    if (action === 'disable') { Object.assign(mfa, { enabled: false, secret: null, recovery: [], lastCounter: -1, since: null }); return { ok: true }; }
-    if (action === 'recovery') { mfa.recovery = newCodes(); return { recovery: mfa.recovery.slice() }; }
+    if (action === 'disable' && demoWho.role !== 'owner' && demoAccounts[demoWho.name].mfaRequired) throw err('Two-step verification is required for your account. Ask an administrator to change that first.', 409);
+    if (!(await mfaCheck(body.code, m)).ok) { await wait(800); throw err('That code is not correct.', 401); }
+    if (action === 'disable') { Object.assign(m, { enabled: false, secret: null, recovery: [], lastCounter: -1, since: null }); return { ok: true }; }
+    if (action === 'recovery') { m.recovery = newCodes(); return { recovery: m.recovery.slice() }; }
     throw err('Unknown endpoint', 404);
   }
   const demoLang = () => { try { return localStorage.getItem('tb-lang') || 'en'; } catch (e) { return 'en'; } };
@@ -828,10 +894,15 @@
   const shareRoots = () => [{ name: 'tank', mountpoint: '/tank' }, { name: 'fast', mountpoint: '/fast' }]
     .concat(datasets.map((x) => ({ name: x.name, mountpoint: x.mountpoint }))).filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
   function sharesGet() {
+    if (demoWho.role === 'user') {
+      const mine = demoAccessFor(demoWho.name);
+      return { installed: true, running: true, shares: [], users: [], groups: [], roots: [], admin: null,
+        places: filePlaces().filter((x) => x.kind === 'share' && mine[x.id]).map((x) => ({ ...x, readOnly: mine[x.id] !== 'rw' })) };
+    }
     return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), places: filePlaces(), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
       connections: { total: 2, perShare: { media: 2, photos: 1 } }, admin: acct.user,
       users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => shareEffective(x)[name]).map((x) => x.name),
-        groups: shareGroups.filter((g) => g.members.includes(name)).map((g) => g.name) })) };
+        groups: shareGroups.filter((g) => g.members.includes(name)).map((g) => g.name), dashboard: accountView(name) })) };
   }
   function shareSave(b, original) {
     const name = String(b.name || '').trim();
@@ -858,9 +929,25 @@
     if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(name)) throw err('Choose a user name with lowercase letters, digits, - or _ (at most 32 characters), e.g. lisa.');
     if (String(b.password || '').length < 8) throw err('Choose a password of at least 8 characters.');
     if (shareUsers.includes(name) || ['root', 'lennert', 'nobody'].includes(name)) throw err('The user ' + name + ' already exists on the server. Choose another name.', 409);
+    if (b.dashboard) {
+      if (String(b.password).length < 10) throw err('Choose a password of at least 10 characters.');
+      if (!['admin', 'user'].includes(b.dashboard.role || 'user')) throw err('Choose the role Administrator or User.');
+    }
     shareUsers.push(name);
     (Array.isArray(b.groups) ? b.groups : []).forEach((g) => { const gr = shareGroups.find((x) => x.name === g); if (gr && !gr.members.includes(name)) gr.members.push(name); });
-    return { name };
+    if (b.access && Object.keys(b.access).length) shareUserAccess(name, { groups: b.groups || [], access: b.access });
+    if (b.dashboard) demoAccounts[name] = { role: b.dashboard.role || 'user', password: b.password, mustChange: !!b.dashboard.mustChange, mfaRequired: !!b.dashboard.mfaRequired, mfa: newMfa(), created: new Date().toISOString(), changed: new Date().toISOString() };
+    return { name, dashboard: accountView(name) };
+  }
+  function shareUserDashboard(name, b) {
+    if (!shareUsers.includes(name)) throw err('This user no longer exists.', 404);
+    if (b.enabled === false) { delete demoAccounts[name]; return { removed: true, dashboard: null }; }
+    if (!['admin', 'user'].includes(b.role || 'user')) throw err('Choose the role Administrator or User.');
+    const a = demoAccounts[name];
+    if (a) { Object.assign(a, { role: b.role || a.role, mustChange: !!b.mustChange, mfaRequired: !!b.mfaRequired }); return { dashboard: accountView(name) }; }
+    if (String(b.password || '').length < 10) throw err('Choose a password to sign in with (at least 10 characters).');
+    demoAccounts[name] = { role: b.role || 'user', password: b.password, mustChange: !!b.mustChange, mfaRequired: !!b.mfaRequired, mfa: newMfa(), created: new Date().toISOString(), changed: new Date().toISOString() };
+    return { dashboard: accountView(name) };
   }
   function shareUserDelete(name) {
     const without = shareGroups.map((g) => ({ ...g, members: g.members.filter((m) => m !== name) }));
@@ -868,7 +955,7 @@
     if (only.length) throw err(name + ' is the only one with access to ' + (only.join(', ')) + '. Give someone else access first, or delete that shared folder.', 409);
     shareList.forEach((x) => { delete x.users[name]; });
     shareGroups.forEach((g) => { g.members = g.members.filter((m) => m !== name); });
-    shareUsers.splice(shareUsers.indexOf(name), 1); return { removed: name };
+    shareUsers.splice(shareUsers.indexOf(name), 1); delete demoAccounts[name]; return { removed: name };
   }
   function shareUserAccess(name, b) {
     if (!shareUsers.includes(name)) throw err('This user no longer exists.', 404);
@@ -2683,7 +2770,8 @@
   async function get(path) {
     await wait(rnd(120, 300));
     { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
-    if (path === '/api/config') return { demo: true, needsLogin: false, ollama: demoAiCfg().provider === 'ollama', language: demoLang(), clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
+    userGate('GET', path);
+    if (path === '/api/config') return { account: demoWho.name || acct.user, role: demoWho.role, demo: true, needsLogin: false, ollama: demoAiCfg().provider === 'ollama', language: demoLang(), clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !onbDone(), setup: !onbDone(), loginUser: true };
     if (path === '/api/remote') return demoRemoteView();
     if (path === '/api/share-links') return { links: demoLinks.filter((row) => !row.expires || row.expires > Date.now()).map(demoLinkUrl) };
     if (path === '/api/install/disks') return copy(instDisks);
@@ -2718,7 +2806,7 @@
     if (path === '/api/update/progress') return updProgress();
     if (path === '/api/system-updates') { await wait(rnd(300, 700)); return debStatus(); }
     if (path === '/api/system-updates/progress') return debProgress();
-    if (path === '/api/mfa') return { enabled: mfa.enabled, since: mfa.since, recoveryLeft: mfa.recovery.length, available: true, demoPassword: DEMO_PW, passwordChanged: onb.passwordChanged };
+    if (path === '/api/mfa') { const m = ownMfa(); return { enabled: m.enabled, since: m.since, recoveryLeft: m.recovery.length, available: true, demoPassword: DEMO_PW, passwordChanged: demoWho.role === 'owner' ? onb.passwordChanged : demoAccounts[demoWho.name].changed, required: demoWho.role !== 'owner' && !!demoAccounts[demoWho.name].mfaRequired }; }
     if (path === '/api/about') return demoAbout();
     if (path === '/api/network') { tickNet(); return copy(net); }
     if (path === '/api/docker-networks') return dnetList();
@@ -2794,6 +2882,7 @@
   }
 
   async function post(path, body = {}) {
+    userGate('POST', path);
     if (path === '/api/terminal/run') {
       await wait(200);
       if (!body.command || !String(body.command).trim()) throw err('Type a command.');
@@ -2817,10 +2906,18 @@
     if (path === '/api/share-links') { await wait(200); return demoLinkCreate(body); }
     if (path.includes('/snapshots')) { await wait(rnd(800, 1600)); const r = snapRoute('POST', path, body); if (r !== undefined) return r; }
     if (path.startsWith('/api/sysbackups')) { await wait(rnd(200, 500)); const r = sysRoute('POST', path, body); if (r !== undefined) return r; }
-    if (path === '/api/login' || path === '/api/login/mfa' || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }
+    if (path.startsWith('/api/login') || path.startsWith('/api/mfa/')) { await wait(rnd(150, 300)); return authPost(path, body); }
     if (path === '/api/datetime') { await wait(rnd(300, 600)); return dtSet(body); }
     if (path === '/api/onboarding/finish') { onbSet(true); return { done: true, finished: new Date().toISOString(), skipped: !!body.skipped }; }
     if (path === '/api/onboarding/reset') { onbSet(false); return { done: false }; }
+    if (path === '/api/password' && demoWho.role !== 'owner') {
+      await wait(rnd(300, 600));
+      const a = demoAccounts[demoWho.name];
+      if (body.current !== a.password) throw err('Your current password is not correct.', 401);
+      if (String(body.password || '').length < 10) throw err('Choose a password of at least 10 characters.');
+      Object.assign(a, { password: body.password, changed: new Date().toISOString() });
+      return { ok: true, changed: a.changed };
+    }
     if (path === '/api/password') { await wait(rnd(300, 600)); return demoPassword(body); }
     if (path === '/api/mcp/token') {
       await wait(200);
@@ -2902,7 +2999,14 @@
     if (sum) { await wait(rnd(300, 600)); return shareUserAccess(decodeURIComponent(sum[1]), body); }
     if (path === '/api/system/power') { if (body.action !== 'reboot' && body.action !== 'shutdown') throw err('Choose restart or shut down.'); return { ok: true, action: body.action }; }
     const pwm = path.match(/^\/api\/share-users\/([^/]+)\/password$/);
-    if (pwm) { if (String(body.password || '').length < 8) throw err('Choose a password of at least 8 characters.'); return { ok: true }; }
+    if (pwm) {
+      const name = decodeURIComponent(pwm[1]), acc = demoAccounts[name];
+      if (String(body.password || '').length < (acc ? 10 : 8)) throw err(acc ? 'Choose a password of at least 10 characters.' : 'Choose a password of at least 8 characters.');
+      if (acc) Object.assign(acc, { password: body.password, mustChange: !!body.mustChange, changed: new Date().toISOString() });
+      return { ok: true };
+    }
+    const dsh = path.match(/^\/api\/share-users\/([^/]+)\/dashboard$/);
+    if (dsh) { await wait(300); return shareUserDashboard(decodeURIComponent(dsh[1]), body); }
     if (path === '/api/apps/custom/inspect') { await wait(rnd(500, 900)); return demoInspect(body.image); }
     if (path === '/api/apps/custom') { await wait(rnd(300, 600)); return demoInstallCustom(body); }
     if (path === '/api/apps/draft') { await wait(rnd(250, 500)); return demoDraft(body); }
@@ -3049,11 +3153,12 @@
       else { md.loaded = false; md.vram = null; }
       return { ok: true };
     }
-    if (path === '/api/logout') return { ok: true };
+    if (path === '/api/logout') { demoWho = { name: null, role: 'owner' }; return { ok: true }; }
     throw err('Unknown endpoint', 404);
   }
 
   async function del(path) {
+    userGate('DELETE', path);
     await wait(400);
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('DELETE', path); if (r !== undefined) return r; }
     if (path.startsWith('/api/pools/')) { const u = new URL(path, 'http://x'); const r = zpRoute('DELETE', u.pathname, null, u.searchParams); if (r !== undefined) return r; }
@@ -3141,6 +3246,7 @@
   }
 
   async function put(path, body) {
+    userGate('PUT', path);
     await wait(rnd(80, 220));
     const q = parseFilesApi(path);
     if (!q) throw err('Unknown endpoint', 404);
@@ -3148,6 +3254,7 @@
   }
   // An upload with progress: about 60 MB/s, at most 6 seconds per file.
   function upload(path, file, { onProgress = () => {}, signal } = {}) {
+    try { userGate('PUT', path); } catch (e) { return Promise.reject(e); }
     return new Promise((resolve, reject) => {
       const size = file.size || 0, secs = Math.min(6, Math.max(0.6, size / 60e6)), start = Date.now();
       const timer = setInterval(() => {

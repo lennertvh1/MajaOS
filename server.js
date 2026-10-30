@@ -153,8 +153,9 @@ async function readBody(req, limit = 1e6) {
 
 function sign(value) { return crypto.createHmac('sha256', CFG.secret).update(value).digest('hex'); }
 const SESSION_MS = 30 * 24 * 3600 * 1000;
-// ok.<issued>.<id>.<signature>: the id lets Sign out refuse this one cookie afterwards.
-function makeToken() { const v = 'ok.' + Date.now() + '.' + crypto.randomBytes(9).toString('base64url'); return v + '.' + sign(v); }
+// ok.<issued>.<id>[.<account>].<signature>: the id lets Sign out refuse this one cookie afterwards; without an account
+// it is the owner's (the first account, and every cookie from before there were more).
+function makeToken(user = '') { const v = 'ok.' + Date.now() + '.' + crypto.randomBytes(9).toString('base64url') + (user ? '.' + user : ''); return v + '.' + sign(v); }
 function readToken(tok) {
   if (!tok) return null;
   const i = tok.lastIndexOf('.');
@@ -162,13 +163,17 @@ function readToken(tok) {
   const v = tok.slice(0, i), s = tok.slice(i + 1);
   const expected = sign(v);
   if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return null;
-  const [, issued, id] = v.split('.');
-  return { issued: Number(issued), id: id || '' };
+  const [, issued, id, user] = v.split('.');
+  return { issued: Number(issued), id: id || '', user: user || null };
 }
+// Who a cookie belongs to: {name, role} (owner, admin or user), or null. Valid for 30 days, not from before that
+// account's last password change or two-step verification, not signed out, and the account must still exist.
 function validToken(tok) {
   const t = readToken(tok);
-  // Valid for 30 days, not from before the last password change or two-step verification, and not signed out.
-  return !!t && Date.now() - t.issued < SESSION_MS && t.issued >= auth.sessionsAfter() && !auth.isRevoked(t.id);
+  if (!t || Date.now() - t.issued >= SESSION_MS || auth.isRevoked(t.id) || t.issued < auth.sessionsAfter(t.user)) return null;
+  if (!t.user) return { name: auth.userName(), role: 'owner' };
+  const a = auth.account(t.user);
+  return a ? { name: a.name, role: a.role } : null;
 }
 function cookies(req) {
   const out = {};
@@ -180,7 +185,13 @@ function cookies(req) {
 // An account (own password) or APP_PASSWORD from older installs. Without both: create an account first (needsSetup).
 const passwordEnabled = () => !!CFG.password || auth.hasPassword();
 const needsSetup = () => !CFG.demo && !passwordEnabled();
-function isAuthed(req) { return passwordEnabled() ? validToken(cookies(req).tb_session) : CFG.demo; }
+function session(req) { return passwordEnabled() ? validToken(cookies(req).tb_session) : CFG.demo ? { name: 'demo', role: 'owner' } : null; }
+function isAuthed(req) { return !!session(req); }
+// The password of whoever is signed in (an account other than the owner has its own).
+function checkPw(req, pw) {
+  const who = session(req);
+  return who && who.role !== 'owner' ? auth.verifyAccount(who.name, pw) : checkPassword(pw);
+}
 // Check the password again (sign in, terminal, making security less strict).
 // An own password (the account, or chosen in Security) replaces APP_PASSWORD.
 function checkPassword(pw) {
@@ -192,8 +203,8 @@ function checkPassword(pw) {
 // Without "Stay signed in" the cookie disappears when the browser closes.
 // Secure when the browser came over https (directly, or through a reverse proxy that says so).
 const viaHttps = (req) => !!(req.socket.encrypted || /^https$/i.test(String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()));
-function setSession(res, remember) {
-  res.setHeader('Set-Cookie', `tb_session=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/` + (remember === false ? '' : '; Max-Age=2592000') + (viaHttps(res.req) ? '; Secure' : ''));
+function setSession(res, remember, user = '') {
+  res.setHeader('Set-Cookie', `tb_session=${encodeURIComponent(makeToken(user))}; HttpOnly; SameSite=Strict; Path=/` + (remember === false ? '' : '; Max-Age=2592000') + (viaHttps(res.req) ? '; Secure' : ''));
 }
 const slow = () => new Promise((r) => setTimeout(r, 800)); // slow down guessing
 const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
@@ -240,7 +251,8 @@ async function handleApi(req, res, url) {
       loginUser: true, // always a user name; older installs keep the one typed at their first sign-in
       language: settings.getSettings().language, clock: settings.getSettings().clock, experience: settings.getSettings().experience, port: settings.listenPort(),
       terminal: settings.getSettings().terminal, terminalPassword: settings.getSettings().terminalPassword && passwordEnabled(),
-      onboarding: needsSetup() || (isAuthed(req) && !onboarding.getState().done), // show the welcome wizard
+      onboarding: needsSetup() || (!!session(req) && session(req).role === 'owner' && !onboarding.getState().done), // show the welcome wizard
+      account: session(req) ? session(req).name : null, role: session(req) ? session(req).role : null,
     });
   }
   // First time: create an account (user name + password). Only possible while there is none yet.
@@ -257,24 +269,58 @@ async function handleApi(req, res, url) {
     console.log(`Account ${r.user} created from ${clientIp(req)}.`);
     return sendJson(res, 200, r);
   }
-  // Sign in: first the password, then (if two-step verification is on) a code from the app or a recovery code.
-  if ((p === '/api/login' || p === '/api/login/mfa') && method === 'POST') {
+  // Sign in: first the password, then (if two-step verification is on) a code from the app or a recovery code. An
+  // account an administrator made can have two more steps first: choose its own password (mustChange), and link an
+  // authenticator app (mfaRequired). Each step answers with the next one, or with the cookie.
+  if (/^\/api\/login(\/(mfa|password|mfa-setup))?$/.test(p) && method === 'POST') {
     const ip = clientIp(req), body = await readBody(req);
     if (auth.lockedFor(ip)) return sendJson(res, 429, { error: 'Too many wrong attempts. Wait 5 minutes and try again.' });
+    const label = (who) => (who || auth.userName() || 'admin') + '@' + os.hostname();
+    // What comes after a step for this account (who = null: the owner).
+    const next = (who, extra = {}) => {
+      const a = who ? auth.account(who) : null;
+      if (a && a.mustChange) return sendJson(res, 200, { changePassword: true, pending: auth.newPending(Date.now(), { who, step: 'password' }), ...extra });
+      if (a && a.mfaRequired && !auth.mfaEnabled(who)) {
+        return sendJson(res, 200, { setupMfa: true, pending: auth.newPending(Date.now(), { who, step: 'setup' }), ...auth.beginSetup(label(who), who), ...extra });
+      }
+      auth.succeeded(ip); setSession(res, body.remember, who || '');
+      return sendJson(res, 200, { ok: true, ...extra });
+    };
     if (p === '/api/login') {
       if (needsSetup()) return sendJson(res, 409, { error: 'There is no account yet. Create one first.', setup: true });
-      if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
-      auth.claimUser(body.user);
-      if (auth.mfaEnabled()) return sendJson(res, 200, { mfa: true, pending: auth.newPending() });
-    } else {
+      const name = String(body.user || '').trim().toLowerCase();
+      let who;
+      if (auth.account(name)) {
+        if (!auth.verifyAccount(name, body.password)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
+        who = name;
+      } else {
+        if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
+        auth.claimUser(body.user);
+        who = null;
+      }
+      if (auth.mfaEnabled(who)) return sendJson(res, 200, { mfa: true, pending: auth.newPending(Date.now(), { who, step: 'mfa' }) });
+      return next(who);
+    }
+    if (p === '/api/login/mfa') {
       const r = auth.usePending(body.pending, body.code);
       if (r.result === 'expired') return sendJson(res, 401, { error: 'Your sign-in expired. Type your password again.', expired: true });
       if (r.result !== 'ok') { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
-      auth.succeeded(ip); setSession(res, body.remember);
-      return sendJson(res, 200, { ok: true, recovery: !!r.recovery, recoveryLeft: r.recoveryLeft });
+      return next(r.who, { recovery: !!r.recovery, recoveryLeft: r.recoveryLeft });
     }
-    auth.succeeded(ip); setSession(res, body.remember);
-    return sendJson(res, 200, { ok: true });
+    const pend = auth.peekPending(body.pending);
+    if (!pend || pend.step !== (p === '/api/login/password' ? 'password' : 'setup')) return sendJson(res, 401, { error: 'Your sign-in expired. Type your password again.', expired: true });
+    if (p === '/api/login/password') {
+      if (body.password !== body.repeat) return sendJson(res, 400, { error: 'The two passwords do not match.' });
+      auth.setAccountPassword(pend.who, body.password);
+      // The same password for the shared folders, so there is one to remember.
+      await shares.setPassword(pend.who, body.password).catch((e) => console.error(`Samba password of ${pend.who}: ${e.message}`));
+      auth.dropPending(body.pending);
+      return next(pend.who);
+    }
+    const out = auth.finishSetup(body.code, Date.now(), pend.who); // throws on a wrong code: the step stays
+    auth.dropPending(body.pending);
+    auth.succeeded(ip); setSession(res, body.remember, pend.who || '');
+    return sendJson(res, 200, { ok: true, recovery: out.recovery });
   }
   if (p === '/api/logout' && method === 'POST') {
     const t = readToken(cookies(req).tb_session);
@@ -305,8 +351,13 @@ async function handleApi(req, res, url) {
     const got = await shortcuts.fetchFavicon(shortcuts.normalizeUrl((await readBody(req)).url));
     return sendJson(res, 200, { icon: got ? 'data:' + got.type + ';base64,' + got.buf.toString('base64') : null });
   }
-  if (!isAuthed(req)) return sendJson(res, 401, { error: 'Not signed in' });
+  const who = session(req);
+  if (!who) return sendJson(res, 401, { error: 'Not signed in' });
   if (CFG.demo) return sendJson(res, 409, { error: 'Demo mode: the browser uses sample data.' });
+  // An account with the role user: Files on the shared folders it may use, and its own password and two-step
+  // verification. Everything else is refused here, before any route.
+  const USER_ROUTES = /^\/api\/(mfa(\/(setup|enable|disable|recovery))?|password|shares|shares\/[^/]+\/files|files\/locate)$/;
+  if (who.role === 'user' && !USER_ROUTES.test(p)) return sendJson(res, 403, { error: 'Your account can\'t do this. Ask an administrator.' });
 
   // Protection against CSRF: requests that change things must come from the same origin.
   if (method !== 'GET') {
@@ -498,20 +549,22 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, await terminal.runCommand(body.command, { timeout: body.timeout }));
   }
   // Manage two-step verification (Settings → Security). Password needed to start, password + code to turn it off.
-  if (p === '/api/mfa' && method === 'GET') return sendJson(res, 200, { ...auth.status(), available: passwordEnabled(), passwordChanged: auth.passwordChanged() });
+  const own = who.role === 'owner' ? null : who.name; // whose two-step verification and password
+  if (p === '/api/mfa' && method === 'GET') return sendJson(res, 200, { ...auth.status(own), available: passwordEnabled(), passwordChanged: own ? (auth.account(own) || {}).password?.changed || null : auth.passwordChanged(), required: own ? !!(auth.account(own) || {}).mfaRequired : false });
   if (p.startsWith('/api/mfa/') && method === 'POST') {
     if (!passwordEnabled()) return sendJson(res, 409, { error: 'Set a password (APP_PASSWORD) first to use two-step verification.' });
     const body = await readBody(req), action = p.slice('/api/mfa/'.length);
     if (action === 'enable') {
-      const out = auth.finishSetup(body.code);
-      setSession(res, true); // other sessions are now signed out, this one stays signed in
+      const out = auth.finishSetup(body.code, Date.now(), own);
+      setSession(res, true, own || ''); // other sessions are now signed out, this one stays signed in
       return sendJson(res, 200, out);
     }
     if (!['setup', 'disable', 'recovery'].includes(action)) return sendJson(res, 404, { error: 'Not found' });
-    if (!checkPassword(body.password)) { await slow(); return sendJson(res, 401, { error: 'Wrong password' }); }
-    if (action === 'setup') return sendJson(res, 200, auth.beginSetup(auth.userName() ? auth.userName() + '@' + os.hostname() : os.hostname()));
-    if (!auth.checkCode(body.code).ok) { await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
-    return sendJson(res, 200, action === 'disable' ? auth.disable() : auth.newRecovery());
+    if (!checkPw(req, body.password)) { await slow(); return sendJson(res, 401, { error: 'Wrong password' }); }
+    if (action === 'setup') return sendJson(res, 200, auth.beginSetup((own || auth.userName() || 'admin') + '@' + os.hostname(), own));
+    if (action === 'disable' && own && (auth.account(own) || {}).mfaRequired) return sendJson(res, 409, { error: 'Two-step verification is required for your account. Ask an administrator to change that first.' });
+    if (!auth.checkCode(body.code, Date.now(), own).ok) { await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
+    return sendJson(res, 200, action === 'disable' ? auth.disable(own) : auth.newRecovery(own));
   }
   if (p === '/api/keyboard' && method === 'GET') return sendJson(res, 200, keyboard.getKeyboard());
   if (p === '/api/keyboard' && method === 'POST') return sendJson(res, 200, await keyboard.setKeyboard((await readBody(req)).layout));
@@ -529,7 +582,13 @@ async function handleApi(req, res, url) {
   if (p === '/api/password' && method === 'POST') {
     const body = await readBody(req);
     if (!passwordEnabled()) return sendJson(res, 409, { error: 'MajaOS runs without a password.' });
-    if (!checkPassword(body.current)) { await slow(); return sendJson(res, 401, { error: 'Your current password is not correct.' }); }
+    if (!checkPw(req, body.current)) { await slow(); return sendJson(res, 401, { error: 'Your current password is not correct.' }); }
+    if (own) {
+      auth.setAccountPassword(own, body.password);
+      await shares.setPassword(own, body.password).catch((e) => console.error(`Samba password of ${own}: ${e.message}`)); // one password for both
+      setSession(res, true, own);
+      return sendJson(res, 200, { ok: true, changed: auth.account(own).password.changed });
+    }
     auth.setPassword(body.password);
     removePasswordIssue();
     setSession(res, true);
@@ -566,7 +625,16 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
 
-  if (p === '/api/shares' && method === 'GET') return sendJson(res, 200, { ...(await shares.listShares()), places: await files.places(), admin: auth.userName() });
+  if (p === '/api/shares' && method === 'GET') {
+    if (who.role === 'user') {
+      const mine = shares.accessFor(who.name);
+      return sendJson(res, 200, { installed: true, running: true, shares: [], users: [], groups: [], roots: [], admin: null,
+        places: (await files.places()).filter((x) => x.kind === 'share' && mine[x.id]).map((x) => ({ ...x, readOnly: mine[x.id] !== 'rw' })) });
+    }
+    const list = await shares.listShares(), acc = new Map(auth.listAccounts().map((a) => [a.name, a]));
+    return sendJson(res, 200, { ...list, users: list.users.map((u) => ({ ...u, dashboard: acc.get(u.name) || null })), places: await files.places(), admin: auth.userName() });
+  }
+  if (who.role === 'user' && p === '/api/shares') return sendJson(res, 403, { error: 'Your account can\'t do this. Ask an administrator.' });
   if (p === '/api/shares' && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req)));
   if (p === '/api/files/locate' && method === 'GET') return sendJson(res, 200, await files.locate(url.searchParams.get('path') || ''));
   if (p === '/api/files/eject' && method === 'POST') return sendJson(res, 200, await files.eject((await readBody(req)).id));
@@ -577,6 +645,11 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/share-links\/([0-9a-f]{8})$/)) && method === 'DELETE') return sendJson(res, 200, sharelinks.remove(m[1]));
   if ((m = p.match(/^\/api\/shares\/([^/]+)\/files$/))) {
     const name = decodeURIComponent(m[1]);
+    if (who.role === 'user') {
+      const level = shares.accessFor(who.name)[name];
+      if (!level) return sendJson(res, 404, { error: 'This folder doesn\'t exist, or you have no access to it.' });
+      if (method !== 'GET' && level !== 'rw') return sendJson(res, 403, { error: 'You may only read this folder.' });
+    }
     const rel = url.searchParams.get('path') || '';
     await files.prepare(name);
     if (method === 'GET' && url.searchParams.get('text') === '1') return sendJson(res, 200, files.readText(name, rel));
@@ -592,13 +665,50 @@ async function handleApi(req, res, url) {
   }
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteShare(decodeURIComponent(m[1])));
-  if (p === '/api/share-users' && method === 'POST') return sendJson(res, 200, await shares.createUser(await readBody(req)));
-  if ((m = p.match(/^\/api\/share-users\/([^/]+)\/password$/)) && method === 'POST') return sendJson(res, 200, await shares.setPassword(decodeURIComponent(m[1]), (await readBody(req)).password));
+  // A new user: the Samba user, its groups and permissions, and (dashboard) whether it may sign in here, all at once.
+  // If a later step fails, the user is removed again, so you can simply try once more.
+  if (p === '/api/share-users' && method === 'POST') {
+    const body = await readBody(req);
+    // Checked before the Samba user exists: a password long enough to sign in with, a known role.
+    if (body.dashboard) {
+      auth.validateNewPassword(body.password);
+      if (!auth.ROLES.includes(body.dashboard.role || 'user')) return sendJson(res, 400, { error: 'Choose the role Administrator or User.' });
+    }
+    const made = await shares.createUser({ name: body.name, password: body.password, groups: body.groups });
+    try {
+      if (body.access && Object.keys(body.access).length) await shares.saveUserAccess(made.name, { groups: body.groups || [], access: body.access });
+      if (body.dashboard) auth.addAccount(made.name, { ...body.dashboard, password: body.password });
+    } catch (e) { await shares.deleteUser(made.name).catch(() => {}); auth.removeAccount(made.name); throw e; }
+    return sendJson(res, 200, { ...made, dashboard: auth.accountView(made.name) });
+  }
+  // Sign-in to MajaOS for an existing user: {enabled, role, mustChange, mfaRequired, password (needed to turn it on)}.
+  if ((m = p.match(/^\/api\/share-users\/([^/]+)\/dashboard$/)) && method === 'POST') {
+    const name = decodeURIComponent(m[1]), body = await readBody(req);
+    if (!(await shares.listShares()).users.some((u) => u.name === name)) return sendJson(res, 404, { error: 'This user no longer exists.' });
+    if (name === who.name && body.enabled === false) return sendJson(res, 409, { error: 'You can\'t take away your own sign-in.' });
+    if (body.enabled === false) return sendJson(res, 200, { ...auth.removeAccount(name), dashboard: null });
+    if (auth.account(name)) return sendJson(res, 200, { dashboard: auth.updateAccount(name, body) });
+    if (!body.password) return sendJson(res, 400, { error: 'Choose a password to sign in with (at least 10 characters).' });
+    await shares.setPassword(name, body.password); // one password for the shared folders and MajaOS
+    return sendJson(res, 200, { dashboard: auth.addAccount(name, body) });
+  }
+  if ((m = p.match(/^\/api\/share-users\/([^/]+)\/password$/)) && method === 'POST') {
+    const name = decodeURIComponent(m[1]), body = await readBody(req);
+    if (auth.account(name)) auth.validateNewPassword(body.password); // stricter when it also signs in here
+    const r = await shares.setPassword(name, body.password);
+    if (auth.account(name)) auth.setAccountPassword(name, body.password, { mustChange: !!body.mustChange });
+    return sendJson(res, 200, r);
+  }
   if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveUserAccess(decodeURIComponent(m[1]), await readBody(req)));
   if (p === '/api/share-groups' && method === 'POST') return sendJson(res, 200, await shares.saveGroup(await readBody(req)));
   if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveGroup(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/share-groups\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteGroup(decodeURIComponent(m[1])));
-  if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteUser(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE' && decodeURIComponent(m[1]) === who.name) return sendJson(res, 409, { error: 'You can\'t remove your own account.' });
+  if ((m = p.match(/^\/api\/share-users\/([^/]+)$/)) && method === 'DELETE') {
+    const name = decodeURIComponent(m[1]), r = await shares.deleteUser(name);
+    auth.removeAccount(name); // signing in here goes with it
+    return sendJson(res, 200, r);
+  }
   // Backups: devices to the NAS, and the NAS to the cloud or another NAS (rclone).
   if (p === '/api/backup' && method === 'GET') return sendJson(res, 200, await backup.overview({ brief: url.searchParams.get('brief') === '1' }));
   // Backups of apps and VMs to a folder on the NAS (lib/sysbackup.js).
@@ -866,7 +976,9 @@ async function onUpgrade(req, socket, head) {
   const url = new URL(req.url, 'http://localhost');
   const m = url.pathname.match(/^\/api\/vms\/([^/]+)\/vnc$/);
   if (!m && url.pathname !== '/api/terminal') return deny(404, 'Not Found');
-  if (!isAuthed(req)) return deny(401, 'Unauthorized');
+  const who = session(req);
+  if (!who) return deny(401, 'Unauthorized');
+  if (who.role === 'user') return deny(403, 'Forbidden');
   if (CFG.demo) return deny(409, 'Conflict');
   let sameOrigin = true;
   try { sameOrigin = !req.headers.origin || new URL(req.headers.origin).host === req.headers.host; } catch { sameOrigin = false; }

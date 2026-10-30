@@ -1670,6 +1670,13 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 }
 
 /* Create pool: ZFS or mixed disks, and the role of each disk in a pool with mixed disks. */
+/* A user account (role user): Files and its own security; the rest of the dashboard isn't there. */
+body.role-user #desk, body.role-user .topnav [data-open]:not([data-open="files"]), body.role-user #setTabs a:not([data-tab="security"]) { display: none !important; }
+.dash-fields { display: grid; gap: 8px; }
+.dash-more { display: grid; gap: 8px; padding-left: 26px; }
+.dash-more[hidden] { display: none; }
+.login-qr { display: grid; place-items: center; padding: 8px; background: #fff; border-radius: 12px; justify-self: center; }
+#loginExtra .recovery-list { columns: 2; }
 /* Settings → Cooling: temperatures as tiles, a card per fan with its mode and curve. */
 .temp-grid { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
 .temp-grid li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); font-size: 13px; }

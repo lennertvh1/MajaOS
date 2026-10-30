@@ -222,3 +222,41 @@ test('a signed out session stays refused, also after a restart', () => {
   auth._reset(); // reads auth.json again
   assert.equal(auth.isRevoked('abc'), true);
 });
+
+test('other accounts: a role, an own password and two-step verification, apart from the owner', () => {
+  auth._reset();
+  if (!auth.hasPassword()) auth.createAccount('admin', 'owner-password-1');
+  if (!auth.userName()) auth.claimUser('admin');
+  const owner = auth.userName();
+  const v = auth.addAccount('lisa', { password: 'lisa-password-1', role: 'user', mustChange: true, mfaRequired: true });
+  assert.deepEqual([v.role, v.mustChange, v.mfaRequired, v.mfa], ['user', true, true, false]);
+  assert.equal(auth.verifyAccount('lisa', 'lisa-password-1'), true);
+  assert.equal(auth.verifyAccount('lisa', 'owner-password-1'), false);
+  assert.equal(auth.verifyPassword('lisa-password-1'), false); // the owner's password is another one
+  assert.throws(() => auth.addAccount(owner, { password: 'x'.repeat(12) }), /already the administrator/);
+  assert.throws(() => auth.addAccount('tom', { password: 'short' }), /at least 10/);
+  assert.throws(() => auth.addAccount('tom', { password: 'tom-password-1', role: 'root' }), /Administrator or User/);
+  // choosing a new password: not the old one, mustChange off, older sessions invalid
+  const before = auth.sessionsAfter('lisa');
+  assert.throws(() => auth.setAccountPassword('lisa', 'lisa-password-1'), /different from the old one/);
+  auth.setAccountPassword('lisa', 'lisa-password-2', {}, before + 1000);
+  assert.equal(auth.account('lisa').mustChange, false);
+  assert.ok(auth.sessionsAfter('lisa') > before);
+  // two-step verification of lisa doesn't touch the owner's
+  const { secret } = auth.beginSetup('lisa@freddy', 'lisa');
+  const t0 = Date.now();
+  auth.finishSetup(auth.totp(secret, t0), t0, 'lisa');
+  assert.equal(auth.mfaEnabled('lisa'), true);
+  assert.equal(auth.mfaEnabled(), false);
+  const id = auth.newPending(t0, { who: 'lisa', step: 'mfa' });
+  assert.deepEqual(auth.peekPending(id, t0), { who: 'lisa', step: 'mfa' });
+  const r = auth.usePending(id, auth.totp(secret, t0 + 30000), t0 + 30000);
+  assert.deepEqual([r.result, r.who], ['ok', 'lisa']);
+  // a lower role signs the account out; removing it ends its sessions
+  auth.updateAccount('lisa', { role: 'admin' });
+  assert.equal(auth.account('lisa').role, 'admin');
+  assert.equal(auth.listAccounts().length, 1);
+  auth.removeAccount('lisa');
+  assert.equal(auth.account('lisa'), null);
+  assert.equal(auth.sessionsAfter('lisa'), Infinity);
+});
