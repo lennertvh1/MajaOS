@@ -253,10 +253,10 @@
   }
   if (window.HTMLDialogElement && !HTMLDialogElement.prototype.showModal.majaos) {
     const showModal = HTMLDialogElement.prototype.showModal;
-    HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length && bar.showPopover) { bar.hidden = false; try { if (bar.matches(':popover-open')) bar.hidePopover(); bar.showPopover(); } catch (e) { /* popover unavailable */ } } };
+    HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length) { bar.hidden = false; this.appendChild(bar); } };
     HTMLDialogElement.prototype.showModal.majaos = true;
   }
-  document.addEventListener('close', (e) => { if (e.target instanceof HTMLDialogElement) placeToasts(); }, true);
+  document.addEventListener('close', (e) => { if (e.target instanceof HTMLDialogElement) { placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length) { const host = [...modalStack].reverse().find((d) => d.open) || document.body; if (bar.parentElement !== host) host.appendChild(bar); } } }, true);
   // Each toast has a × to close it. Errors and long messages stay until they are closed
   // (no time to read them otherwise); short confirmations go away by themselves.
   // opts.action {label, run}: a button in the message (the message then stays until it is used or closed).
@@ -1687,8 +1687,8 @@
   let minimizingWindow = false;
   let minimizedTitle = '';
   let winTaskItem = null;
-  function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; if (!bar.matches(':popover-open')) bar.showPopover(); return bar; }
-  function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { if (bar.matches(':popover-open')) bar.hidePopover(); bar.hidden = true; } }
+  function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; document.body.appendChild(bar); return bar; }
+  function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { bar.hidden = true; } }
   function addMinimizedTask(title, icon, restore) {
     const bar = showMinimizedBar();
     const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task';
@@ -1699,9 +1699,9 @@
     bar.appendChild(item); return item;
   }
   function windowGlyph(title) {
-    const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title);
+    const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title || title.startsWith(prettyName(a.name) + ' ·'));
     if (app && app.icon) return app.icon;
-    const pageId = ({ Storage: 'storage', 'Shared folders': 'shares', VMs: 'vms', 'App store': 'store', Files: 'files', Backups: 'backup' })[title];
+    const pageId = ({ [t('Storage')]: 'storage', [t('Shared folders')]: 'shares', [t('VMs')]: 'vms', [t('App store')]: 'store', [t('Files')]: 'files', [t('Backups')]: 'backup' })[title];
     const p = pageId && PAGE_META[pageId];
     if (p) return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p.svg}</svg>`;
     const s = title.toLowerCase();
@@ -1709,7 +1709,7 @@
     if (title === 'App') return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${PAGE_META.store.svg}</svg>`;
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
   }
-  function mountTaskbar() { /* The taskbar stays in the document top layer, above every dialog. */ }
+  function mountTaskbar(dialog) { const bar = $('#minimizedWindows'); if (bar.children.length) { bar.hidden = false; dialog.appendChild(bar); } }
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
@@ -8485,6 +8485,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   const pop = $('#pop');
   let popKindNow = '';
+  let popMinimizing = false;
   function showPop(kind) {
     $('#storePage').hidden = kind !== 'store';
     $('#filesPage').hidden = kind !== 'files';
@@ -8492,6 +8493,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#storeCount').hidden = kind !== 'store';
     if (!pop.open) pop.showModal();
   }
+  $('#popMinimize').addEventListener('click', () => { const title = $('#popTitleText').textContent; const kind = popKindNow; addMinimizedTask(title, windowGlyph(title), () => { popMinimizing = true; pop.classList.remove('window-minimized'); pop.showModal(); }); popMinimizing = true; pop.close(); pop.classList.add('window-minimized'); });
   function closePop() {
     $('#storePage').hidden = true;
     $('#filesPage').hidden = true;
@@ -8531,6 +8533,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   $('#popClose').addEventListener('click', () => { location.hash = ''; });
   pop.addEventListener('click', (e) => { if (e.target === pop) location.hash = ''; });
   pop.addEventListener('close', () => {
+    if (popMinimizing) { popMinimizing = false; return; }
     const h = location.hash;
     if (h === '#store' || h.startsWith('#files')) location.hash = '';
   });
