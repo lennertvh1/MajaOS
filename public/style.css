@@ -1879,3 +1879,5 @@ h2 .hint, h3 .hint { margin-left: 8px; }
 .minimized-icon img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 5px; }
 
 .minimized-icon svg { display: block; width: 100%; height: 100%; padding: 2px; }
+
+.window[open]:has(> .minimized-windows:not([hidden])) { animation: none; }

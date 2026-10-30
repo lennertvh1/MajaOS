@@ -1685,11 +1685,12 @@
   const win = $('#win');
   let onWinClose = null;
   let minimizingWindow = false;
-  function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; document.body.appendChild(bar); return bar; }
+  function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; if (!bar.parentElement.closest('dialog[open]')) document.body.appendChild(bar); return bar; }
   function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { bar.hidden = true; } }
+  let nextTaskId = 0;
   function addMinimizedTask(title, icon, restore) {
     const bar = showMinimizedBar();
-    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task';
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task'; item.dataset.windowId = 'window-' + ++nextTaskId;
     const glyph = document.createElement('span'); glyph.className = 'minimized-icon'; glyph.setAttribute('aria-hidden', 'true');
     if (icon && /^<svg/.test(icon)) glyph.innerHTML = icon; else if (icon && /^https?:|^\//.test(icon)) { const img = document.createElement('img'); img.src = icon; img.alt = ''; glyph.appendChild(img); } else glyph.textContent = icon;
     const label = document.createElement('span'); label.textContent = title; item.append(glyph, label);
@@ -8500,16 +8501,26 @@ sudo ./install.sh</pre></div>`}` : '') +
   const pop = $('#pop');
   let popKindNow = '';
   let popMinimizing = false;
-  let popTaskItem = null;
+  const popTasks = new Map();
   function showPop(kind) {
-    if (pop.classList.contains('window-minimized')) { pop.classList.remove('window-minimized'); if (popTaskItem) { popTaskItem.remove(); popTaskItem = null; } hideMinimizedBarIfEmpty(); }
+    const task = popTasks.get(kind);
+    if (task) { task.remove(); popTasks.delete(kind); hideMinimizedBarIfEmpty(); }
+    pop.classList.remove('window-minimized');
     $('#storePage').hidden = kind !== 'store';
     $('#filesPage').hidden = kind !== 'files';
     $('#popTitleText').textContent = t(kind === 'store' ? 'App store' : 'Files');
     $('#storeCount').hidden = kind !== 'store';
     if (!pop.open) pop.showModal();
   }
-  $('#popMinimize').addEventListener('click', () => { const title = $('#popTitleText').textContent; popTaskItem = addMinimizedTask(title, windowGlyph(title), () => { popTaskItem = null; popMinimizing = true; pop.classList.remove('window-minimized'); pop.showModal(); }); popMinimizing = true; pop.close(); pop.classList.add('window-minimized'); });
+  $('#popMinimize').addEventListener('click', () => {
+    const kind = popKindNow || popKindOf(location.hash), title = $('#popTitleText').textContent, address = location.hash;
+    if (!popTasks.has(kind)) popTasks.set(kind, addMinimizedTask(title, windowGlyph(title), () => {
+      popTasks.delete(kind);
+      if (location.hash !== address) location.hash = address;
+      else showPop(kind);
+    }));
+    popMinimizing = true; pop.close(); pop.classList.add('window-minimized');
+  });
   function closePop() {
     $('#storePage').hidden = true;
     $('#filesPage').hidden = true;
