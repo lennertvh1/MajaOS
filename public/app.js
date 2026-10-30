@@ -8518,6 +8518,12 @@ sudo ./install.sh</pre></div>`}` : '') +
     $$('.nav-btn[data-nav="settings"]').forEach((b) => b.removeAttribute('aria-current'));
     if (setWin.open) setWin.close();
   }
+  $('#setMinimize').addEventListener('click', () => {
+    const bar = $('#minimizedWindows'); bar.hidden = false; bar.replaceChildren();
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm'; item.textContent = t('Settings');
+    item.addEventListener('click', () => { bar.replaceChildren(); bar.hidden = true; setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); });
+    bar.appendChild(item); setWin.close(); setWin.show(); setWin.classList.add('window-minimized');
+  });
   $('#setClose').addEventListener('click', closeSettings);
   setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
   setWin.addEventListener('cancel', (e) => { e.preventDefault(); closeSettings(); }); // Escape
