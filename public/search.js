@@ -27,9 +27,10 @@
       if (best >= 9) return 9;
       total += best;
     }
-    return total;
+    // 9 means no match. Several valid tokens can otherwise add up to 9 and disappear.
+    return Math.min(total, 8);
   }
-  const GROUPS = { apps: 0, vms: 1, folders: 2, pages: 3, settings: 4, shares: 5, backups: 6, store: 7, ai: 8 };
+  const GROUPS = { apps: 0, vms: 1, folders: 2, pages: 3, settings: 4, hardware: 5, shares: 6, backups: 7, store: 8, ai: 9, shortcuts: 10 };
   function rankHits(items, query, opts) {
     const toks = tokens(query);
     if (!toks.length) return [];

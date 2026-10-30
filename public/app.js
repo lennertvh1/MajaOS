@@ -220,7 +220,7 @@
   /* ------------------------------------------------------------ state */
   const S = { overview: null, apps: [], vms: [], ai: null, aiError: null, filter: 'all', search: '', config: {},
     vmsLoaded: false, vmError: null, vmFilter: 'all', vmSearch: '', vmBusy: {},
-    store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {},
+    store: null, storeQuery: '', storeCat: 'featured', storeShown: 48, appBusy: {}, hardware: null, hardwareDisks: [],
     view: (() => { try { return localStorage.getItem('tb-app-view') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })(), // per device
     layout: { items: [] }, shortcuts: [], placing: false, folder: null };
   const EXPERIENCE_LEVELS = new Set(['beginner', 'expert']);
@@ -8269,6 +8269,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     const value = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
     const error = (i) => results[i].status === 'rejected' ? `<p class="muted small">${esc(results[i].reason.message)}</p>` : '';
     const a = value(0), hw = value(1), disks = value(2), updates = value(3);
+    if (hw) S.hardware = hw;
+    if (disks) S.hardwareDisks = disks.disks || [];
     const pci = hw && hw.pci || [];
     const grouped = {
       display: pci.filter((d) => d.kind === 'Display'),
@@ -9021,7 +9023,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     files: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/>',
   };
   const spotIco = (k) => `<span class="spot-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SPOT_ICO[k] || SPOT_ICO.settings}</svg></span>`;
-  const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI', shortcuts: 'Shortcuts' };
+  const SPOT_GROUPS = { apps: 'Apps', vms: 'Virtual machines', folders: 'Folders', pages: 'Places', settings: 'Settings', hardware: 'Hardware', shares: 'Shared folders', backups: 'Backups', store: 'App store', ai: 'AI', shortcuts: 'Shortcuts' };
   let spotHits = [], spotSel = 0;
 
   function spotMark(text, q) {
@@ -9071,6 +9073,20 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/migration', 'Migration', ['unraid', 'migrate', 'import', t('Migration'), t('Move from Unraid')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));
+    const hardware = S.hardware || {};
+    const devices = (hardware.pci || []).map((d) => item({
+      id: 'hw:' + d.key, group: 'hardware', title: d.name || d.address,
+      keys: [d.kind, d.address, d.driver, 'pci', t('Hardware')], hint: [t('Hardware'), d.driver].filter(Boolean).join(' · '),
+      ico: spotIco('settings'), run: () => goSettings('settings/hardware'),
+    })).concat((hardware.usb || []).map((d) => item({
+      id: 'hw:' + d.key + ':' + d.bus + ':' + d.device, group: 'hardware', title: d.name,
+      keys: [d.vendor + ':' + d.product, ...(d.drivers || []), 'usb', t('Hardware')], hint: t('USB devices'),
+      ico: spotIco('settings'), run: () => goSettings('settings/hardware'),
+    })), (S.hardwareDisks || []).map((d) => item({
+      id: 'hw:disk:' + d.name, group: 'hardware', title: d.model || d.name,
+      keys: [d.name, d.serial, 'disk', t('Storage devices')], hint: t('Storage devices'),
+      ico: spotIco('storage'), run: () => goSettings('settings/hardware'),
+    })));
     const apps = S.apps.map((a) => {
       const open = appUrl(a);
       return item({
@@ -9111,7 +9127,16 @@ sudo ./install.sh</pre></div>`}` : '') +
       id: 'cut:' + s.id, group: 'shortcuts', title: s.name, keys: [s.url, shortcutHost(s.url)], hint: t('Shortcut'), ico: shortcutIconHtml(s),
       run: () => window.open(s.url, '_blank', 'noopener,noreferrer'),
     }));
-    return pages.map(item).concat(settings, apps, vms, folders, shares, backups, store, models, cuts);
+    return pages.map(item).concat(settings, devices, apps, vms, folders, shares, backups, store, models, cuts);
+  }
+  let hardwareSearchLoading = null;
+  function refreshHardwareSearch() {
+    if (hardwareSearchLoading) return hardwareSearchLoading;
+    hardwareSearchLoading = Promise.allSettled([api.get('/api/hardware'), api.get('/api/storage/disks')]).then(([hw, disks]) => {
+      if (hw.status === 'fulfilled') S.hardware = hw.value;
+      if (disks.status === 'fulfilled') S.hardwareDisks = disks.value.disks || [];
+    }).finally(() => { hardwareSearchLoading = null; });
+    return hardwareSearchLoading;
   }
   function hitsForQuery(q) {
     const items = buildSpotItems();
@@ -9150,6 +9175,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     spotQ.focus();
     renderSpot();
     ensureStoreCatalog().then(() => { if (!spotPanel.hidden) renderSpot(); });
+    refreshHardwareSearch().then(() => { if (!spotPanel.hidden) renderSpot(); });
   }
   function runSpot(i) {
     const hit = spotHits[i]; if (!hit) return;

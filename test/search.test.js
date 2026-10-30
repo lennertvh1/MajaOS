@@ -16,6 +16,12 @@ test('all tokens must match', () => {
   assert.equal(itemScore(it, ['home', 'xyz']), 9);
 });
 
+test('a long query stays searchable when every token matches', () => {
+  const it = { id: 'device', group: 'hardware', title: 'Realtek network adapter', keys: ['RTL8125', 'r8169', 'PCI'] };
+  assert.deepEqual(rankHits([it], 'realtek r8169 pci').map((x) => x.id), ['device']);
+  assert.deepEqual(rankHits([it], 'realtek missing pci'), []);
+});
+
 test('exact title beats a word in the middle', () => {
   const items = [
     { id: 'a', group: 'apps', title: 'Notes', keys: [] },
