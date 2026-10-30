@@ -1687,17 +1687,19 @@
   let minimizingWindow = false;
   let minimizedTitle = '';
   let winTaskItem = null;
+  function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; if (!bar.matches(':popover-open')) bar.showPopover(); return bar; }
+  function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { if (bar.matches(':popover-open')) bar.hidePopover(); bar.hidden = true; } }
   function addMinimizedTask(title, icon, restore) {
-    const bar = $('#minimizedWindows'); bar.hidden = false;
+    const bar = showMinimizedBar();
     const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task';
     const glyph = document.createElement('span'); glyph.className = 'minimized-icon'; glyph.setAttribute('aria-hidden', 'true');
     if (icon && /^https?:|^\//.test(icon)) { const img = document.createElement('img'); img.src = icon; img.alt = ''; glyph.appendChild(img); } else glyph.textContent = icon;
     const label = document.createElement('span'); label.textContent = title; item.append(glyph, label);
-    item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); if (!bar.children.length) bar.hidden = true; restore(); });
+    item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); hideMinimizedBarIfEmpty(); restore(); });
     bar.appendChild(item); return item;
   }
   function windowGlyph(title) { const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title); return app && app.icon || (/settings|instellingen/i.test(title) ? '⚙' : /storage|opslag/i.test(title) ? '▤' : /system|systeem/i.test(title) ? '◉' : /vm|virtual/i.test(title) ? '▣' : /file|bestand/i.test(title) ? '▧' : /console/i.test(title) ? '⌘' : '▰'); }
-  function mountTaskbar(dialog) { const bar = $('#minimizedWindows'); if (bar.parentElement !== dialog) dialog.appendChild(bar); }
+  function mountTaskbar() { /* The taskbar stays in the document top layer, above every dialog. */ }
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
@@ -1707,7 +1709,7 @@
     const old = $('#winBody'), body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
-    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } const bar = $('#minimizedWindows'); if (!bar.children.length) bar.hidden = true; }
+    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } hideMinimizedBarIfEmpty(); }
     mountTaskbar(win);
     if (!win.open) win.showModal();
     if (after) after(body);
@@ -1717,7 +1719,7 @@
     minimizedTitle = $('#winTitle').textContent;
     const y = window.scrollY;
     winTaskItem = addMinimizedTask(minimizedTitle, windowGlyph(minimizedTitle), () => { winTaskItem = null; mountTaskbar(win); minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); window.scrollTo(0, y); });
-    minimizingWindow = true; win.close(); document.body.appendChild($('#minimizedWindows')); win.show(); win.classList.add('window-minimized'); window.scrollTo(0, y);
+    minimizingWindow = true; win.close(); win.classList.add('window-minimized'); window.scrollTo(0, y);
   });
   // A link to Settings in a window: the window closes, Settings opens on top.
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
@@ -8534,7 +8536,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   $('#setMinimize').addEventListener('click', () => {
     const y = window.scrollY;
     addMinimizedTask(t('Settings'), '⚙', () => { mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); });
-    setWin.close(); document.body.appendChild($('#minimizedWindows')); setWin.show(); setWin.classList.add('window-minimized'); window.scrollTo(0, y);
+    setWin.close(); setWin.classList.add('window-minimized'); window.scrollTo(0, y);
   });
   $('#setClose').addEventListener('click', closeSettings);
   setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
