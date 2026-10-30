@@ -1698,14 +1698,22 @@
   function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; if (!bar.parentElement.closest('dialog[open]')) document.body.appendChild(bar); return bar; }
   function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { bar.hidden = true; } }
   let nextTaskId = 0;
-  function addMinimizedTask(title, icon, restore) {
+  const taskStorageKey = 'tb-minimized-windows';
+  const recoveredWindowTasks = new Map();
+  let tasksRecovered = false;
+  function storedTasks() { try { return JSON.parse(sessionStorage.getItem(taskStorageKey) || '{}'); } catch (e) { return {}; } }
+  function saveTasks(tasks) { try { sessionStorage.setItem(taskStorageKey, JSON.stringify(tasks)); } catch (e) { /* private window */ } }
+  function forgetTask(id) { const tasks = storedTasks(); delete tasks[id]; saveTasks(tasks); }
+  function addMinimizedTask(title, icon, restore, descriptor) {
     const bar = showMinimizedBar();
-    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task'; item.dataset.windowId = 'window-' + ++nextTaskId;
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task'; item.dataset.windowId = 'window-' + Date.now() + '-' + ++nextTaskId;
     const glyph = document.createElement('span'); glyph.className = 'minimized-icon'; glyph.setAttribute('aria-hidden', 'true');
     if (icon && /^<svg/.test(icon)) glyph.innerHTML = icon; else if (icon && /^https?:|^\//.test(icon)) { const img = document.createElement('img'); img.src = icon; img.alt = ''; glyph.appendChild(img); } else glyph.textContent = icon;
     const label = document.createElement('span'); label.textContent = title; item.append(glyph, label);
-    item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); hideMinimizedBarIfEmpty(); restore(); });
-    bar.appendChild(item); return item;
+    item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); forgetTask(item.dataset.windowId); hideMinimizedBarIfEmpty(); restore(); });
+    bar.appendChild(item);
+    if (descriptor) { const tasks = storedTasks(); tasks[item.dataset.windowId] = { ...descriptor, title }; saveTasks(tasks); }
+    return item;
   }
   function windowGlyph(title) {
     const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title || title.startsWith(prettyName(a.name) + ' ·'));
@@ -1718,8 +1726,55 @@
     if (title === 'App') return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${PAGE_META.store.svg}</svg>`;
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
   }
+  function reopenWindow(title) {
+    if (title === t('System')) return systemWindow();
+    if (title === t('Storage')) return storageWindow();
+    if (title === t('Shared folders')) return sharesWindow();
+    if (title === t('Backups')) return backupWindow();
+    if (title === t('AI')) return aiWindow();
+    if (title === t('Create pool')) return poolCreateWindow();
+    if (title === t('Import pool')) return poolImportWindow();
+    if (title === t('Add your own app')) return customAppWindow();
+    if (title === t('New VM')) return vmCreateWindow();
+    if (title === t('App')) { location.hash = 'store'; return; }
+    const app = S.apps.find((a) => title.startsWith(prettyName(a.name) + ' · '));
+    if (!app && !S.apps.length) return loadApps().then(() => reopenWindow(title));
+    if (app && title.endsWith(' · ' + t('logs'))) return logWindow(app);
+    if (app && title.endsWith(' · ' + t('console'))) return consoleWindow(app);
+    if (app && title.endsWith(' · ' + t('settings'))) return appSettingsWindow(app);
+  }
+  function canReopenWindow(title) {
+    return [t('System'), t('Storage'), t('Shared folders'), t('Backups'), t('AI'), t('Create pool'), t('Import pool'), t('Add your own app'), t('New VM'), t('App')].includes(title)
+      || [t('logs'), t('console'), t('settings')].some((part) => title.endsWith(' · ' + part));
+  }
+  function restoreMinimizedTasks() {
+    if (tasksRecovered) return;
+    tasksRecovered = true;
+    const tasks = storedTasks();
+    for (const [id, task] of Object.entries(tasks)) {
+      if (!task || !task.kind) { delete tasks[id]; continue; }
+      let item;
+      if (task.kind === 'pop' && ['store', 'files'].includes(task.page)) {
+        item = addMinimizedTask(task.title, windowGlyph(task.title), () => { popTasks.delete(task.page); if (location.hash === task.address) showPop(task.page); else location.hash = task.address; });
+        popTasks.set(task.page, item);
+      } else if (task.kind === 'settings') {
+        item = addMinimizedTask(task.title, windowGlyph(task.title), () => { setTaskItem = null; location.hash = task.address || '#settings'; });
+        setTaskItem = item;
+      } else if (task.kind === 'window' && canReopenWindow(task.title)) {
+        item = addMinimizedTask(task.title, windowGlyph(task.title), () => { recoveredWindowTasks.delete(task.title); reopenWindow(task.title); });
+        recoveredWindowTasks.set(task.title, item);
+      } else { delete tasks[id]; continue; }
+      item.dataset.windowId = id;
+    }
+    saveTasks(tasks);
+    // A reload can route to the same address before the saved minimized tasks are rebuilt.
+    if (pop.open && popTasks.has(popKindOf(location.hash))) { popMinimizing = true; pop.close(); pop.classList.add('window-minimized'); }
+    if (setWin.open && setTaskItem && settingsHash()) { setWin.close(); setWin.classList.add('window-minimized'); }
+    const top = [...modalStack].reverse().find((dialog) => dialog.open); if (top) mountTaskbar(top);
+  }
   function mountTaskbar(dialog) { const bar = $('#minimizedWindows'); if (bar.children.length) { bar.hidden = false; dialog.appendChild(bar); } }
   function openWindow(title, html, after) {
+    const recovered = recoveredWindowTasks.get(title); if (recovered) { recovered.remove(); forgetTask(recovered.dataset.windowId); recoveredWindowTasks.delete(title); hideMinimizedBarIfEmpty(); }
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
     if (onWinClose) { try { onWinClose(); } catch (e) { /* ignore */ } onWinClose = null; }
@@ -1749,7 +1804,7 @@
       win.showModal();
       window.scrollTo(0, y);
       requestAnimationFrame(() => window.scrollTo(0, y));
-    });
+    }, canReopenWindow(snapshot.title) ? { kind: 'window' } : null);
     minimizingWindow = true;
     win.close(); win.classList.add('window-minimized');
     requestAnimationFrame(() => window.scrollTo(0, y));
@@ -5115,7 +5170,7 @@
   const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
-    if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
+    if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
     mountTaskbar(setWin);
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
@@ -8514,7 +8569,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   const popTasks = new Map();
   function showPop(kind) {
     const task = popTasks.get(kind);
-    if (task) { task.remove(); popTasks.delete(kind); hideMinimizedBarIfEmpty(); }
+    if (task) { task.remove(); forgetTask(task.dataset.windowId); popTasks.delete(kind); hideMinimizedBarIfEmpty(); }
     pop.classList.remove('window-minimized');
     $('#storePage').hidden = kind !== 'store';
     $('#filesPage').hidden = kind !== 'files';
@@ -8528,7 +8583,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       popTasks.delete(kind);
       if (location.hash !== address) location.hash = address;
       else showPop(kind);
-    }));
+    }, { kind: 'pop', page: kind, address }));
     popMinimizing = true; pop.close(); pop.classList.add('window-minimized');
   });
   function closePop() {
@@ -8554,7 +8609,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    if (inSettings) { if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); setTaskItem = null; } hideMinimizedBarIfEmpty(); } if (!setWin.open) setWin.showModal(); showSettings(); return; }
+    if (inSettings) { if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); } if (!setWin.open) setWin.showModal(); showSettings(); return; }
     // Always load the first time (also when the page opens right on #vms).
     const pageChanged = location.hash !== pageHash || !pageLoaded;
     pageHash = location.hash; pageLoaded = true;
@@ -8586,7 +8641,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   $('#setMinimize').addEventListener('click', () => {
     const y = window.scrollY;
-    setTaskItem = addMinimizedTask(t('Settings'), windowGlyph(t('Settings')), () => { setTaskItem = null; mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
+    setTaskItem = addMinimizedTask(t('Settings'), windowGlyph(t('Settings')), () => { setTaskItem = null; mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }, { kind: 'settings', address: location.hash });
     setWin.close(); setWin.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
   });
   $('#setClose').addEventListener('click', closeSettings);
@@ -8636,6 +8691,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     document.body.classList.remove('role-user');
     applyExperienceLevel();
     showDesk();
+    restoreMinimizedTasks();
     $('#demoBadge').hidden = api === realApi;
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     $('#powerBtn').hidden = false;

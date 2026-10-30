@@ -774,11 +774,11 @@ html:has(.pop-win[open]) { overflow: hidden; }
 .file-view { display: block; max-width: 100%; max-height: min(68vh, 720px); margin: 0 auto; }
 video.file-view { width: 100%; background: #000; }
 .window.window-minimized { display: none !important; }
-.minimized-windows { pointer-events: none; position: fixed; inset: auto 12px 10px; margin: 0; z-index: 10000; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 8px; padding: 8px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--glass-strong); backdrop-filter: blur(18px); box-shadow: var(--shade); }
+.minimized-windows { box-sizing: border-box; height: 54px; width: calc(100vw - 24px); align-items: center; overflow-x: auto; overflow-y: hidden; pointer-events: none; position: fixed; inset: auto 12px 10px; margin: 0; z-index: 10000; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 8px; padding: 8px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--glass-strong); backdrop-filter: blur(18px); box-shadow: var(--shade); }
 .minimized-windows > * { pointer-events: auto; }
 .minimized-windows[hidden] { display: none; }
 .window:has(> .minimized-windows:not([hidden])) { overflow: visible; }
-.window > .minimized-windows { position: fixed; inset: auto 12px 10px; width: auto; z-index: 10002; }
+.window > .minimized-windows { position: fixed; inset: auto 12px 10px; width: calc(100vw - 24px); z-index: 10002; }
 .window:has(> .minimized-windows:not([hidden])) .win-body { padding-bottom: 72px; }
 .window:has(> .minimized-windows:not([hidden])) .pop-body { padding-bottom: 72px; }
 .window-minimized { display: none !important; }
@@ -1873,7 +1873,7 @@ h2 .hint, h3 .hint { margin-left: 8px; }
   background: color-mix(in srgb, var(--body-bg) 94%, var(--text) 6%); color: var(--text); border: 1px solid var(--glass-line);
   box-shadow: var(--shade); font-size: 13px; line-height: 1.45; font-weight: 400; text-transform: none; letter-spacing: 0; white-space: normal; }
 
-.minimized-task { display: inline-flex; align-items: center; gap: 8px; }
+.minimized-task { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .minimized-icon { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 6px; background: var(--glass); font-size: 1rem; }
 
 .minimized-icon img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 5px; }
