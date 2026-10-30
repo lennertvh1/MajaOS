@@ -1684,6 +1684,8 @@
   /* ------------------------------------------------------------ window */
   const win = $('#win');
   let onWinClose = null;
+  let minimizingWindow = false;
+  let minimizedTitle = '';
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
@@ -1693,15 +1695,23 @@
     const old = $('#winBody'), body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
+    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); }
     if (!win.open) win.showModal();
     if (after) after(body);
   }
-  $('#winClose').addEventListener('click', () => win.close());
+  $('#winClose').addEventListener('click', () => { minimizingWindow = false; win.close(); });
+  $('#winMinimize').addEventListener('click', () => {
+    minimizedTitle = $('#winTitle').textContent;
+    const bar = $('#minimizedWindows'); bar.hidden = false;
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm'; item.textContent = minimizedTitle; item.setAttribute('aria-label', t('Restore {name}', { name: minimizedTitle }));
+    item.addEventListener('click', () => { bar.replaceChildren(); bar.hidden = true; minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); });
+    bar.replaceChildren(item); minimizingWindow = true; win.close(); win.show(); win.classList.add('window-minimized');
+  });
   // A link to Settings in a window: the window closes, Settings opens on top.
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
   win.addEventListener('click', (e) => { if (e.target === win || e.target.closest('[data-close]')) win.close(); });
   // The close event comes asynchronously: if a new window is already open by then, don't empty that one.
-  win.addEventListener('close', () => { if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
+  win.addEventListener('close', () => { if (minimizingWindow) { minimizingWindow = false; return; } if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
 
   // Own confirmation (also works where confirm() is blocked).
   // With checkLabel a checkbox is added and ask() returns { checked } instead of true.
