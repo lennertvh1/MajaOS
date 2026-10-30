@@ -1687,7 +1687,6 @@
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
-    const backButton = $('#winBack'); if (backButton) { backButton.hidden = true; backButton.onclick = null; }
     if (onWinClose) { try { onWinClose(); } catch (e) { /* ignore */ } onWinClose = null; }
     $('#winTitle').textContent = title;
     // New element, so listeners of a previous window don't hang around.
@@ -3044,7 +3043,7 @@
       const title = t('Migrate from Unraid to MajaOS');
       const html = network ? `<section class="pool-card plain mig-card mig-net"><div class="mig-text"><b>${t('Unraid to MajaOS over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}<p class="muted small">${t('Your Unraid server keeps running; nothing has to move.')}</p><form class="mig-form" data-mig-ssh novalidate><input class="field" name="host" placeholder="${esc(t('Address, e.g. 192.168.1.10'))}" aria-label="${esc(t('Address'))}" autocomplete="off" spellcheck="false"><input class="field" name="user" value="root" aria-label="${esc(t('User name'))}" autocomplete="off" spellcheck="false"><input class="field" name="password" type="password" placeholder="${esc(t('Password'))}" aria-label="${esc(t('Password'))}" autocomplete="off"><button class="btn primary" type="submit">${t('Connect')}</button></form><p class="form-error" role="alert"></p></div></section>` : `<div class="ur-root"></div>`;
       openWindow(title, html);
-      const winBody = $('#winBody'), back = $('#winBack'); back.hidden = false; back.onclick = () => { win.close(); migrationPane(el); };
+      const winBody = $('#winBody');
       if (network) {
         $('[data-mig-ssh]', winBody).addEventListener('submit', async (e) => { e.preventDefault(); const f=e.currentTarget, err=$('.form-error',winBody), btn=$('[type=submit]',f); err.textContent=''; btn.disabled=true; btn.textContent=t('Connecting…'); try { const r=await api.post('/api/unraid/connect',{host:f.elements.host.value.trim(),user:f.elements.user.value.trim(),password:f.elements.password.value}); unraidFlow(winBody,false,r); } catch(ex) { err.textContent=ex.message; btn.disabled=false; btn.textContent=t('Connect'); } });
       } else unraidFlow(winBody);
