@@ -1717,25 +1717,49 @@ body.role-user #desk, body.role-user .topnav [data-open]:not([data-open="files"]
 .mx-acts { flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .mx-sched { display: inline-flex; align-items: center; gap: 6px; }
 /* System in detail: a row per thread, memory as one stacked bar, GPU and network rows. */
-.sysd-sec { display: grid; gap: 10px; margin-bottom: 14px; }
+/* System details: summary first, then readable hardware cards. */
+.sysd-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.sysd-summary .stat { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--glass); min-width: 0; }
+.sysd-summary .stat b { font-size: clamp(18px, 2.2vw, 26px); line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sysd-summary .stat > span { color: var(--muted); font-size: 12px; }
+.sysd-sec { display: grid; gap: 16px; margin-bottom: 16px; padding: 20px; }
+.sysd-sec p { margin: 0; }
+.sysd-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sysd-heading > b { font-variant-numeric: tabular-nums; }
 .sysd-sec .usage-bar span:not(.warn):not(.bad) { background: var(--accent); }
-.sysd-cores, .sysd-rows, .sysd-legend, .sysd-net { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.sysd-cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
-.sysd-cores li, .sysd-rows li { display: grid; grid-template-columns: 72px 1fr 44px 62px; align-items: center; gap: 10px; font-size: 13px; }
-.sysd-rows li { grid-template-columns: 72px 1fr auto; }
+.sysd-cores, .sysd-rows, .sysd-legend, .sysd-net { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sysd-cores { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+.sysd-cores li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 9px; padding: 12px; background: var(--glass); border-radius: 10px; font-size: 13px; }
+.sysd-cores .usage-bar { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+.sysd-cores li > .small { grid-column: 1 / -1; font-size: 12px; }
 .sysd-cores b, .sysd-rows b { text-align: right; font-variant-numeric: tabular-nums; }
 .sysd-core { color: var(--muted); }
-.sysd-stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--glass); }
+.sysd-rows li { display: grid; grid-template-columns: 64px minmax(40px, 1fr) auto; align-items: center; gap: 12px; font-size: 13px; }
+.sysd-stack { display: flex; height: 22px; border-radius: 7px; overflow: hidden; background: var(--track); gap: 2px; }
 .sysd-stack span { height: 100%; }
-.sysd-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
-.sysd-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.sysd-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: 13px; }
+.sysd-legend li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--track); }
+.sysd-legend b { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sysd-legend .dot { flex-shrink: 0; width: 10px; height: 10px; border-radius: 3px; }
+.sysd-legend .sysd-memory-note { grid-column: 1 / -1; border: 0; padding-bottom: 0; }
 .mem-apps { background: var(--accent); }
-.mem-zfs { background: var(--pool-2, var(--warn)); }
+.mem-zfs { background: var(--pool-2); }
 .mem-cache { background: var(--faint); }
-.mem-free { background: transparent; border: 1px solid var(--glass-line); }
+.mem-free { background: var(--glass); border: 1px solid var(--track); }
 .sysd-stack .mem-free { border: 0; }
-.sysd-net li { display: grid; grid-template-columns: minmax(80px, 140px) 120px 120px 1fr; gap: 10px; align-items: baseline; font-size: 13px; font-variant-numeric: tabular-nums; }
-@media (max-width: 640px) { .sysd-net li { grid-template-columns: 1fr 1fr; } .sysd-cores li { grid-template-columns: 64px 1fr 40px 56px; } }
+.sysd-net li { display: grid; grid-template-columns: minmax(80px, 1fr) 1fr 1fr; gap: 12px; align-items: center; padding: 14px; border-radius: 10px; background: var(--glass); font-size: 14px; font-variant-numeric: tabular-nums; }
+.sysd-net li > b { overflow-wrap: anywhere; }
+.sysd-transfer { display: grid; gap: 5px; }
+.sysd-net li > .small { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--track); }
+@media (max-width: 640px) {
+  .sysd-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sysd-sec { padding: 14px; }
+  .sysd-legend { grid-template-columns: 1fr; }
+  .sysd-net li { grid-template-columns: 1fr 1fr; }
+  .sysd-net li > b { grid-column: 1 / -1; }
+  .sysd-rows li { grid-template-columns: 1fr auto; }
+  .sysd-rows .usage-bar { grid-column: 1 / -1; grid-row: 2; }
+}
 /* Move from Unraid: one card per kind, a row per disk, share, user, app or VM. */
 .mig-card { display: flex; align-items: center; gap: 14px; }
 .mig-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--glass); color: var(--accent); }

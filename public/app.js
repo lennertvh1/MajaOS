@@ -2811,7 +2811,7 @@
         ['free', t('free'), Math.max(0, m.total - m.apps - m.zfsCache - Math.max(0, m.cache))]] : [];
       const g = d.gpu && d.gpu[0];
       body.innerHTML = `
-        <div class="stat-strip">
+        <div class="stat-strip sysd-summary">
           <div class="stat"><b>${c.percent == null ? '–' : nf0.format(c.percent) + '%'}</b><span>CPU</span></div>
           <div class="stat"><b>${c.temp == null ? '–' : nf.format(c.temp) + ' °C'}</b><span>${t('CPU temperature')}</span></div>
           <div class="stat"><b>${d.load.map((x) => nf.format(x)).join(' · ')}</b><span>${t('Load (1, 5, 15 min)')} ${hint(t('How many tasks were waiting for the processor on average. Below the number of threads ({n}) the server keeps up easily.', { n: c.threads }))}</span></div>
@@ -2823,10 +2823,10 @@
           <ul class="sysd-cores">${c.cores.map((x) => `<li><span class="sysd-core">${esc(t('Thread {n}', { n: x.id }))}</span>${bar(x.percent)}<b>${x.percent == null ? '–' : nf0.format(x.percent) + '%'}</b><span class="muted small">${esc(ghz(x.mhz))}</span></li>`).join('')}</ul>
         </section>
         ${m ? `<section class="pool-card plain sysd-sec">
-          <div class="sub-head">${t('Memory')}</div>
+          <div class="sysd-heading"><div class="sub-head">${t('Memory')}</div><b>${esc(bytes(m.total))}</b></div>
           <div class="sysd-stack" role="img" aria-label="${esc(memParts.map(([, l, v]) => l + ' ' + bytes(v)).join(', '))}">${memParts.map(([k, , v]) => `<span class="mem-${k}" style="width:${((v / m.total) * 100).toFixed(2)}%"></span>`).join('')}</div>
           <ul class="sysd-legend">${memParts.map(([k, l, v]) => `<li><span class="dot mem-${k}"></span>${esc(l)} <b>${esc(bytes(v))}</b></li>`).join('')}
-            <li class="muted">${esc(t('{used} of {total}', { used: bytes(m.total - m.available - m.zfsCache), total: bytes(m.total) }))} ${hint(t('The ZFS cache is given back as soon as apps need the memory, so it doesn\'t count as used.'))}</li></ul>
+            <li class="muted sysd-memory-note">${esc(t('{used} of {total}', { used: bytes(m.total - m.available - m.zfsCache), total: bytes(m.total) }))} ${hint(t('The ZFS cache is given back as soon as apps need the memory, so it doesn\'t count as used.'))}</li></ul>
           ${m.swapTotal ? `<p class="muted small">${esc(t('Swap: {used} of {total}', { used: bytes(m.swapUsed), total: bytes(m.swapTotal) }))}</p>` : ''}
         </section>` : ''}
         ${g ? `<section class="pool-card plain sysd-sec">
@@ -2840,7 +2840,7 @@
           ${d.gpus.map((x) => `<p class="small">${esc(x.name)} · <span class="${x.ready ? 'muted' : 'temp-warn'}">${esc(!x.ready ? t('no driver') : d.gpuError ? t('nvidia-smi doesn\'t answer') : t('no measurements'))}</span></p>`).join('')}</section>` : ''}
         ${(d.net || []).length ? `<section class="pool-card plain sysd-sec">
           <div class="sub-head">${t('Network')}</div>
-          <ul class="sysd-net">${d.net.map((n) => `<li><b>${esc(n.name)}</b><span title="${esc(t('Received'))}">↓ ${esc(rate(n.rx))}</span><span title="${esc(t('Sent'))}">↑ ${esc(rate(n.tx))}</span>
+          <ul class="sysd-net">${d.net.map((n) => `<li><b>${esc(n.name)}</b><div class="sysd-transfer"><span class="muted small">↓ ${t('Received')}</span><strong>${esc(rate(n.rx))}</strong></div><div class="sysd-transfer"><span class="muted small">↑ ${t('Sent')}</span><strong>${esc(rate(n.tx))}</strong></div>
             <span class="muted small">${esc(t('since start: {rx} in, {tx} out', { rx: bytes(n.rxTotal), tx: bytes(n.txTotal) }))}</span></li>`).join('')}</ul>
         </section>` : ''}`;
     };
@@ -9287,13 +9287,13 @@ sudo ./install.sh</pre></div>`}` : '') +
   // Enter in a field of the wizard = Next (not in the two-step verification forms).
   $('#onbBody').addEventListener('submit', (e) => { if (!e.target.closest('[data-onb-form]')) return; e.preventDefault(); onbGo(1); });
 
-  function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } }
+  function demoOnboarded() { try { return localStorage.getItem('tb-onboarded') !== '0'; } catch (e) { return true; } }
   function demoClock() { try { return localStorage.getItem('tb-clock') || 'auto'; } catch (e) { return 'auto'; } }
   function demoExperience() {
     try { const v = localStorage.getItem('tb-experience'); return EXPERIENCE_LEVELS.has(v) ? v : 'beginner'; } catch (e) { return 'beginner'; }
   }
   function demoWebPort() { try { const n = Number(localStorage.getItem('tb-port')); if (Number.isInteger(n) && n >= 1 && n <= 65535) return n; } catch (e) { /* private window */ } return 80; }
-  // The demo starts like a new server: first create an account (until the wizard has been finished once).
+  // Open the demo dashboard directly; the welcome wizard can still be opened from Settings.
   function useDemo() {
     api = translatedApi(window.MajaOSDemo);
     S.config = { demo: true, ollama: true, terminal: true, passwordEnabled: true, loginUser: true, clock: demoClock(), experience: demoExperience(), port: demoWebPort(), onboarding: !demoOnboarded(), setup: !demoOnboarded() };

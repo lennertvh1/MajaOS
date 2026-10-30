@@ -57,8 +57,8 @@
   const demoSshState = () => ({ installed: true, enabled: !!demoSecurity.ssh, active: !!demoSecurity.ssh });
   /* ---- welcome wizard: remembered per browser whether it is finished */
   const onb = { passwordChanged: null };
-  const onbDone = () => { try { return localStorage.getItem('tb-onboarded') === '1'; } catch (e) { return true; } };
-  const onbSet = (v) => { try { if (v) localStorage.setItem('tb-onboarded', '1'); else localStorage.removeItem('tb-onboarded'); } catch (e) { /* private window */ } };
+  const onbDone = () => { try { return localStorage.getItem('tb-onboarded') !== '0'; } catch (e) { return true; } };
+  const onbSet = (v) => { try { localStorage.setItem('tb-onboarded', v ? '1' : '0'); } catch (e) { /* private window */ } };
   function onbGet() {
     const o = poolOptions();
     return { done: onbDone(), finished: null, skipped: false, hostname: net.hostname, timezone: dt.timezone, passwordChanged: onb.passwordChanged, user: acct.user, mfa: mfa.enabled, appdata: sp.appdata,
