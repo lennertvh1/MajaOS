@@ -1719,7 +1719,7 @@
     const old = $('#winBody'), body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
-    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } hideMinimizedBarIfEmpty(); }
+    if (win.classList.contains('window-minimized')) { win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } hideMinimizedBarIfEmpty(); }
     mountTaskbar(win);
     if (!win.open) win.showModal();
     if (after) after(body);
@@ -5091,6 +5091,7 @@
   const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
+    if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
     mountTaskbar(setWin);
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
@@ -8486,14 +8487,16 @@ sudo ./install.sh</pre></div>`}` : '') +
   const pop = $('#pop');
   let popKindNow = '';
   let popMinimizing = false;
+  let popTaskItem = null;
   function showPop(kind) {
+    if (pop.classList.contains('window-minimized')) { pop.classList.remove('window-minimized'); if (popTaskItem) { popTaskItem.remove(); popTaskItem = null; } hideMinimizedBarIfEmpty(); }
     $('#storePage').hidden = kind !== 'store';
     $('#filesPage').hidden = kind !== 'files';
     $('#popTitleText').textContent = t(kind === 'store' ? 'App store' : 'Files');
     $('#storeCount').hidden = kind !== 'store';
     if (!pop.open) pop.showModal();
   }
-  $('#popMinimize').addEventListener('click', () => { const title = $('#popTitleText').textContent; const kind = popKindNow; addMinimizedTask(title, windowGlyph(title), () => { popMinimizing = true; pop.classList.remove('window-minimized'); pop.showModal(); }); popMinimizing = true; pop.close(); pop.classList.add('window-minimized'); });
+  $('#popMinimize').addEventListener('click', () => { const title = $('#popTitleText').textContent; popTaskItem = addMinimizedTask(title, windowGlyph(title), () => { popTaskItem = null; popMinimizing = true; pop.classList.remove('window-minimized'); pop.showModal(); }); popMinimizing = true; pop.close(); pop.classList.add('window-minimized'); });
   function closePop() {
     $('#storePage').hidden = true;
     $('#filesPage').hidden = true;
@@ -8517,7 +8520,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    if (inSettings) { if (!setWin.open) setWin.showModal(); showSettings(); return; }
+    if (inSettings) { if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); setTaskItem = null; } hideMinimizedBarIfEmpty(); } if (!setWin.open) setWin.showModal(); showSettings(); return; }
     // Always load the first time (also when the page opens right on #vms).
     const pageChanged = location.hash !== pageHash || !pageLoaded;
     pageHash = location.hash; pageLoaded = true;
@@ -8538,6 +8541,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (h === '#store' || h.startsWith('#files')) location.hash = '';
   });
   const setWin = $('#setWin');
+  let setTaskItem = null;
   // Close: straight back to the address of the page below, without rebuilding it.
   // (Not in the close event: that comes asynchronously and can lag behind a next click.)
   function closeSettings() {
@@ -8548,7 +8552,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   $('#setMinimize').addEventListener('click', () => {
     const y = window.scrollY;
-    addMinimizedTask(t('Settings'), '⚙', () => { mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
+    setTaskItem = addMinimizedTask(t('Settings'), windowGlyph(t('Settings')), () => { setTaskItem = null; mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
     setWin.close(); setWin.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
   });
   $('#setClose').addEventListener('click', closeSettings);
