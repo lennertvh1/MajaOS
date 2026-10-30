@@ -1685,8 +1685,6 @@
   const win = $('#win');
   let onWinClose = null;
   let minimizingWindow = false;
-  let minimizedTitle = '';
-  let winTaskItem = null;
   function showMinimizedBar() { const bar = $('#minimizedWindows'); bar.hidden = false; document.body.appendChild(bar); return bar; }
   function hideMinimizedBarIfEmpty() { const bar = $('#minimizedWindows'); if (!bar.children.length) { bar.hidden = true; } }
   function addMinimizedTask(title, icon, restore) {
@@ -1719,18 +1717,33 @@
     const old = $('#winBody'), body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
-    if (win.classList.contains('window-minimized')) { win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } hideMinimizedBarIfEmpty(); }
+    win.classList.remove('window-minimized');
     mountTaskbar(win);
     if (!win.open) win.showModal();
     if (after) after(body);
   }
   $('#winClose').addEventListener('click', () => { minimizingWindow = false; win.close(); });
-  $('#winMinimize').addEventListener('click', () => {
-    minimizedTitle = $('#winTitle').textContent;
+  function minimizeAppWindow() {
+    if (!win.open) return;
+    const snapshot = { title: $('#winTitle').textContent, body: $('#winBody'), classes: win.className, close: onWinClose };
+    onWinClose = null; // Keep the window's state and listeners until it is restored.
     const y = window.scrollY;
-    winTaskItem = addMinimizedTask(minimizedTitle, windowGlyph(minimizedTitle), () => { winTaskItem = null; mountTaskbar(win); minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
-    minimizingWindow = true; win.close(); win.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
-  });
+    addMinimizedTask(snapshot.title, windowGlyph(snapshot.title), () => {
+      if (win.open) minimizeAppWindow();
+      const current = $('#winBody'); current.replaceWith(snapshot.body);
+      $('#winTitle').textContent = snapshot.title;
+      win.className = snapshot.classes;
+      onWinClose = snapshot.close;
+      minimizingWindow = true;
+      win.showModal();
+      window.scrollTo(0, y);
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    });
+    minimizingWindow = true;
+    win.close(); win.classList.add('window-minimized');
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  }
+  $('#winMinimize').addEventListener('click', minimizeAppWindow);
   // A link to Settings in a window: the window closes, Settings opens on top.
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
   win.addEventListener('click', (e) => { if (e.target === win || e.target.closest('[data-close]')) win.close(); });
