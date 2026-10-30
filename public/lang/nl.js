@@ -2925,6 +2925,8 @@ window.TB_LANG.nl = {
   "Choose how to connect to your Unraid server.": "Kies hoe je met je Unraid-server verbindt.",
   "USB stick and disks": "USB-stick en schijven",
   "Over the network": "Via het netwerk",
+  "Own address via br0 ({name})": "Eigen adres via br0 ({name})",
+  "New VMs use br0 by default when it is available. Apps can choose their own address in the home network from the Network menu.": "Nieuwe VM's gebruiken standaard br0 als het beschikbaar is. Voor apps kun je in het menu Netwerk een eigen adres op je thuisnetwerk kiezen.",
   "Devices detected by this server and the drivers currently in use.": "De apparaten die deze server ziet en de drivers die nu in gebruik zijn.",
   "Drivers": "Drivers",
   "Driver": "Driver",

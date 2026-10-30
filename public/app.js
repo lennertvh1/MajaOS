@@ -2199,7 +2199,7 @@
     if (f.network === '*') out.unshift({ value: '*', label: t('Custom networks ({list})', { list: f.networks.join(', ') }) });
     const pn = f.projectNetworks || [];
     pn.filter((x) => !x.external).forEach((x) => out.push({ value: x.key, label: t('{name} (from this compose file)', { name: x.key }) }));
-    if (!dockerNets.some(ownNet)) out.push({ value: LAN_CHOICE, label: t('Own address in my home network') });
+    out.push({ value: LAN_CHOICE, label: t('Own address in my home network') });
     dockerNets.filter((n) => !pn.some((x) => !x.external && x.name === n.name)).forEach((n) =>
       out.push({ value: n.name, label: netLabel(n) }));
     if (f.network && !out.some((o) => o.value === f.network)) out.push({ value: f.network, label: f.network });
@@ -4357,7 +4357,8 @@
       if (e.target.closest('a[href^="#settings"]')) { win.close(); return; }
       if (e.target.closest('[data-pin-clear]')) { st.pins.clear(); drawCpu(); return; }
       if (e.target.closest('[data-nic-add]')) {
-        const first = opts.bridges[0] ? { type: 'bridge', source: opts.bridges[0].name } : { type: 'network', source: (opts.networks[0] || {}).name || 'default' };
+        const [type, source] = opts.network.split(':');
+        const first = { type, source };
         st.nics.push({ ...first, model: 'virtio', mac: '' }); drawNet(); return;
       }
       const nd = e.target.closest('[data-nic-del]'); if (nd) { st.nics.splice(Number(nd.dataset.nicDel), 1); drawNet(); return; }
@@ -4699,11 +4700,13 @@
   // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (MajaOS creates it on install).
   const LAN_CHOICE = '@lan';
   const ownNet = (n) => n && /^(macvlan|ipvlan)$/.test(n.driver);
-  const netLabel = (n) => (ownNet(n) ? t('Own address in my home network ({name})', { name: n.name }) : [n.name, n.driver, n.subnet].filter(Boolean).join(' · '));
+  const netLabel = (n) => (ownNet(n) ? n.parent === 'br0'
+    ? t('Own address via br0 ({name})', { name: n.name })
+    : t('Own address in my home network ({name})', { name: n.name }) : [n.name, n.driver, n.subnet].filter(Boolean).join(' · '));
   function storeNetHtml(d) {
     const nets = d.networks || [];
     const opts = [['bridge', t('Default (bridge)')], ['host', t('Host (the server\'s network)')],
-      ...(nets.some(ownNet) ? [] : [[LAN_CHOICE, t('Own address in my home network')]]),
+      [LAN_CHOICE, t('Own address in my home network')],
       ...nets.map((n) => [n.name, netLabel(n)])];
     return `<h3>${t('Network')}</h3><div class="form">
       <label class="fld"><span>${t('Network')}</span><select class="field" name="__network">${opts.map(([v, label]) =>
@@ -5694,7 +5697,7 @@
         <label class="fld" data-static><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span><input class="field" name="dns" value="${esc(c ? c.dns.join(', ') : '')}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false">
           </label>
         <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Create bridge br0 for VMs')}</label>
-        <p class="muted small" style="margin-top:-6px">${t('Needed to give VMs (such as Home Assistant) their own address in your home network. Then set VM_NETWORK=bridge=br0.')}</p>
+        <p class="muted small" style="margin-top:-6px">${t('New VMs use br0 by default when it is available. Apps can choose their own address in the home network from the Network menu.')}</p>
         <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Apply')}</button></div>

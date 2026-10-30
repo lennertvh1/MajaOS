@@ -89,7 +89,7 @@ iface br0 inet dhcp
 ```
 
 Preferably do this with a screen and keyboard on the server: if there is a typo, you lose the connection.
-Then reboot the server, set `VM_NETWORK=bridge=br0` in `/etc/majaos/majaos.env` and restart MajaOS.
+Then reboot the server. MajaOS automatically selects `br0` for new VMs when the bridge exists; otherwise it uses libvirt NAT.
 You can also create the bridge in *Settings > Network*. You choose a VM's network when creating it or later under *Edit > Network*.
 
 ## VMs
@@ -266,7 +266,7 @@ In *Settings > Docker networks* you create networks for your apps:
 
 Note: with macvlan and ipvlan the server itself can't reach the apps at their own address (other devices in your network can). That's how Linux works.
 
-You put an app in a network in the app's settings (compose form, field *Network*, optionally with a fixed IP address) or when installing from the app store. In the compose file it becomes an `external` network.
+You put an app in a network in the app's settings (compose form, field *Network*, optionally with a fixed IP address) or when installing from the app store. The *Own address in my home network* option is always available; MajaOS uses the server's home interface, which can be `br0`. In the compose file it becomes an `external` network.
 
 ## Shared folders
 

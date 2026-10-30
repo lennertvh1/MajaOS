@@ -4,7 +4,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { vmHardware, VM_OS_IDS } = require('../lib/vms');
+const { vmHardware, VM_OS_IDS, defaultVmNetwork } = require('../lib/vms');
+
+test('new VMs default to br0 when it exists, otherwise to libvirt NAT', () => {
+  const nets = [{ name: 'default' }];
+  assert.equal(defaultVmNetwork([{ name: 'br0' }], nets, 'network=default'), 'bridge:br0');
+  assert.equal(defaultVmNetwork([], nets, 'network=default'), 'network:default');
+  assert.equal(defaultVmNetwork([{ name: 'br0' }], [...nets, { name: 'lab' }], 'network=lab'), 'network:lab');
+  assert.equal(defaultVmNetwork([{ name: 'br0' }], nets, 'bridge=missing'), 'bridge:br0');
+});
 
 test('each operating system gets hardware its installer understands', () => {
   assert.deepEqual(vmHardware({ os: 'debian' }), { os: 'debian', media: 'iso', osinfo: 'debian13', fallback: 'linux2022', firmware: 'uefi', bus: 'virtio', nic: 'virtio', tpm: false });
