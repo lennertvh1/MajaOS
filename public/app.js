@@ -255,6 +255,16 @@
     const showModal = HTMLDialogElement.prototype.showModal;
     HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length) { bar.hidden = false; this.appendChild(bar); } };
     HTMLDialogElement.prototype.showModal.majaos = true;
+    const closeDialog = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.close = function (...args) {
+      // Move the taskbar before this dialog leaves the top layer; the close event arrives later.
+      const bar = document.getElementById('minimizedWindows');
+      if (bar && bar.parentElement === this) {
+        const host = [...modalStack].reverse().find((dialog) => dialog !== this && dialog.open) || document.body;
+        host.appendChild(bar);
+      }
+      return closeDialog.apply(this, args);
+    };
   }
   document.addEventListener('close', (e) => { if (e.target instanceof HTMLDialogElement) { placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length) { const host = [...modalStack].reverse().find((d) => d.open) || document.body; if (bar.parentElement !== host) host.appendChild(bar); } } }, true);
   // Each toast has a × to close it. Errors and long messages stay until they are closed
