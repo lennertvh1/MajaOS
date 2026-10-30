@@ -83,6 +83,7 @@ const issue = require('./lib/issue');
 const keyboard = require('./lib/keyboard');
 const mixed = require('./lib/mixed');
 const unraid = require('./lib/unraid');
+const fans = require('./lib/fans');
 
 const CFG = {
   port: settings.listenPort(),
@@ -315,6 +316,11 @@ async function handleApi(req, res, url) {
 
   let m;
   if (p === '/api/system/details' && method === 'GET') return sendJson(res, 200, await sys.details());
+  // Cooling (lib/fans.js): temperatures and fans; a channel's mode (auto, fixed, curve) and own names.
+  if (p === '/api/fans' && method === 'GET') return sendJson(res, 200, await fans.status());
+  if (p === '/api/fans/probe' && method === 'POST') return sendJson(res, 200, await fans.probe());
+  if (p === '/api/fans/channel' && method === 'POST') { const b = await readBody(req); return sendJson(res, 200, await fans.save(String(b.id || ''), b)); }
+  if (p === '/api/fans/name' && method === 'POST') { const b = await readBody(req); return sendJson(res, 200, fans.rename(String(b.id || ''), b.name)); }
   if (p === '/api/overview' && method === 'GET') return sendJson(res, 200, await apiOverview());
   // Restart or shut down the server. Answer first, only then the command (otherwise the answer never arrives).
   if (p === '/api/system/power' && method === 'POST') {
@@ -920,6 +926,7 @@ bind(CFG.port).then(() => {
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
     storage.watchDisks(); // a disk plugged in or taken out: a message on the dashboard
+    fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
     mixed.startSchedule(); // parity of pools with mixed disks: sync and scrub on their schedule
   }
 }).catch((e) => {

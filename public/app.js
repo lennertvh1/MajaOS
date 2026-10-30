@@ -2840,6 +2840,125 @@
 
   // Moving from Unraid: the stick and the old disks are in this server. Choose what comes along (disks, shared folders,
   // users, apps with or without their data, VMs), then one job with steps (lib/unraid.js).
+  // Settings → Cooling (lib/fans.js): every temperature, every fan with its speed, and per fan Auto (the BIOS),
+  // Fixed or Curve. The numbers refresh every 2 s; the forms stay as they are while you edit.
+  async function coolingPane(el) {
+    el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+    let d;
+    try { d = await api.get('/api/fans'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'cooling') return;
+    const tName = (x) => x.name || (x.id === 'gpu' ? 'GPU' : [x.label || t('Sensor {n}', { n: x.n }), x.chip].join(' · '));
+    const fName = (f, i) => f.name || f.label || t('Fan {n}', { n: i + 1 });
+    const DEF_POINTS = [[30, 25], [45, 35], [60, 60], [75, 100]];
+    const tempsHtml = () => d.temps.map((x) => `<li data-temp="${esc(x.id)}"><span>${esc(tName(x))}</span><b class="${tempClass(x.value >= 70 ? 51 : x.value >= 55 ? 46 : 40)}">${nf.format(x.value)} °C</b></li>`).join('');
+    const curveSvg = (points) => {
+      const p = [...points].sort((a, b) => a[0] - b[0]), X = (v) => 8 + (v / 100) * 224, Y = (v) => 92 - (v / 100) * 84;
+      return `<svg class="fan-curve" viewBox="0 0 240 100" aria-hidden="true"><path class="grid" d="M8 8V92H232"/>
+        <polyline points="${[[0, p[0] ? p[0][1] : 100], ...p, [100, p.length ? p[p.length - 1][1] : 100]].map(([a, b]) => X(Math.min(100, a)) + ',' + Y(b)).join(' ')}"/>
+        ${p.map(([a, b]) => `<circle cx="${X(Math.min(100, a))}" cy="${Y(b)}" r="3"/>`).join('')}</svg>`;
+    };
+    const fanHtml = (f, i) => {
+      const p = f.pwm;
+      const head = `<div class="fan-head"><span class="fan-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s3 4-2 7M14 12c4 0 7 1 7 4s-4 3-7-2M12 14c0 4-1 7-4 7s-3-4 2-7M10 12c-4 0-7-1-7-4s4-3 7 2"/></svg></span>
+        <div class="fan-title"><b>${esc(fName(f, i))}</b><span class="muted small">${esc([f.chip, f.label && f.name ? f.label : null].filter(Boolean).join(' · '))}</span></div>
+        <div class="fan-now"><b data-rpm="${esc(f.id)}">${f.rpm == null ? '–' : nf0.format(f.rpm) + ' rpm'}</b><span class="muted small" data-pct="${esc(f.id)}">${p && p.percent != null ? p.percent + '%' : ''}</span></div></div>`;
+      if (!p) return `<li class="fan-card">${head}<p class="muted small">${t('This fan can only be read: its speed is set by the BIOS.')}</p></li>`;
+      if (!p.writable) return `<li class="fan-card">${head}<p class="muted small">${t('This fan can\'t be controlled: the chip doesn\'t allow it. Use the fan settings in the BIOS.')}</p></li>`;
+      const pts = p.points || DEF_POINTS;
+      return `<li class="fan-card" data-fan="${esc(p.id)}">${head}
+        <form class="fan-form" novalidate>
+          <div class="fld-row">
+            <label class="fld"><span>${t('Name')}</span><input class="field" name="name" value="${esc(f.name || '')}" placeholder="${esc(fName(f, i))}" maxlength="40" autocomplete="off"></label>
+            <div class="fld"><span>${t('Mode')}</span><div class="seg" role="radiogroup">${[['auto', t('Auto (BIOS)')], ['fixed', t('Fixed')], ['curve', t('Curve')]].map(([k, l]) =>
+              `<button type="button" role="radio" aria-checked="${p.mode === k ? 'true' : 'false'}" data-mode="${k}">${esc(l)}</button>`).join('')}</div></div>
+          </div>
+          <input type="hidden" name="mode" value="${esc(p.mode)}">
+          <div data-show="fixed"${p.mode === 'fixed' ? '' : ' hidden'}><label class="fld"><span>${t('Speed')} <b data-fixed-out>${p.fixed}%</b></span><input type="range" name="percent" min="0" max="100" step="5" value="${p.fixed}"></label></div>
+          <div data-show="curve" class="fan-curve-box"${p.mode === 'curve' ? '' : ' hidden'}>
+            <label class="fld"><span>${t('Follows')}</span><select class="field" name="source">${d.temps.map((x) => `<option value="${esc(x.id)}"${(p.source || (d.temps.find((y) => y.cpu) || {}).id) === x.id ? ' selected' : ''}>${esc(tName(x))} · ${nf.format(x.value)} °C</option>`).join('')}</select></label>
+            <div class="fan-points"><table><thead><tr><th>°C</th><th>%</th><th></th></tr></thead><tbody>${pts.map(([a, b]) => `<tr><td><input class="field sm" type="number" min="0" max="110" value="${a}" data-pt="t"></td><td><input class="field sm" type="number" min="0" max="100" value="${b}" data-pt="p"></td><td><button class="btn sm" type="button" data-pt-del aria-label="${esc(t('Remove'))}">×</button></td></tr>`).join('')}</tbody></table>
+              <button class="btn sm" type="button" data-pt-add>${t('+ Point')}</button></div>
+            <div data-curve-svg>${curveSvg(pts)}</div>
+          </div>
+          <div data-show="fixed curve"${p.mode === 'auto' ? ' hidden' : ''}><label class="fld fan-min"><span>${t('Never below')} ${hint(t('Some fans stop or don\'t start again below a certain speed. MajaOS never goes lower than this.'))}</span>
+            <input class="field sm" type="number" name="min" min="0" max="100" value="${p.min}"> %</label></div>
+          <p class="form-error" role="alert"></p>
+          <div class="btn-row"><button class="btn primary sm" type="submit">${t('Save')}</button></div>
+        </form></li>`;
+    };
+    const draw = () => {
+      el.innerHTML = `${paneHint(t('MajaOS reads the temperatures and fans of the motherboard. Auto leaves a fan to the BIOS. With Fixed or Curve MajaOS sets it; from {hot} °C on the processor every fan runs at full speed, and when MajaOS stops the BIOS takes over again.', { hot: d.hot }))}
+        <h2 class="pane-title">${t('Temperatures')}</h2>
+        ${d.temps.length ? `<ul class="temp-grid">${tempsHtml()}</ul>` : `<p class="muted">${t('No temperature sensors found.')}</p>`}
+        <h2 class="pane-title">${t('Fans')}</h2>
+        ${d.fans.length ? `<ul class="fan-list">${d.fans.map(fanHtml).join('')}</ul>`
+          : `<p class="muted">${t('No fans found. The sensor chip of the motherboard may need its driver: click Look for sensors.')}</p>`}
+        <div class="btn-row"><button class="btn" type="button" data-fan-probe>${t('Look for sensors')}</button></div>`;
+    };
+    draw();
+    // Live numbers, without redrawing the forms.
+    const live = async () => {
+      if (settingsTab() !== 'cooling' || !el.isConnected || !$('.temp-grid, .fan-list', el)) return;
+      try {
+        const n = await api.get('/api/fans');
+        n.temps.forEach((x) => { const b = $(`[data-temp="${CSS.escape(x.id)}"] b`, el); if (b) { b.textContent = nf.format(x.value) + ' °C'; b.className = tempClass(x.value >= 70 ? 51 : x.value >= 55 ? 46 : 40); } });
+        n.fans.forEach((f) => {
+          const r = $(`[data-rpm="${CSS.escape(f.id)}"]`, el); if (r) r.textContent = f.rpm == null ? '–' : nf0.format(f.rpm) + ' rpm';
+          const p = $(`[data-pct="${CSS.escape(f.id)}"]`, el); if (p) p.textContent = f.pwm && f.pwm.percent != null ? f.pwm.percent + '%' : '';
+        });
+      } catch (e) { /* keep the last numbers */ }
+      setTimeout(live, 2000);
+    };
+    setTimeout(live, 2000);
+    const points = (form) => $$('tbody tr', form).map((tr) => [Number($('[data-pt="t"]', tr).value), Number($('[data-pt="p"]', tr).value)]);
+    el.onclick = async (e) => {
+      if (e.target.closest('[data-fan-probe]')) {
+        const b = e.target.closest('[data-fan-probe]'); b.disabled = true; b.textContent = t('Looking…');
+        try { const r = await api.post('/api/fans/probe'); d = r; draw(); toast(r.loaded.length ? t('Sensor drivers loaded: {list}', { list: r.loaded.join(', ') }) : t('No new sensors found.')); }
+        catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = t('Look for sensors'); }
+        return;
+      }
+      const form = e.target.closest('.fan-form'); if (!form) return;
+      const m = e.target.closest('[data-mode]');
+      if (m) {
+        form.elements.mode.value = m.dataset.mode;
+        $$('[data-mode]', form).forEach((x) => x.setAttribute('aria-checked', String(x === m)));
+        $$('[data-show]', form).forEach((x) => { x.hidden = !x.dataset.show.split(' ').includes(m.dataset.mode); });
+        return;
+      }
+      if (e.target.closest('[data-pt-add]')) {
+        const rows = points(form), last = rows[rows.length - 1] || [60, 60];
+        if (rows.length >= 8) return;
+        $('tbody', form).insertAdjacentHTML('beforeend', `<tr><td><input class="field sm" type="number" min="0" max="110" value="${Math.min(110, last[0] + 10)}" data-pt="t"></td><td><input class="field sm" type="number" min="0" max="100" value="${Math.min(100, last[1] + 15)}" data-pt="p"></td><td><button class="btn sm" type="button" data-pt-del aria-label="${esc(t('Remove'))}">×</button></td></tr>`);
+        $('[data-curve-svg]', form).innerHTML = curveSvg(points(form));
+        return;
+      }
+      if (e.target.closest('[data-pt-del]')) {
+        if ($$('tbody tr', form).length <= 2) return;
+        e.target.closest('tr').remove(); $('[data-curve-svg]', form).innerHTML = curveSvg(points(form));
+      }
+    };
+    el.oninput = (e) => {
+      const form = e.target.closest('.fan-form'); if (!form) return;
+      if (e.target.name === 'percent') $('[data-fixed-out]', form).textContent = e.target.value + '%';
+      if (e.target.dataset.pt) $('[data-curve-svg]', form).innerHTML = curveSvg(points(form));
+    };
+    el.onsubmit = async (e) => {
+      const form = e.target.closest('.fan-form'); if (!form) return;
+      e.preventDefault();
+      const id = form.closest('[data-fan]').dataset.fan, err = $('.form-error', form), btn = $('[type=submit]', form);
+      const mode = form.elements.mode.value;
+      if (mode !== 'auto' && Number(form.elements.min.value) < 20 && !(await ask(t('A minimum below 20% can stop some fans completely. Continue?'), t('Save')))) return;
+      err.textContent = ''; btn.disabled = true;
+      try {
+        d = await api.post('/api/fans/channel', { id, name: form.elements.name.value.trim(), mode, percent: Number(form.elements.percent.value),
+          min: Number(form.elements.min.value), source: form.elements.source ? form.elements.source.value : null, points: points(form) });
+        toast(t('Saved.'));
+        draw();
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    };
+  }
+
   // Settings → Migration: where to move from (now Unraid). A running move shows its steps right away.
   async function migrationPane(el) {
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
@@ -4864,17 +4983,17 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', migration: 'Migration', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', migration: 'Migration', about: 'About' }[tab]);
     if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
-    $('#setPane').onclick = null; $('#setPane').onchange = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
+    $('#setPane').onclick = null; $('#setPane').onchange = null; $('#setPane').oninput = null; $('#setPane').onsubmit = null;
+    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
   }
 
   // Settings and the wizard only offer a language once its dictionary covers the interface.
@@ -8571,6 +8690,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/ai', 'AI', ['ollama', 'claude', 'lm studio', 'llama', t('AI')]],
       ['settings/mcp', 'MCP', ['mcp', 'cursor', 'claude', 'vscode', 'codex', 'token', t('MCP')]],
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
+      ['settings/cooling', 'Cooling', ['fans', 'fan', 'pwm', 'temperature', 'rpm', t('Cooling'), t('Fans')]],
       ['settings/migration', 'Migration', ['unraid', 'migrate', 'import', t('Migration'), t('Move from Unraid')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));

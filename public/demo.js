@@ -2037,6 +2037,56 @@
       gpu: nvidia.loaded ? gpu() : null, gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }], gpuError: null, net,
     };
   }
+  // Cooling (lib/fans.js): a B550 board with an nct6798 chip, four fans with PWM, the CPU, an NVMe, two disks and the GPU.
+  const demoFans = { names: {}, ch: {}, probed: true };
+  const FAN_DEFS = [['pwm1', 'CPU_FAN', 900, 2200], ['pwm2', 'SYS_FAN1', 600, 1500], ['pwm3', 'SYS_FAN2', 600, 1500], ['pwm4', 'SYS_FAN3', 500, 1400]];
+  function fansStatus() {
+    const cpu = Math.round(rnd(44, 52) * 10) / 10;
+    const temps = [
+      { id: 'k10temp@0000:00:18.3/temp1', chip: 'k10temp', n: 1, label: 'Tctl', value: cpu, cpu: true },
+      { id: 'nct6798@nct6775.656/temp1', chip: 'nct6798', n: 1, label: 'SYSTIN', value: Math.round(rnd(31, 34) * 10) / 10, cpu: false },
+      { id: 'nct6798@nct6775.656/temp2', chip: 'nct6798', n: 2, label: 'CPUTIN', value: Math.round(rnd(36, 40) * 10) / 10, cpu: false },
+      { id: 'nvme@nvme0/temp1', chip: 'nvme', n: 1, label: 'Composite', value: Math.round(rnd(38, 42) * 10) / 10, cpu: false },
+      { id: 'drivetemp@0:0:0:0/temp1', chip: 'drivetemp', n: 1, label: 'sda', value: Math.round(rnd(33, 36)), cpu: false },
+      { id: 'drivetemp@1:0:0:0/temp1', chip: 'drivetemp', n: 1, label: 'sdb', value: Math.round(rnd(34, 37)), cpu: false },
+      ...(nvidia.loaded ? [{ id: 'gpu', chip: 'nvidia', n: 1, label: 'NVIDIA GeForce RTX 3060 Ti', value: Math.round(rnd(41, 47)), cpu: false }] : []),
+    ].map((x) => ({ ...x, name: demoFans.names[x.id] || null }));
+    const pctOf = (c) => {
+      if (!c || c.mode === 'auto') return Math.round(30 + (cpu - 40) * 1.5);
+      if (c.mode === 'fixed') return Math.max(c.min, c.percent);
+      const src = temps.find((x) => x.id === c.source), p = [...c.points].sort((a, b) => a[0] - b[0]);
+      if (!src) return 100;
+      let v = p[p.length - 1][1];
+      if (src.value <= p[0][0]) v = p[0][1];
+      else for (let i = 1; i < p.length; i++) if (src.value <= p[i][0]) { v = p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (src.value - p[i - 1][0])) / (p[i][0] - p[i - 1][0]); break; }
+      return Math.round(Math.max(c.min, v));
+    };
+    const fans = FAN_DEFS.map(([pwm, label, lo, hi], i) => {
+      const id = 'nct6798@nct6775.656/' + pwm, c = demoFans.ch[id], pct = Math.max(0, Math.min(100, pctOf(c)));
+      return { id: 'nct6798@nct6775.656/fan' + (i + 1), chip: 'nct6798', label, name: demoFans.names[id] || null, rpm: Math.round(lo + ((hi - lo) * pct) / 100 + rnd(-15, 15)),
+        pwm: { id, percent: pct, writable: true, enable: c && c.mode !== 'auto' ? 1 : 5, mode: c ? c.mode : 'auto', fixed: c && c.percent != null ? c.percent : 50, min: c ? c.min : 20, source: c ? c.source || null : null, points: c ? c.points || null : null } };
+    });
+    return { temps, fans, controllable: true, hot: 85, modules: ['nct6775', 'drivetemp'] };
+  }
+  function fansSave(b) {
+    const id = String(b.id || ''), def = FAN_DEFS.find(([p]) => id === 'nct6798@nct6775.656/' + p);
+    if (!def) throw err('This fan can\'t be controlled (anymore). Look for sensors again.', 404);
+    if (!['auto', 'fixed', 'curve'].includes(b.mode)) throw err('Choose Auto, Fixed or Curve.');
+    const min = b.min == null ? 20 : Number(b.min);
+    if (!(min >= 0 && min <= 100)) throw err('Choose a minimum between 0 and 100%.');
+    const c = { mode: b.mode, min };
+    if (b.mode === 'fixed') { if (!(b.percent >= 0 && b.percent <= 100)) throw err('Choose a speed between 0 and 100%.'); c.percent = Math.round(b.percent); }
+    if (b.mode === 'curve') {
+      if (!fansStatus().temps.some((x) => x.id === b.source)) throw err('Choose the temperature the fan follows.');
+      if (!Array.isArray(b.points) || b.points.length < 2 || b.points.length > 8) throw err('A curve needs between 2 and 8 points.');
+      if (b.points.some(([x, y]) => !(x >= 0 && x <= 110 && y >= 0 && y <= 100))) throw err('Each point needs a temperature (0–110 °C) and a speed (0–100%).');
+      c.source = b.source; c.points = b.points.map(([x, y]) => [Number(x), Number(y)]).sort((p, q) => p[0] - q[0]);
+    }
+    demoFans.ch[id] = c;
+    if (b.name) demoFans.names[id] = String(b.name).slice(0, 40); else delete demoFans.names[id];
+    return fansStatus();
+  }
+
   /* ---- moving from Unraid (lib/unraid.js): a stick and three disks of an old server, the steps run on the clock */
   const unraidScan = () => ({
     found: true, name: 'Tower', version: '6.12.13', flash: 'sdk', warnings: [],
@@ -2727,6 +2777,7 @@
     if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidSsh ? unraidSshScan() : unraidScan();
     if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/system/details') { await wait(rnd(150, 300)); return systemDetails(); }
+    if (path === '/api/fans') return fansStatus();
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     throw err('Unknown endpoint', 404);
@@ -2851,6 +2902,9 @@
     if (path === '/api/pools') { await wait(rnd(300, 600)); return demoStartCreate(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
+    if (path === '/api/fans/probe') { await wait(1200); return { loaded: [], ...fansStatus() }; }
+    if (path === '/api/fans/channel') { await wait(300); return fansSave(body || {}); }
+    if (path === '/api/fans/name') { const id = String((body || {}).id || ''); if (body.name) demoFans.names[id] = String(body.name).slice(0, 40); else delete demoFans.names[id]; return { id, name: demoFans.names[id] || null }; }
     if (path === '/api/unraid/close') { unraidSsh = null; return { closed: true }; }
     if (path === '/api/unraid/connect') { await wait(900); return unraidConnect(body || {}); }
     if (path === '/api/storage/rescan') return demoRescan();

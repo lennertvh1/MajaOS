@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 EnvironmentFile=/etc/majaos/majaos.env
 ExecStart=/usr/bin/node /opt/majaos/server.js
+# Fans MajaOS controlled (Settings → Cooling) go back to the BIOS when it stops, also after a crash.
+ExecStopPost=-/usr/bin/node /opt/majaos/lib/fans.js --restore
 Restart=on-failure
 RestartSec=5
 # Stopping (an update, a restart): SIGTERM to MajaOS itself, then whatever it started (a terminal's bash ignores SIGTERM,

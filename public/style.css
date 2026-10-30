@@ -1670,6 +1670,28 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 }
 
 /* Create pool: ZFS or mixed disks, and the role of each disk in a pool with mixed disks. */
+/* Settings → Cooling: temperatures as tiles, a card per fan with its mode and curve. */
+.temp-grid { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.temp-grid li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); font-size: 13px; }
+.temp-grid li span { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fan-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.fan-card { display: grid; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); }
+.fan-head { display: flex; align-items: center; gap: 12px; }
+.fan-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--glass-strong); color: var(--accent); }
+.fan-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.fan-title { flex: 1; display: grid; min-width: 0; }
+.fan-now { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
+.fan-form { display: grid; gap: 10px; }
+.fan-form [hidden] { display: none; }
+.fan-form input[type=range] { width: 100%; accent-color: var(--accent); }
+.fan-curve-box { display: grid; grid-template-columns: auto minmax(200px, 320px); gap: 10px 24px; align-items: start; justify-content: start; }
+.fan-curve-box > .fld { grid-column: 1 / -1; max-width: 420px; }
+.fan-points table { border-collapse: collapse; } .fan-points th { font-size: 12px; color: var(--muted); text-align: left; padding: 0 6px 4px 0; }
+.fan-points td { padding: 0 6px 4px 0; } .fan-points input.field { width: 76px; }
+.fan-curve { width: 100%; height: auto; } .fan-curve .grid { fill: none; stroke: var(--glass-line); }
+.fan-curve polyline { fill: none; stroke: var(--accent); stroke-width: 2; } .fan-curve circle { fill: var(--accent); }
+.fan-min .field.sm { width: 80px; display: inline-block; }
+@media (max-width: 760px) { .fan-curve-box { grid-template-columns: 1fr; } }
 /* Create pool: a wizard with numbered steps. */
 .wz { display: grid; gap: 14px; }
 .wz-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
