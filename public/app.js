@@ -1686,6 +1686,16 @@
   let onWinClose = null;
   let minimizingWindow = false;
   let minimizedTitle = '';
+  let winTaskItem = null;
+  function addMinimizedTask(title, icon, restore) {
+    const bar = $('#minimizedWindows'); bar.hidden = false;
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task';
+    const glyph = document.createElement('span'); glyph.className = 'minimized-icon'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = icon;
+    const label = document.createElement('span'); label.textContent = title; item.append(glyph, label);
+    item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); if (!bar.children.length) bar.hidden = true; restore(); });
+    bar.appendChild(item); return item;
+  }
+  function windowGlyph(title) { const s = String(title).toLowerCase(); return /settings|instellingen/.test(s) ? '⚙' : /storage|opslag/.test(s) ? '▤' : /system|systeem/.test(s) ? '◉' : /vm|virtual/.test(s) ? '▣' : /file|bestand/.test(s) ? '▧' : /console/.test(s) ? '⌘' : /share|gedeeld/.test(s) ? '▤' : '▰'; }
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
@@ -1695,17 +1705,15 @@
     const old = $('#winBody'), body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
-    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); }
+    if (win.open && win.classList.contains('window-minimized')) { win.close(); win.classList.remove('window-minimized'); if (winTaskItem) { winTaskItem.remove(); winTaskItem = null; } const bar = $('#minimizedWindows'); if (!bar.children.length) bar.hidden = true; }
     if (!win.open) win.showModal();
     if (after) after(body);
   }
   $('#winClose').addEventListener('click', () => { minimizingWindow = false; win.close(); });
   $('#winMinimize').addEventListener('click', () => {
     minimizedTitle = $('#winTitle').textContent;
-    const bar = $('#minimizedWindows'); bar.hidden = false;
-    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm'; item.textContent = minimizedTitle; item.setAttribute('aria-label', t('Restore {name}', { name: minimizedTitle }));
-    item.addEventListener('click', () => { bar.replaceChildren(); bar.hidden = true; minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); });
-    bar.replaceChildren(item); minimizingWindow = true; win.close(); win.show(); win.classList.add('window-minimized');
+    winTaskItem = addMinimizedTask(minimizedTitle, windowGlyph(minimizedTitle), () => { winTaskItem = null; minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); });
+    minimizingWindow = true; win.close(); win.show(); win.classList.add('window-minimized');
   });
   // A link to Settings in a window: the window closes, Settings opens on top.
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
@@ -8519,10 +8527,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (setWin.open) setWin.close();
   }
   $('#setMinimize').addEventListener('click', () => {
-    const bar = $('#minimizedWindows'); bar.hidden = false; bar.replaceChildren();
-    const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm'; item.textContent = t('Settings');
-    item.addEventListener('click', () => { bar.replaceChildren(); bar.hidden = true; setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); });
-    bar.appendChild(item); setWin.close(); setWin.show(); setWin.classList.add('window-minimized');
+    addMinimizedTask(t('Settings'), '⚙', () => { setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); });
+    setWin.close(); setWin.show(); setWin.classList.add('window-minimized');
   });
   $('#setClose').addEventListener('click', closeSettings);
   setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
