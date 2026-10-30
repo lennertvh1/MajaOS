@@ -3037,9 +3037,21 @@
           <button class="btn primary" type="button" data-mig-hardware>${t('Prepare migration')}</button>
           <p class="form-error" role="alert" data-mig-hardware-msg></p></div>
       </section>
+      <section class="pool-card plain mig-card mig-net" data-mig-choice hidden>
+        <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>
+        <div class="mig-text"><b>${t('Unraid to MajaOS over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
+          <div class="muted small">${t('Your Unraid server keeps running; nothing has to move.')}</div>
+          <form class="mig-form" data-mig-ssh novalidate>
+            <input class="field" name="host" placeholder="${esc(t('Address, e.g. 192.168.1.10'))}" aria-label="${esc(t('Address'))}" autocomplete="off" spellcheck="false">
+            <input class="field" name="user" value="root" aria-label="${esc(t('User name'))}" autocomplete="off" spellcheck="false">
+            <input class="field" name="password" type="password" placeholder="${esc(t('Password'))}" aria-label="${esc(t('Password'))}" autocomplete="off">
+            <button class="btn primary" type="submit">${t('Connect')}</button><button class="btn" type="button" data-mig-back>${t('Back')}</button>
+          </form><p class="form-error" role="alert"></p></div>
+      </section>
 `;
     $('[data-mig-usb]', el).addEventListener('click', () => unraidFlow(el));
     $('[data-mig-network]', el).addEventListener('click', () => { $('[data-mig-choice]', el).hidden = false; });
+    $('[data-mig-back]', el).addEventListener('click', () => { $('[data-mig-choice]', el).hidden = true; });
     $('[data-mig-hardware]', el).addEventListener('click', () => {
       backupWindow('system');
       toast(t('Create app and VM backups on storage the new server can reach, then restore them there.'));
