@@ -41,6 +41,7 @@ if (process.argv.includes('--demo')) process.env.DEMO = '1';
 
 // Only load after reading .env: the modules read their settings when they are loaded.
 const sys = require('./lib/system');
+const hardware = require('./lib/hardware');
 const docker = require('./lib/docker');
 const vms = require('./lib/vms');
 const storage = require('./lib/storage');
@@ -367,6 +368,7 @@ async function handleApi(req, res, url) {
 
   let m;
   if (p === '/api/system/details' && method === 'GET') return sendJson(res, 200, await sys.details());
+  if (p === '/api/hardware' && method === 'GET') return sendJson(res, 200, await hardware.inventory());
   // Cooling (lib/fans.js): temperatures and fans; a channel's mode (auto, fixed, curve) and own names.
   if (p === '/api/fans' && method === 'GET') return sendJson(res, 200, await fans.status());
   if (p === '/api/fans/probe' && method === 'POST') return sendJson(res, 200, await fans.probe());

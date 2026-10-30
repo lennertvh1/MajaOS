@@ -112,6 +112,7 @@ test('checking hardware', () => {
 test('devices of the server: lsusb, lspci and CPU list', () => {
   assert.deepEqual(hw.parseLsusb('Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\nBus 001 Device 004: ID 10c4:ea60 Silicon Labs CP210x UART Bridge\nBus 003 Device 002: ID 05e3:0610 Genesys Logic, Inc. Hub\n'),
     [{ key: 'usb:10c4:ea60', bus: 1, device: 4, vendor: '10c4', product: 'ea60', name: 'Silicon Labs CP210x UART Bridge' }]);
+  assert.equal(hw.parseLsusb('Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub', { includeHubs: true }).length, 1);
   const pci = hw.summarizePci([
     { address: '0000:00:01.0', class: '060000', group: '0', driver: null },
     { address: '0000:0a:00.0', class: '030000', group: '14', driver: 'nvidia' },
@@ -124,6 +125,12 @@ test('devices of the server: lsusb, lspci and CPU list', () => {
     ['pci:0000:0a:00.0', 'Display', 'NVIDIA GeForce RTX 3060 Ti', 'nvidia', ['0000:0a:00.1']],
     ['pci:0000:0a:00.1', 'Audio', 'NVIDIA GA104 High Definition Audio Controller', 'snd_hda_intel', ['0000:0a:00.0']],
     ['pci:0000:0c:00.3', 'USB', 'Advanced Micro Devices Matisse USB 3.0 Host Controller', 'xhci_hcd', []]]);
+  const all = hw.summarizePci([
+    { address: '0000:00:01.0', class: '060000', group: '0', driver: null },
+    { address: '0000:0a:00.0', class: '030000', group: '14', driver: 'nvidia' },
+  ], '0000:00:01.0 "Host bridge" "Advanced Micro Devices" "Root Complex"\n', { all: true });
+  assert.deepEqual(all.map((p) => [p.address, p.kind, p.driver]), [
+    ['0000:00:01.0', 'Host bridge', null], ['0000:0a:00.0', 'Display', 'nvidia']]);
   assert.deepEqual(hw.expandList('0,8'), [0, 8]);
   assert.deepEqual(hw.expandList('0-1,4'), [0, 1, 4]);
 });

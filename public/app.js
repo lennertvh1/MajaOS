@@ -5167,7 +5167,7 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
@@ -5175,11 +5175,11 @@
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', migration: 'Migration', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', hardware: 'Hardware', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', migration: 'Migration', about: 'About' }[tab]);
     if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null; $('#setPane').oninput = null; $('#setPane').onsubmit = null;
-    ({ general: generalPane, storage: storagePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, hardware: hardwarePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
   }
 
   // Settings and the wizard only offer a language once its dictionary covers the interface.
@@ -8258,6 +8258,90 @@ sudo ./install.sh</pre></div>`}` : '') +
     };
   }
 
+  /* --- Hardware: a read-only inventory, with the existing NVIDIA install action when needed. */
+  async function hardwarePane(el) {
+    const request = String(Number(el.dataset.hwRequest || 0) + 1);
+    el.dataset.hwRequest = request;
+    el.innerHTML = `<h2 class="pane-title">${t('Hardware')}</h2><p class="muted">${t('Loading…')}</p>`;
+    const urls = ['/api/about', '/api/hardware', '/api/storage/disks', '/api/system-updates'];
+    const results = await Promise.allSettled(urls.map((url) => api.get(url)));
+    if (settingsTab() !== 'hardware' || !el.isConnected || el.dataset.hwRequest !== request) return;
+    const value = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
+    const error = (i) => results[i].status === 'rejected' ? `<p class="muted small">${esc(results[i].reason.message)}</p>` : '';
+    const a = value(0), hw = value(1), disks = value(2), updates = value(3);
+    const pci = hw && hw.pci || [];
+    const grouped = {
+      display: pci.filter((d) => d.kind === 'Display'),
+      network: pci.filter((d) => d.kind === 'Network'),
+      storage: pci.filter((d) => d.kind === 'Storage'),
+      other: pci.filter((d) => !['Display', 'Network', 'Storage'].includes(d.kind)),
+    };
+    const device = (d, usb = false) => {
+      const drivers = usb ? d.drivers || [] : d.driver ? [d.driver] : [];
+      const meta = usb ? `USB ${d.vendor}:${d.product}` : `${d.kind} · ${d.address}`;
+      return `<li class="hw-device"><div><b>${esc(d.name || d.address || d.key)}</b><span class="muted small">${esc(meta)}</span></div>
+        <span class="hw-driver ${drivers.length ? 'ready' : ''}">${drivers.length ? `${t('Driver')}: ${esc(drivers.join(', '))}` : usb ? t('Driver not reported') : t('No kernel driver')}</span></li>`;
+    };
+    const devices = (list, usb = false) => list.length ? `<ul class="hw-devices">${list.map((d) => device(d, usb)).join('')}</ul>` : `<p class="muted small">${t('No devices found.')}</p>`;
+    const diskList = (list) => list.length ? `<ul class="hw-devices">${list.map((d) => `<li class="hw-device"><div><b>${esc(d.model || d.name)}</b>
+      <span class="muted small">${esc([d.name, d.serial].filter(Boolean).join(' · '))}</span></div><span class="hw-driver ready">${esc(bytes(d.size || 0))}</span></li>`).join('')}</ul>` : `<p class="muted small">${t('No devices found.')}</p>`;
+    const section = (title, content) => `<section class="hw-section"><h2 class="pane-title">${t(title)}</h2>${content}</section>`;
+    const board = a && a.board || {};
+    const overview = a ? `<dl class="kv about-kv hw-overview">
+      <dt>${t('Motherboard')}</dt><dd>${esc([board.boardVendor, board.board].filter(Boolean).join(' ') || '–')}</dd>
+      <dt>${t('BIOS')}</dt><dd>${esc([board.bios, board.biosDate].filter(Boolean).join(' · ') || '–')}</dd>
+      <dt>${t('Processor')}</dt><dd>${esc(a.cpu && a.cpu.brand || '–')}</dd>
+      <dt>${t('Cores')}</dt><dd>${esc(a.cpu ? t('{cores} cores, {threads} threads', { cores: a.cpu.cores || '?', threads: a.cpu.threads || '?' }) : '–')}</dd>
+      <dt>${t('Memory')}</dt><dd>${a.memory ? esc(bytes(a.memory)) : '–'}</dd>
+      <dt>${t('ECC')}</dt><dd>${a.ecc ? (a.ecc.active ? t('Active') + (a.ecc.mode ? ' · ' + esc(a.ecc.mode) : '') : t('Not active')) : t('Unknown')}</dd>
+      <dt>${t('Operating system')}</dt><dd>${esc(a.os || '–')}</dd>
+      <dt>${t('Kernel')}</dt><dd>${esc(a.kernel || '–')}</dd></dl>` : error(0);
+    const nv = updates && updates.nvidia;
+    const driverStatus = `${nvidiaCard(nv, !!(updates && updates.job && updates.job.running))}
+      <p class="muted small">${t('Kernel drivers for PCI and USB devices are listed below. MajaOS can install NVIDIA GPU support here.')}</p>
+      ${error(3)}<div data-hw-job></div>`;
+    el.innerHTML = `<div class="hw-head"><div><h2 class="pane-title">${t('Hardware')}</h2><p class="muted small">${t('Devices detected by this server and the drivers currently in use.')}</p></div>
+      <button class="btn" type="button" data-hw-refresh>${t('Refresh')}</button></div>
+      ${section('System', overview)}
+      ${section('Drivers', driverStatus)}
+      ${section('Graphics cards', error(1) || devices(grouped.display))}
+      ${section('Storage devices', disks ? diskList(disks.disks || []) : error(2))}
+      ${section('Network adapters', error(1) || devices(grouped.network))}
+      ${section('USB devices', error(1) || devices(hw.usb || [], true))}
+      ${section('Storage controllers', error(1) || devices(grouped.storage))}
+      ${section('Other PCI devices', error(1) || devices(grouped.other))}`;
+    const jobBox = $('[data-hw-job]', el);
+    const busy = !!(updates && updates.job && updates.job.running);
+    const follow = async () => {
+      let p;
+      try { p = await api.get('/api/system-updates/progress'); } catch { if (el.isConnected && settingsTab() === 'hardware') setTimeout(follow, 2000); return; }
+      if (!jobBox.isConnected || settingsTab() !== 'hardware' || el.dataset.hwRequest !== request) return;
+      if (p.state !== 'idle') {
+        if (!$('.deb-job', jobBox)) jobBox.innerHTML = `<div class="deb-job"><p class="small"></p><details><summary>${t('Details')}</summary><pre class="logs"></pre></details></div>`;
+        const label = { check: t('Checking for updates'), upgrade: t('Updating Debian'), 'auto-on': t('Turning on automatic updates'), 'auto-off': t('Turning off automatic updates'), nvidia: t('Installing the NVIDIA driver') }[p.action] || t('Driver status');
+        $('.deb-job p', jobBox).innerHTML = `<b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}`;
+        if (p.state === 'failed') $('details', jobBox).open = true;
+        const pre = $('pre', jobBox), atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
+        const log = (p.lines || []).join('\n');
+        if (pre.textContent !== log) { pre.textContent = log; if (atEnd) pre.scrollTop = pre.scrollHeight; }
+      }
+      if (p.running) setTimeout(follow, 1500);
+      else if (busy || jobBox.dataset.waiting) hardwarePane(el);
+    };
+    if (busy || (updates && updates.job && updates.job.action === 'nvidia' && updates.job.state === 'failed')) follow();
+    el.onclick = async (e) => {
+      if (e.target.closest('[data-hw-refresh]')) { hardwarePane(el); return; }
+      const b = e.target.closest('[data-deb="nvidia"]'); if (!b) return;
+      if (!(await ask(t('Install the NVIDIA driver and GPU support for Docker? This takes a few minutes and downloads about 500 MB. At the end Docker restarts (your apps stop for a moment), and the server needs a restart to load the driver.'), t('Install driver')))) return;
+      try {
+        b.disabled = true;
+        await api.post('/api/system-updates/nvidia');
+        jobBox.dataset.waiting = '1';
+        follow();
+      } catch (ex) { b.disabled = false; toast(ex.message, true); }
+    };
+  }
+
   async function aboutPane(el) {
     el.onchange = null;
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
@@ -8974,6 +9058,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const settings = [
       ['settings', 'General', ['language', 'theme', 'clock', 'port', 'timezone', 'ntp', 'wizard', t('Language'), t('Theme'), t('Web interface port')]],
       ['settings/storage', 'Storage', ['appdata', 'paths', 'migrate', t('Storage')]],
+      ['settings/hardware', 'Hardware', ['cpu', 'gpu', 'pci', 'usb', 'drivers', 'motherboard', t('Hardware')]],
       ['settings/network', 'Network', ['hostname', 'dhcp', 'dns', 'bridge', 'ip', t('Network')]],
       ['settings/docker', 'Docker networks', ['macvlan', 'ipvlan', 'bridge', t('Docker networks')]],
       ['settings/vmnet', 'VM networks', ['nat', 'isolated', t('VM networks')]],

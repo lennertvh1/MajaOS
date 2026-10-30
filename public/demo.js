@@ -2808,6 +2808,8 @@
     if (path === '/api/system-updates/progress') return debProgress();
     if (path === '/api/mfa') { const m = ownMfa(); return { enabled: m.enabled, since: m.since, recoveryLeft: m.recovery.length, available: true, demoPassword: DEMO_PW, passwordChanged: demoWho.role === 'owner' ? onb.passwordChanged : demoAccounts[demoWho.name].changed, required: demoWho.role !== 'owner' && !!demoAccounts[demoWho.name].mfaRequired }; }
     if (path === '/api/about') return demoAbout();
+    if (path === '/api/hardware') return { pci: PCI.map((d) => ({ ...copy(d), driver: d.kind === 'Display' && !nvidia.loaded ? null : d.driver })),
+      usb: USB.map((d) => ({ ...copy(d), drivers: d.vendor === '0781' ? ['usb-storage'] : d.vendor === '10c4' ? ['cp210x'] : ['cdc_acm'] })), iommu: true };
     if (path === '/api/network') { tickNet(); return copy(net); }
     if (path === '/api/docker-networks') return dnetList();
     if (path === '/api/docker-networks/lan') { // like lanInfo() in lib/dockernet.js
