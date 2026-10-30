@@ -2917,4 +2917,8 @@ window.TB_LANG.nl = {
   "Migrate from Unraid to MajaOS. Choose how to connect to Unraid or move to new hardware. Your Unraid data stays untouched until you choose what to copy.": "Migreer van Unraid naar MajaOS. Kies hoe je met Unraid verbindt of naar nieuwe hardware verhuist. Je Unraid-gegevens blijven onaangeroerd tot je kiest wat je kopieert.",
   "Move from Unraid to MajaOS on new hardware": "Van Unraid naar MajaOS op nieuwe hardware",
   "For an Unraid server: set up MajaOS on new hardware with new disks, then transfer your apps and virtual machines.": "Voor een Unraid-server: installeer MajaOS op nieuwe hardware met nieuwe schijven en zet daarna je apps en virtuele machines over.",
+  "Move from Unraid to MajaOS. Choose whether to connect the Unraid USB stick and disks here, or copy from a running Unraid server over the network.": "Stap over van Unraid naar MajaOS. Sluit de Unraid-USB-stick en schijven hier aan, of kopieer via het netwerk vanaf een draaiende Unraid-server.",
+  "Unraid to MajaOS with USB and disks": "Van Unraid naar MajaOS met USB en schijven",
+  "Move data from an Unraid USB stick and its disks installed in this server. Choose which disks, shares, users, apps and VMs to bring into MajaOS.": "Zet gegevens over van een Unraid-USB-stick en de bijbehorende schijven in deze server. Kies welke schijven, gedeelde mappen, gebruikers, apps en VM's naar MajaOS komen.",
+  "Unraid to MajaOS over the network": "Van Unraid naar MajaOS via het netwerk",
 };

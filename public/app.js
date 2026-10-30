@@ -3017,16 +3017,16 @@
     const p = await api.get('/api/unraid/progress').catch(() => ({ state: 'idle' }));
     if (settingsTab() !== 'migration') return;
     if (p.state === 'running') { unraidFlow(el); return; }
-    el.innerHTML = `${paneHint(t('Migrate from Unraid to MajaOS. Choose how to connect to Unraid or move to new hardware. Your Unraid data stays untouched until you choose what to copy.'))}
+    el.innerHTML = `${paneHint(t('Move from Unraid to MajaOS. Choose whether to connect the Unraid USB stick and disks here, or copy from a running Unraid server over the network.'))}
       <section class="pool-card plain mig-card">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/></svg></span>
-        <div class="mig-text"><b>Unraid</b><div class="muted small">${t('Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.')}</div></div>
+        <div class="mig-text"><b>${t('Unraid to MajaOS with USB and disks')}</b><div class="muted small">${t('Move data from an Unraid USB stick and its disks installed in this server. Choose which disks, shares, users, apps and VMs to bring into MajaOS.')}</div></div>
         <button class="btn primary" type="button" data-mig-unraid>${t('Start')}</button>
       </section>
       <section class="pool-card plain mig-card mig-hardware">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3"/></svg></span>
-        <div class="mig-text"><b>${t('Move from Unraid to MajaOS on new hardware')}</b>
-          <div class="muted small">${t('For an Unraid server: set up MajaOS on new hardware with new disks, then transfer your apps and virtual machines.')}</div>
+        <div class="mig-text"><b>${t('Move MajaOS to new hardware')}</b>
+          <div class="muted small">${t('Set up a fresh MajaOS server with new disks, then bring your apps, virtual machines and settings across.')}</div>
           <details class="mig-hardware-details"><summary>${t('How the move works')}</summary>
             <ol><li>${t('Install MajaOS on the new boot drive and create a pool on the new data drives.')}</li>
             <li>${t('On the old server, back up apps and virtual machines to storage both servers can reach.')}</li>
@@ -3038,7 +3038,7 @@
       </section>
       <section class="pool-card plain mig-card mig-net">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>
-        <div class="mig-text"><b>${t('Unraid over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
+        <div class="mig-text"><b>${t('Unraid to MajaOS over the network')}</b> ${hint(t('MajaOS signs in to your running Unraid server with SSH and copies what you choose over the network. Turn SSH on in Unraid under Settings → Management Access. The old server keeps its files; apps and VMs you take over are stopped there.'))}
           <div class="muted small">${t('Your Unraid server keeps running; nothing has to move.')}</div>
           <form class="mig-form" data-mig-ssh novalidate>
             <input class="field" name="host" placeholder="${esc(t('Address, e.g. 192.168.1.10'))}" aria-label="${esc(t('Address'))}" autocomplete="off" spellcheck="false">
