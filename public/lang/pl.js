@@ -2862,4 +2862,5 @@ window.TB_LANG.pl = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "Nie udało się zainstalować lm-sensors (potrzebne do znalezienia układu): {error}",
   "The boot settings could not be updated: {error}": "Nie udało się zaktualizować ustawień rozruchu: {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "Sterownik {driver} jest załadowany, ale układ nie zgłasza wentylatorów. Sprawdź w BIOS-ie, czy złącza wentylatorów są włączone, albo ustaw wentylatory tam.",
+  "Its data is erased": "Dane na nim zostaną wymazane",
 };

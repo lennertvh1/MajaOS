@@ -2862,4 +2862,5 @@ window.TB_LANG.it = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "Impossibile installare lm-sensors (serve per trovare il chip): {error}",
   "The boot settings could not be updated: {error}": "Impossibile aggiornare le impostazioni di avvio: {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "Il driver {driver} è caricato, ma il chip non segnala ventole. Controlla nel BIOS che i connettori siano attivi, oppure imposta lì le ventole.",
+  "Its data is erased": "I suoi dati vengono cancellati",
 };

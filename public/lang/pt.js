@@ -2862,4 +2862,5 @@ window.TB_LANG.pt = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "Não foi possível instalar o lm-sensors (necessário para encontrar o chip): {error}",
   "The boot settings could not be updated: {error}": "Não foi possível atualizar as definições de arranque: {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "O controlador {driver} está carregado, mas o chip não indica ventoinhas. Verifique na BIOS se os conectores estão ativos, ou ajuste lá as ventoinhas.",
+  "Its data is erased": "Os dados são apagados",
 };

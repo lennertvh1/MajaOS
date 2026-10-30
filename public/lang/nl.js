@@ -2866,4 +2866,5 @@ window.TB_LANG.nl = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "lm-sensors kon niet geïnstalleerd worden (nodig om de sensorchip te vinden): {error}",
   "The boot settings could not be updated: {error}": "De opstartinstellingen konden niet bijgewerkt worden: {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "De driver {driver} is geladen, maar de chip meldt geen fans. Kijk in het BIOS of de fan-aansluitingen aanstaan, of stel de fans daar in.",
+  "Its data is erased": "De data erop wordt gewist",
 };

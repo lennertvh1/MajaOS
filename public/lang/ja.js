@@ -2862,4 +2862,5 @@ window.TB_LANG.ja = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "lm-sensors をインストールできませんでした（センサーチップの検出に必要）: {error}",
   "The boot settings could not be updated: {error}": "起動設定を更新できませんでした: {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "ドライバー {driver} は読み込まれましたが、チップがファンを報告していません。BIOS でファン端子が有効か確認するか、そこでファンを設定してください。",
+  "Its data is erased": "データは消去されます",
 };

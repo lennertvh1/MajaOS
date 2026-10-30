@@ -2647,7 +2647,7 @@
         if (!free.length) return `<p class="lead">${t('There are no free disks. Every disk is already in a pool or holds the system.')}</p>`;
         if (W.kind === 'zfs') {
           return `<h3 class="wz-q">${t('Which disks go into the pool?')}</h3><p class="muted small">${t('Tap the disks you want to use together.')}</p>
-            <div class="pool-disk-tiles">${free.map((d) => tile(d, W.picked.has(d.name), d.warn && W.picked.has(d.name) ? `<span class="pool-disk-warn small temp-warn">${esc(tr(d.warn))}</span>` : '')).join('')}</div>`;
+            <div class="pool-disk-tiles">${free.map((d) => tile(d, W.picked.has(d.name), d.warn && W.picked.has(d.name) ? `<span class="pool-disk-warn small temp-warn" title="${esc(tr(d.warn))}">${t('Its data is erased')}</span>` : '')).join('')}</div>`;
         }
         return `<h3 class="wz-q">${t('Which disks go into the pool?')}</h3><p class="muted small">${t('Mark each disk as Data or Parity.')} ${hint(t('Each disk keeps its own files and may have a different size; you can add disks later. A parity disk protects against a disk that stops working and must be at least as large as your largest data disk. The parity is brought up to date every night: files from today are protected after that.'))}</p>
           <ul class="rows mix-disks">${free.map((d) => {

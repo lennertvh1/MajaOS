@@ -2862,4 +2862,5 @@ window.TB_LANG.fr = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "lm-sensors n'a pas pu être installé (nécessaire pour trouver la puce) : {error}",
   "The boot settings could not be updated: {error}": "Les réglages de démarrage n'ont pas pu être mis à jour : {error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "Le pilote {driver} est chargé, mais la puce ne signale aucun ventilateur. Vérifiez dans le BIOS que les connecteurs sont activés, ou réglez les ventilateurs là.",
+  "Its data is erased": "Ses données sont effacées",
 };

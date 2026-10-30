@@ -2862,4 +2862,5 @@ window.TB_LANG.zh = {
   "lm-sensors could not be installed (needed to find the sensor chip): {error}": "无法安装 lm-sensors（查找传感器芯片需要）：{error}",
   "The boot settings could not be updated: {error}": "无法更新启动设置：{error}",
   "The driver {driver} is loaded, but the chip reports no fans. Check in the BIOS that the fan headers are on, or set the fans there.": "驱动 {driver} 已加载，但芯片未报告风扇。请在 BIOS 中检查风扇接口是否开启，或在那里设置风扇。",
+  "Its data is erased": "其上的数据将被清除",
 };
