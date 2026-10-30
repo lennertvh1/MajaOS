@@ -253,7 +253,7 @@
   }
   if (window.HTMLDialogElement && !HTMLDialogElement.prototype.showModal.majaos) {
     const showModal = HTMLDialogElement.prototype.showModal;
-    HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); };
+    HTMLDialogElement.prototype.showModal = function () { showModal.call(this); modalStack.push(this); placeToasts(); const bar = document.getElementById('minimizedWindows'); if (bar && bar.children.length && bar.showPopover) { bar.hidden = false; try { if (bar.matches(':popover-open')) bar.hidePopover(); bar.showPopover(); } catch (e) { /* popover unavailable */ } } };
     HTMLDialogElement.prototype.showModal.majaos = true;
   }
   document.addEventListener('close', (e) => { if (e.target instanceof HTMLDialogElement) placeToasts(); }, true);
@@ -1693,12 +1693,22 @@
     const bar = showMinimizedBar();
     const item = document.createElement('button'); item.type = 'button'; item.className = 'btn sm minimized-task';
     const glyph = document.createElement('span'); glyph.className = 'minimized-icon'; glyph.setAttribute('aria-hidden', 'true');
-    if (icon && /^https?:|^\//.test(icon)) { const img = document.createElement('img'); img.src = icon; img.alt = ''; glyph.appendChild(img); } else glyph.textContent = icon;
+    if (icon && /^<svg/.test(icon)) glyph.innerHTML = icon; else if (icon && /^https?:|^\//.test(icon)) { const img = document.createElement('img'); img.src = icon; img.alt = ''; glyph.appendChild(img); } else glyph.textContent = icon;
     const label = document.createElement('span'); label.textContent = title; item.append(glyph, label);
     item.setAttribute('aria-label', t('Restore {name}', { name: title })); item.addEventListener('click', () => { item.remove(); hideMinimizedBarIfEmpty(); restore(); });
     bar.appendChild(item); return item;
   }
-  function windowGlyph(title) { const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title); return app && app.icon || (/settings|instellingen/i.test(title) ? '⚙' : /storage|opslag/i.test(title) ? '▤' : /system|systeem/i.test(title) ? '◉' : /vm|virtual/i.test(title) ? '▣' : /file|bestand/i.test(title) ? '▧' : /console/i.test(title) ? '⌘' : '▰'); }
+  function windowGlyph(title) {
+    const app = S.apps.find((a) => prettyName(a.name) === title || a.name === title);
+    if (app && app.icon) return app.icon;
+    const pageId = ({ Storage: 'storage', 'Shared folders': 'shares', VMs: 'vms', 'App store': 'store', Files: 'files', Backups: 'backup' })[title];
+    const p = pageId && PAGE_META[pageId];
+    if (p) return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p.svg}</svg>`;
+    const s = title.toLowerCase();
+    if (/settings|instellingen/.test(s)) return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5v.1h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1L7 4.3l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.2 1.1z"/></svg>';
+    if (title === 'App') return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${PAGE_META.store.svg}</svg>`;
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
+  }
   function mountTaskbar() { /* The taskbar stays in the document top layer, above every dialog. */ }
   function openWindow(title, html, after) {
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
@@ -1718,8 +1728,8 @@
   $('#winMinimize').addEventListener('click', () => {
     minimizedTitle = $('#winTitle').textContent;
     const y = window.scrollY;
-    winTaskItem = addMinimizedTask(minimizedTitle, windowGlyph(minimizedTitle), () => { winTaskItem = null; mountTaskbar(win); minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); window.scrollTo(0, y); });
-    minimizingWindow = true; win.close(); win.classList.add('window-minimized'); window.scrollTo(0, y);
+    winTaskItem = addMinimizedTask(minimizedTitle, windowGlyph(minimizedTitle), () => { winTaskItem = null; mountTaskbar(win); minimizingWindow = true; win.close(); win.classList.remove('window-minimized'); win.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
+    minimizingWindow = true; win.close(); win.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
   });
   // A link to Settings in a window: the window closes, Settings opens on top.
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
@@ -8535,8 +8545,8 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   $('#setMinimize').addEventListener('click', () => {
     const y = window.scrollY;
-    addMinimizedTask(t('Settings'), '⚙', () => { mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); });
-    setWin.close(); setWin.classList.add('window-minimized'); window.scrollTo(0, y);
+    addMinimizedTask(t('Settings'), '⚙', () => { mountTaskbar(setWin); setWin.close(); setWin.classList.remove('window-minimized'); setWin.showModal(); window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
+    setWin.close(); setWin.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
   });
   $('#setClose').addEventListener('click', closeSettings);
   setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
