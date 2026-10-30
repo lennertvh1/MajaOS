@@ -319,6 +319,8 @@ async function handleApi(req, res, url) {
   // Cooling (lib/fans.js): temperatures and fans; a channel's mode (auto, fixed, curve) and own names.
   if (p === '/api/fans' && method === 'GET') return sendJson(res, 200, await fans.status());
   if (p === '/api/fans/probe' && method === 'POST') return sendJson(res, 200, await fans.probe());
+  if (p === '/api/fans/diagnose' && method === 'POST') return sendJson(res, 200, await fans.diagnose({ fresh: !!(await readBody(req)).fresh }));
+  if (p === '/api/fans/install' && method === 'POST') return sendJson(res, 200, await fans.installDriver());
   if (p === '/api/fans/channel' && method === 'POST') { const b = await readBody(req); return sendJson(res, 200, await fans.save(String(b.id || ''), b)); }
   if (p === '/api/fans/name' && method === 'POST') { const b = await readBody(req); return sendJson(res, 200, fans.rename(String(b.id || ''), b.name)); }
   if (p === '/api/overview' && method === 'GET') return sendJson(res, 200, await apiOverview());

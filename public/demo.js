@@ -2038,7 +2038,17 @@
     };
   }
   // Cooling (lib/fans.js): a B550 board with an nct6798 chip, four fans with PWM, the CPU, an NVMe, two disks and the GPU.
-  const demoFans = { names: {}, ch: {}, probed: true };
+  // /?fans=0: a board whose sensor driver isn't loaded yet; /?fans=lax: and the BIOS keeps the chip (needs a restart).
+  const fansQ = (() => { try { return new URLSearchParams(location.search).get('fans'); } catch (e) { return null; } })();
+  const demoFans = { names: {}, ch: {}, driver: !fansQ, reboot: false };
+  const fansDiagnose = () => (demoFans.reboot ? { state: 'pending', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'yes' }
+    : demoFans.driver ? { state: 'loaded', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'no' }
+    : { state: 'ready', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: fansQ === 'lax' ? 'yes' : 'no' });
+  function fansInstall() {
+    if (fansQ === 'lax') { demoFans.reboot = true; return { ok: true, reboot: true, driver: 'nct6775', ...fansStatus() }; }
+    demoFans.driver = true;
+    return { ok: true, reboot: false, driver: 'nct6775', ...fansStatus() };
+  }
   const FAN_DEFS = [['pwm1', 'CPU_FAN', 900, 2200], ['pwm2', 'SYS_FAN1', 600, 1500], ['pwm3', 'SYS_FAN2', 600, 1500], ['pwm4', 'SYS_FAN3', 500, 1400]];
   function fansStatus() {
     const cpu = Math.round(rnd(44, 52) * 10) / 10;
@@ -2061,12 +2071,12 @@
       else for (let i = 1; i < p.length; i++) if (src.value <= p[i][0]) { v = p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (src.value - p[i - 1][0])) / (p[i][0] - p[i - 1][0]); break; }
       return Math.round(Math.max(c.min, v));
     };
-    const fans = FAN_DEFS.map(([pwm, label, lo, hi], i) => {
+    const fans = !demoFans.driver ? [] : FAN_DEFS.map(([pwm, label, lo, hi], i) => {
       const id = 'nct6798@nct6775.656/' + pwm, c = demoFans.ch[id], pct = Math.max(0, Math.min(100, pctOf(c)));
       return { id: 'nct6798@nct6775.656/fan' + (i + 1), chip: 'nct6798', label, name: demoFans.names[id] || null, rpm: Math.round(lo + ((hi - lo) * pct) / 100 + rnd(-15, 15)),
         pwm: { id, percent: pct, writable: true, enable: c && c.mode !== 'auto' ? 1 : 5, mode: c ? c.mode : 'auto', fixed: c && c.percent != null ? c.percent : 50, min: c ? c.min : 20, source: c ? c.source || null : null, points: c ? c.points || null : null } };
     });
-    return { temps, fans, controllable: true, hot: 85, modules: ['nct6775', 'drivetemp'] };
+    return { temps: demoFans.driver ? temps : temps.filter((x) => x.chip !== 'nct6798'), fans, controllable: fans.length > 0, hot: 85, modules: demoFans.driver ? ['nct6775', 'drivetemp'] : ['drivetemp'] };
   }
   function fansSave(b) {
     const id = String(b.id || ''), def = FAN_DEFS.find(([p]) => id === 'nct6798@nct6775.656/' + p);
@@ -2903,6 +2913,8 @@
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
     if (path === '/api/fans/probe') { await wait(1200); return { loaded: [], ...fansStatus() }; }
+    if (path === '/api/fans/diagnose') { await wait(1500); return fansDiagnose(); }
+    if (path === '/api/fans/install') { await wait(2000); return fansInstall(); }
     if (path === '/api/fans/channel') { await wait(300); return fansSave(body || {}); }
     if (path === '/api/fans/name') { const id = String((body || {}).id || ''); if (body.name) demoFans.names[id] = String(body.name).slice(0, 40); else delete demoFans.names[id]; return { id, name: demoFans.names[id] || null }; }
     if (path === '/api/unraid/close') { unraidSsh = null; return { closed: true }; }

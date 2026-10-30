@@ -2892,10 +2892,31 @@
         ${d.temps.length ? `<ul class="temp-grid">${tempsHtml()}</ul>` : `<p class="muted">${t('No temperature sensors found.')}</p>`}
         <h2 class="pane-title">${t('Fans')}</h2>
         ${d.fans.length ? `<ul class="fan-list">${d.fans.map(fanHtml).join('')}</ul>`
-          : `<p class="muted">${t('No fans found. The sensor chip of the motherboard may need its driver: click Look for sensors.')}</p>`}
+          : `<div class="fan-diag" data-fan-diag><p class="muted">${t('No fans found. Checking which sensor chip your motherboard has…')}</p></div>`}
         <div class="btn-row"><button class="btn" type="button" data-fan-probe>${t('Look for sensors')}</button></div>`;
     };
+    // No fans: what the board's sensor chip needs, with whether a restart is needed, before anything is installed.
+    const REBOOT = { no: ['ok', 'No restart needed'], yes: ['warn', 'Needs a restart'], maybe: ['warn', 'Maybe a restart'] };
+    const REBOOT_WHY = { yes: 'The BIOS keeps this chip for itself. MajaOS allows the driver from the next start, so the server has to restart once.',
+      maybe: 'The driver is already loaded but sees no fans. If the BIOS keeps the chip for itself, MajaOS allows it from the next start (one restart).' };
+    const diagnose = async (fresh) => {
+      const box = $('[data-fan-diag]', el); if (!box) return;
+      let g;
+      try { g = await api.post('/api/fans/diagnose', { fresh: !!fresh }); }
+      catch (e) { box.innerHTML = `<p class="small temp-bad">${esc(e.message)}</p>`; return; }
+      if (!box.isConnected) return;
+      if (g.state === 'none') { box.innerHTML = `<p class="muted">${t('MajaOS found no sensor chip on this motherboard. Its fans can only be set in the BIOS.')}</p>`; return; }
+      if (g.state === 'unsupported') { box.innerHTML = `<p class="muted">${esc(t('The sensor chip {chip} has no driver in this Linux version yet. Set the fans in the BIOS.', { chip: g.chip }))}</p>`; return; }
+      const [cls, label] = REBOOT[g.reboot] || REBOOT.no;
+      box.innerHTML = `<div class="upd-card new"><span class="nv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
+        <div class="upd-text"><b>${esc(t('Sensor chip: {chip}', { chip: g.chip }))}</b>
+          <div class="muted small">${esc(t('Driver: {driver}', { driver: g.driver }))} · <span class="pill ${cls}">${esc(t(label))}</span></div>
+          ${g.state === 'pending' ? `<div class="muted small">${t('The driver is installed. Restart the server once to see the fans.')}</div>` : REBOOT_WHY[g.reboot] ? `<div class="muted small">${esc(t(REBOOT_WHY[g.reboot]))}</div>` : ''}</div>
+        <div class="btn-row">${g.state === 'pending' ? `<button class="btn primary" type="button" data-fan-reboot>${t('Restart now')}</button>`
+          : `<button class="btn primary" type="button" data-fan-install data-reboot="${esc(g.reboot)}">${t('Install driver')}</button>`}</div></div>`;
+    };
     draw();
+    diagnose(false);
     // Live numbers, without redrawing the forms.
     const live = async () => {
       if (settingsTab() !== 'cooling' || !el.isConnected || !$('.temp-grid, .fan-list', el)) return;
@@ -2912,9 +2933,24 @@
     setTimeout(live, 2000);
     const points = (form) => $$('tbody tr', form).map((tr) => [Number($('[data-pt="t"]', tr).value), Number($('[data-pt="p"]', tr).value)]);
     el.onclick = async (e) => {
+      if (e.target.closest('[data-fan-reboot]')) { powerAction('reboot'); return; }
+      const inst = e.target.closest('[data-fan-install]');
+      if (inst) {
+        const reboot = inst.dataset.reboot;
+        if (reboot === 'yes' && !(await ask(t('Install the driver? The server needs one restart before the fans can be controlled.'), t('Install driver')))) return;
+        inst.disabled = true; inst.textContent = t('Installing…');
+        try {
+          const r = await api.post('/api/fans/install');
+          d = r; draw();
+          if (r.reboot) toast(t('The driver is installed. Restart the server once to see the fans.'), false, { action: { label: t('Restart now'), run: () => powerAction('reboot') } });
+          else toast(t('The driver is installed: the fans are there.'));
+          if (!d.fans.length) diagnose(true);
+        } catch (ex) { toast(ex.message, true); inst.disabled = false; inst.textContent = t('Install driver'); }
+        return;
+      }
       if (e.target.closest('[data-fan-probe]')) {
         const b = e.target.closest('[data-fan-probe]'); b.disabled = true; b.textContent = t('Looking…');
-        try { const r = await api.post('/api/fans/probe'); d = r; draw(); toast(r.loaded.length ? t('Sensor drivers loaded: {list}', { list: r.loaded.join(', ') }) : t('No new sensors found.')); }
+        try { const r = await api.post('/api/fans/probe'); d = r; draw(); if (!d.fans.length) diagnose(true); toast(r.loaded.length ? t('Sensor drivers loaded: {list}', { list: r.loaded.join(', ') }) : t('No new sensors found.')); }
         catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = t('Look for sensors'); }
         return;
       }

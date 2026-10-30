@@ -68,3 +68,20 @@ test('applying: fixed sets manual mode and the speed; auto and restore put the c
   await fans.save('nct6798@hwmon1/pwm1', { mode: 'auto' });
   assert.equal(fs.readFileSync(pwm1 + '_enable', 'utf8'), '5');
 });
+
+test('the sensor chip: sensors-detect\'s findings, and whether the BIOS blocks it', () => {
+  const out = `# sensors-detect version 3.6.0
+Probing for Super-I/O at 0x2e/0x2f
+Trying family \`National Semiconductor/ITE'...               No
+Trying family \`Nuvoton/Winbond'...                          Yes
+Found \`Nuvoton NCT6798D Super IO Sensors'                   Success!
+    (address 0x290, driver \`nct6775')
+Found \`ITE IT8689E Super IO Sensors'                        Success!
+    (address 0xa40, driver \`to-be-written')
+AMD Family 17h thermal sensors...                           Success!
+    (driver \`k10temp')
+`;
+  assert.deepEqual(fans.parseSensorsDetect(out), [{ chip: 'Nuvoton NCT6798D', driver: 'nct6775' }, { chip: 'ITE IT8689E', driver: 'to-be-written' }]);
+  assert.equal(fans.acpiConflict('ACPI Warning: SystemIO range 0x0000000000000295-0x0000000000000296 conflicts with OpRegion 0x290-0x299 (\\_GPE.HWM) (20230628/utaddress-204)\nnct6775: resource conflict', 'nct6775'), true);
+  assert.equal(fans.acpiConflict('usb 1-1: new high-speed USB device', 'nct6775'), false);
+});
