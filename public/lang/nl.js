@@ -2914,4 +2914,7 @@ window.TB_LANG.nl = {
   "New disks do not contain the old data automatically. Copy shared files separately and keep the old server until you have checked the new one.": "Nieuwe schijven bevatten je oude gegevens niet vanzelf. Kopieer gedeelde bestanden apart en houd de oude server bij tot je de nieuwe hebt gecontroleerd.",
   "Prepare migration": "Migratie voorbereiden",
   "Create app and VM backups on storage the new server can reach, then restore them there.": "Maak back-ups van apps en VM's op opslag die de nieuwe server kan bereiken en herstel ze daar.",
+  "Migrate from Unraid to MajaOS. Choose how to connect to Unraid or move to new hardware. Your Unraid data stays untouched until you choose what to copy.": "Migreer van Unraid naar MajaOS. Kies hoe je met Unraid verbindt of naar nieuwe hardware verhuist. Je Unraid-gegevens blijven onaangeroerd tot je kiest wat je kopieert.",
+  "Move from Unraid to MajaOS on new hardware": "Van Unraid naar MajaOS op nieuwe hardware",
+  "For an Unraid server: set up MajaOS on new hardware with new disks, then transfer your apps and virtual machines.": "Voor een Unraid-server: installeer MajaOS op nieuwe hardware met nieuwe schijven en zet daarna je apps en virtuele machines over.",
 };

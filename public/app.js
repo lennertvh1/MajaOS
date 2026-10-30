@@ -3017,7 +3017,7 @@
     const p = await api.get('/api/unraid/progress').catch(() => ({ state: 'idle' }));
     if (settingsTab() !== 'migration') return;
     if (p.state === 'running') { unraidFlow(el); return; }
-    el.innerHTML = `${paneHint(t('Take over what you had on another system. Nothing on its disks changes until you choose what comes along.'))}
+    el.innerHTML = `${paneHint(t('Migrate from Unraid to MajaOS. Choose how to connect to Unraid or move to new hardware. Your Unraid data stays untouched until you choose what to copy.'))}
       <section class="pool-card plain mig-card">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/></svg></span>
         <div class="mig-text"><b>Unraid</b><div class="muted small">${t('Disks, shared folders, users, apps and VMs of an Unraid server. Put its USB stick and disks in this server first.')}</div></div>
@@ -3025,8 +3025,8 @@
       </section>
       <section class="pool-card plain mig-card mig-hardware">
         <span class="mig-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3"/></svg></span>
-        <div class="mig-text"><b>${t('Move MajaOS to new hardware')}</b>
-          <div class="muted small">${t('Set up a fresh MajaOS server with new disks, then bring your apps, virtual machines and settings across.')}</div>
+        <div class="mig-text"><b>${t('Move from Unraid to MajaOS on new hardware')}</b>
+          <div class="muted small">${t('For an Unraid server: set up MajaOS on new hardware with new disks, then transfer your apps and virtual machines.')}</div>
           <details class="mig-hardware-details"><summary>${t('How the move works')}</summary>
             <ol><li>${t('Install MajaOS on the new boot drive and create a pool on the new data drives.')}</li>
             <li>${t('On the old server, back up apps and virtual machines to storage both servers can reach.')}</li>
