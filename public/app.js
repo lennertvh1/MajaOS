@@ -2979,17 +2979,30 @@
     let d;
     try { d = await api.get('/api/fans'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     if (settingsTab() !== 'cooling') return;
-    const tName = (x) => x.name || (x.id === 'gpu' ? 'GPU' : [x.label || t('Sensor {n}', { n: x.n }), x.chip].join(' · '));
+    // Plain names: the processor (also older AMD CPUs, whose k10temp has no label), disks, NVMe, the graphics card and the board's chip.
+    const BOARD_CHIP = /^(nct|it8|f71|w83|asus|gigabyte|nct6687)/;
+    const tName = (x) => {
+      if (x.name) return x.name;
+      if (x.id === 'gpu') return t('Graphics card') + (x.label ? ' · ' + x.label : '');
+      if (x.cpu) return t('Processor') + (x.label && !/^T(ctl|die)$/.test(x.label) ? ' · ' + x.label : '');
+      if (x.chip === 'drivetemp') return t('Disk {name}', { name: x.label || x.n });
+      if (x.chip === 'nvme') return t('NVMe SSD') + (x.label && x.label !== 'Composite' ? ' · ' + x.label : '');
+      if (/^(amdgpu|radeon|nouveau)$/.test(x.chip)) return t('Graphics card') + (x.label ? ' · ' + x.label : '');
+      if (BOARD_CHIP.test(x.chip)) return x.label ? x.label + ' · ' + t('Motherboard') : t('Motherboard sensor {n}', { n: x.n });
+      return [x.label || t('Sensor {n}', { n: x.n }), x.chip].join(' · ');
+    };
+    // The processor first, then the rest as the server listed them.
+    const byCpu = (list) => [...list].sort((a, b) => (b.cpu ? 1 : 0) - (a.cpu ? 1 : 0));
     const fName = (f, i) => f.name || f.label || t('Fan {n}', { n: i + 1 });
     const DEF_POINTS = [[30, 25], [45, 35], [60, 60], [75, 100]];
-    const tempsHtml = () => d.temps.map((x) => `<li data-temp="${esc(x.id)}"><span>${esc(tName(x))}</span><b class="${tempClass(x.value >= 70 ? 51 : x.value >= 55 ? 46 : 40)}">${nf.format(x.value)} °C</b></li>`).join('');
+    const tempsHtml = () => byCpu(d.temps).map((x) => `<li data-temp="${esc(x.id)}"><span>${esc(tName(x))}</span><b class="${tempClass(x.value >= 70 ? 51 : x.value >= 55 ? 46 : 40)}">${nf.format(x.value)} °C</b></li>`).join('');
     const curveSvg = (points) => {
       const p = [...points].sort((a, b) => a[0] - b[0]), X = (v) => 8 + (v / 100) * 224, Y = (v) => 92 - (v / 100) * 84;
       return `<svg class="fan-curve" viewBox="0 0 240 100" aria-hidden="true"><path class="grid" d="M8 8V92H232"/>
         <polyline points="${[[0, p[0] ? p[0][1] : 100], ...p, [100, p.length ? p[p.length - 1][1] : 100]].map(([a, b]) => X(Math.min(100, a)) + ',' + Y(b)).join(' ')}"/>
         ${p.map(([a, b]) => `<circle cx="${X(Math.min(100, a))}" cy="${Y(b)}" r="3"/>`).join('')}</svg>`;
     };
-    const sourceRow = (id) => `<div class="fan-src"><select class="field" data-src>${d.temps.map((x) => `<option value="${esc(x.id)}"${x.id === id ? ' selected' : ''}>${esc(tName(x))} · ${nf.format(x.value)} °C</option>`).join('')}</select>
+    const sourceRow = (id) => `<div class="fan-src"><select class="field" data-src>${byCpu(d.temps).map((x) => `<option value="${esc(x.id)}"${x.id === id ? ' selected' : ''}>${esc(tName(x))} · ${nf.format(x.value)} °C</option>`).join('')}</select>
       <button class="btn sm" type="button" data-src-del aria-label="${esc(t('Remove'))}">×</button></div>`;
     const fanHtml = (f, i) => {
       const p = f.pwm;

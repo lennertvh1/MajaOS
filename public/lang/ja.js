@@ -2982,4 +2982,7 @@ window.TB_LANG.ja = {
   "The driver could not be built for this kernel: {error}": "このカーネル用にドライバーをビルドできませんでした: {error}",
   "The driver was built, but it does not load: {error}": "ドライバーはビルドされましたが、読み込めません: {error}",
   "Unknown driver.": "不明なドライバーです。",
+  "Motherboard sensor {n}": "マザーボードのセンサー {n}",
+  "Disk {name}": "ディスク {name}",
+  "NVMe SSD": "NVMe SSD",
 };

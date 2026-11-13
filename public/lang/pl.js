@@ -2982,4 +2982,7 @@ window.TB_LANG.pl = {
   "The driver could not be built for this kernel: {error}": "Nie udało się skompilować sterownika dla tego jądra: {error}",
   "The driver was built, but it does not load: {error}": "Sterownik został skompilowany, ale się nie ładuje: {error}",
   "Unknown driver.": "Nieznany sterownik.",
+  "Motherboard sensor {n}": "Czujnik płyty głównej {n}",
+  "Disk {name}": "Dysk {name}",
+  "NVMe SSD": "SSD NVMe",
 };

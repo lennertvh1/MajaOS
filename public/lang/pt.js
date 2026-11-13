@@ -2982,4 +2982,7 @@ window.TB_LANG.pt = {
   "The driver could not be built for this kernel: {error}": "Não foi possível compilar o driver para este kernel: {error}",
   "The driver was built, but it does not load: {error}": "O driver foi compilado, mas não carrega: {error}",
   "Unknown driver.": "Driver desconhecido.",
+  "Motherboard sensor {n}": "Sensor da motherboard {n}",
+  "Disk {name}": "Disco {name}",
+  "NVMe SSD": "SSD NVMe",
 };

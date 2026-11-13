@@ -3022,4 +3022,7 @@ window.TB_LANG.nl = {
   "The driver could not be built for this kernel: {error}": "De driver kon niet voor deze kernel gebouwd worden: {error}",
   "The driver was built, but it does not load: {error}": "De driver is gebouwd, maar laadt niet: {error}",
   "Unknown driver.": "Onbekende driver.",
+  "Motherboard sensor {n}": "Moederbordsensor {n}",
+  "Disk {name}": "Schijf {name}",
+  "NVMe SSD": "NVMe-SSD",
 };

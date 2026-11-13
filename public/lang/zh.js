@@ -2982,4 +2982,7 @@ window.TB_LANG.zh = {
   "The driver could not be built for this kernel: {error}": "无法为当前内核编译驱动：{error}",
   "The driver was built, but it does not load: {error}": "驱动已编译，但无法加载：{error}",
   "Unknown driver.": "未知驱动。",
+  "Motherboard sensor {n}": "主板传感器 {n}",
+  "Disk {name}": "磁盘 {name}",
+  "NVMe SSD": "NVMe 固态硬盘",
 };
