@@ -4713,7 +4713,7 @@
         `<option value="${esc(v)}"${v === d.networkDefault ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
         <small id="storeNetHelp"></small></label>
       <label class="fld" data-store-ip><span>${t('Fixed IP address (optional)')} ${hint(t('Empty = Docker picks an address.'))}</span><input class="field" name="__ip" spellcheck="false" autocomplete="off">
-        </label></div>`;
+        <small></small></label></div>`;
   }
   function storeSections(fields, d) {
     return FIELD_GROUPS.map(([type, title]) => {
