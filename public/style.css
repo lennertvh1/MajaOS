@@ -1072,6 +1072,11 @@ body.onb-open .shell, body.booting .shell { visibility: hidden; }
 .md a { color: var(--accent); }
 .md hr { border: 0; border-top: 1px solid var(--glass-line); margin: 10px 0; }
 .upd-how { font-size: 14px; }
+details.upd-how > summary { cursor: pointer; font-weight: 600; }
+details.upd-how[open] > summary { margin-bottom: 6px; }
+.dev-warn { padding: 12px 16px; border-radius: 14px; border: 1px solid var(--bad); border-left-width: 4px; background: color-mix(in srgb, var(--bad) 12%, transparent); display: grid; gap: 4px; }
+.win-body .dev-warn h3, .dev-warn h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--bad); }
+.dev-warn p { margin: 0; font-size: 14px; color: var(--text); }
 .upd-how pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; background: var(--glass-strong); padding: 10px 12px; border-radius: 10px; overflow-x: auto; margin: 6px 0; }
 /* progress of Update now */
 .upd-run { padding: 20px; border-radius: 18px; background: var(--glass); border: 1px solid var(--glass-line); display: grid; gap: 12px; }

@@ -8221,10 +8221,13 @@ sudo ./install.sh</pre></div>`}` : '') +
         <label class="check"><input type="checkbox" name="updateCheck"${u.auto ? ' checked' : ''}> ${t('Check for updates automatically (every 12 hours)')}</label>
         <div class="choice-row" role="radiogroup" aria-label="${t('Kind of versions')}">${[['stable', t('Stable versions only')], ['beta', t('Include beta versions')], ['dev', t('Dev versions (branch {branch})', { branch: u.branch || 'dev' })]].map(([k, name]) => `
           <label class="choice"><input type="radio" name="updateChannel" value="${k}"${k === u.channel ? ' checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
-        ${u.channel === 'dev' ? `<p class="muted small">${t('Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.', { branch: esc(u.branch || 'dev') })}</p>
-        <div class="upd-how"><p class="muted small">${t('Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:', { branch: esc(u.branch || 'dev') })}</p>
+        ${u.channel === 'dev' ? `<div class="dev-warn" role="note">
+          <h3>${t('Development build')}</h3>
+          <p>${t('Every new commit on the {branch} branch is an update. These versions are not tested yet and can contain bugs. Use them only on a test server.', { branch: esc(u.branch || 'dev') })}</p></div>
+        <details class="upd-how"><summary>${t('Install from a terminal')}</summary>
+          <p class="muted small">${t('Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:', { branch: esc(u.branch || 'dev') })}</p>
           <pre>sudo bash /opt/majaos/deploy/install-branch.sh ${esc(u.branch || 'dev')}</pre>
-          <p class="muted small">${t('Back to official versions: the same command with main.')}</p></div>` : ''}
+          <p class="muted small">${t('Back to official versions: the same command with main.')}</p></details>` : ''}
         <p class="muted small">${t('MajaOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
     debianSection($('#debianBox', el));

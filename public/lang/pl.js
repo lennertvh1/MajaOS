@@ -2164,7 +2164,6 @@ window.TB_LANG.pl = {
   "ZFS reported an error: {error}": "ZFS zgłosił błąd: {error}",
   "zstd (saves more, a bit slower)": "zstd (oszczędza więcej, trochę wolniej)",
   "Development": "Rozwój",
-  "Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.": "Rozwój: każdy nowy commit na gałęzi {branch} jest aktualizacją. Tylko dla serwera testowego: te wersje nie są jeszcze sprawdzone.",
   "Choose stable, beta or development.": "Wybierz stabilny, beta albo rozwój.",
   "The branches of {repo} can't be read. Is the repository private? Then set UPDATE_TOKEN in /etc/majaos/majaos.env.": "Nie da się odczytać gałęzi {repo}. Czy repozytorium jest prywatne? Wtedy ustaw UPDATE_TOKEN w /etc/majaos/majaos.env.",
   "The branch {branch} doesn't exist in {repo}.": "Gałąź {branch} nie istnieje w {repo}.",
@@ -2925,4 +2924,7 @@ window.TB_LANG.pl = {
   "MajaOS can not edit the compose file of {name}. Add the GPU to it yourself.": "MajaOS nie może edytować pliku compose aplikacji {name}. Dodaj GPU samodzielnie.",
   "This app uses the NVIDIA GPU.": "Ta aplikacja używa GPU NVIDIA.",
   "This app wants an NVIDIA GPU, but its driver is not installed. It runs without the GPU. Install the driver in Settings → Hardware.": "Ta aplikacja chce GPU NVIDIA, ale sterownik nie jest zainstalowany. Działa bez GPU. Zainstaluj sterownik w Ustawienia → Sprzęt.",
+  "Development build": "Wersja deweloperska",
+  "Every new commit on the {branch} branch is an update. These versions are not tested yet and can contain bugs. Use them only on a test server.": "Każdy nowy commit w gałęzi {branch} to aktualizacja. Te wersje nie są jeszcze przetestowane i mogą zawierać błędy. Używaj ich tylko na serwerze testowym.",
+  "Install from a terminal": "Instalacja z terminala",
 };

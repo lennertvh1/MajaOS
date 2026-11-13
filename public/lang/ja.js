@@ -2164,7 +2164,6 @@ window.TB_LANG.ja = {
   "ZFS reported an error: {error}": "ZFS がエラーを報告しました: {error}",
   "zstd (saves more, a bit slower)": "zstd（より節約、少し遅い）",
   "Development": "開発版",
-  "Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.": "開発版: {branch} ブランチの新しいコミットがすべてアップデートになります。テストサーバー専用です。これらのバージョンはまだテストされていません。",
   "Choose stable, beta or development.": "安定版、ベータ、開発版のいずれかを選んでください。",
   "The branches of {repo} can't be read. Is the repository private? Then set UPDATE_TOKEN in /etc/majaos/majaos.env.": "{repo} のブランチを読めません。リポジトリは非公開ですか？その場合は /etc/majaos/majaos.env に UPDATE_TOKEN を設定してください。",
   "The branch {branch} doesn't exist in {repo}.": "ブランチ {branch} は {repo} にありません。",
@@ -2925,4 +2924,7 @@ window.TB_LANG.ja = {
   "MajaOS can not edit the compose file of {name}. Add the GPU to it yourself.": "MajaOS は {name} の compose ファイルを編集できません。GPU を手動で追加してください。",
   "This app uses the NVIDIA GPU.": "このアプリは NVIDIA GPU を使います。",
   "This app wants an NVIDIA GPU, but its driver is not installed. It runs without the GPU. Install the driver in Settings → Hardware.": "このアプリは NVIDIA GPU を必要としますが、ドライバーがインストールされていません。GPU なしで動作します。設定 → ハードウェア でドライバーをインストールしてください。",
+  "Development build": "開発版",
+  "Every new commit on the {branch} branch is an update. These versions are not tested yet and can contain bugs. Use them only on a test server.": "{branch} ブランチへの新しいコミットはすべて更新になります。これらのバージョンはまだテストされておらず、不具合がある可能性があります。テスト用サーバーでのみ使ってください。",
+  "Install from a terminal": "ターミナルからインストール",
 };

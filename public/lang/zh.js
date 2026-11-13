@@ -2164,7 +2164,6 @@ window.TB_LANG.zh = {
   "ZFS reported an error: {error}": "ZFS 报告了错误：{error}",
   "zstd (saves more, a bit slower)": "zstd（省更多空间，稍慢一点）",
   "Development": "开发版",
-  "Development: every new commit on the {branch} branch is an update. Only for a test server: these versions are not tested yet.": "开发版：{branch} 分支上的每个新提交都是一次更新。只给测试服务器用：这些版本还没有测试过。",
   "Choose stable, beta or development.": "选择稳定版、Beta 或开发版。",
   "The branches of {repo} can't be read. Is the repository private? Then set UPDATE_TOKEN in /etc/majaos/majaos.env.": "无法读取 {repo} 的分支。仓库是私有的吗？请在 /etc/majaos/majaos.env 里设置 UPDATE_TOKEN。",
   "The branch {branch} doesn't exist in {repo}.": "仓库 {repo} 里没有分支 {branch}。",
@@ -2925,4 +2924,7 @@ window.TB_LANG.zh = {
   "MajaOS can not edit the compose file of {name}. Add the GPU to it yourself.": "MajaOS 无法编辑 {name} 的 compose 文件。请自行添加 GPU。",
   "This app uses the NVIDIA GPU.": "此应用使用 NVIDIA GPU。",
   "This app wants an NVIDIA GPU, but its driver is not installed. It runs without the GPU. Install the driver in Settings → Hardware.": "此应用需要 NVIDIA GPU，但驱动尚未安装。它将在没有 GPU 的情况下运行。请在 设置 → 硬件 中安装驱动。",
+  "Development build": "开发版本",
+  "Every new commit on the {branch} branch is an update. These versions are not tested yet and can contain bugs. Use them only on a test server.": "{branch} 分支上的每个新提交都是一次更新。这些版本尚未经过测试，可能有错误。请只在测试服务器上使用。",
+  "Install from a terminal": "通过终端安装",
 };
