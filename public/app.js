@@ -8228,7 +8228,6 @@ sudo ./install.sh</pre></div>`}` : '') +
           <p class="muted small">${t('Update now installs the newest code of {branch}. In a terminal (SSH, or the terminal at the top right) it works too:', { branch: esc(u.branch || 'dev') })}</p>
           <pre>sudo bash /opt/majaos/deploy/install-branch.sh ${esc(u.branch || 'dev')}</pre>
           <p class="muted small">${t('Back to official versions: the same command with main.')}</p></details>` : ''}
-        <p class="muted small">${t('MajaOS looks for new versions on GitHub ({repo}).', { repo: esc(u.repo) })}${u.token ? '' : ' ' + t('If the repository is private, put a token in UPDATE_TOKEN.')}</p>
       </div>`;
     debianSection($('#debianBox', el));
     if (u.running) { updateProgress(el); return; } // an update is already running (e.g. after refreshing the page)
