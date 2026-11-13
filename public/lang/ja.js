@@ -2906,4 +2906,6 @@ window.TB_LANG.ja = {
   "Edit the compose file": "compose ファイルを編集",
   "Back to the simple fields? What you changed in the compose file will be lost.": "シンプルな項目に戻りますか？compose ファイルの変更は失われます。",
   "Fill in {field} first. Then you can edit the compose file.": "先に {field} を入力してください。その後 compose ファイルを編集できます。",
+  "More about this app": "このアプリについて詳しく",
+  "Before you install": "インストールの前に",
 };

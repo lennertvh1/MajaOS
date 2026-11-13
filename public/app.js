@@ -4751,6 +4751,7 @@
         ${askBlock}
         <p class="muted small" data-install-note data-simple></p>
         <div class="form" data-full hidden>
+        <h3>${t('General')}</h3>
         <label class="fld"><span>${t('Name')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
           <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}${dirLink(d.stacksDir)}</small></label>
@@ -4832,6 +4833,42 @@
     };
   }
 
+  // An app's description (plain text with some Markdown from the catalogue) with structure: bullets (•, -item) become
+  // lists, a short line on its own ("Features:", "Note") becomes a heading. Returns the first paragraph as a summary and
+  // the rest, so the window can fold the long part away.
+  function storeOverview(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n').map((l) => l.trim()
+      .replace(/^[•·▪◦–—]\s*/, '- ').replace(/^-(?=[A-Za-z0-9])/, '- '));
+    const paras = lines.join('\n').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p, i, all) => {
+      const one = !p.includes('\n'), plain = p.replace(/^\*\*(.*)\*\*$/, '$1');
+      const heading = one && !/^(-|#|\d+[.)]\s)/.test(p) && !/https?:/.test(p) && i < all.length - 1
+        && (/^[^.!?]{2,48}:$/.test(plain) || (plain.length <= 40 && !/[.!?,;)]$/.test(plain)));
+      if (heading) return '# ' + plain.replace(/:$/, '');
+      // "Features:" followed directly by its list (no empty line): heading + list.
+      const m = p.match(/^([^\n.!?]{2,48}):\n(- [\s\S]*)$/);
+      return m ? '# ' + m[1].replace(/^\*\*|\*\*$/g, '') + '\n\n' + m[2] : p;
+    }).reduce((out, p) => {
+      // List items with empty lines between them: one list.
+      const isList = (x) => x.split('\n').every((l) => /^- /.test(l));
+      if (out.length && isList(p) && isList(out[out.length - 1])) out[out.length - 1] += '\n' + p; else out.push(p);
+      return out;
+    }, []);
+    const at = paras.findIndex((p) => !/^(#|- |\d+[.)]\s)/.test(p));
+    if (at < 0) return { summary: '', more: mdToHtml(paras.join('\n\n')) };
+    const rest = paras.filter((_, i) => i !== at);
+    // Short descriptions stay whole; folding away two lines helps nobody.
+    if (paras.join(' ').length <= 420) return { summary: mdToHtml(paras.join('\n\n')), more: '' };
+    // A long first paragraph: the first sentences as the summary, the rest of it goes on top of the folded part.
+    let first = paras[at];
+    if (first.length > 300 && !first.includes('\n')) {
+      const parts = first.split(/(?<=[.!?])\s+(?=[A-Z])/);
+      let head = parts.shift();
+      while (parts.length && head.length + parts[0].length < 220) head += ' ' + parts.shift();
+      if (parts.length) { first = head; rest.splice(at, 0, parts.join(' ')); }
+    }
+    return { summary: mdToHtml(first), more: rest.length ? mdToHtml(rest.join('\n\n')) : '' };
+  }
+
   async function storeWindow(id) {
     openWindow(t('App'), `<p class="lead">${t('Loading…')}</p>`);
     let d;
@@ -4847,16 +4884,18 @@
     const rest = basic.filter((f) => !needed.includes(f));
     const links = [d.project && `<a href="${esc(d.project)}" target="_blank" rel="noopener">${t('Website')}</a>`,
       d.support && `<a href="${esc(d.support)}" target="_blank" rel="noopener">${t('Support')}</a>`].filter(Boolean).join(' · ');
-    const body = $('#winBody');
+    const body = $('#winBody'), about = storeOverview(String(d.overview || '').split(/\n{2,}/).map(tr).join('\n\n'));
     body.innerHTML = `
       <div class="store-head">${storeIconHtml(d)}
         <div><p class="store-by">${esc([d.maintainer, d.official ? t('official') : null].filter(Boolean).join(' · '))}</p>
           ${links ? `<p class="small">${links}</p>` : ''}</div>
       </div>
-      <p class="store-overview">${esc(tr(d.overview))}</p>
-      ${d.requires ? `<p class="lead"><b>${t('Requires:')}</b> ${esc(tr(d.requires))}</p>` : ''}
+      ${about.summary ? `<div class="md store-summary">${about.summary}</div>` : ''}
+      ${about.more ? `<details class="store-about"><summary>${t('More about this app')}</summary><div class="md">${about.more}</div></details>` : ''}
       ${d.installed ? `<p class="lead temp-ok">${t('This app is already on your server. You can install it again under another name.')}</p>` : ''}
-      ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
+      ${d.requires || d.warnings.length ? `<section class="store-notes"><h3>${t('Before you install')}</h3>
+        ${d.requires ? `<p><b>${t('Requires:')}</b> ${esc(tr(d.requires))}</p>` : ''}
+        ${d.warnings.length ? `<ul>${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}</section>` : ''}
       ${d.appdataMissing ? `<p class="lead temp-bad">${t('There is no folder for app data yet ({dir}). Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Open Settings → Storage')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
         ${storeInstallFormInner(d, { adv, ask: needed, rest })}

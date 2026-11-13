@@ -2946,4 +2946,6 @@ window.TB_LANG.nl = {
   "Edit the compose file": "Compose-bestand bewerken",
   "Back to the simple fields? What you changed in the compose file will be lost.": "Terug naar de eenvoudige velden? Wat je in het compose-bestand wijzigde, gaat verloren.",
   "Fill in {field} first. Then you can edit the compose file.": "Vul eerst {field} in. Daarna kan je het compose-bestand bewerken.",
+  "More about this app": "Meer over deze app",
+  "Before you install": "Voor je installeert",
 };

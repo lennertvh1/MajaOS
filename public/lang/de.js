@@ -2906,4 +2906,6 @@ window.TB_LANG.de = {
   "Edit the compose file": "Compose-Datei bearbeiten",
   "Back to the simple fields? What you changed in the compose file will be lost.": "Zurück zu den einfachen Feldern? Ihre Änderungen an der Compose-Datei gehen verloren.",
   "Fill in {field} first. Then you can edit the compose file.": "Füllen Sie zuerst {field} aus. Dann können Sie die Compose-Datei bearbeiten.",
+  "More about this app": "Mehr über diese App",
+  "Before you install": "Vor der Installation",
 };

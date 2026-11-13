@@ -1381,7 +1381,8 @@
       () => [F('Port', 'WebUI', '9443', 9443, { mode: 'tcp', req: true }), F('Path', 'Docker', '/var/run/docker.sock', '/var/run/docker.sock', { req: true }),
         F('Path', 'Data', '/data', AD() + '/portainer', { req: true, auto: true })], { webui: 'https://[IP]:[PORT:9443]' }],
     ['stirling-pdf', 'frooodle/s-pdf', 'selfhosters', ['Productivity'], false, "Everything with PDFs: merge, split, sign, OCR and more.",
-      () => [F('Port', 'WebUI', '8080', 8090, { mode: 'tcp', req: true })], { webui: 'http://[IP]:[PORT:8080]' }],
+      () => [F('Port', 'WebUI', '8080', 8090, { mode: 'tcp', req: true })], { webui: 'http://[IP]:[PORT:8080]',
+        about: 'Stirling-PDF runs in your own network and never sends your files to anyone else. It is a web page with dozens of tools for PDF files, made for people who handle a lot of paperwork at home or at work.\n\nFeatures:\n• Merge, split and reorder pages by dragging them\n• Turn scans into searchable text (OCR) in more than 100 languages\n• Sign documents and fill in forms\n• Compress large files before you send them\n• Convert to and from Word, images and HTML\n\nNote\n\n    The first start downloads the OCR languages and can take a few minutes.\n\n    -Login is off by default\n\n    -Turn it on with SECURITY_ENABLELOGIN=true\n\nMore info: https://example.org/stirling-pdf' }],
     ['ollama', 'ollama/ollama', 'selfhosters', ['AI'], true, 'Run language models such as Llama and Qwen on your own GPU.',
       () => [F('Port', 'API', '11434', 11434, { mode: 'tcp', req: true }), F('Path', 'Models', '/root/.ollama', AD() + '/ollama', { req: true, auto: true })], { gpu: true }],
     ['Grafana', 'grafana/grafana', 'selfhosters', ['Tools'], true, 'Charts and dashboards for everything you measure.',
@@ -1397,8 +1398,9 @@
   const CATS_NL = { AI: 'AI', Security: 'Security', HomeAutomation: 'Home automation', GameServers: 'Game servers', Tools: 'Tools', MediaApp: 'Media apps',
     MediaServer: 'Media servers', Network: 'Network', Productivity: 'Productivity' };
   const store = storeDefs.map(([name, image, maintainer, categories, featured, overview, fields, o], i) => ({
-    id: o.id || (i.toString(16) + 'f0e1d2c3b4a5').slice(0, 12).padStart(12, '0'), name, image, maintainer, categories, featured, overview,
-    summary: overview, icon: ICON(STORE_ICON[name] || name.toLowerCase()), official: !!o.official, beta: false, popularity: 1000 - i, webui: o.webui || null, network: o.network || 'bridge',
+    id: o.id || (i.toString(16) + 'f0e1d2c3b4a5').slice(0, 12).padStart(12, '0'), name, image, maintainer, categories, featured,
+    // Like the catalogue: the whole description (o.about = more paragraphs, as long descriptions in the feed), and a short summary.
+    overview: o.about ? overview + '\n\n' + o.about : overview, summary: overview, icon: ICON(STORE_ICON[name] || name.toLowerCase()), official: !!o.official, beta: false, popularity: 1000 - i, webui: o.webui || null, network: o.network || 'bridge',
     requires: o.requires || null, project: 'https://example.org/' + name.toLowerCase(), support: null, privileged: !!o.privileged, gpu: !!o.gpu,
     fields: () => { fk = 0; return fields(); }, // fixed keys c0, c1, … as on the server
   }));

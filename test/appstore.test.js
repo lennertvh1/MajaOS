@@ -45,7 +45,8 @@ test('normalising the feed: plugins, deprecated and blacklisted apps removed; te
   assert.deepEqual(c.apps.map((a) => a.name), ['jellyfin', 'EasyPXE-Nginx', 'nginx']);
   const jf = c.apps[0];
   assert.equal(jf.maintainer, 'linuxserver');
-  assert.equal(jf.overview, 'Mediaserver.\n\nFree and open. Open [IP]:[PORT:8096].');
+  assert.equal(jf.overview, 'Mediaserver.\n\n**Free** and open. Open [IP]:[PORT:8096].');
+  assert.equal(jf.summary, 'Mediaserver. Free and open. Open [IP]:[PORT:8096].');
   assert.deepEqual(jf.categories, ['MediaServer']);
   assert.match(jf.id, /^[0-9a-f]{12}$/);
   assert.equal(jf.featured, true);

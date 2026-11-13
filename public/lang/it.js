@@ -2906,4 +2906,6 @@ window.TB_LANG.it = {
   "Edit the compose file": "Modifica il file compose",
   "Back to the simple fields? What you changed in the compose file will be lost.": "Tornare ai campi semplici? Le modifiche al file compose andranno perse.",
   "Fill in {field} first. Then you can edit the compose file.": "Compila prima {field}. Poi puoi modificare il file compose.",
+  "More about this app": "Altro su questa app",
+  "Before you install": "Prima di installare",
 };

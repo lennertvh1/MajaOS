@@ -2906,4 +2906,6 @@ window.TB_LANG.zh = {
   "Edit the compose file": "编辑 compose 文件",
   "Back to the simple fields? What you changed in the compose file will be lost.": "返回简单字段？你在 compose 文件中的更改将丢失。",
   "Fill in {field} first. Then you can edit the compose file.": "请先填写 {field}，然后才能编辑 compose 文件。",
+  "More about this app": "关于此应用的更多信息",
+  "Before you install": "安装前须知",
 };
