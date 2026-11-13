@@ -1777,6 +1777,7 @@
     const recovered = recoveredWindowTasks.get(title); if (recovered) { recovered.remove(); forgetTask(recovered.dataset.windowId); recoveredWindowTasks.delete(title); hideMinimizedBarIfEmpty(); }
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
+    $('#winAdv').hidden = true;
     if (onWinClose) { try { onWinClose(); } catch (e) { /* ignore */ } onWinClose = null; }
     $('#winTitle').textContent = title;
     // New element, so listeners of a previous window don't hang around.
@@ -4732,11 +4733,24 @@
       </label>`;
   }
   const advToggleHtml = () => `<label class="check adv-switch"><input type="checkbox" name="__adv">
-      <span><b>${t('Advanced')}</b> ${hint(t('Set every option yourself: image, restart, network, and add your own ports, folders, variables, devices and labels. Or edit the compose file as code.'))}</span></label>`;
+      <span><b>${t('Edit the compose file')}</b> ${hint(t('Set every option yourself: image, restart, network, and add your own ports, folders, variables, devices and labels. Or edit the compose file as code.'))}</span></label>`;
 
-  function storeInstallFormInner(d, { basic, adv, ask, rest }) {
-    const exp = experienceLevel();
-    const core = `
+  // The Advanced switch in the title bar of the window: a fresh input each time, so old listeners go away.
+  function winAdvSwitch() {
+    const box = $('#winAdv'), old = $('input', box), sw = old.cloneNode(false);
+    old.replaceWith(sw); box.hidden = false;
+    return sw;
+  }
+  function storeInstallFormInner(d, { adv, ask, rest }) {
+    // Simple (Advanced off): only what MajaOS can't choose itself, plus one line on what to do.
+    // Advanced (the switch in the window's title bar): everything else too.
+    const askBlock = ask.length ? `<div class="form" data-ask>${ask.map((f) => storeFieldHtml(f, d)).join('')}</div>` : '';
+    return `<p class="store-todo" data-simple>${ask.length
+        ? (ask.length === 1 ? t('Fill in the field marked with * and click Install. MajaOS chooses the rest.') : t('Fill in the fields marked with * and click Install. MajaOS chooses the rest.'))
+        : t('Nothing to fill in. Click Install: MajaOS chooses the folder, network and ports.')}</p>
+        ${askBlock}
+        <p class="muted small" data-install-note data-simple></p>
+        <div class="form" data-full hidden>
         <label class="fld"><span>${t('Name')} <em class="req">*</em></span>
           <input class="field" name="__name" required maxlength="63" autocomplete="off" value="${esc(d.suggestedName)}">
           <small>${t('Lowercase letters, digits, - and _. Becomes the name of the container and of the folder {dir}/name.', { dir: esc(d.stacksDir) })}${dirLink(d.stacksDir)}</small></label>
@@ -4744,17 +4758,14 @@
         ${advToggleHtml()}
         <div class="form" data-basic>
         ${storeNetHtml(d)}
-        ${storeSections(exp === 'expert' ? basic : rest, d)}
+        ${storeSections(rest, d)}
         <div class="cf-list" id="storeExtra"></div>
         <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Port')}</button></div>
-        ${adv.length ? `<details class="adv" data-more${exp === 'expert' ? ' open' : ''}><summary>${t('More settings ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
+        ${adv.length ? `<details class="adv" data-more open><summary>${t('More settings ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
         </div>
-        <div data-advanced hidden></div>`;
-    if (exp === 'expert') return core;
-    const askBlock = ask.length ? `<div class="form" data-ask><p class="lead">${t('This app needs a bit of information:')}</p>${ask.map((f) => storeFieldHtml(f, d)).join('')}</div>` : '';
-    return `${askBlock}<p class="muted" data-install-note></p>
-        <details class="adv" data-custom><summary>${t('Customize')} <span class="muted small">${t('Name, folder, network, ports and more')}</span></summary>
-        <div class="form">${core}</div></details>`;
+        <div data-advanced hidden></div>
+        <p class="muted small">${t('Image: {image}. MajaOS turns it into a compose file that you can later open in Dockge too.', { image: esc(d.image) })}</p>
+        </div>`;
   }
 
   // The full container form (like in an app's settings) or the code. The draft goes back and forth
@@ -4832,8 +4843,8 @@
     const adv = d.fields.filter((f) => !basic.includes(f));
     // Simple by default, like an app store: only ask for what has no default (a folder or a password the app can't guess).
     // Name, data folder, network, ports and the other fields wait under Customize.
-    const ask = basic.filter((f) => f.required && !String(f.value).trim() && f.type !== 'Device');
-    const rest = basic.filter((f) => !ask.includes(f));
+    const needed = basic.filter((f) => f.required && !String(f.value).trim() && f.type !== 'Device');
+    const rest = basic.filter((f) => !needed.includes(f));
     const links = [d.project && `<a href="${esc(d.project)}" target="_blank" rel="noopener">${t('Website')}</a>`,
       d.support && `<a href="${esc(d.support)}" target="_blank" rel="noopener">${t('Support')}</a>`].filter(Boolean).join(' · ');
     const body = $('#winBody');
@@ -4848,15 +4859,13 @@
       ${d.warnings.length ? `<ul class="warn-list">${d.warnings.map((w) => `<li>${esc(tr(w))}</li>`).join('')}</ul>` : ''}
       ${d.appdataMissing ? `<p class="lead temp-bad">${t('There is no folder for app data yet ({dir}). Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(d.appdataDir) }) + ` <a href="#settings/storage">${t('Open Settings → Storage')}</a>`}</p>` : ''}
       <form class="form" id="storeForm" novalidate>
-        ${storeInstallFormInner(d, { basic, adv, ask, rest })}
-        <p class="muted small">${t('Image: {image}. MajaOS turns it into a compose file that you can later open in Dockge too.', { image: esc(d.image) })}</p>
+        ${storeInstallFormInner(d, { adv, ask: needed, rest })}
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${d.appdataMissing ? ' disabled' : ''}>${t('Install')}</button>
           <button class="btn" type="button" data-close>${t('Cancel')}</button></div>
       </form>
       ${jobHtml()}`;
     const form = $('#storeForm', body);
-    if (experienceLevel() === 'expert') { const note = $('[data-install-note]', form); if (note) note.hidden = true; }
     const syncNet = () => {
       const v = form.elements.__network.value, n = (d.networks || []).find((x) => x.name === v), ports = storeNetPorts(d, v);
       // A fixed address: in a network with its own subnet, or on the default network (then the app joins the shared maja network).
@@ -4901,6 +4910,21 @@
     form.addEventListener('change', (e) => { if (e.target.dataset.xport) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
     // The data folder follows the name (as long as you didn't choose it yourself), and all folders below follow the data folder.
     let lastName = d.suggestedName, curDir = form.elements.__datadir.value.trim(), editor = null;
+    const sw = winAdvSwitch();
+    function setFull(on) {
+      sw.checked = on; sw.setAttribute('aria-checked', String(on));
+      $('[data-full]', form).hidden = !on;
+      $$('[data-simple]', form).forEach((el) => { el.hidden = on; });
+      if (!on) drawNote();
+    }
+    // Back from the compose editor to the fields: what was changed there is lost.
+    async function leaveEditor() {
+      if (!(await ask(t('Back to the simple fields? What you changed in the compose file will be lost.'), t('Back')))) return false;
+      const box = $('[data-advanced]', form);
+      editor = null; box.hidden = true; box.innerHTML = ''; form.elements.__adv.checked = false;
+      $('[data-basic]', form).hidden = false; form.elements.__name.readOnly = false; $('[data-datadir]', form).hidden = false;
+      return true;
+    }
     const moveData = (to) => {
       if (!to.startsWith('/') || to === curDir) return;
       $$('[data-path]', form).forEach((el) => { el.value = rebasePath(el.value, curDir, to); });
@@ -4916,10 +4940,10 @@
     // The one-line summary of where the app goes, so you can install without opening Customize.
     const note = $('[data-install-note]', form);
     const drawNote = () => {
-      if (!note || note.hidden) return;
+      if (!note) return;
       const dir = form.elements.__datadir.value.trim(), v = form.elements.__network.value;
-      note.textContent = v === 'host' ? t('Installs in {dir} and uses the server\'s network. Change this under Customize.', { dir })
-        : t('Installs in {dir} on the network {network}. Change this under Customize.', { dir, network: form.elements.__network.selectedOptions[0].textContent });
+      note.textContent = v === 'host' ? t('Installs in {dir} and uses the server\'s network. Turn on Advanced to change this.', { dir })
+        : t('Installs in {dir} on the network {network}. Turn on Advanced to change this.', { dir, network: form.elements.__network.selectedOptions[0].textContent });
     };
     if (note) { form.addEventListener('input', drawNote); form.elements.__network.addEventListener('change', drawNote); drawNote(); }
     // What the simple form would install now (also the starting point for Advanced).
@@ -4933,6 +4957,7 @@
     const missingField = (msg) => {
       const missing = [...form.elements].find((el) => el.required && !el.disabled && !el.value.trim());
       if (!missing) return false;
+      if (missing.closest('[data-full]')) setFull(true);
       const det = missing.closest('details'); if (det) det.open = true;
       $('.form-error', form).textContent = t(msg, { field: missing.closest('.fld').querySelector('span').textContent.replace('*', '').trim() });
       missing.focus(); return true;
@@ -4941,21 +4966,24 @@
     form.elements.__adv.addEventListener('change', async (e) => {
       const err = $('.form-error', form); err.textContent = '';
       const on = e.target.checked, box = $('[data-advanced]', form);
-      if (on && missingField('Fill in {field} first. Then you can change everything under Advanced.')) { e.target.checked = false; return; }
+      if (on && missingField('Fill in {field} first. Then you can edit the compose file.')) { e.target.checked = false; return; }
       if (!on) {
-        if (!(await ask(t('Back to the simple fields? What you changed under Advanced will be lost.'), t('Back')))) { e.target.checked = true; return; }
-        editor = null; box.hidden = true; box.innerHTML = ''; $('[data-basic]', form).hidden = false; form.elements.__name.readOnly = false; $('[data-datadir]', form).hidden = false;
-        const askBox = $('[data-ask]', form); if (askBox) askBox.hidden = false;
+        if (!(await leaveEditor())) e.target.checked = true;
         return;
       }
       try {
         const b = basicBody();
         editor = await advancedEditor(box, b.name, { store: d.id, ...b });
         box.hidden = false; $('[data-basic]', form).hidden = true; form.elements.__name.readOnly = true;
-        const askBox = $('[data-ask]', form); if (askBox) askBox.hidden = true;
       } catch (ex) { e.target.checked = false; box.hidden = true; err.textContent = ex.message; }
     });
     form.addEventListener('advmode', (e) => { $('[data-datadir]', form).hidden = e.detail === 'code'; });
+    // Advanced off = only the fields MajaOS can't fill in; on = everything. Experts start with it on.
+    setFull(experienceLevel() === 'expert');
+    sw.addEventListener('change', async () => {
+      if (!sw.checked && editor && !(await leaveEditor())) { sw.checked = true; return; }
+      setFull(sw.checked);
+    });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = $('.form-error', form), btn = $('[type=submit]', form);

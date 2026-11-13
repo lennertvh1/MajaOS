@@ -1615,7 +1615,7 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 /* ---- installing apps: advanced */
 .adv-switch { align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line); }
 .adv-switch input { margin-top: 2px; }
-.adv-switch > span { display: grid; gap: 2px; }
+.adv-switch > span { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .adv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
 .adv-bar .seg button[disabled] { opacity: .45; cursor: not-allowed; }
 
@@ -1897,3 +1897,11 @@ h2 .hint, h3 .hint { margin-left: 8px; }
 .minimized-icon svg { display: block; width: 100%; height: 100%; padding: 2px; }
 
 .window[open]:has(> .minimized-windows:not([hidden])) { animation: none; }
+
+/* The Advanced switch in a window's title bar (app store) and the one-line instruction of the simple install form. */
+.win-adv { gap: 8px; font-size: .9rem; color: var(--muted); margin-right: 4px; }
+.win-adv[hidden] { display: none; }
+.win-adv .toggle-ui { width: 38px; height: 22px; }
+.win-adv .toggle-ui::after { width: 16px; height: 16px; }
+.win-adv input:checked + .toggle-ui::after { transform: translateX(16px); }
+.store-todo { font-weight: 500; }
