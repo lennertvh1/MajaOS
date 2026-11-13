@@ -6893,14 +6893,20 @@
       stage.innerHTML = `<p class="files-empty">${esc(t('This folder no longer exists.'))}</p>`;
       return;
     }
-    stage.innerHTML = `<p class="files-empty">${esc(t('Loading…'))}</p>`;
+    // A folder usually opens within a moment: keep the old listing (dimmed) instead of flashing "Loading…",
+    // and only say it is loading when it takes longer.
+    stage.setAttribute('aria-busy', 'true');
+    const slow = setTimeout(() => { if (gen === fx.gen) stage.innerHTML = `<p class="files-empty">${esc(t('Loading…'))}</p>`; }, 400);
+    const done = () => { clearTimeout(slow); stage.removeAttribute('aria-busy'); };
     try { fx.data = await api.get(filesApi(loc.share, loc.path)); }
     catch (e) {
       if (gen !== fx.gen) return;
+      done();
       stage.innerHTML = `<p class="files-empty">${esc(e.message)}</p>`;
       return;
     }
     if (gen !== fx.gen) return;
+    done();
     paintItems();
   }
 
