@@ -4676,7 +4676,7 @@
     const attrs = `name="${esc(f.key)}"${f.required ? ' required' : ''}${f.auto ? ' data-auto="1"' : ''}${f.type === 'Port' ? ' data-port="1"' : ''}${f.type === 'Path' ? ' data-path="1"' : ''}`;
     const input = f.options
       ? `<select class="field" ${attrs}>${f.options.map((o) => `<option${o === f.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
-      : `<input class="field" ${attrs} type="${f.type === 'Port' ? 'number' : f.mask ? 'password' : 'text'}" value="${esc(f.value)}" autocomplete="off"
+      : `<input class="field" ${attrs} type="${f.type === 'Port' ? 'number' : f.mask ? 'password' : 'text'}" value="${esc(f.value)}" autocomplete="off"${f.type === 'Path' ? ' list="appFolders" spellcheck="false"' : ''}
           ${f.type === 'Port' ? 'min="1" max="65535"' : ''}${f.type === 'Path' && !f.value ? ` placeholder="${t('e.g. {path}', { path: esc(d.sharesDir) + '/media' })}"` : ''}>`;
     return `<label class="fld"><span>${esc(tr(f.name))}${f.required ? ' <em class="req">*</em>' : ''}</span>${input}
       <small>${esc([tr(f.description), where].filter(Boolean).join(' · '))}</small></label>`;
@@ -4741,12 +4741,22 @@
     old.replaceWith(sw); box.hidden = false;
     return sw;
   }
+  // A folder with the user's own files: a Path outside the app's own data and not a system path (docker.sock, /dev, …).
+  const SYSTEM_PATH = /^\/$|^\/(dev|sys|proc|run|var|etc|usr|lib|lib64|boot|tmp|opt|root|bin|sbin)(\/|$)/;
+  function storeUserFolder(f, d) {
+    if (f.type !== 'Path' || f.auto) return false;
+    const v = String(f.value || '').trim();
+    if (!v) return true;
+    return !SYSTEM_PATH.test(v) && !(d.appdataDir && (v === d.appdataDir || v.startsWith(d.appdataDir + '/')));
+  }
   function storeInstallFormInner(d, { adv, ask, rest }) {
     // Simple (Advanced off): only what MajaOS can't choose itself, plus one line on what to do.
     // Advanced (the switch in the window's title bar): everything else too.
     const askBlock = ask.length ? `<div class="form" data-ask>${ask.map((f) => storeFieldHtml(f, d)).join('')}</div>` : '';
-    return `<p class="store-todo" data-simple>${ask.length
-        ? (ask.length === 1 ? t('Fill in the field marked with * and click Install. MajaOS chooses the rest.') : t('Fill in the fields marked with * and click Install. MajaOS chooses the rest.'))
+    const empty = ask.filter((f) => f.required && !String(f.value).trim()).length;
+    return `<p class="store-todo" data-simple>${empty === 1 ? t('Fill in the field marked with * and click Install. MajaOS chooses the rest.')
+        : empty ? t('Fill in the fields marked with * and click Install. MajaOS chooses the rest.')
+        : ask.length ? t('Check the folders below and click Install. MajaOS chooses the rest.')
         : t('Nothing to fill in. Click Install: MajaOS chooses the folder, network and ports.')}</p>
         ${askBlock}
         <p class="muted small" data-install-note data-simple></p>
@@ -4878,9 +4888,10 @@
     // Always show required fields without a value, even if the template calls them "advanced".
     const basic = d.fields.filter((f) => !f.advanced || (f.required && !f.value));
     const adv = d.fields.filter((f) => !basic.includes(f));
-    // Simple by default, like an app store: only ask for what has no default (a folder or a password the app can't guess).
-    // Name, data folder, network, ports and the other fields wait under Customize.
-    const needed = basic.filter((f) => f.required && !String(f.value).trim() && f.type !== 'Device');
+    // Simple by default, like an app store: only ask for what has no default (a folder or a password the app can't guess),
+    // and always the folders with your own files (films, series, photos, downloads): only you know where those are.
+    // Name, data folder, network, ports and the other fields wait under Advanced.
+    const needed = basic.filter((f) => (f.required && !String(f.value).trim() && f.type !== 'Device') || storeUserFolder(f, d));
     const rest = basic.filter((f) => !needed.includes(f));
     const links = [d.project && `<a href="${esc(d.project)}" target="_blank" rel="noopener">${t('Website')}</a>`,
       d.support && `<a href="${esc(d.support)}" target="_blank" rel="noopener">${t('Support')}</a>`].filter(Boolean).join(' · ');

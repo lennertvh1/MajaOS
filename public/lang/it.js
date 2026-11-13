@@ -2908,4 +2908,5 @@ window.TB_LANG.it = {
   "Fill in {field} first. Then you can edit the compose file.": "Compila prima {field}. Poi puoi modificare il file compose.",
   "More about this app": "Altro su questa app",
   "Before you install": "Prima di installare",
+  "Check the folders below and click Install. MajaOS chooses the rest.": "Controlla le cartelle qui sotto e fai clic su Installa. MajaOS sceglie il resto.",
 };

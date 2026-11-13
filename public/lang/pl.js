@@ -2908,4 +2908,5 @@ window.TB_LANG.pl = {
   "Fill in {field} first. Then you can edit the compose file.": "Najpierw wypełnij {field}. Potem możesz edytować plik compose.",
   "More about this app": "Więcej o tej aplikacji",
   "Before you install": "Przed instalacją",
+  "Check the folders below and click Install. MajaOS chooses the rest.": "Sprawdź foldery poniżej i kliknij Zainstaluj. MajaOS wybierze resztę.",
 };

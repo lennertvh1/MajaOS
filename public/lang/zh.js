@@ -2908,4 +2908,5 @@ window.TB_LANG.zh = {
   "Fill in {field} first. Then you can edit the compose file.": "请先填写 {field}，然后才能编辑 compose 文件。",
   "More about this app": "关于此应用的更多信息",
   "Before you install": "安装前须知",
+  "Check the folders below and click Install. MajaOS chooses the rest.": "检查下面的文件夹，然后点击安装。其余由 MajaOS 选择。",
 };

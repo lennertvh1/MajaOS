@@ -2948,4 +2948,5 @@ window.TB_LANG.nl = {
   "Fill in {field} first. Then you can edit the compose file.": "Vul eerst {field} in. Daarna kan je het compose-bestand bewerken.",
   "More about this app": "Meer over deze app",
   "Before you install": "Voor je installeert",
+  "Check the folders below and click Install. MajaOS chooses the rest.": "Controleer de mappen hieronder en klik op Installeren. MajaOS kiest de rest.",
 };
