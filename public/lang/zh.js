@@ -2985,4 +2985,8 @@ window.TB_LANG.zh = {
   "Motherboard sensor {n}": "主板传感器 {n}",
   "Disk {name}": "磁盘 {name}",
   "NVMe SSD": "NVMe 固态硬盘",
+  "Upload files": "上传文件",
+  "Select all": "全选",
+  "Copy location": "复制位置",
+  "Duplicate": "创建副本",
 };

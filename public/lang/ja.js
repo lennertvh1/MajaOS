@@ -2985,4 +2985,8 @@ window.TB_LANG.ja = {
   "Motherboard sensor {n}": "マザーボードのセンサー {n}",
   "Disk {name}": "ディスク {name}",
   "NVMe SSD": "NVMe SSD",
+  "Upload files": "ファイルをアップロード",
+  "Select all": "すべて選択",
+  "Copy location": "場所をコピー",
+  "Duplicate": "複製",
 };

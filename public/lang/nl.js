@@ -3025,4 +3025,8 @@ window.TB_LANG.nl = {
   "Motherboard sensor {n}": "Moederbordsensor {n}",
   "Disk {name}": "Schijf {name}",
   "NVMe SSD": "NVMe-SSD",
+  "Upload files": "Bestanden uploaden",
+  "Select all": "Alles selecteren",
+  "Copy location": "Locatie kopiëren",
+  "Duplicate": "Dupliceren",
 };

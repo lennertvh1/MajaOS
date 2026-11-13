@@ -2985,4 +2985,8 @@ window.TB_LANG.es = {
   "Motherboard sensor {n}": "Sensor de la placa base {n}",
   "Disk {name}": "Disco {name}",
   "NVMe SSD": "SSD NVMe",
+  "Upload files": "Subir archivos",
+  "Select all": "Seleccionar todo",
+  "Copy location": "Copiar ubicación",
+  "Duplicate": "Duplicar",
 };

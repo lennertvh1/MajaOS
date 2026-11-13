@@ -6565,26 +6565,61 @@
       };
     });
   }
-  function closeFileMenu() { const m = $('#fileMenu'); if (m) m.hidden = true; }
-  function openFileMenu(item, x, y) {
+  let fileMenuOpener = null;
+  function closeFileMenu(refocus) {
+    const m = $('#fileMenu');
+    if (!m || m.hidden) return;
+    m.hidden = true;
+    if (refocus && fileMenuOpener && fileMenuOpener.isConnected) fileMenuOpener.focus();
+  }
+  const FILE_ICONS = {
+    newdir: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5"/>',
+    upload: '<path d="M12 16V5M7 10l5-5 5 5M5 20h14"/>',
+    refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
+    selectall: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    path: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  };
+  // The right-click menu of Files (also the menu key, Shift+F10 and a long press). Three kinds: one item, a selection of
+  // several, or the empty space of the folder. It lives in the window's dialog: outside it, a modal dialog hides it.
+  function openFileMenu(item, x, y, opener) {
     closeMenu(false);
     const m = $('#fileMenu');
-    const name = item.dataset.filesName;
-    m.innerHTML = `<div class="menu-head"><b>${esc(name)}</b></div>` + [
-      ['open', t('Open'), MENU_ICONS.open],
-      ['download', t('Download'), MENU_ICONS.update],
-      ['share', t('Share'), MENU_ICONS.share],
-      ['copy', t('Copy'), MENU_ICONS.copy],
-      ['rename', t('Rename'), MENU_ICONS.rename],
-      ['remove', t('Remove'), MENU_ICONS.remove, 'danger'],
-    ].map(([id, label, icon, cls]) => `<button type="button" role="menuitem" class="menu-item ${cls || ''}" data-file-act="${id}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>${esc(label)}</button>`).join('');
-    m.dataset.path = item.dataset.filesItem;
-    m.dataset.kind = item.dataset.filesKind;
-    m.dataset.name = name;
+    const host = $('#filesPage').closest('dialog[open]') || document.body;
+    if (m.parentElement !== host) host.appendChild(m);
+    const ro = document.body.classList.contains('files-ro');
+    const rel = item ? item.dataset.filesItem : '';
+    // Right-click on an item outside the selection: that item becomes the selection (like a file manager).
+    if (item && !fx.picked.has(rel)) { fx.picked.clear(); fx.picked.add(rel); paintChrome(); }
+    const many = item && fx.picked.size > 1;
+    const btn = (id, label, icon, cls) => `<button type="button" role="menuitem" class="menu-item ${cls || ''}" data-file-act="${id}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>${esc(label)}</button>`;
+    let head, list;
+    if (!item) {
+      head = placeLabel(fx.share) + (fx.path ? ' / ' + fx.path.split('/').pop() : '');
+      list = [!ro && ['newdir', t('New folder'), FILE_ICONS.newdir], !ro && ['upload', t('Upload files'), FILE_ICONS.upload], (!ro) && '-',
+        ['refresh', t('Refresh'), FILE_ICONS.refresh], ['selectall', t('Select all'), FILE_ICONS.selectall]];
+    } else if (many) {
+      head = t('{n} items', { n: fx.picked.size });
+      list = [['download-all', t('Download'), MENU_ICONS.download], !ro && '-', !ro && ['remove-all', t('Remove'), MENU_ICONS.remove, 'danger']];
+    } else {
+      head = item.dataset.filesName;
+      list = [['open', t('Open'), MENU_ICONS.open], ['download', t('Download'), MENU_ICONS.download], ['share', t('Share'), MENU_ICONS.share],
+        ['path', t('Copy location'), FILE_ICONS.path], !ro && '-', !ro && ['copy', t('Duplicate'), MENU_ICONS.copy], !ro && ['rename', t('Rename'), MENU_ICONS.rename],
+        !ro && '-', !ro && ['remove', t('Remove'), MENU_ICONS.remove, 'danger']];
+    }
+    m.innerHTML = `<div class="menu-head"><b>${esc(head)}</b></div>` + list.filter(Boolean).map((x) => (x === '-' ? '<hr>' : btn(...x))).join('');
+    m.setAttribute('aria-label', head);
+    m.dataset.path = rel;
+    m.dataset.kind = item ? item.dataset.filesKind : '';
+    m.dataset.name = item ? item.dataset.filesName : '';
     m.hidden = false;
+    // Position in the viewport; inside a dialog with a backdrop filter "fixed" is relative to the dialog: correct for that.
     const r = m.getBoundingClientRect();
-    m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
-    m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+    const wantX = Math.max(8, Math.min(x, innerWidth - r.width - 8)), wantY = Math.max(8, Math.min(y, innerHeight - r.height - 8));
+    m.style.left = wantX + 'px'; m.style.top = wantY + 'px';
+    const got = m.getBoundingClientRect();
+    m.style.left = (wantX - (got.left - wantX)) + 'px'; m.style.top = (wantY - (got.top - wantY)) + 'px';
+    fileMenuOpener = opener || null;
+    if (opener) { const first = $('.menu-item', m); if (first) first.focus(); }
   }
   // Uploads: one at a time, with a panel at the bottom of Files (a bar for everything and one per file, Stop). Each
   // file shows up in the folder as soon as it is done. Files dropped while others upload join the queue.
@@ -6792,18 +6827,56 @@
       if (item) filesShare(rel, item.dataset.filesName);
     });
     stage.addEventListener('contextmenu', (e) => {
+      // The browser's own menu stays in text fields (e.g. renaming).
+      if (e.target.closest('input, textarea')) return;
       const item = e.target.closest('[data-files-item]');
-      if (!item) return;
+      if (!item && !fx.data) return;
       e.preventDefault();
       fx.menuAt = Date.now();
       openFileMenu(item, e.clientX, e.clientY);
     });
-    $('#fileMenu').addEventListener('click', (e) => {
+    // Keyboard: the menu key or Shift+F10 opens it for the selected item, or for the folder.
+    stage.addEventListener('keydown', (e) => {
+      if (!(e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) || e.target.closest('input, textarea')) return;
+      e.preventDefault();
+      const rel = fx.picked.size ? [...fx.picked][fx.picked.size - 1] : null;
+      const item = rel ? [...$$('[data-files-item]', page)].find((n) => n.dataset.filesItem === rel) : null;
+      const at = (item || stage).getBoundingClientRect();
+      openFileMenu(item, at.left + Math.min(40, at.width / 2), at.top + Math.min(40, at.height / 2), item ? ($('.files-hit, button', item) || stage) : stage);
+    });
+    $('#fileMenu').addEventListener('keydown', (e) => {
+      const m = $('#fileMenu'), items = $$('.menu-item', m), i = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+      else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+      else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFileMenu(true); }
+      else if (e.key === 'Tab') closeFileMenu(false);
+    });
+    $('#fileMenu').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-file-act]'); if (!b) return;
       const m = $('#fileMenu');
       const rel = m.dataset.path, kind = m.dataset.kind, name = m.dataset.name;
-      closeFileMenu();
-      if (b.dataset.fileAct === 'open') return openFileItem({ dataset: { filesItem: rel, filesKind: kind, filesName: name } });
+      closeFileMenu(false);
+      const act = b.dataset.fileAct;
+      if (act === 'newdir') return showNameRow('mkdir');
+      if (act === 'upload') return $('#filesInput').click();
+      if (act === 'refresh') return reloadList();
+      if (act === 'selectall') { ((fx.data && fx.data.items) || []).forEach((it) => fx.picked.add(filesJoin(fx.data.path, it.name))); paintChrome(); return; }
+      if (act === 'remove-all') return $('#filesDel').click();
+      if (act === 'download-all') {
+        for (const it of pickedItems()) await filesDownload(filesJoin(fx.data.path, it.name), { zip: it.type === 'dir' });
+        return;
+      }
+      if (act === 'path') {
+        // The folder on the server (e.g. for an app's folder setting); an account without that sees the place's name.
+        const pl = (fx.shares || []).find((x) => x.id === fx.share) || {};
+        const text = (pl.path ? pl.path.replace(/\/+$/, '') : placeLabel(fx.share)) + '/' + rel;
+        try { await navigator.clipboard.writeText(text); toast(t('Copied: {text}', { text })); }
+        catch (ex) { toast(text); }
+        return;
+      }
+      if (act === 'open') return openFileItem({ dataset: { filesItem: rel, filesKind: kind, filesName: name } });
       if (b.dataset.fileAct === 'download') return filesDownload(rel, { zip: kind === 'dir' });
       if (b.dataset.fileAct === 'share') return filesShare(rel, name, kind);
       if (b.dataset.fileAct === 'copy') return filesCopy(rel);
@@ -6814,7 +6887,7 @@
       const m = $('#fileMenu');
       if (m && !m.hidden && !m.contains(e.target)) closeFileMenu();
     }, true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFileMenu(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFileMenu(false); });
     stage.addEventListener('dragover', (e) => { e.preventDefault(); stage.classList.add('is-over'); });
     stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('is-over'); });
     stage.addEventListener('drop', (e) => { e.preventDefault(); stage.classList.remove('is-over'); uploadFiles(e.dataTransfer.files); });
