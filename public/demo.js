@@ -2464,6 +2464,30 @@
     } catch { /* keep the sample Ollama */ }
     return base;
   }
+  // Saved chats (lib/chats.js), kept in this browser so they survive a reload.
+  const demoChats = (() => {
+    try { const v = JSON.parse(localStorage.getItem('tb-demo-chats')); if (Array.isArray(v)) return v; } catch (e) { /* first visit */ }
+    const at = (min) => new Date(Date.now() - min * 60000).toISOString();
+    return [{ id: 'a1b2c3d4e5f6', title: 'Which disk runs the hottest?', model: 'llama3.1:8b', created: at(1500), updated: at(1490), messages: [
+      { role: 'user', content: 'Which disk runs the hottest?', at: at(1500) },
+      { role: 'assistant', content: 'The hottest disk is **sdb** in pool *tank* at 41 °C. That is fine: hard disks are happy below 45 °C.', tools: ['storage'], at: at(1499) },
+      { role: 'user', content: 'And the SSDs?', at: at(1491) },
+      { role: 'assistant', content: 'Both SSDs in *fast* are at 36 °C.\n\n- nvme0n1: 36 °C\n- nvme1n1: 35 °C', at: at(1490) },
+    ] }];
+  })();
+  const saveChats = () => { try { localStorage.setItem('tb-demo-chats', JSON.stringify(demoChats)); } catch (e) { /* only for this visit */ } };
+  const chatBrief = (c) => ({ id: c.id, title: c.title, model: c.model, created: c.created, updated: c.updated, count: c.messages.length });
+  function demoChat(id) {
+    const c = demoChats.find((x) => x.id === id);
+    if (!c) throw err('That chat does not exist (anymore).', 404);
+    return c;
+  }
+  function chatTitle(text) {
+    const line = String(text || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+    if (line.length <= 60) return line;
+    const cut = line.slice(0, 60);
+    return (cut.lastIndexOf(' ') > 30 ? cut.slice(0, cut.lastIndexOf(' ')) : cut) + '…';
+  }
   function demoAiView() {
     const c = demoAiCfg();
     const common = { enabled: c.enabled !== false, tools: c.tools !== false, choices: AI_CHOICES, claudeModels: CLAUDE_MODELS, gpu: null, version: null };
@@ -2888,6 +2912,8 @@
     if (path === '/api/fans') return fansStatus();
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
+    if (path === '/api/ai/chats') return { chats: demoChats.map(chatBrief).sort((a, b) => b.updated.localeCompare(a.updated)) };
+    { const cm = path.match(/^\/api\/ai\/chats\/([^/]+)$/); if (cm) return copy(demoChat(cm[1])); }
     throw err('Unknown endpoint', 404);
   }
 
@@ -2913,6 +2939,19 @@
     if (path === '/api/install/network') { await wait(1500); return instNetSet(body); }
     if (path === '/api/remote') { await wait(400); return demoRemoteSet(body); }
     if (path === '/api/ai/settings') { await wait(200); return demoAiSave(body); }
+    if (path === '/api/ai/chats') {
+      const now = new Date().toISOString();
+      const c = { id: Math.random().toString(16).slice(2, 14).padEnd(12, '0'), title: String(body.title || '').slice(0, 80), model: String(body.model || ''), created: now, updated: now, messages: [] };
+      demoChats.push(c); saveChats();
+      return copy(c);
+    }
+    { const cm = path.match(/^\/api\/ai\/chats\/([^/]+)$/); if (cm) {
+      const c = demoChat(cm[1]);
+      if (body.title !== undefined) { const ti = String(body.title).trim().slice(0, 80); if (!ti) throw err('Type a name for the chat.', 400); c.title = ti; }
+      if (body.model !== undefined) c.model = String(body.model);
+      saveChats();
+      return chatBrief(c);
+    } }
     if (path === '/api/ai/use-gpu') {
       if (noDriver) throw err('Install the NVIDIA driver first: Settings → Hardware.', 409);
       const already = !ollamaNoGpu;
@@ -3177,6 +3216,10 @@
   async function del(path) {
     userGate('DELETE', path);
     await wait(400);
+    { const cm = path.match(/^\/api\/ai\/chats\/([^/]+)$/); if (cm) {
+      const c = demoChat(cm[1]); demoChats.splice(demoChats.indexOf(c), 1); saveChats();
+      return { removed: c.id };
+    } }
     if (path.startsWith('/api/mixed-pools/')) { const r = mxRoute('DELETE', path); if (r !== undefined) return r; }
     if (path.startsWith('/api/pools/')) { const u = new URL(path, 'http://x'); const r = zpRoute('DELETE', u.pathname, null, u.searchParams); if (r !== undefined) return r; }
     { const lm = path.match(/^\/api\/share-links\/([0-9a-f]{8})$/); if (lm) {
@@ -3245,25 +3288,50 @@
       const cfg = demoAiCfg();
       if (cfg.enabled === false) throw err('AI is turned off. Turn it on in Settings.', 409);
       if (cfg.provider === 'off') throw err('No AI is connected yet. Choose one in Settings.', 409);
-      const q = (body.messages[body.messages.length - 1] || {}).content || '';
+      // A saved chat: only the new question comes along; the chat is the context.
+      const saved = body.chat ? demoChat(body.chat) : null;
+      const q = saved ? String(body.content || '').trim() : (body.messages[body.messages.length - 1] || {}).content || '';
+      if (!q) throw err('Type a question first.', 400);
+      const earlier = saved ? saved.messages.filter((x) => x.content && !x.error).length : 0;
+      const model = body.model || (saved && saved.model) || '';
+      const turn = { content: '', thinking: '', tools: [], from: 0, secs: 0 };
+      const send = onLine;
+      onLine = (l) => {
+        if (l.thinking) { if (!turn.from) turn.from = Date.now(); turn.thinking += l.thinking; }
+        if (l.message && l.message.content) { if (turn.from && !turn.secs) turn.secs = Math.max(1, Math.round((Date.now() - turn.from) / 1000)); turn.content += l.message.content; }
+        if (l.tool) turn.tools.push(l.tool.name);
+        send(l);
+      };
+      const keep = (extra) => {
+        if (!saved || !demoChats.includes(saved)) return;
+        const at = new Date().toISOString();
+        saved.messages.push({ role: 'user', content: q, at }, { role: 'assistant', content: turn.content, ...(turn.thinking ? { thinking: turn.thinking, secs: turn.secs || 1 } : {}),
+          ...(turn.tools.length ? { tools: turn.tools } : {}), ...extra, at });
+        if (!saved.title) saved.title = chatTitle(q);
+        saved.model = model; saved.updated = at; saveChats();
+      };
+      try {
       let tool = '';
       if (/vm|virtual|virtuele/i.test(q)) tool = 'vms_list';
       else if (/file|bestand|map/i.test(q)) tool = 'files_places';
       else if (/opslag|storage|disk|schijf|pool/i.test(q)) tool = 'storage';
       else if (/app|container|jellyfin/i.test(q)) tool = 'apps_list';
       if (cfg.tools === false) tool = '';
-      if (/qwen3|deepseek-r1|gpt-oss|magistral/i.test(body.model)) {
+      if (/qwen3|deepseek-r1|gpt-oss|magistral/i.test(model)) {
         const thought = 'The user asks: "' + q.slice(0, 60) + (q.length > 60 ? '…' : '') + '". ' + (tool ? 'I should look this up on the server first with ' + tool + '. ' : '')
           + 'This is the demo, so I will explain that and keep the answer short.';
         await wait(500);
         for (const word of thought.split(/(\s+)/)) { halt(); onLine({ thinking: word }); await wait(35); }
       }
       if (tool) { halt(); onLine({ tool: { name: tool } }); await wait(220); }
-      const reply = (tool ? 'I looked that up on the sample server. ' : '') + 'This is demo mode, so I am not really running on your GPU. On your own server ' + body.model +
-        ' would answer this here: "' + q.slice(0, 80) + (q.length > 80 ? '…' : '') + '". With an RTX 3060 Ti an 8B model gets roughly 60 to 70 tokens per second.';
+      const reply = (tool ? 'I looked that up on the sample server. ' : '') + 'This is demo mode, so I am not really running on your GPU. On your own server ' + model +
+        ' would answer this here: "' + q.slice(0, 80) + (q.length > 80 ? '…' : '') + '".'
+        + (earlier ? ' I also remember the ' + earlier + ' earlier messages in this chat.' : '') + ' With an RTX 3060 Ti an 8B model gets roughly 60 to 70 tokens per second.';
       await wait(350);
       for (const word of reply.split(/(\s+)/)) { halt(); onLine({ message: { content: word }, done: false }); await wait(28); }
       onLine({ done: true });
+      keep({});
+      } catch (e) { keep(e.name === 'AbortError' ? { stopped: true } : { error: e.message }); throw e; }
       return;
     }
     throw err('Unknown endpoint', 404);

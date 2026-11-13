@@ -145,3 +145,54 @@ test('the chat streams from Ollama and asks again without thinking for a model t
   const lines = chunks.join('').trim().split('\n').map((l) => JSON.parse(l));
   assert.deepEqual(lines, [{ message: { content: 'Hel' } }, { message: { content: 'lo' } }]);
 });
+
+test('saved chats: per account, a title from the first question, and the context for the next question', async () => {
+  const chats = require('../lib/chats');
+  const c = chats.create('lennert', { model: 'llama3' });
+  assert.equal(chats.list('lennert').length, 1);
+  assert.equal(chats.list('other').length, 0);
+  assert.throws(() => chats.get('other', c.id), /does not exist/);
+  assert.throws(() => chats.get('lennert', '../../etc'), /does not exist/);
+  assert.ok(!chats.fileFor('../x').includes('../'));
+
+  // A fake Ollama that answers with how many messages it got.
+  const http = require('node:http');
+  const seen = [];
+  const srv = http.createServer((req, res) => {
+    let b = '';
+    req.on('data', (x) => { b += x; });
+    req.on('end', () => {
+      const body = JSON.parse(b);
+      seen.push(body.messages);
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      res.end(JSON.stringify({ message: { thinking: 'hmm' } }) + '\n' + JSON.stringify({ message: { content: 'Answer ' + seen.length } }) + '\n{"done":true}\n');
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  fs.writeFileSync(path.join(dir, 'ai.json'), JSON.stringify({ provider: 'ollama', url: 'http://127.0.0.1:' + srv.address().port, model: 'llama3', tools: false }));
+  const sink = () => { const w = new (require('node:stream').Writable)({ write(x, e, cb) { cb(); } }); w.writeHead = () => {}; return w; };
+  await ai.chat(sink(), { chat: c.id, content: 'Which disk is hottest?' }, { account: 'lennert' });
+  await ai.chat(sink(), { chat: c.id, content: 'And the SSDs?' }, { account: 'lennert' });
+  srv.close();
+  fs.rmSync(path.join(dir, 'ai.json'));
+
+  // The second question came with the first question and its answer.
+  assert.deepEqual(seen[1].slice(1).map((m) => m.content), ['Which disk is hottest?', 'Answer 1', 'And the SSDs?']);
+  const saved = chats.get('lennert', c.id);
+  assert.equal(saved.title, 'Which disk is hottest?');
+  assert.equal(saved.messages.length, 4);
+  assert.equal(saved.messages[1].thinking, 'hmm');
+  assert.equal(saved.model, 'llama3');
+  chats.remove('lennert', c.id);
+  assert.equal(chats.list('lennert').length, 0);
+  assert.equal(chats.titleFrom('a '.repeat(50)).endsWith('…'), true);
+});
+
+test('a question whose answer failed is not sent again', () => {
+  const chats = require('../lib/chats');
+  const ctx = chats.context({ messages: [
+    { role: 'user', content: 'one' }, { role: 'assistant', content: '', error: 'Ollama is not reachable.' },
+    { role: 'user', content: 'two' }, { role: 'assistant', content: 'ok' },
+  ] });
+  assert.deepEqual(ctx.map((m) => m.content), ['two', 'ok']);
+});

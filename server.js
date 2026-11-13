@@ -62,6 +62,7 @@ const layout = require('./lib/layout');
 const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
 const mcphttp = require('./lib/mcphttp');
+const chats = require('./lib/chats');
 const tlsCert = require('./lib/tls');
 const shares = require('./lib/shares');
 const files = require('./lib/files');
@@ -817,7 +818,16 @@ async function handleApi(req, res, url) {
     return proxyStream(res, '/api/pull', { name: body.name, stream: true });
   }
   if (p === '/api/ai/chat' && method === 'POST') {
-    return ai.chat(res, await readBody(req, 5e6), { token: cookies(req).tb_session || '', port: CFG.port });
+    return ai.chat(res, await readBody(req, 5e6), { token: cookies(req).tb_session || '', port: CFG.port, account: (session(req) || {}).name });
+  }
+  // Saved chats, per account.
+  if (p === '/api/ai/chats' && method === 'GET') return sendJson(res, 200, { chats: chats.list((session(req) || {}).name) });
+  if (p === '/api/ai/chats' && method === 'POST') return sendJson(res, 200, chats.create((session(req) || {}).name, await readBody(req)));
+  if ((m = p.match(/^\/api\/ai\/chats\/([^/]+)$/))) {
+    const who = (session(req) || {}).name;
+    if (method === 'GET') return sendJson(res, 200, chats.get(who, m[1]));
+    if (method === 'POST') return sendJson(res, 200, chats.update(who, m[1], await readBody(req)));
+    if (method === 'DELETE') return sendJson(res, 200, chats.remove(who, m[1]));
   }
   if ((m = p.match(/^\/api\/ai\/models\/(.+)$/)) && method === 'DELETE') {
     const base = needOllama();

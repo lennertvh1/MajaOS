@@ -8460,7 +8460,6 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* --- AI */
-  const chatHistory = [];
   const AI_NAMES = { off: 'None', ollama: 'Ollama', lmstudio: 'LM Studio', llamacpp: 'llama.cpp', localai: 'LocalAI', claude: 'Claude' };
   const AI_HELP = {
     off: 'Chat shows a message until you choose an AI.',
@@ -8493,6 +8492,26 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (!(ai.models || []).length) return `<div class="chat-empty"><p class="lead">${t('This AI has no model yet.')}</p><p class="muted">${t(ai.provider === 'ollama' ? 'Download a model in AI settings.' : 'Start the AI and check the address in Settings.')}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
     return '';
   }
+  // The AI window: saved chats on the left (like other chat apps), the conversation on the right, and the model choice
+  // inside the box you type in. A chat keeps its context on the server (lib/chats.js); a new chat is only saved at its first question.
+  const chatUi = { id: null };
+  const CHAT_ICONS = {
+    send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    side: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M9.5 5v14"/></svg>',
+  };
+  const TOO_MANY_STEPS = 'I stopped after too many steps. Ask again for what is still left.';
+  function chatMsgHtml(m) {
+    if (m.role === 'user') return `<div class="msg user">${esc(m.content)}</div>`;
+    const answer = m.content === TOO_MANY_STEPS ? tr(m.content) : m.content;
+    return (m.thinking ? `<details class="msg think" data-done="1"><summary>${m.secs ? t('Thought for {secs} s', { secs: m.secs }) : t('Thought')}</summary><div class="think-text">${esc(m.thinking)}</div></details>` : '')
+      + (m.tools || []).map((name) => `<div class="msg tool">${esc(t('Used {name}', { name }))}</div>`).join('')
+      + (answer ? `<div class="msg assistant md">${mdToHtml(answer)}</div>` : '')
+      + (m.error ? `<div class="msg assistant chat-err">${esc(t('No answer: {error}', { error: tr(m.error) }))}</div>` : '')
+      + (m.stopped ? `<div class="msg tool">${t('Stopped.')}</div>` : '');
+  }
   async function aiWindow() {
     openWindow(t('AI'), `<p class="lead">${t('Loading…')}</p>`);
     win.classList.add('chat-win');
@@ -8503,29 +8522,114 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (notice) { body.innerHTML = `<div class="chat">${notice}</div>`; return; }
     const list = (S.ai.models || []).filter((m) => !/embed/i.test(m.name));
     const models = list.length ? list : S.ai.models;
-    const picked = models.some((m) => m.name === S.ai.model) ? S.ai.model : models[0].name;
-    const msgHtml = (m) => (m.role === 'assistant' ? `<div class="msg assistant md">${mdToHtml(m.content)}</div>` : `<div class="msg ${m.role === 'user' ? 'user' : 'tool'}">${esc(m.content)}</div>`);
-    body.innerHTML = `<form class="chat" id="chatForm">
-      ${aiGpuBanner(S.ai)}
-      <label class="fld">${t('Model')}<select class="field" id="chatModel">${models.map((m) => `<option value="${esc(m.name)}"${m.name === picked ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
-      ${S.ai && S.ai.tools === false ? '' : `<p class="muted small">${t('It can manage this server, the same as an MCP connection.')}</p>`}
-      <div class="chat-log" id="chatLog" aria-live="polite">${chatHistory.map(msgHtml).join('')}</div>
-      <textarea class="field" id="chatInput" rows="3" placeholder="${t('Ask your own model a question')}" required></textarea>
-      <div class="btn-row"><button class="btn primary" type="submit" data-chat-send>${t('Send')}</button><button class="btn" type="button" data-chat-stop hidden>${t('Stop')}</button></div>
-    </form>`;
-    const form = $('#chatForm', body);
-    const gpuBtn = $('[data-ai-gpu]', form);
-    if (gpuBtn) gpuBtn.addEventListener('click', () => aiUseGpu(gpuBtn, () => { const b = $('.ai-gpu', form); if (b && !(S.ai && S.ai.gpuMissing)) b.remove(); }));
-    let running = null;
-    $('[data-chat-stop]', form).addEventListener('click', () => { if (running) running.abort(); });
+    const lastModel = (() => { try { return localStorage.getItem('tb-chat-model'); } catch (e) { return null; } })();
+    const fallback = [lastModel, S.ai.model].find((x) => x && models.some((m) => m.name === x)) || models[0].name;
+    const narrow = () => window.matchMedia('(max-width: 720px)').matches;
+    body.innerHTML = `<div class="chat-app${narrow() ? '' : ' side-open'}">
+      <aside class="chat-side" aria-label="${t('Chats')}">
+        <button class="btn chat-new" type="button" data-chat-new>${CHAT_ICONS.plus}<span>${t('New chat')}</span></button>
+        <ul class="chat-list" data-chat-list></ul>
+      </aside>
+      <section class="chat-main">
+        <div class="chat-top"><button class="chat-ico" type="button" data-chat-side aria-label="${t('Chats')}" title="${t('Chats')}">${CHAT_ICONS.side}</button>
+          <h3 class="chat-title" data-chat-title></h3></div>
+        ${aiGpuBanner(S.ai)}
+        <div class="chat-log" id="chatLog" aria-live="polite"></div>
+        <form class="composer" id="chatForm">
+          <textarea id="chatInput" rows="1" placeholder="${t('Ask your own model a question')}" aria-label="${t('Message')}"></textarea>
+          <div class="composer-bar">
+            <select id="chatModel" class="model-pick" aria-label="${t('Model')}">${models.map((m) => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}</select>
+            <span class="composer-note muted">${S.ai.tools === false ? '' : t('Can manage this server')}</span>
+            <button class="composer-btn" type="submit" data-chat-send aria-label="${t('Send')}" title="${t('Send')}">${CHAT_ICONS.send}</button>
+            <button class="composer-btn stop" type="button" data-chat-stop hidden aria-label="${t('Stop')}" title="${t('Stop')}">${CHAT_ICONS.stop}</button>
+          </div>
+        </form>
+      </section></div>`;
+    const app = $('.chat-app', body), log = $('#chatLog', body), form = $('#chatForm', body), input = $('#chatInput', body);
+    const pick = $('#chatModel', body), listEl = $('[data-chat-list]', body), titleEl = $('[data-chat-title]', body);
+    let chatsList = [], running = null;
+
+    const gpuBtn = $('[data-ai-gpu]', body);
+    if (gpuBtn) gpuBtn.addEventListener('click', () => aiUseGpu(gpuBtn, () => { const b = $('.ai-gpu', body); if (b && !(S.ai && S.ai.gpuMissing)) b.remove(); }));
+
+    const setModel = (name) => { pick.value = models.some((m) => m.name === name) ? name : fallback; };
+    const grow = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 200) + 'px'; };
+    const emptyHtml = () => `<div class="chat-hello"><h2>${t('What can I help with?')}</h2>
+      <p class="muted">${S.ai.tools === false ? t('Ask anything. The chat remembers what you said before in this chat.') : t('Ask anything, or let it check and manage this server. The chat remembers what you said before in this chat.')}</p></div>`;
+    const drawList = () => {
+      listEl.innerHTML = chatsList.length ? chatsList.map((c) => `<li class="${c.id === chatUi.id ? 'active' : ''}">
+        <button class="chat-item" type="button" data-chat-open="${esc(c.id)}"${c.id === chatUi.id ? ' aria-current="true"' : ''}><span>${esc(c.title || t('New chat'))}</span>
+          <small>${esc(ago(new Date(c.updated).getTime()))}</small></button>
+        <button class="chat-ico chat-del" type="button" data-chat-del="${esc(c.id)}" aria-label="${esc(t('Delete {name}', { name: c.title || t('New chat') }))}" title="${t('Delete')}">${CHAT_ICONS.trash}</button></li>`).join('')
+        : `<li class="chat-none muted small">${t('No chats yet.')}</li>`;
+    };
+    const loadList = async () => {
+      try { chatsList = (await api.get('/api/ai/chats')).chats || []; } catch (e) { toast(e.message, true); }
+      drawList();
+    };
+    const openChat = async (id) => {
+      if (running) running.abort();
+      chatUi.id = id || null;
+      drawList();
+      if (narrow()) app.classList.remove('side-open');
+      if (!id) { titleEl.textContent = t('New chat'); log.innerHTML = emptyHtml(); setModel(fallback); input.focus(); return; }
+      log.innerHTML = `<p class="muted">${t('Loading…')}</p>`;
+      let c;
+      try { c = await api.get('/api/ai/chats/' + encodeURIComponent(id)); }
+      catch (e) { toast(e.message, true); chatUi.id = null; await loadList(); openChat(null); return; }
+      if (chatUi.id !== id) return;
+      titleEl.textContent = c.title || t('New chat');
+      log.innerHTML = c.messages.length ? c.messages.map(chatMsgHtml).join('') : emptyHtml();
+      setModel(c.model);
+      log.scrollTop = log.scrollHeight;
+      input.focus();
+    };
+
+    $('[data-chat-side]', body).addEventListener('click', (e) => { e.stopPropagation(); app.classList.toggle('side-open'); });
+    // On a phone the list lies over the conversation: a tap next to it closes it.
+    $('.chat-main', body).addEventListener('click', () => { if (narrow()) app.classList.remove('side-open'); });
+    $('[data-chat-new]', body).addEventListener('click', () => openChat(null));
+    listEl.addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-chat-del]');
+      if (del) {
+        const c = chatsList.find((x) => x.id === del.dataset.chatDel);
+        if (!c || !(await ask(t('Delete the chat "{name}"? This can\'t be undone.', { name: c.title || t('New chat') }), t('Delete')))) return;
+        try {
+          if (running && chatUi.id === c.id) running.abort();
+          await api.del('/api/ai/chats/' + encodeURIComponent(c.id));
+          toast(t('Chat deleted.'));
+        } catch (ex) { toast(ex.message, true); }
+        await loadList();
+        if (chatUi.id === c.id) openChat(chatsList[0] ? chatsList[0].id : null);
+        return;
+      }
+      const open = e.target.closest('[data-chat-open]');
+      if (open && open.dataset.chatOpen !== chatUi.id) openChat(open.dataset.chatOpen);
+    });
+    pick.addEventListener('change', () => {
+      try { localStorage.setItem('tb-chat-model', pick.value); } catch (e) { /* only a convenience */ }
+      if (chatUi.id) api.post('/api/ai/chats/' + encodeURIComponent(chatUi.id), { model: pick.value }).catch(() => {});
+    });
+    input.addEventListener('input', grow);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    $('[data-chat-stop]', body).addEventListener('click', () => { if (running) running.abort(); });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (running) return;
-      const input = $('#chatInput', body); const text = input.value.trim(); if (!text) return;
-      const model = $('#chatModel', body).value; const log = $('#chatLog', body);
-      const btn = $('[data-chat-send]', form), stopBtn = $('[data-chat-stop]', form);
-      btn.disabled = true; stopBtn.hidden = false; input.value = '';
-      chatHistory.push({ role: 'user', content: text });
+      const text = input.value.trim(); if (!text) return;
+      const model = pick.value;
+      const sendBtn = $('[data-chat-send]', body), stopBtn = $('[data-chat-stop]', body);
+      // A new chat is saved at its first question.
+      if (!chatUi.id) {
+        try { chatUi.id = (await api.post('/api/ai/chats', { model })).id; }
+        catch (ex) { toast(ex.message, true); return; }
+      }
+      const id = chatUi.id;
+      sendBtn.hidden = true; stopBtn.hidden = false; input.value = ''; grow();
+      const hello = $('.chat-hello', log); if (hello) hello.remove();
       log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
       // Until the first word: three dots and, after a few seconds, how long it has been (loading a model can take a while).
       const started = Date.now();
@@ -8538,9 +8642,10 @@ sudo ./install.sh</pre></div>`}` : '') +
       }, 1000);
       log.scrollTop = log.scrollHeight;
       let answer = '', shown = 0, out = null, think = null, thinkText = '', thinkStart = 0;
+      const here = () => chatUi.id === id && log.isConnected;
       const atEnd = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
       const dropWait = () => { if (wait.parentNode) wait.remove(); };
-      // A thinking model shows its reasoning live, folded away as soon as the answer starts (like other chat apps).
+      // A thinking model shows its reasoning live, folded away as soon as the answer starts.
       const endThink = () => {
         if (!think || think.dataset.done) return;
         think.dataset.done = '1'; think.open = false;
@@ -8548,7 +8653,8 @@ sudo ./install.sh</pre></div>`}` : '') +
       };
       running = new AbortController();
       try {
-        await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
+        await api.stream('/api/ai/chat', { chat: id, model, content: text }, (l) => {
+          if (!here()) return;
           const follow = atEnd();
           if (l.thinking) {
             dropWait();
@@ -8567,32 +8673,35 @@ sudo ./install.sh</pre></div>`}` : '') +
           if (l.message && l.message.content) {
             dropWait(); endThink();
             if (!out) { out = document.createElement('div'); out.className = 'msg assistant md'; log.appendChild(out); }
-            const piece = l.message.content === 'I stopped after too many steps. Ask again for what is still left.' ? tr(l.message.content) : l.message.content;
-            answer += piece; out.innerHTML = mdToHtml(answer.slice(shown));
+            answer += l.message.content;
+            const part = answer.slice(shown);
+            out.innerHTML = mdToHtml(part === TOO_MANY_STEPS ? tr(part) : part);
           }
           if (follow) log.scrollTop = log.scrollHeight;
         }, { signal: running.signal });
-        dropWait(); endThink();
-        if (answer) chatHistory.push({ role: 'assistant', content: answer });
-        else if (!think) { chatHistory.pop(); log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('The model gave no answer.')}</div>`); }
+        if (here()) {
+          dropWait(); endThink();
+          if (!answer && !think) log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('The model gave no answer.')}</div>`);
+        }
       } catch (err) {
-        dropWait(); endThink();
-        if (err && err.name === 'AbortError') {
-          if (answer) chatHistory.push({ role: 'assistant', content: answer }); else chatHistory.pop();
-          log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('Stopped.')}</div>`);
-        } else {
-          if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
-          out.textContent = t('No answer: {error}', { error: err.message });
-          chatHistory.pop();
+        if (here()) {
+          dropWait(); endThink();
+          if (err && err.name === 'AbortError') log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('Stopped.')}</div>`);
+          else log.insertAdjacentHTML('beforeend', `<div class="msg assistant chat-err">${esc(t('No answer: {error}', { error: err.message }))}</div>`);
         }
       }
       clearInterval(tick); running = null;
-      btn.disabled = false; stopBtn.hidden = true; input.focus();
-      log.scrollTop = log.scrollHeight;
+      sendBtn.hidden = false; stopBtn.hidden = true;
+      if (here()) { log.scrollTop = log.scrollHeight; input.focus(); }
+      // The server saved the turn and gave a new chat its title.
+      await loadList();
+      const c = chatsList.find((x) => x.id === chatUi.id);
+      if (c && here()) titleEl.textContent = c.title || t('New chat');
     });
-    form.addEventListener('keydown', (e) => {
-      if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
-    });
+
+    await loadList();
+    const keep = chatUi.id && chatsList.some((c) => c.id === chatUi.id) ? chatUi.id : null;
+    openChat(keep);
   }
 
   async function aiPane(el) {
