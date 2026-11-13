@@ -871,6 +871,29 @@ select.field { padding-right: 8px; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 5px; }
 .msg.assistant { align-self: flex-start; background: var(--glass); border: 1px solid var(--glass-line); border-bottom-left-radius: 5px; }
 .msg.tool { align-self: flex-start; max-width: 100%; padding: 2px 4px; background: none; color: var(--muted); font-size: 13px; }
+.msg.md { white-space: normal; }
+.msg.md > :first-child { margin-top: 0; }
+.msg.md > :last-child { margin-bottom: 0; }
+.msg.md p, .msg.md ul, .msg.md ol, .msg.md pre { margin: 0 0 8px; }
+.msg.md ul, .msg.md ol { padding-left: 20px; }
+.msg.md pre { padding: 8px 10px; border-radius: 10px; background: var(--glass); border: 1px solid var(--glass-line); overflow: auto; white-space: pre; font-size: 13px; }
+.msg.md h4, .msg.md h5, .msg.md h6 { margin: 10px 0 4px; font-size: 15px; }
+.msg.typing { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+.msg.typing .dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+.msg.typing .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: chat-dot 1.2s infinite ease-in-out; }
+.msg.typing .dots i:nth-child(2) { animation-delay: .15s; }
+.msg.typing .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes chat-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .msg.typing .dots i { animation: none; opacity: .6; } }
+.msg.think { align-self: flex-start; max-width: 85%; padding: 2px 4px; background: none; color: var(--muted); font-size: 13px; white-space: normal; }
+.msg.think summary { cursor: pointer; font-weight: 600; }
+.msg.think:not([data-done]) summary { animation: chat-pulse 1.6s infinite ease-in-out; }
+@keyframes chat-pulse { 50% { opacity: .5; } }
+.msg.think .think-text { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--glass-line); white-space: pre-wrap; max-height: 220px; overflow: auto; }
+.ai-gpu { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--warn); margin: 0 0 14px; }
+.ai-gpu > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ai-gpu span { color: var(--muted); font-size: 13px; }
+.chat .ai-gpu { margin: 0; }
 .chat > .field { flex: none; width: 100%; }
 .chat textarea { min-height: 72px; padding: 10px 12px; resize: vertical; height: auto; }
 

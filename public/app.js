@@ -193,8 +193,9 @@
       try { name = decodeURIComponent((star && star[1]) || (plain && plain[1]) || 'download'); } catch (e) { name = (plain && plain[1]) || 'download'; }
       return { blob, name };
     },
-    async stream(path, body, onLine) {
-      const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => { connectionLost(); throw offline(); });
+    async stream(path, body, onLine, { signal } = {}) {
+      const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+        .catch((e) => { if (e && e.name === 'AbortError') throw e; connectionLost(); throw offline(); });
       if (!res.ok || !res.body) { const d = await res.json().catch(() => ({})); throw new Error(tr(d.error) || t('Error {status}', { status: res.status })); }
       const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
       for (;;) {
@@ -2231,6 +2232,7 @@
                 : t('Empty = Docker picks an address. A fixed address only works in a network with its own subnet.')}</small></label>`;
           })()}
           <label class="check"><input type="checkbox" data-cf-top="privileged"${f.privileged ? ' checked' : ''}> ${t('Privileged (almost full access to the server, only if the app really needs it)')}</label>
+          ${f.gpu !== undefined ? `<label class="check"><input type="checkbox" data-cf-top="gpu"${f.gpu ? ' checked' : ''}> ${t('Use the NVIDIA graphics card (GPU)')} ${hint(t('For AI models and video transcoding. Needs the NVIDIA driver (Settings → Hardware).'))}</label>` : ''}
           ${f.otherServices.length ? `<p class="muted small">${t('This file also contains: {list}. Those stay unchanged.', { list: esc(f.otherServices.join(', ')) })}</p>` : ''}
         </div>
         ${CF_KINDS.map(([kind, title]) => (f[kind].length ? `<h3>${t(title)}</h3><div class="cf-list">${f[kind].map((r, i) => cfRow(kind, r, i)).join('')}</div>` : '')).join('')}
@@ -8466,6 +8468,23 @@ sudo ./install.sh</pre></div>`}` : '') +
     localai: 'LocalAI speaks the same language as LM Studio. The usual address is http://127.0.0.1:8080/v1.',
     claude: 'Claude runs at Anthropic. Paste an API key from console.anthropic.com. The key stays on this server.',
   };
+  // Ollama runs, but without the graphics card: every answer goes through the CPU.
+  function aiGpuBanner(ai) {
+    const g = ai && ai.gpuMissing;
+    if (!g) return '';
+    return `<div class="ai-gpu"><div><b>${t('Ollama does not use the graphics card.')}</b>
+      <span>${t('Answers come from the processor: slow, and the CPU runs at 100%. Give {app} the {card}.', { app: esc(g.name), card: esc(g.card || 'GPU') })}</span></div>
+      ${g.driver ? `<button class="btn primary sm" type="button" data-ai-gpu>${t('Use the GPU')}</button>` : `<a class="btn sm" href="#settings/hardware">${t('Install the driver')}</a>`}</div>`;
+  }
+  async function aiUseGpu(btn, after) {
+    if (!(await ask(t('Give Ollama the graphics card? Ollama restarts, which takes a moment.'), t('Use the GPU')))) return;
+    await withBusy(btn, async () => {
+      const r = await api.post('/api/ai/use-gpu');
+      toast(r.already ? t('Ollama already uses the graphics card.') : t('Ollama now uses the graphics card.'));
+      await loadAi(true).catch(() => {});
+      after();
+    });
+  }
   function aiNotice(ai) {
     if (!ai || ai.provider === 'off') return `<div class="chat-empty"><p class="lead">${t('No AI is connected yet.')}</p><p class="muted">${t('Choose Ollama, LM Studio, llama.cpp, LocalAI or Claude in Settings.')}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
     if (!ai.reachable) return `<div class="chat-empty"><p class="lead">${esc(tr(ai.error || t('The AI is not reachable.')))}</p><a class="btn primary" href="#settings/ai">${t('Open AI settings')}</a></div>`;
@@ -8483,48 +8502,91 @@ sudo ./install.sh</pre></div>`}` : '') +
     const list = (S.ai.models || []).filter((m) => !/embed/i.test(m.name));
     const models = list.length ? list : S.ai.models;
     const picked = models.some((m) => m.name === S.ai.model) ? S.ai.model : models[0].name;
+    const msgHtml = (m) => (m.role === 'assistant' ? `<div class="msg assistant md">${mdToHtml(m.content)}</div>` : `<div class="msg ${m.role === 'user' ? 'user' : 'tool'}">${esc(m.content)}</div>`);
     body.innerHTML = `<form class="chat" id="chatForm">
+      ${aiGpuBanner(S.ai)}
       <label class="fld">${t('Model')}<select class="field" id="chatModel">${models.map((m) => `<option value="${esc(m.name)}"${m.name === picked ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
       ${S.ai && S.ai.tools === false ? '' : `<p class="muted small">${t('It can manage this server, the same as an MCP connection.')}</p>`}
-      <div class="chat-log" id="chatLog">${chatHistory.map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div>
+      <div class="chat-log" id="chatLog" aria-live="polite">${chatHistory.map(msgHtml).join('')}</div>
       <textarea class="field" id="chatInput" rows="3" placeholder="${t('Ask your own model a question')}" required></textarea>
-      <div class="btn-row"><button class="btn primary" type="submit">${t('Send')}</button></div>
+      <div class="btn-row"><button class="btn primary" type="submit" data-chat-send>${t('Send')}</button><button class="btn" type="button" data-chat-stop hidden>${t('Stop')}</button></div>
     </form>`;
     const form = $('#chatForm', body);
+    const gpuBtn = $('[data-ai-gpu]', form);
+    if (gpuBtn) gpuBtn.addEventListener('click', () => aiUseGpu(gpuBtn, () => { const b = $('.ai-gpu', form); if (b && !(S.ai && S.ai.gpuMissing)) b.remove(); }));
+    let running = null;
+    $('[data-chat-stop]', form).addEventListener('click', () => { if (running) running.abort(); });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (running) return;
       const input = $('#chatInput', body); const text = input.value.trim(); if (!text) return;
       const model = $('#chatModel', body).value; const log = $('#chatLog', body);
-      const btn = form.querySelector('button'); btn.disabled = true; input.value = '';
+      const btn = $('[data-chat-send]', form), stopBtn = $('[data-chat-stop]', form);
+      btn.disabled = true; stopBtn.hidden = false; input.value = '';
       chatHistory.push({ role: 'user', content: text });
       log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div>`);
-      const wait = document.createElement('div'); wait.className = 'msg assistant'; wait.textContent = '…'; log.appendChild(wait);
+      // Until the first word: three dots and, after a few seconds, how long it has been (loading a model can take a while).
+      const started = Date.now();
+      const wait = document.createElement('div'); wait.className = 'msg assistant typing';
+      wait.innerHTML = `<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="typing-note"></span>`;
+      log.appendChild(wait);
+      const tick = setInterval(() => {
+        const secs = Math.round((Date.now() - started) / 1000);
+        if (secs >= 5 && wait.parentNode) $('.typing-note', wait).textContent = t('Waiting for the model… {secs} s', { secs });
+      }, 1000);
       log.scrollTop = log.scrollHeight;
-      let answer = '', shown = 0, out = null;
+      let answer = '', shown = 0, out = null, think = null, thinkText = '', thinkStart = 0;
+      const atEnd = () => log.scrollHeight - log.scrollTop - log.clientHeight < 40;
       const dropWait = () => { if (wait.parentNode) wait.remove(); };
+      // A thinking model shows its reasoning live, folded away as soon as the answer starts (like other chat apps).
+      const endThink = () => {
+        if (!think || think.dataset.done) return;
+        think.dataset.done = '1'; think.open = false;
+        $('summary', think).textContent = t('Thought for {secs} s', { secs: Math.max(1, Math.round((Date.now() - thinkStart) / 1000)) });
+      };
+      running = new AbortController();
       try {
         await api.stream('/api/ai/chat', { model, messages: chatHistory }, (l) => {
+          const follow = atEnd();
+          if (l.thinking) {
+            dropWait();
+            if (!think || think.dataset.done) {
+              thinkText = ''; thinkStart = Date.now();
+              think = document.createElement('details'); think.className = 'msg think'; think.open = true;
+              think.innerHTML = `<summary>${t('Thinking…')}</summary><div class="think-text"></div>`;
+              log.appendChild(think);
+            }
+            thinkText += l.thinking; $('.think-text', think).textContent = thinkText;
+          }
           if (l.tool && l.tool.name) {
-            dropWait(); shown = answer.length; out = null;
+            dropWait(); endThink(); shown = answer.length; out = null;
             log.insertAdjacentHTML('beforeend', `<div class="msg tool">${esc(t('Using {name}', { name: l.tool.name }))}</div>`);
           }
           if (l.message && l.message.content) {
-            dropWait();
-            if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
+            dropWait(); endThink();
+            if (!out) { out = document.createElement('div'); out.className = 'msg assistant md'; log.appendChild(out); }
             const piece = l.message.content === 'I stopped after too many steps. Ask again for what is still left.' ? tr(l.message.content) : l.message.content;
-            answer += piece; out.textContent = answer.slice(shown);
+            answer += piece; out.innerHTML = mdToHtml(answer.slice(shown));
           }
-          log.scrollTop = log.scrollHeight;
-        });
-        if (!answer) dropWait();
-        else chatHistory.push({ role: 'assistant', content: answer });
+          if (follow) log.scrollTop = log.scrollHeight;
+        }, { signal: running.signal });
+        dropWait(); endThink();
+        if (answer) chatHistory.push({ role: 'assistant', content: answer });
+        else if (!think) { chatHistory.pop(); log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('The model gave no answer.')}</div>`); }
       } catch (err) {
-        dropWait();
-        if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
-        out.textContent = t('No answer: {error}', { error: err.message });
-        chatHistory.pop();
+        dropWait(); endThink();
+        if (err && err.name === 'AbortError') {
+          if (answer) chatHistory.push({ role: 'assistant', content: answer }); else chatHistory.pop();
+          log.insertAdjacentHTML('beforeend', `<div class="msg tool">${t('Stopped.')}</div>`);
+        } else {
+          if (!out) { out = document.createElement('div'); out.className = 'msg assistant'; log.appendChild(out); }
+          out.textContent = t('No answer: {error}', { error: err.message });
+          chatHistory.pop();
+        }
       }
-      btn.disabled = false; input.focus();
+      clearInterval(tick); running = null;
+      btn.disabled = false; stopBtn.hidden = true; input.focus();
+      log.scrollTop = log.scrollHeight;
     });
     form.addEventListener('keydown', (e) => {
       if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
@@ -8606,7 +8668,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     });
     paint();
     if (ai.provider === 'ollama' && ai.reachable) {
-      $('#aiExtra', el).innerHTML = `
+      $('#aiExtra', el).innerHTML = `${aiGpuBanner(ai)}
         <h2 class="pane-title">${t('Models')}</h2>
         <ul class="rows">${(ai.models || []).map((m) => `<li>
           <div><div class="row-title">${esc(m.name)}</div>
@@ -8625,6 +8687,8 @@ sudo ./install.sh</pre></div>`}` : '') +
         <p class="progress-note" id="pullNote"></p>`;
     }
     el.onclick = async (e) => {
+      const g = e.target.closest('[data-ai-gpu]');
+      if (g) { aiUseGpu(g, () => { if (settingsTab() === 'ai') aiPane(el); }); return; }
       const b = e.target.closest('[data-model]'); if (!b || !el.contains(b)) return;
       const name = b.dataset.model, act = b.dataset.do;
       if (act === 'delete' && !(await ask(t('Remove {name}?', { name }), t('Remove')))) return;

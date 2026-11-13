@@ -193,3 +193,16 @@ test('host network: a port that is taken is found, including MajaOS itself', () 
   assert.deepEqual(s.hostClashes([{ port: 53 }], inst), []); // only TCP is tracked
   assert.deepEqual(s.hostClashes([], inst), []);
 });
+
+test('Ollama gets the NVIDIA GPU when Docker can use it', () => {
+  const app = { id: 'oll', name: 'ollama', image: 'ollama/ollama', network: 'bridge', extraParams: '', postArgs: '' };
+  const fields = [{ key: 'c0', type: 'Port', name: 'API', target: '11434', value: '11434', mode: 'tcp' }];
+  const on = s.buildCompose(app, 'ollama', fields, { tz: 'UTC', nvidia: true });
+  assert.match(on.text, /driver: "nvidia"/);
+  const off = s.buildCompose(app, 'ollama', fields, { tz: 'UTC', nvidia: false });
+  assert.doesNotMatch(off.text, /nvidia/);
+  // A template that asks for it with --runtime=nvidia, on a server without the driver: no GPU (docker would refuse to start it).
+  const asks = s.buildCompose({ ...app, image: 'lscr.io/linuxserver/jellyfin', extraParams: '--runtime=nvidia' }, 'jf', [], { tz: 'UTC', nvidia: false });
+  assert.doesNotMatch(asks.text, /nvidia/);
+  assert.ok(asks.warnings.some((w) => /driver is not installed/.test(w)));
+});

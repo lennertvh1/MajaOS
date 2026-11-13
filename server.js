@@ -810,6 +810,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/ai' && method === 'GET') return sendJson(res, 200, await ai.status());
   if (p === '/api/ai/settings' && method === 'POST') return sendJson(res, 200, ai.save(await readBody(req)));
+  if (p === '/api/ai/use-gpu' && method === 'POST') return sendJson(res, 200, await ai.useGpu());
   if (p === '/api/ai/pull' && method === 'POST') {
     const body = await readBody(req);
     if (!MODEL_NAME.test(body.name || '')) return sendJson(res, 400, { error: 'Invalid model name' });

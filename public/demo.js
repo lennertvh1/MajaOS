@@ -110,6 +110,7 @@
     nvidia: [[0, 'Fetching the package lists…'], [1500, 'Installing the kernel headers…'], [3000, 'Installing the NVIDIA driver (this takes a few minutes)…'],
       [7000, 'Installing GPU support for Docker…'], [9000, 'Restarting Docker (the apps are back in a moment)…'], [10500, null]] };
   // The RTX 3060 Ti of the demo has its driver; /?nvidia=0 shows a server where it still has to be installed.
+  let ollamaNoGpu = (() => { try { return new URLSearchParams(location.search).get('ollamagpu') === '0'; } catch (e) { return false; } })();
   const noDriver = (() => { try { return new URLSearchParams(location.search).get('nvidia') === '0'; } catch (e) { return false; } })();
   const nvidia = { cards: ['GeForce RTX 3060 Ti'], installed: !noDriver, loaded: !noDriver, version: noDriver ? null : '550.163.01', toolkit: !noDriver, docker: !noDriver, secureBoot: false, reboot: false };
   function debProgress() {
@@ -1280,6 +1281,7 @@
             { host: '', container: '/transcode', mode: 'rw', kind: 'tmpfs', locked: true }] : []),
         env: [{ name: 'TZ', value: 'Europe/Brussels' }, { name: 'PUID', value: '1000' }, { name: 'PGID', value: '1000' }],
         devices: gpu ? [{ host: '/dev/dri', container: '/dev/dri', perm: '' }] : [], labels: [],
+        gpu: a.name === 'ollama' ? !ollamaNoGpu : a.name === 'jellyfin',
       };
     }
     return { ...copy(formState[a.name]), otherServices: apps.filter((x) => x.compose === a.compose && x !== a).map((x) => x.name) };
@@ -1293,6 +1295,7 @@
         (f.network === 'host' || f.network === 'none' ? '    network_mode: ' + q(f.network) + '\n' : '') +
         (f.network && f.network !== 'host' && f.network !== 'none' ? '    networks:\n      ' + f.network + (f.ip ? ':\n        ipv4_address: ' + q(f.ip) : ': null') + '\n' : '') +
         (f.privileged ? '    privileged: true\n' : '') +
+        (f.gpu ? '    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: "nvidia"\n              count: "all"\n              capabilities:\n                - "gpu"\n' : '') +
         list('ports', f.ports.map((p) => q((p.host ? p.host + ':' : '') + p.container + '/' + p.protocol))) +
         list('volumes', f.volumes.map((v) => (v.locked ? '{ type: "tmpfs", target: ' + q(v.container) + ' }' : q(v.host + ':' + v.container + (v.mode === 'ro' ? ':ro' : ''))))) +
         list('devices', f.devices.map((d) => q(d.host + ':' + (d.container || d.host)))) +
@@ -1414,7 +1417,7 @@
     if (network === undefined && !['bridge', 'host', 'none'].includes(tpl)) w.push('The template uses the network "' + tpl + '". Choose a network below, or create it in Settings → Docker networks.');
     if (network && ownIpNet(network)) w.push('This app gets its own address in your home network. The ports are then the app\'s own; the server itself cannot reach the app at this address.');
     if (a.privileged) w.push('This app runs privileged: it gets almost full access to your server.');
-    if (a.gpu) w.push('This app uses the NVIDIA GPU. That requires install.sh to have been run with --nvidia.');
+    if (a.gpu) w.push(noDriver ? 'This app wants an NVIDIA GPU, but its driver is not installed. It runs without the GPU. Install the driver in Settings → Hardware.' : 'This app uses the NVIDIA GPU.');
     if (a.fields().some((f) => f.value === '/var/run/docker.sock')) w.push('This app gets access to Docker and can therefore manage all your containers.');
     return w;
   }
@@ -2472,7 +2475,10 @@
       return { ...common, provider: 'claude', url: '', model: c.model || CLAUDE_MODELS[0], hasKey: !!c.hasKey, reachable: !!c.hasKey,
         error: c.hasKey ? null : 'Paste the API key from Claude.', models: CLAUDE_MODELS.map((name) => ({ name })) };
     }
-    if (c.provider === 'ollama') return { ...common, provider: 'ollama', url: c.url, model: c.model, hasKey: false, reachable: true, error: null, models: copy(models), version: '0.13.4', gpu: gpu() };
+    if (c.provider === 'ollama') {
+      return { ...common, provider: 'ollama', url: c.url, model: c.model, hasKey: false, reachable: true, error: null, models: copy(models), version: '0.13.4', gpu: gpu(),
+        gpuMissing: ollamaNoGpu || noDriver ? { id: 'ollama', name: 'ollama', card: 'GeForce RTX 3060 Ti', driver: !noDriver } : null };
+    }
     return { ...common, provider: c.provider, url: c.url, model: c.model || 'local-model', hasKey: false, reachable: true, error: null, models: [{ name: c.model || 'local-model' }] };
   }
   function demoAiSave(body) {
@@ -2907,6 +2913,13 @@
     if (path === '/api/install/network') { await wait(1500); return instNetSet(body); }
     if (path === '/api/remote') { await wait(400); return demoRemoteSet(body); }
     if (path === '/api/ai/settings') { await wait(200); return demoAiSave(body); }
+    if (path === '/api/ai/use-gpu') {
+      if (noDriver) throw err('Install the NVIDIA driver first: Settings → Hardware.', 409);
+      const already = !ollamaNoGpu;
+      await wait(1200); ollamaNoGpu = false;
+      const a = apps.find((x) => x.name === 'ollama'); if (a) { demoForm(a); formState.ollama.gpu = true; }
+      return already ? { ok: true, already: true } : { ok: true, name: 'ollama' };
+    }
     if (path === '/api/share-links') { await wait(200); return demoLinkCreate(body); }
     if (path.includes('/snapshots')) { await wait(rnd(800, 1600)); const r = snapRoute('POST', path, body); if (r !== undefined) return r; }
     if (path.startsWith('/api/sysbackups')) { await wait(rnd(200, 500)); const r = sysRoute('POST', path, body); if (r !== undefined) return r; }
@@ -3210,7 +3223,8 @@
     throw err('Unknown endpoint', 404);
   }
 
-  async function stream(path, body, onLine) {
+  async function stream(path, body, onLine, { signal } = {}) {
+    const halt = () => { if (signal && signal.aborted) { const e = new Error('Stopped.'); e.name = 'AbortError'; throw e; } };
     if (path === '/api/ai/pull') {
       const total = rnd(1.8, 4.6) * GB;
       onLine({ status: 'pulling manifest' });
@@ -3238,11 +3252,17 @@
       else if (/opslag|storage|disk|schijf|pool/i.test(q)) tool = 'storage';
       else if (/app|container|jellyfin/i.test(q)) tool = 'apps_list';
       if (cfg.tools === false) tool = '';
-      if (tool) { onLine({ tool: { name: tool } }); await wait(220); }
+      if (/qwen3|deepseek-r1|gpt-oss|magistral/i.test(body.model)) {
+        const thought = 'The user asks: "' + q.slice(0, 60) + (q.length > 60 ? '…' : '') + '". ' + (tool ? 'I should look this up on the server first with ' + tool + '. ' : '')
+          + 'This is the demo, so I will explain that and keep the answer short.';
+        await wait(500);
+        for (const word of thought.split(/(\s+)/)) { halt(); onLine({ thinking: word }); await wait(35); }
+      }
+      if (tool) { halt(); onLine({ tool: { name: tool } }); await wait(220); }
       const reply = (tool ? 'I looked that up on the sample server. ' : '') + 'This is demo mode, so I am not really running on your GPU. On your own server ' + body.model +
         ' would answer this here: "' + q.slice(0, 80) + (q.length > 80 ? '…' : '') + '". With an RTX 3060 Ti an 8B model gets roughly 60 to 70 tokens per second.';
       await wait(350);
-      for (const word of reply.split(/(\s+)/)) { onLine({ message: { content: word }, done: false }); await wait(28); }
+      for (const word of reply.split(/(\s+)/)) { halt(); onLine({ message: { content: word }, done: false }); await wait(28); }
       onLine({ done: true });
       return;
     }

@@ -118,3 +118,17 @@ test('changing a port with mode: host', () => {
   assert.deepEqual(cf.applyServiceForm(PROJECT, f).services.jellyfin.ports[2], { mode: 'host', target: 1900, published: '1901', protocol: 'udp' });
   assert.equal(cf.parsePort({ target: 80, published: '8080', x_extra: 1 }).locked, true); // onbekende sleutel: geavanceerd
 });
+
+test('the GPU switch adds and removes the NVIDIA device request, and keeps the rest of deploy', () => {
+  const project = { name: 'ollama', services: { ollama: { image: 'ollama/ollama', deploy: { resources: { limits: { memory: '8g' } } } } } };
+  const form = cf.serviceForm(project, 'ollama');
+  assert.equal(form.gpu, false);
+  const on = cf.applyServiceForm(project, { ...form, gpu: true });
+  assert.deepEqual(on.services.ollama.deploy.resources.reservations.devices, [{ driver: 'nvidia', count: 'all', capabilities: ['gpu'] }]);
+  assert.equal(on.services.ollama.deploy.resources.limits.memory, '8g');
+  assert.equal(cf.serviceForm(on, 'ollama').gpu, true);
+  const off = cf.applyServiceForm(on, { ...cf.serviceForm(on, 'ollama'), gpu: false });
+  assert.deepEqual(off.services.ollama.deploy, { resources: { limits: { memory: '8g' } } });
+  // gpus: all (newer compose) counts as on too.
+  assert.equal(cf.serviceForm({ services: { x: { image: 'a', gpus: 'all' } } }, 'x').gpu, true);
+});

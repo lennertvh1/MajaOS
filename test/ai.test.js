@@ -91,3 +91,57 @@ test('shutting down from the chat still needs confirm', async () => {
   const mcp = require('../lib/mcp');
   await assert.rejects(() => mcp.runTool('power', { action: 'reboot' }, { call() { throw new Error('should not run'); } }), /confirm/);
 });
+
+test('streamed pieces: Ollama, OpenAI-style servers and Claude', () => {
+  const acc = { calls: [], parts: [] };
+  assert.deepEqual(ai.ollamaChunk({ message: { role: 'assistant', content: '', thinking: 'Hmm' } }, acc), { text: '', thinking: 'Hmm' });
+  assert.deepEqual(ai.ollamaChunk({ message: { content: 'Hi' } }, acc), { text: 'Hi', thinking: '' });
+  ai.ollamaChunk({ message: { content: '', tool_calls: [{ function: { name: 'apps_list', arguments: {} } }] } }, acc);
+  assert.equal(acc.calls[0].name, 'apps_list');
+  assert.throws(() => ai.ollamaChunk({ error: 'out of memory' }, acc), /out of memory/);
+
+  const oa = { calls: [], parts: [] };
+  assert.deepEqual(ai.openaiChunk('data: {"choices":[{"delta":{"reasoning_content":"Let me see"}}]}', oa), { text: '', thinking: 'Let me see' });
+  assert.deepEqual(ai.openaiChunk('data: {"choices":[{"delta":{"content":"Yes"}}]}', oa), { text: 'Yes', thinking: '' });
+  ai.openaiChunk('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"storage","arguments":"{\\"wa"}}]}}]}', oa);
+  ai.openaiChunk('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ke\\":true}"}}]}}]}', oa);
+  assert.deepEqual(oa.parts[0], { id: 'c1', name: 'storage', args: '{"wake":true}' });
+  assert.deepEqual(ai.openaiChunk('data: [DONE]', oa), { text: '', thinking: '' });
+
+  const cl = { calls: [], parts: [] };
+  ai.claudeChunk('data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tu1","name":"vms_list","input":{}}}', cl);
+  ai.claudeChunk('data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}', cl);
+  assert.deepEqual(cl.parts[1], { id: 'tu1', name: 'vms_list', args: '{}' });
+  assert.deepEqual(ai.claudeChunk('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Ok"}}', cl), { text: 'Ok', thinking: '' });
+  assert.throws(() => ai.claudeChunk('data: {"type":"error","error":{"message":"overloaded"}}', cl), /overloaded/);
+});
+
+test('the chat streams from Ollama and asks again without thinking for a model that can\'t', async () => {
+  const http = require('node:http');
+  const bodies = [];
+  const srv = http.createServer((req, res) => {
+    let b = '';
+    req.on('data', (c) => { b += c; });
+    req.on('end', () => {
+      const body = JSON.parse(b);
+      bodies.push(body);
+      if (body.think) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"\\"llama3\\" does not support thinking"}'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      res.write('{"message":{"role":"assistant","content":"Hel"},"done":false}\n{"message":{"role":"assistant","con');
+      setTimeout(() => res.end('tent":"lo"},"done":false}\n{"done":true}\n'), 20);
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  fs.writeFileSync(path.join(dir, 'ai.json'), JSON.stringify({ provider: 'ollama', url: 'http://127.0.0.1:' + srv.address().port, model: 'llama3', tools: false }));
+  const chunks = [];
+  const res = new (require('node:stream').Writable)({ write(c, e, cb) { chunks.push(String(c)); cb(); } });
+  res.writeHead = () => {};
+  await ai.chat(res, { messages: [{ role: 'user', content: 'Hi' }] });
+  srv.close();
+  fs.rmSync(path.join(dir, 'ai.json'));
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0].stream, true);
+  assert.equal(bodies[1].think, undefined);
+  const lines = chunks.join('').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(lines, [{ message: { content: 'Hel' } }, { message: { content: 'lo' } }]);
+});
