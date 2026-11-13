@@ -137,3 +137,15 @@ test('Detect fans tests every channel and puts the chip\'s own mode back afterwa
   assert.equal(fs.readFileSync(pwm1 + '_enable', 'utf8'), '5');
   assert.equal(JSON.parse(fs.readFileSync(path.join(process.env.DATA_DIR, 'fans.json'), 'utf8')).testing, undefined);
 });
+
+test('an older driver (f71882fg) registers the legacy way: everything in hwmonN/device/', async () => {
+  const dev = path.join(root, 'hwmon/hwmon7/device');
+  w(path.join(dev, 'name'), 'f71889ed');
+  w(path.join(dev, 'fan1_input'), '1032'); w(path.join(dev, 'pwm1'), '128'); w(path.join(dev, 'pwm1_enable'), '2');
+  w(path.join(dev, 'temp1_input'), '41000');
+  const r = fans.read();
+  assert.deepEqual(r.fans.filter((f) => f.chip === 'f71889ed').map((f) => [f.id, f.rpm]), [['f71889ed@device/fan1', 1032]]);
+  assert.equal(r.pwms.find((p) => p.chip === 'f71889ed').file, path.join(dev, 'pwm1'));
+  assert.ok(r.temps.some((x) => x.chip === 'f71889ed' && x.value === 41));
+  fs.rmSync(path.join(root, 'hwmon/hwmon7'), { recursive: true, force: true });
+});
