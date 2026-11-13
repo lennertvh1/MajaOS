@@ -142,3 +142,37 @@ test('an empty command is refused, a real one returns its output', async () => {
   assert.match(r.output, /hello-mcp/);
   assert.equal(r.timedOut, false);
 });
+
+test('a weak model is sent back to ask: missing information, then a plan, and only with confirm the change', async () => {
+  const posts = [];
+  const client = fake(async (method, path, opts) => {
+    if (method === 'GET' && path === '/api/shares') return { shares: [{ name: 'media' }], users: [{ name: 'lennert' }], groups: [{ name: 'family' }], roots: [{ name: 'tank', mountpoint: '/tank' }] };
+    posts.push({ method, path, body: opts && opts.body });
+    return { ok: true };
+  });
+  const call = (args) => dispatch({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'share_save', arguments: args } }, client).then((r) => r.result);
+
+  const missing = await call({ name: 'films' });
+  assert.equal(missing.isError, true);
+  assert.match(missing.content[0].text, /^Missing information/);
+  assert.match(missing.content[0].text, /tank/); // offers the pools
+  assert.match(missing.content[0].text, /lennert/); // and the users
+
+  const unknown = await call({ name: 'films', create: { parent: 'tank' }, users: { mieke: 'rw' } });
+  assert.match(unknown.content[0].text, /mieke does not exist/);
+
+  const plan = await call({ name: 'films', create: { parent: 'tank' }, users: { lennert: 'rw' } });
+  assert.match(plan.content[0].text, /^Not done yet/);
+  assert.match(plan.content[0].text, /lennert \(read and write\)/);
+  assert.equal(posts.length, 0);
+
+  const done = await call({ name: 'films', create: { parent: 'tank' }, users: { lennert: 'rw' }, confirm: true });
+  assert.notEqual(done.isError, true);
+  assert.deepEqual(posts, [{ method: 'POST', path: '/api/shares', body: { name: 'films', create: { parent: 'tank' }, users: { lennert: 'rw' } } }]);
+});
+
+test('the instructions tell the model to ask instead of guess', async () => {
+  const init = await dispatch({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }, null);
+  assert.match(init.result.instructions, /Never guess missing information/);
+  assert.match(init.result.instructions, /Never invent a password/);
+});
