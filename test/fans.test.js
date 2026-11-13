@@ -10,6 +10,8 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fans-'));
 process.env.HWMON_DIR = path.join(root, 'hwmon');
 process.env.DATA_DIR = path.join(root, 'data');
 process.env.FANS_MODULES_FILE = path.join(root, 'modules.conf');
+process.env.FANS_OPTIONS_FILE = path.join(root, 'options.conf');
+process.env.FANS_WAIT_MS = '1';
 const w = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, String(v)); };
 // k10temp (CPU), nct6798 (board: two fans, two PWM channels), nvme.
 w(path.join(root, 'hwmon/hwmon0/name'), 'k10temp'); w(path.join(root, 'hwmon/hwmon0/temp1_input'), '48250'); w(path.join(root, 'hwmon/hwmon0/temp1_label'), 'Tctl');
@@ -84,4 +86,54 @@ AMD Family 17h thermal sensors...                           Success!
   assert.deepEqual(fans.parseSensorsDetect(out), [{ chip: 'Nuvoton NCT6798D', driver: 'nct6775' }, { chip: 'ITE IT8689E', driver: 'to-be-written' }]);
   assert.equal(fans.acpiConflict('ACPI Warning: SystemIO range 0x0000000000000295-0x0000000000000296 conflicts with OpRegion 0x290-0x299 (\\_GPE.HWM) (20230628/utaddress-204)\nnct6775: resource conflict', 'nct6775'), true);
   assert.equal(fans.acpiConflict('usb 1-1: new high-speed USB device', 'nct6775'), false);
+});
+
+test('like FanControl: several sources (the highest counts), hysteresis, step speed and a start kick', () => {
+  const temps = (cpu, gpu) => [{ id: 'cpu', value: cpu, cpu: true }, { id: 'gpu', value: gpu, cpu: false }];
+  const ch = { mode: 'curve', sources: ['cpu', 'gpu'], points: [[30, 20], [70, 100]], min: 0, hyst: 3 };
+  assert.equal(fans.target(ch, temps(40, 60)), 80); // the GPU is hotter: it decides
+  // Hysteresis: from 60 °C (80%) back to 58 °C stays at 80%; at 56 °C it slows down.
+  assert.deepEqual(fans.nextPercent(ch, temps(40, 58), { pct: 80, temp: 60 }), { pct: 80, temp: 60 });
+  assert.equal(fans.nextPercent(ch, temps(40, 56), { pct: 80, temp: 60 }).pct, 72);
+  // Step speed: at most 2%/s down and 10%/s up, per 3 s.
+  const slow = { ...ch, hyst: 0, stepDown: 2, stepUp: 10 };
+  assert.equal(fans.nextPercent(slow, temps(30, 30), { pct: 80, temp: 60 }, 3).pct, 74);
+  assert.equal(fans.nextPercent(slow, temps(30, 70), { pct: 20, temp: 30 }, 3).pct, 50);
+  // Safety skips all of that: a source that is gone means full speed at once.
+  assert.equal(fans.nextPercent({ ...slow, sources: ['cpu', 'gone'] }, temps(30, 30), { pct: 20, temp: 30 }).pct, 100);
+  // A stopped fan gets its start speed for a moment.
+  const kick = { mode: 'fixed', percent: 15, min: 0, calib: { stop: 10, start: 30 } };
+  assert.equal(fans.nextPercent(kick, temps(40, 40), { pct: 0, temp: null }).pct, 30);
+  assert.equal(fans.nextPercent(kick, temps(40, 40), { pct: 30, temp: null }).pct, 15);
+});
+
+test('pairing: the fan that slows down clearly when the channel goes to 0%', () => {
+  assert.equal(fans.pairFan({ a: 1200, b: 900 }, { a: 1180, b: 0 }), 'b');
+  assert.equal(fans.pairFan({ a: 1200, b: 900 }, { a: 1150, b: 880 }), null); // nothing changed: not paired
+  assert.equal(fans.pairFan({ a: 1500, b: 900 }, { a: 600, b: 400 }), 'a'); // a fan that never stops still counts
+});
+
+test('driver options: one driver\'s lines replaced, the rest kept', () => {
+  const before = '# Written by MajaOS (Settings → Cooling): options of the sensor drivers.\noptions it87 force_id=0x8628\noptions other x=1\n';
+  const after = fans.buildOptions(before, { module: 'it87', options: 'ignore_resource_conflict=1' });
+  assert.match(after, /^options other x=1$/m);
+  assert.match(after, /^options it87 ignore_resource_conflict=1$/m);
+  assert.doesNotMatch(after, /force_id/);
+  assert.match(fans.buildOptions('', { module: 'nct6687', blacklist: ['nct6683'] }), /^blacklist nct6683$/m);
+  assert.ok(fans.COMMUNITY.it87.match.test('ITE IT8689E') && fans.COMMUNITY.nct6687.match.test('Nuvoton NCT6687D'));
+  assert.match(fans.COMMUNITY.it87.commit, /^[0-9a-f]{40}$/);
+});
+
+test('Detect fans tests every channel and puts the chip\'s own mode back afterwards', async () => {
+  await fans.save('nct6798@hwmon1/pwm1', { mode: 'auto' });
+  fs.writeFileSync(pwm1 + '_enable', '5');
+  const started = fans.detect();
+  assert.equal(started.state, 'running');
+  assert.throws(() => fans.detect(), /already/);
+  for (let i = 0; i < 200 && fans.progress().state === 'running'; i++) await new Promise((r) => setTimeout(r, 10));
+  const done = fans.progress();
+  assert.equal(done.state, 'done');
+  assert.equal(done.results.length, 2); // the sample fans don't react: nothing paired
+  assert.equal(fs.readFileSync(pwm1 + '_enable', 'utf8'), '5');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(process.env.DATA_DIR, 'fans.json'), 'utf8')).testing, undefined);
 });

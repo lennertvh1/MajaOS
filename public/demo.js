@@ -2130,24 +2130,53 @@
     };
   }
   // Cooling (lib/fans.js): a B550 board with an nct6798 chip, four fans with PWM, the CPU, an NVMe, two disks and the GPU.
-  // /?fans=0: a board whose sensor driver isn't loaded yet; /?fans=lax: and the BIOS keeps the chip (needs a restart).
+  // /?fans=0: a board whose sensor driver isn't loaded yet; /?fans=lax: and the BIOS keeps the chip (needs a restart);
+  // /?fans=it87: a Gigabyte board with an ITE IT8689E that only the community driver controls.
   const fansQ = (() => { try { return new URLSearchParams(location.search).get('fans'); } catch (e) { return null; } })();
-  const demoFans = { names: {}, ch: {}, driver: !fansQ, reboot: false };
-  const fansDiagnose = () => (demoFans.reboot ? { state: 'pending', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'yes' }
-    : demoFans.driver ? { state: 'loaded', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'no' }
-    : { state: 'ready', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: fansQ === 'lax' ? 'yes' : 'no' });
+  const demoFans = { names: {}, ch: {}, driver: !fansQ, reboot: false, job: null };
+  const ite = fansQ === 'it87';
+  const fanChip = () => (ite ? 'it8689' : 'nct6798');
+  const fanDev = () => (ite ? 'it87.2624' : 'nct6775.656');
+  const fansDiagnose = () => {
+    const base = { secureBoot: false, community: ite ? { id: 'it87', repo: 'frankcrawford/it87', commit: 'bd7a566', installed: demoFans.driver } : null };
+    if (ite) return { ...base, state: demoFans.driver ? 'loaded' : 'community', chip: 'ITE IT8689E', driver: 'it87', reboot: 'no' };
+    return { ...base, ...(demoFans.reboot ? { state: 'pending', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'yes' }
+      : demoFans.driver ? { state: 'loaded', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: 'no' }
+      : { state: 'ready', chip: 'Nuvoton NCT6798D', driver: 'nct6775', reboot: fansQ === 'lax' ? 'yes' : 'no' }) };
+  };
   function fansInstall() {
     if (fansQ === 'lax') { demoFans.reboot = true; return { ok: true, reboot: true, driver: 'nct6775', ...fansStatus() }; }
     demoFans.driver = true;
-    return { ok: true, reboot: false, driver: 'nct6775', ...fansStatus() };
+    return { ok: true, reboot: false, driver: ite ? 'it87' : 'nct6775', community: ite, ...fansStatus() };
+  }
+  // Detect fans: a few seconds per channel; CPU_FAN never stops, the others stop below 20–25%.
+  const FAN_CALIB = [{ stop: null, start: null, maxRpm: 2200 }, { stop: 15, start: 25, maxRpm: 1500 }, { stop: 20, start: 30, maxRpm: 1500 }, { stop: 15, start: 20, maxRpm: 1400 }];
+  function fansDetect() {
+    if (demoFans.job && demoFans.job.state === 'running') throw err('Fans are already being detected.', 409);
+    const job = demoFans.job = { state: 'running', step: 'Starting', percent: 0, results: [], error: null };
+    const total = FAN_DEFS.length;
+    let i = 0;
+    const next = () => {
+      if (i >= total) { job.state = 'done'; job.step = 'Done'; job.percent = 100; return; }
+      job.step = 'Testing channel ' + (i + 1) + ' of ' + total;
+      const id = fanChip() + '@' + fanDev() + '/' + FAN_DEFS[i][0];
+      setTimeout(() => {
+        const calib = { ...FAN_CALIB[i], at: new Date().toISOString() };
+        job.results.push({ pwm: id, fan: fanChip() + '@' + fanDev() + '/fan' + (i + 1), calib });
+        demoFans.ch[id] = { ...(demoFans.ch[id] || { mode: 'auto', min: 20 }), fan: true, calib };
+        i += 1; job.percent = (i / total) * 100; next();
+      }, 1800);
+    };
+    next();
+    return { ...job };
   }
   const FAN_DEFS = [['pwm1', 'CPU_FAN', 900, 2200], ['pwm2', 'SYS_FAN1', 600, 1500], ['pwm3', 'SYS_FAN2', 600, 1500], ['pwm4', 'SYS_FAN3', 500, 1400]];
   function fansStatus() {
     const cpu = Math.round(rnd(44, 52) * 10) / 10;
     const temps = [
       { id: 'k10temp@0000:00:18.3/temp1', chip: 'k10temp', n: 1, label: 'Tctl', value: cpu, cpu: true },
-      { id: 'nct6798@nct6775.656/temp1', chip: 'nct6798', n: 1, label: 'SYSTIN', value: Math.round(rnd(31, 34) * 10) / 10, cpu: false },
-      { id: 'nct6798@nct6775.656/temp2', chip: 'nct6798', n: 2, label: 'CPUTIN', value: Math.round(rnd(36, 40) * 10) / 10, cpu: false },
+      { id: fanChip() + '@' + fanDev() + '/temp1', chip: fanChip(), n: 1, label: ite ? null : 'SYSTIN', value: Math.round(rnd(31, 34) * 10) / 10, cpu: false },
+      { id: fanChip() + '@' + fanDev() + '/temp2', chip: fanChip(), n: 2, label: ite ? null : 'CPUTIN', value: Math.round(rnd(36, 40) * 10) / 10, cpu: false },
       { id: 'nvme@nvme0/temp1', chip: 'nvme', n: 1, label: 'Composite', value: Math.round(rnd(38, 42) * 10) / 10, cpu: false },
       { id: 'drivetemp@0:0:0:0/temp1', chip: 'drivetemp', n: 1, label: 'sda', value: Math.round(rnd(33, 36)), cpu: false },
       { id: 'drivetemp@1:0:0:0/temp1', chip: 'drivetemp', n: 1, label: 'sdb', value: Math.round(rnd(34, 37)), cpu: false },
@@ -2156,30 +2185,47 @@
     const pctOf = (c) => {
       if (!c || c.mode === 'auto') return Math.round(30 + (cpu - 40) * 1.5);
       if (c.mode === 'fixed') return Math.max(c.min, c.percent);
-      const src = temps.find((x) => x.id === c.source), p = [...c.points].sort((a, b) => a[0] - b[0]);
-      if (!src) return 100;
+      const vals = (c.sources || [c.source]).map((id) => temps.find((x) => x.id === id)), p = [...c.points].sort((a, b) => a[0] - b[0]);
+      if (vals.some((x) => !x)) return 100;
+      const src = { value: Math.max(...vals.map((x) => x.value)) }; // the highest of the sources counts
       let v = p[p.length - 1][1];
       if (src.value <= p[0][0]) v = p[0][1];
       else for (let i = 1; i < p.length; i++) if (src.value <= p[i][0]) { v = p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (src.value - p[i - 1][0])) / (p[i][0] - p[i - 1][0]); break; }
       return Math.round(Math.max(c.min, v));
     };
     const fans = !demoFans.driver ? [] : FAN_DEFS.map(([pwm, label, lo, hi], i) => {
-      const id = 'nct6798@nct6775.656/' + pwm, c = demoFans.ch[id], pct = Math.max(0, Math.min(100, pctOf(c)));
-      return { id: 'nct6798@nct6775.656/fan' + (i + 1), chip: 'nct6798', label, name: demoFans.names[id] || null, rpm: Math.round(lo + ((hi - lo) * pct) / 100 + rnd(-15, 15)),
-        pwm: { id, percent: pct, writable: true, enable: c && c.mode !== 'auto' ? 1 : 5, mode: c ? c.mode : 'auto', fixed: c && c.percent != null ? c.percent : 50, min: c ? c.min : 20, source: c ? c.source || null : null, points: c ? c.points || null : null } };
+      const id = fanChip() + '@' + fanDev() + '/' + pwm, c = demoFans.ch[id], pct = Math.max(0, Math.min(100, pctOf(c)));
+      const cal = c && c.calib, stopped = cal && cal.stop != null && pct <= cal.stop;
+      return { id: fanChip() + '@' + fanDev() + '/fan' + (i + 1), chip: fanChip(), label: ite ? null : label, name: demoFans.names[id] || null, rpm: stopped ? 0 : Math.round(lo + ((hi - lo) * pct) / 100 + rnd(-15, 15)),
+        pwm: { id, percent: pct, writable: true, enable: c && c.mode !== 'auto' ? 1 : 5, mode: c ? c.mode : 'auto', fixed: c && c.percent != null ? c.percent : 50,
+          min: c && c.min != null ? c.min : 20, source: c ? (c.sources || [c.source])[0] || null : null, sources: c ? c.sources || (c.source ? [c.source] : []) : [],
+          points: c ? c.points || null : null, hyst: c && c.hyst != null ? c.hyst : 2, stepUp: (c && c.stepUp) || 0, stepDown: (c && c.stepDown) || 0,
+          calib: cal || null, paired: !!(c && c.fan) } };
     });
-    return { temps: demoFans.driver ? temps : temps.filter((x) => x.chip !== 'nct6798'), fans, controllable: fans.length > 0, hot: 85, modules: demoFans.driver ? ['nct6775', 'drivetemp'] : ['drivetemp'] };
+    return { temps: demoFans.driver ? temps : temps.filter((x) => x.chip !== fanChip()), fans, controllable: fans.length > 0, hot: 85,
+      modules: demoFans.driver ? [ite ? 'it87' : 'nct6775', 'drivetemp'] : ['drivetemp'], detect: demoFans.job ? { ...demoFans.job, percent: Math.round(demoFans.job.percent) } : null };
   }
   function fansSave(b) {
-    const id = String(b.id || ''), def = FAN_DEFS.find(([p]) => id === 'nct6798@nct6775.656/' + p);
+    const id = String(b.id || ''), def = FAN_DEFS.find(([p]) => id === fanChip() + '@' + fanDev() + '/' + p);
     if (!def) throw err('This fan can\'t be controlled (anymore). Look for sensors again.', 404);
     if (!['auto', 'fixed', 'curve'].includes(b.mode)) throw err('Choose Auto, Fixed or Curve.');
     const min = b.min == null ? 20 : Number(b.min);
     if (!(min >= 0 && min <= 100)) throw err('Choose a minimum between 0 and 100%.');
-    const c = { mode: b.mode, min };
+    const prev = demoFans.ch[id] || {};
+    const c = { mode: b.mode, min, ...(prev.fan ? { fan: prev.fan, calib: prev.calib } : {}) };
+    for (const k of ['stepUp', 'stepDown']) {
+      const v = b[k] == null || b[k] === '' ? 0 : Number(b[k]);
+      if (!(v >= 0 && v <= 100)) throw err('Choose a step speed between 0 and 100% per second (0 = right away).');
+      c[k] = v;
+    }
     if (b.mode === 'fixed') { if (!(b.percent >= 0 && b.percent <= 100)) throw err('Choose a speed between 0 and 100%.'); c.percent = Math.round(b.percent); }
     if (b.mode === 'curve') {
-      if (!fansStatus().temps.some((x) => x.id === b.source)) throw err('Choose the temperature the fan follows.');
+      const sources = [...new Set((Array.isArray(b.sources) && b.sources.length ? b.sources : [b.source]).filter(Boolean))];
+      if (!sources.length || sources.some((x) => !fansStatus().temps.some((y) => y.id === x))) throw err('Choose the temperature the fan follows.');
+      if (sources.length > 4) throw err('A fan can follow at most 4 temperatures.');
+      const hyst = b.hyst == null || b.hyst === '' ? 2 : Number(b.hyst);
+      if (!(hyst >= 0 && hyst <= 15)) throw err('Choose a hysteresis between 0 and 15 °C.');
+      c.sources = sources; c.hyst = hyst; b.source = sources[0];
       if (!Array.isArray(b.points) || b.points.length < 2 || b.points.length > 8) throw err('A curve needs between 2 and 8 points.');
       if (b.points.some(([x, y]) => !(x >= 0 && x <= 110 && y >= 0 && y <= 100))) throw err('Each point needs a temperature (0–110 °C) and a speed (0–100%).');
       c.source = b.source; c.points = b.points.map(([x, y]) => [Number(x), Number(y)]).sort((p, q) => p[0] - q[0]);
@@ -2910,6 +2956,7 @@
     if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/system/details') { await wait(rnd(150, 300)); return systemDetails(); }
     if (path === '/api/fans') return fansStatus();
+    if (path === '/api/fans/detect') return demoFans.job ? { ...demoFans.job, percent: Math.round(demoFans.job.percent) } : { state: 'idle' };
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
     if (path === '/api/ai') return demoAiView();
     if (path === '/api/ai/chats') return { chats: demoChats.map(chatBrief).sort((a, b) => b.updated.localeCompare(a.updated)) };
@@ -3074,7 +3121,8 @@
     if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
     if (path === '/api/fans/probe') { await wait(1200); return { loaded: [], ...fansStatus() }; }
     if (path === '/api/fans/diagnose') { await wait(1500); return fansDiagnose(); }
-    if (path === '/api/fans/install') { await wait(2000); return fansInstall(); }
+    if (path === '/api/fans/install') { await wait(body && body.community ? 4000 : 2000); return fansInstall(); }
+    if (path === '/api/fans/detect') return fansDetect();
     if (path === '/api/fans/channel') { await wait(300); return fansSave(body || {}); }
     if (path === '/api/fans/name') { const id = String((body || {}).id || ''); if (body.name) demoFans.names[id] = String(body.name).slice(0, 40); else delete demoFans.names[id]; return { id, name: demoFans.names[id] || null }; }
     if (path === '/api/unraid/close') { unraidSsh = null; return { closed: true }; }

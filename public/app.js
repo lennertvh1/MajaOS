@@ -2989,10 +2989,14 @@
         <polyline points="${[[0, p[0] ? p[0][1] : 100], ...p, [100, p.length ? p[p.length - 1][1] : 100]].map(([a, b]) => X(Math.min(100, a)) + ',' + Y(b)).join(' ')}"/>
         ${p.map(([a, b]) => `<circle cx="${X(Math.min(100, a))}" cy="${Y(b)}" r="3"/>`).join('')}</svg>`;
     };
+    const sourceRow = (id) => `<div class="fan-src"><select class="field" data-src>${d.temps.map((x) => `<option value="${esc(x.id)}"${x.id === id ? ' selected' : ''}>${esc(tName(x))} · ${nf.format(x.value)} °C</option>`).join('')}</select>
+      <button class="btn sm" type="button" data-src-del aria-label="${esc(t('Remove'))}">×</button></div>`;
     const fanHtml = (f, i) => {
       const p = f.pwm;
       const head = `<div class="fan-head"><span class="fan-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s3 4-2 7M14 12c4 0 7 1 7 4s-4 3-7-2M12 14c0 4-1 7-4 7s-3-4 2-7M10 12c-4 0-7-1-7-4s4-3 7 2"/></svg></span>
-        <div class="fan-title"><b>${esc(fName(f, i))}</b><span class="muted small">${esc([f.chip, f.label && f.name ? f.label : null].filter(Boolean).join(' · '))}</span></div>
+        <div class="fan-title"><b>${esc(fName(f, i))}</b><span class="muted small">${esc([f.chip, f.label && f.name ? f.label : null].filter(Boolean).join(' · '))}</span>
+          ${p && p.calib ? `<span class="muted small fan-calib">${esc(p.calib.start != null ? t('Starts at {start}%, stops at {stop}% · max {rpm} rpm', { start: p.calib.start, stop: p.calib.stop != null ? p.calib.stop : 0, rpm: nf0.format(p.calib.maxRpm || 0) })
+            : t('Never stops · max {rpm} rpm', { rpm: nf0.format(p.calib.maxRpm || 0) }))}</span>` : ''}</div>
         <div class="fan-now"><b data-rpm="${esc(f.id)}">${f.rpm == null ? '–' : nf0.format(f.rpm) + ' rpm'}</b><span class="muted small" data-pct="${esc(f.id)}">${p && p.percent != null ? p.percent + '%' : ''}</span></div></div>`;
       if (!p) return `<li class="fan-card">${head}<p class="muted small">${t('This fan can only be read: its speed is set by the BIOS.')}</p></li>`;
       if (!p.writable) return `<li class="fan-card">${head}<p class="muted small">${t('This fan can\'t be controlled: the chip doesn\'t allow it. Use the fan settings in the BIOS.')}</p></li>`;
@@ -3007,11 +3011,22 @@
           <input type="hidden" name="mode" value="${esc(p.mode)}">
           <div data-show="fixed"${p.mode === 'fixed' ? '' : ' hidden'}><label class="fld"><span>${t('Speed')} <b data-fixed-out>${p.fixed}%</b></span><input type="range" name="percent" min="0" max="100" step="5" value="${p.fixed}"></label></div>
           <div data-show="curve" class="fan-curve-box"${p.mode === 'curve' ? '' : ' hidden'}>
-            <label class="fld"><span>${t('Follows')}</span><select class="field" name="source">${d.temps.map((x) => `<option value="${esc(x.id)}"${(p.source || (d.temps.find((y) => y.cpu) || {}).id) === x.id ? ' selected' : ''}>${esc(tName(x))} · ${nf.format(x.value)} °C</option>`).join('')}</select></label>
+            <div class="fld"><span>${t('Follows')} ${hint(t('With more than one sensor the highest temperature counts, e.g. the processor and the graphics card.'))}</span>
+              <div class="fan-sources" data-sources>${(p.sources && p.sources.length ? p.sources : [p.source || (d.temps.find((y) => y.cpu) || d.temps[0] || {}).id]).map((id) => sourceRow(id)).join('')}</div>
+              <button class="btn sm" type="button" data-src-add>${t('+ Sensor')}</button></div>
             <div class="fan-points"><table><thead><tr><th>°C</th><th>%</th><th></th></tr></thead><tbody>${pts.map(([a, b]) => `<tr><td><input class="field sm" type="number" min="0" max="110" value="${a}" data-pt="t"></td><td><input class="field sm" type="number" min="0" max="100" value="${b}" data-pt="p"></td><td><button class="btn sm" type="button" data-pt-del aria-label="${esc(t('Remove'))}">×</button></td></tr>`).join('')}</tbody></table>
               <button class="btn sm" type="button" data-pt-add>${t('+ Point')}</button></div>
             <div data-curve-svg>${curveSvg(pts)}</div>
           </div>
+          <details class="fan-more" data-show="fixed curve"${p.mode === 'auto' ? ' hidden' : ''}><summary>${t('Response')}</summary>
+            <div class="fld-row">
+              <label class="fld" data-show-in="curve"${p.mode === 'curve' ? '' : ' hidden'}><span>${t('Hysteresis')} ${hint(t('The fan only slows down once the temperature dropped this much. Stops the speed going up and down all the time.'))}</span>
+                <span class="fan-unit"><input class="field sm" type="number" name="hyst" min="0" max="15" step="0.5" value="${p.hyst != null ? p.hyst : 2}"> °C</span></label>
+              <label class="fld"><span>${t('Speed up')} ${hint(t('How fast the fan may speed up, in % per second. 0 = right away.'))}</span>
+                <span class="fan-unit"><input class="field sm" type="number" name="stepUp" min="0" max="100" value="${p.stepUp || 0}"> %/s</span></label>
+              <label class="fld"><span>${t('Slow down')} ${hint(t('How fast the fan may slow down, in % per second. A low value keeps it quieter after a short peak. 0 = right away.'))}</span>
+                <span class="fan-unit"><input class="field sm" type="number" name="stepDown" min="0" max="100" value="${p.stepDown || 0}"> %/s</span></label>
+            </div></details>
           <div data-show="fixed curve"${p.mode === 'auto' ? ' hidden' : ''}><label class="fld fan-min"><span>${t('Never below')} ${hint(t('Some fans stop or don\'t start again below a certain speed. MajaOS never goes lower than this.'))}</span>
             <input class="field sm" type="number" name="min" min="0" max="100" value="${p.min}"> %</label></div>
           <p class="form-error" role="alert"></p>
@@ -3023,9 +3038,30 @@
         <h2 class="pane-title">${t('Temperatures')}</h2>
         ${d.temps.length ? `<ul class="temp-grid">${tempsHtml()}</ul>` : `<p class="muted">${t('No temperature sensors found.')}</p>`}
         <h2 class="pane-title">${t('Fans')}</h2>
-        ${d.fans.length ? `<ul class="fan-list">${d.fans.map(fanHtml).join('')}</ul>`
-          : `<div class="fan-diag" data-fan-diag><p class="muted">${t('No fans found. Checking which sensor chip your motherboard has…')}</p></div>`}
+        ${d.controllable ? `<div class="fan-detect" data-fan-detect>${detectHtml(d.detect)}</div>` : ''}
+        ${d.fans.length ? `<ul class="fan-list">${d.fans.map(fanHtml).join('')}</ul>` : ''}
+        ${!d.controllable ? `<div class="fan-diag" data-fan-diag><p class="muted">${d.fans.length ? t('These fans can only be read. Checking what your motherboard\'s sensor chip needs…') : t('No fans found. Checking which sensor chip your motherboard has…')}</p></div>` : ''}
         <div class="btn-row"><button class="btn" type="button" data-fan-probe>${t('Look for sensors')}</button></div>`;
+    };
+    // Detect fans: which channel drives which fan, and where each fan stops and starts (like FanControl's pairing).
+    const detectHtml = (j) => {
+      if (j && j.state === 'running') return `<div class="fan-detect-run"><b>${t('Detecting fans…')}</b> <span class="muted small">${esc(tr(j.step || ''))}</span>
+        <div class="bar"><span style="width:${Math.max(2, j.percent || 0)}%"></span></div>
+        <p class="muted small">${t('The fans speed up and slow down one by one. This takes about a minute per fan.')}</p></div>`;
+      const res = j && j.state === 'done' ? `<span class="muted small">${t('{n} of {total} channels drive a fan.', { n: j.results.filter((r) => r.fan).length, total: j.results.length })}</span>`
+        : j && j.state === 'failed' ? `<span class="small temp-bad">${esc(tr(j.error || ''))}</span>` : '';
+      return `<div class="fan-detect-idle"><div><b>${t('Detect fans')}</b> ${hint(t('MajaOS turns each channel up and down to see which fan it drives, and measures at which speed each fan stops and starts again. Curves then never let a fan stall.'))}
+        <div>${res}</div></div><button class="btn" type="button" data-fan-detect-start>${t('Detect fans')}</button></div>`;
+    };
+    const followDetect = async () => {
+      let j;
+      try { j = await api.get('/api/fans/detect'); } catch (e) { return; }
+      const box = $('[data-fan-detect]', el);
+      if (!box || settingsTab() !== 'cooling') return;
+      if (j.state === 'running') { box.innerHTML = detectHtml(j); setTimeout(followDetect, 1500); return; }
+      try { d = await api.get('/api/fans'); } catch (e) { /* keep the old numbers */ }
+      draw();
+      if (j.state === 'done') toast(t('Fans detected.'));
     };
     // No fans: what the board's sensor chip needs, with whether a restart is needed, before anything is installed.
     const REBOOT = { no: ['ok', 'No restart needed'], yes: ['warn', 'Needs a restart'], maybe: ['warn', 'Maybe a restart'] };
@@ -3039,6 +3075,16 @@
       if (!box.isConnected) return;
       if (g.state === 'none') { box.innerHTML = `<p class="muted">${t('MajaOS found no sensor chip on this motherboard. Its fans can only be set in the BIOS.')}</p>`; return; }
       if (g.state === 'unsupported') { box.innerHTML = `<p class="muted">${esc(t('The sensor chip {chip} has no driver in this Linux version yet. Set the fans in the BIOS.', { chip: g.chip }))}</p>`; return; }
+      if (g.state === 'community' && g.community) {
+        box.innerHTML = `<div class="upd-card new"><span class="nv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
+          <div class="upd-text"><b>${esc(t('Sensor chip: {chip}', { chip: g.chip }))}</b>
+            <div class="muted small">${esc(t('Linux itself can\'t control this chip yet. A driver from the community can: {repo} (version {commit}).', { repo: g.community.repo, commit: g.community.commit }))}
+              ${hint(t('MajaOS downloads exactly this version, builds it for this kernel (DKMS) and builds it again after a kernel update. No restart needed.'))}</div>
+            ${g.secureBoot ? `<div class="small temp-bad">${t('Secure Boot is on: a driver built on this server would not load. Turn Secure Boot off in the BIOS first.')}</div>` : ''}
+            ${g.community.installed ? `<div class="muted small">${t('This driver is already installed.')}</div>` : ''}</div>
+          <div class="btn-row"><button class="btn primary" type="button" data-fan-install data-community="1"${g.secureBoot ? ' disabled' : ''}>${t('Install driver')}</button></div></div>`;
+        return;
+      }
       const [cls, label] = REBOOT[g.reboot] || REBOOT.no;
       box.innerHTML = `<div class="upd-card new"><span class="nv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
         <div class="upd-text"><b>${esc(t('Sensor chip: {chip}', { chip: g.chip }))}</b>
@@ -3049,6 +3095,7 @@
     };
     draw();
     diagnose(false);
+    if (d.detect && d.detect.state === 'running') setTimeout(followDetect, 1500);
     // Live numbers, without redrawing the forms.
     const live = async () => {
       if (settingsTab() !== 'cooling' || !el.isConnected || !$('.temp-grid, .fan-list', el)) return;
@@ -3068,11 +3115,12 @@
       if (e.target.closest('[data-fan-reboot]')) { powerAction('reboot'); return; }
       const inst = e.target.closest('[data-fan-install]');
       if (inst) {
-        const reboot = inst.dataset.reboot;
+        const reboot = inst.dataset.reboot, community = inst.dataset.community === '1';
         if (reboot === 'yes' && !(await ask(t('Install the driver? The server needs one restart before the fans can be controlled.'), t('Install driver')))) return;
-        inst.disabled = true; inst.textContent = t('Installing…');
+        if (community && !(await ask(t('Install the driver from the community? MajaOS downloads it from GitHub and builds it for this kernel. This takes a few minutes.'), t('Install driver')))) return;
+        inst.disabled = true; inst.textContent = community ? t('Building the driver… (a few minutes)') : t('Installing…');
         try {
-          const r = await api.post('/api/fans/install');
+          const r = await api.post('/api/fans/install', { community });
           d = r; draw();
           if (r.reboot) toast(t('The driver is installed. Restart the server once to see the fans.'), false, { action: { label: t('Restart now'), run: () => powerAction('reboot') } });
           else toast(t('The driver is installed: the fans are there.'));
@@ -3086,12 +3134,33 @@
         catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = t('Look for sensors'); }
         return;
       }
+      const det = e.target.closest('[data-fan-detect-start]');
+      if (det) {
+        if (!(await ask(t('Detect fans? Every controlled fan runs at full speed for a moment, then each one slows down and stops one by one. This takes about a minute per fan.'), t('Detect fans')))) return;
+        det.disabled = true;
+        try { const j = await api.post('/api/fans/detect'); $('[data-fan-detect]', el).innerHTML = detectHtml(j); setTimeout(followDetect, 1500); }
+        catch (ex) { toast(ex.message, true); det.disabled = false; }
+        return;
+      }
       const form = e.target.closest('.fan-form'); if (!form) return;
       const m = e.target.closest('[data-mode]');
       if (m) {
         form.elements.mode.value = m.dataset.mode;
         $$('[data-mode]', form).forEach((x) => x.setAttribute('aria-checked', String(x === m)));
         $$('[data-show]', form).forEach((x) => { x.hidden = !x.dataset.show.split(' ').includes(m.dataset.mode); });
+        $$('[data-show-in]', form).forEach((x) => { x.hidden = x.dataset.showIn !== m.dataset.mode; });
+        return;
+      }
+      if (e.target.closest('[data-src-add]')) {
+        const box = $('[data-sources]', form);
+        if ($$('[data-src]', box).length >= 4) return;
+        const used = $$('[data-src]', box).map((x) => x.value);
+        box.insertAdjacentHTML('beforeend', sourceRow((d.temps.find((x) => !used.includes(x.id)) || d.temps[0]).id));
+        return;
+      }
+      if (e.target.closest('[data-src-del]')) {
+        if ($$('[data-src]', form).length <= 1) return;
+        e.target.closest('.fan-src').remove();
         return;
       }
       if (e.target.closest('[data-pt-add]')) {
@@ -3119,8 +3188,10 @@
       if (mode !== 'auto' && Number(form.elements.min.value) < 20 && !(await ask(t('A minimum below 20% can stop some fans completely. Continue?'), t('Save')))) return;
       err.textContent = ''; btn.disabled = true;
       try {
+        const sources = $$('[data-src]', form).map((x) => x.value);
         d = await api.post('/api/fans/channel', { id, name: form.elements.name.value.trim(), mode, percent: Number(form.elements.percent.value),
-          min: Number(form.elements.min.value), source: form.elements.source ? form.elements.source.value : null, points: points(form) });
+          min: Number(form.elements.min.value), source: sources[0] || null, sources, points: points(form),
+          hyst: form.elements.hyst ? form.elements.hyst.value : null, stepUp: form.elements.stepUp.value, stepDown: form.elements.stepDown.value });
         toast(t('Saved.'));
         draw();
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }

@@ -1789,6 +1789,19 @@ body.role-user #desk, body.role-user .topnav [data-open]:not([data-open="files"]
 .fan-curve { width: 100%; height: auto; } .fan-curve .grid { fill: none; stroke: var(--glass-line); }
 .fan-curve polyline { fill: none; stroke: var(--accent); stroke-width: 2; } .fan-curve circle { fill: var(--accent); }
 .fan-min .field.sm { width: 80px; display: inline-block; }
+.fan-calib { display: block; }
+.fan-sources { display: grid; gap: 6px; margin-bottom: 6px; }
+[data-src-add] { justify-self: start; width: auto; }
+.fan-src { display: flex; gap: 6px; align-items: center; }
+.fan-src .field { flex: 1; min-width: 0; }
+.fan-more > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.fan-more[open] > summary { margin-bottom: 8px; }
+.fan-unit { display: inline-flex; align-items: center; gap: 6px; }
+.fan-unit .field.sm { width: 80px; }
+.fan-detect { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--glass-line); background: var(--glass); }
+.fan-detect-idle { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+.fan-detect-run { display: grid; gap: 8px; }
+.fan-detect-run p { margin: 0; }
 @media (max-width: 760px) { .fan-curve-box { grid-template-columns: 1fr; } }
 /* Create pool: a wizard with numbered steps. */
 .wz { display: grid; gap: 14px; }
