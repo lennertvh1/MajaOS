@@ -2007,9 +2007,22 @@ h2 .hint, h3 .hint { margin-left: 8px; }
 .win-adv input:checked + .toggle-ui::after { transform: translateX(16px); }
 #storeForm [data-full] > h3:first-child { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--glass-line); }
 
-/* UPS in the header: charge and time left (lib/ups.js through /api/overview) */
-.ups-chip { font-variant-numeric: tabular-nums; font-size: 0.85rem; padding: 0.5em 0.6em; white-space: nowrap; }
+/* The middle of the header: how long the server has been up, and the UPS (charge and time left, lib/ups.js through /api/overview) */
+.top-status { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+.top-status + .topnav { margin-left: 0; }
+.top-pill {
+  display: inline-flex; align-items: center; gap: 0.45em; flex: none; white-space: nowrap;
+  font: inherit; font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted);
+  padding: 0.38em 0.75em; border-radius: 99px; background: var(--glass); border: 1px solid var(--glass-line);
+}
+.top-pill[hidden] { display: none; }
+.top-pill svg { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+button.top-pill { cursor: pointer; }
+button.top-pill:hover { background: var(--glass-hover); color: var(--text); }
 .ups-chip .ups-level { fill: currentColor; stroke: none; }
-.ups-chip.on-battery { color: var(--warn); }
-.ups-chip.low { color: var(--bad); }
-@media (max-width: 720px) { .ups-chip #upsText { display: none; } }
+.ups-chip.on-battery { color: var(--warn); border-color: var(--warn); }
+.ups-chip.low { color: var(--bad); border-color: var(--bad); }
+/* Little room: first the uptime, then also the UPS shows only its icon (the title still tells everything). */
+@container (max-width: 1100px) { #topUptime > span { display: none; } #topUptime { padding: 0.38em 0.5em; } }
+@container (max-width: 900px) { .top-pill > span { display: none; } .top-pill { padding: 0.38em 0.5em; } }
+@media (max-width: 880px) { .top-status { order: 2; flex: 0 0 auto; } }

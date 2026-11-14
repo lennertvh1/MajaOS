@@ -56,6 +56,16 @@
           <div class="spot-list" id="spotList" role="listbox" aria-label="Search results"></div>
         </div>
       </div>
+      <div class="top-status" id="topStatus">
+        <span class="top-pill" id="topUptime" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+          <span id="topUptimeText"></span>
+        </span>
+        <button class="top-pill ups-chip" type="button" id="upsBtn" hidden aria-label="UPS" title="UPS">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3"/><rect class="ups-level" id="upsLevel" x="4.5" y="9" width="13" height="6" rx="0.8"/></svg>
+          <span id="upsText"></span>
+        </button>
+      </div>
       <nav class="topnav" aria-label="Management">
         <button class="nav-btn" data-open="home" type="button" title="Overview">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg>
@@ -67,10 +77,6 @@
         </button>
       </nav>
       <div class="top-actions" id="topActions">
-        <button class="nav-btn ups-chip" type="button" id="upsBtn" hidden aria-label="UPS" title="UPS">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3"/><rect class="ups-level" id="upsLevel" x="4.5" y="9" width="13" height="6" rx="0.8"/></svg>
-          <span id="upsText"></span>
-        </button>
         <button class="nav-btn icon-only has-dot" type="button" id="noteBtn" aria-label="Notifications" title="Notifications" aria-expanded="false" aria-controls="noteSide">
           <span class="nav-count" id="noteDot" hidden></span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>

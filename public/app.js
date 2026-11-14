@@ -9262,7 +9262,17 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderUpsChip(); diskEventToasts(S.overview.diskEvents); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); diskEventToasts(S.overview.diskEvents); }
+  // The middle of the header: how long the server has been up.
+  function renderTopUptime() {
+    const o = S.overview, pill = $('#topUptime');
+    if (!pill) return;
+    pill.hidden = !o || o.uptime == null || S.config.role === 'user';
+    if (pill.hidden) return;
+    $('#topUptimeText').textContent = duration(o.uptime);
+    const label = t('Up for {time}', { time: duration(o.uptime) });
+    pill.title = label; pill.setAttribute('aria-label', label);
+  }
   // The UPS in the header: charge and time left, orange on battery, red when the battery is almost empty.
   const upsTime = (sec) => {
     const m = Math.max(0, Math.round(sec / 60));
