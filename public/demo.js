@@ -2529,7 +2529,7 @@
   }
   function storageSummary() {
     const total = pools.reduce((s, p) => s + p.total, 0), used = pools.reduce((s, p) => s + p.used, 0);
-    return { health: 'ONLINE', total, used, free: total - used, pools: pools.length, alerts: demoAlerts() };
+    return { health: 'ONLINE', total, used, free: total - used, pools: pools.length, list: pools.map((p) => ({ name: p.name, health: p.health, used: p.used, total: p.total })), alerts: demoAlerts() };
   }
 
   /* ---- AI */

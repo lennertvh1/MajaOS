@@ -1029,60 +1029,90 @@
     const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
     const o = S.overview || {};
     const txt = (sel) => { const el = $(sel); return el ? el.textContent.trim() : ''; };
-    const tile = ({ key, open, color, icon, label, big, sub, pill, extra = '', small = false }) => `
-      <button type="button" class="m-tile" ${open}>
+    const pct = (v) => (v == null ? '–' : nf0.format(Math.round(v)) + '%');
+    // A meter row: label, bar, value. A list row: status dot, name, a short value.
+    const meter = (label, p, value, cls) => `<li class="m-meter"><span class="m-k">${esc(label)}</span><span class="m-bar"><i class="${cls != null ? cls : p == null ? '' : level(p)}" style="width:${p == null ? 0 : Math.max(2, Math.min(100, p)).toFixed(1)}%"></i></span><span class="m-v">${esc(value)}</span></li>`;
+    const row = (dot, name, value) => `<li class="m-row"><span class="m-dot ${dot || ''}"></span><span class="m-n">${esc(name)}</span><span class="m-v">${esc(value || '')}</span></li>`;
+    const more = (n) => (n > 0 ? `<li class="m-more">${esc(t('and {n} more', { n }))}</li>` : '');
+    const tile = ({ open, color, icon, label, pill, body, foot }) => `<button type="button" class="m-tile" ${open}>
         <span class="m-tile-head"><span class="m-ico" style="--c:${color}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span>
           <span class="m-label">${esc(label)}</span>${pill ? `<span class="pill ${pill[1] || ''}">${esc(pill[0])}</span>` : ''}</span>
-        ${extra}
-        <span class="m-big${small ? ' small' : ''}">${big}</span>
-        ${sub ? `<span class="m-sub">${esc(sub)}</span>` : ''}
-      </button>`.replace(/^\s+/gm, '');
+        <span class="m-body">${body}</span>${foot ? `<span class="m-sub">${esc(foot)}</span>` : ''}</button>`;
     const tiles = [];
-    // Apps: four icons, how many run, updates.
+
+    // Apps: six icons, how many run, updates.
     const apps = S.apps || [];
     const running = apps.filter(isRunning).length, upd = apps.filter((a) => a.update === true).length;
-    tiles.push(tile({ key: 'apps', open: 'data-m-apps', color: '#3e8e7e', icon: M_ICONS.apps, label: t('Apps'),
-      extra: `<span class="m-app-icons">${apps.slice(0, 4).map((a) => iconHtml(a)).join('')}</span>`,
-      big: esc(t('{n} of {total}', { n: running, total: apps.length })), small: true,
-      sub: upd ? t(upd === 1 ? '{n} update' : '{n} updates', { n: upd }) : t('running') }));
+    tiles.push(tile({ open: 'data-m-apps', color: '#3e8e7e', icon: M_ICONS.apps, label: t('Apps'),
+      pill: upd ? [t(upd === 1 ? '{n} update' : '{n} updates', { n: upd }), 'warn'] : null,
+      body: `<span class="m-app-icons">${apps.slice(0, 6).map((a) => iconHtml(a)).join('')}</span>`,
+      foot: t('{n} of {total} running', { n: running, total: apps.length }) }));
+
+    // System: CPU, RAM and the graphics card (load and VRAM), temperature and how long it is up.
     if (!hidden.has('sys')) {
-      const cpu = o.cpu && o.cpu.percent, mem = o.memory && o.memory.percent;
-      tiles.push(tile({ key: 'sys', open: 'data-open="system"', color: '#4a6fb5', icon: M_ICONS.sys, label: t('System'),
-        big: cpu == null ? '–' : esc(Math.round(cpu) + '%') + `<small> CPU</small>`,
-        sub: [mem == null ? null : 'RAM ' + Math.round(mem) + '%', o.uptime != null ? duration(o.uptime) : null].filter(Boolean).join(' · ') }));
+      const g = o.gpu && o.gpu[0];
+      const vram = g && g.memTotal ? (g.memUsed / g.memTotal) * 100 : null;
+      const lines = [meter('CPU', o.cpu && o.cpu.percent, pct(o.cpu && o.cpu.percent)), meter('RAM', o.memory && o.memory.percent, o.memory ? bytes(o.memory.used) : '–')];
+      if (g && g.util != null) lines.push(meter('GPU', g.util, pct(g.util)));
+      if (vram != null) lines.push(meter('VRAM', vram, bytes(g.memUsed)));
+      tiles.push(tile({ open: 'data-open="system"', color: '#4a6fb5', icon: M_ICONS.sys, label: t('System'),
+        pill: g && g.temp != null ? [g.temp + ' °C', g.temp >= 80 ? 'bad' : g.temp >= 70 ? 'warn' : ''] : null,
+        body: `<ul class="m-lines">${lines.join('')}</ul>`, foot: o.uptime != null ? t('Up for {time}', { time: duration(o.uptime) }) : '' }));
     }
+    // Storage: free space, then each pool with how full it is.
     if (!hidden.has('storage')) {
-      const s = o.storage, pct = s && s.total ? (s.used / s.total) * 100 : 0;
-      tiles.push(tile({ key: 'storage', open: 'data-open="storage"', color: PAGE_META.storage.color, icon: PAGE_META.storage.svg, label: t('Storage'),
-        big: s && s.pools ? esc(bytes(s.free)) + `<small> ${esc(t('free'))}</small>` : '–', sub: txt('#storeLine'),
-        pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null,
-        extra: s && s.pools ? `<span class="m-bar"><i class="${level(pct, 80, 92)}" style="width:${pct.toFixed(1)}%"></i></span>` : '' }));
+      const s = o.storage;
+      const pools = (s && s.list) || [];
+      const body = s && s.pools
+        ? `<span class="m-big">${esc(bytes(s.free))}<small> ${esc(t('free'))}</small></span><ul class="m-lines">${pools.slice(0, 3).map((p) => meter(p.name, p.total ? (p.used / p.total) * 100 : null, pct(p.total ? (p.used / p.total) * 100 : null))).join('')}${more(pools.length - 3)}</ul>`
+        : `<span class="m-big small">${esc(txt('#storeLine') || '–')}</span>`;
+      tiles.push(tile({ open: 'data-open="storage"', color: PAGE_META.storage.color, icon: PAGE_META.storage.svg, label: t('Storage'),
+        pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null, body }));
     }
+    // VMs: each VM with its state, and CPU and RAM of the ones that run.
     if (!hidden.has('vms')) {
-      const vms = S.vms || [], on = vms.filter((v) => vmKind(v.state) === 'on');
-      tiles.push(tile({ key: 'vms', open: 'data-open="vms"', color: PAGE_META.vms.color, icon: PAGE_META.vms.svg, label: t('VMs'),
-        big: esc(t('{n} of {total}', { n: on.length, total: vms.length })), small: true,
-        sub: on.length ? on.map((v) => v.name).join(', ') : t(vms.length ? 'All off' : 'No VMs yet') }));
+      const vms = S.vms || [], on = vms.filter((v) => vmKind(v.state) === 'on').length;
+      const dot = (v) => ({ on: 'ok', paused: 'warn', bad: 'bad' })[vmKind(v.state)] || '';
+      const sorted = [...vms].sort((a, b) => (vmKind(a.state) === 'on' ? 0 : 1) - (vmKind(b.state) === 'on' ? 0 : 1));
+      const body = vms.length ? `<ul class="m-lines">${sorted.slice(0, 4).map((v) => row(dot(v), v.name, vmKind(v.state) === 'on' ? (v.cpu != null ? nf0.format(v.cpu) + '% · ' : '') + bytes(v.memUsed || v.memory) : vmStateText(v.state))).join('')}${more(vms.length - 4)}</ul>`
+        : `<span class="m-big small">${esc(t('No VMs yet'))}</span>`;
+      tiles.push(tile({ open: 'data-open="vms"', color: PAGE_META.vms.color, icon: PAGE_META.vms.svg, label: t('VMs'),
+        pill: vms.length ? [t('{n} of {total}', { n: on, total: vms.length }), on ? 'ok' : ''] : null, body }));
     }
+    // Shared folders: each folder with who is connected.
     if (!hidden.has('shares')) {
       const d = S.shares;
-      tiles.push(tile({ key: 'shares', open: 'data-open="shares"', color: PAGE_META.shares.color, icon: PAGE_META.shares.svg, label: t('Shared folders'),
-        big: d && d.shares ? esc(String(d.shares.length)) : '–', sub: txt('#shareConn') }));
+      const c = (d && d.connections) || { total: 0, perShare: {} };
+      const body = d && d.shares && d.shares.length ? `<ul class="m-lines">${d.shares.slice(0, 4).map((sh) => row(c.perShare[sh.name] ? 'ok' : '', sh.name, c.perShare[sh.name] ? t('{n} connected', { n: c.perShare[sh.name] }) : '')).join('')}${more(d.shares.length - 4)}</ul>`
+        : `<span class="m-big small">${esc(d ? t('No shared folders yet') : t('Loading…'))}</span>`;
+      tiles.push(tile({ open: 'data-open="shares"', color: PAGE_META.shares.color, icon: PAGE_META.shares.svg, label: t('Shared folders'),
+        body, foot: d && d.installed ? txt('#shareConn') : '' }));
     }
+    // Backups: each task with how it went.
     if (!hidden.has('backup')) {
-      const d = S.backup;
-      tiles.push(tile({ key: 'backup', open: 'data-open="backup"', color: PAGE_META.backup.color, icon: PAGE_META.backup.svg, label: t('Backups'),
-        big: `<span class="${$('#bkState').classList.contains('bad') ? 'temp-bad' : ''}">${esc(txt('#bkState') || (d && d.jobs && d.jobs.length ? '' : t('None yet')))}</span>`, small: true,
-        sub: d && d.jobs ? t(d.jobs.length === 1 ? '{n} task' : '{n} tasks', { n: d.jobs.length }) : '' }));
+      const d = S.backup, jobs = (d && d.jobs) || [];
+      const st = (j) => (j.running ? 'warn' : !j.lastRun ? '' : j.lastRun.state === 'ok' ? 'ok' : 'bad');
+      const when = (j) => (j.running ? (j.running.percent != null ? Math.floor(j.running.percent) + '%' : t('in progress')) : j.lastRun ? ago(j.lastRun.ended) : t('not done yet'));
+      const body = jobs.length ? `<ul class="m-lines">${jobs.slice(0, 4).map((j) => row(st(j), j.name, when(j))).join('')}${more(jobs.length - 4)}</ul>`
+        : `<span class="m-big small">${esc(t('No backups yet'))}</span>`;
+      tiles.push(tile({ open: 'data-open="backup"', color: PAGE_META.backup.color, icon: PAGE_META.backup.svg, label: t('Backups'),
+        pill: txt('#bkState') ? [txt('#bkState'), ($('#bkState').className.split(' ')[1] || '')] : null, body,
+        foot: d && d.devices ? t(d.devices === 1 ? '{n} device' : '{n} devices', { n: d.devices }) : '' }));
     }
+    // AI: the models (loaded first) and the graphics card's memory.
     if (!hidden.has('ai') && !(S.ai && S.ai.enabled === false)) {
-      tiles.push(tile({ key: 'ai', open: 'data-open="ai"', color: '#7a5bc4', icon: M_ICONS.ai, label: 'AI',
-        big: esc(txt('#aiLine') || '–'), small: true, sub: txt('#aiState') }));
+      const ai = S.ai, models = ((ai && ai.models) || []).slice().sort((a, b) => Number(b.loaded) - Number(a.loaded));
+      const g = ai && ai.gpu && ai.gpu[0];
+      const body = models.length ? `<ul class="m-lines">${models.slice(0, 3).map((m) => row(m.loaded ? 'ok' : '', m.name, m.loaded ? t('Ready') : '')).join('')}${more(models.length - 3)}${g && g.memTotal ? meter('VRAM', (g.memUsed / g.memTotal) * 100, bytes(g.memUsed)) : ''}</ul>`
+        : `<span class="m-big small">${esc(txt('#aiLine') || '–')}</span>`;
+      tiles.push(tile({ open: 'data-open="ai"', color: '#7a5bc4', icon: M_ICONS.ai, label: 'AI', pill: txt('#aiState') ? [txt('#aiState'), ($('#aiState').className.split(' ')[1] || '')] : null, body }));
     }
+    // UPS: charge, time left, load.
     const u = o.ups;
     if (u) {
-      tiles.push(tile({ key: 'ups', open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS',
-        big: u.charge != null ? esc(nf0.format(u.charge) + '%') : '–', sub: [u.runtime != null ? upsTime(u.runtime) : null, t(u.onBattery ? 'On battery' : 'On mains power')].filter(Boolean).join(' · ') }));
+      const state = u.lowBattery ? ['Battery almost empty', 'bad'] : u.onBattery ? ['On battery', 'warn'] : ['On mains power', 'ok'];
+      tiles.push(tile({ open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS', pill: [t(state[0]), state[1]],
+        body: `<span class="m-big">${u.charge != null ? esc(nf0.format(u.charge) + '%') : '–'}</span><ul class="m-lines">${u.charge != null ? meter(t('Battery'), u.charge, '', u.charge <= 20 ? 'bad' : u.charge <= 50 ? 'warn' : '') : ''}${u.runtime != null ? row('', t('Time left'), upsTime(u.runtime)) : ''}${u.load != null ? row('', t('UPS load'), nf0.format(u.load) + '%' + (u.power != null ? ' · ' + nf0.format(u.power) + ' W' : '')) : ''}</ul>` }));
     }
     box.innerHTML = `
       <div class="m-hero"><span class="m-greet">${esc(txt('#greeting'))}</span><span class="m-time">${esc(txt('#clock'))}</span><span class="m-date">${esc(txt('#date'))}</span></div>

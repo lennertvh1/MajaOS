@@ -3194,4 +3194,7 @@ window.TB_LANG.nl = {
   "{n} task": "{n} taak",
   "{n} tasks": "{n} taken",
   "Home": "Start",
+  "UPS load": "Belasting",
+  "No shared folders yet": "Nog geen gedeelde mappen",
+  "No backups yet": "Nog geen back-ups",
 };
