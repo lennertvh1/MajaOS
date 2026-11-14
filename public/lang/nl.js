@@ -3183,4 +3183,7 @@ window.TB_LANG.nl = {
   "The backups can't move along: devices and the backup app use that folder. They stay where they are.": "De back-ups kunnen niet mee: toestellen en de back-up-app gebruiken die map. Ze blijven waar ze zijn.",
   "Shut down the VMs first, then their disks can move: {list}.": "Sluit eerst de VM's af, dan kunnen hun schijven verhuizen: {list}.",
   "{vm} has snapshots. Remove them first (they point to the old disks), then the VM disks can move.": "{vm} heeft snapshots. Verwijder ze eerst (ze wijzen naar de oude schijven), dan kunnen de VM-schijven verhuizen.",
+  "Used by {list} (an old RAID array or LVM). MajaOS releases it and erases the disk.": "Wordt gebruikt door {list} (een oude RAID-array of LVM). MajaOS maakt de schijf los en wist ze.",
+  "{disk} is still in use: {list}. Unmount it first.": "{disk} is nog in gebruik: {list}. Ontkoppel eerst.",
+  "{disk} is held by {holder} and could not be released: {error}": "{disk} wordt vastgehouden door {holder} en kon niet losgemaakt worden: {error}",
 };

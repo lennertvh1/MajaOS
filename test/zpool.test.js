@@ -65,3 +65,20 @@ test('building and checking zpool create', () => {
   const m = zp.buildCreate({ name: 'fast', layout: 'mirror', disks: ['sdb', 'sdc'], confirm: 'fast' }, opts);
   assert.deepEqual(m.slice(-4), ['fast', 'mirror', '/dev/disk/by-id/ata-WDC_WD20EFZX_B', '/dev/sdc']);
 });
+
+test('a disk held by an old RAID array or LVM: released before the pool is made', () => {
+  const tree = { blockdevices: [
+    { name: 'sde', type: 'disk', size: 120e9, rota: false, tran: 'sata', model: 'KINGSTON SV300S37A120G', serial: 'K1', children: [
+      { name: 'sde1', type: 'part', fstype: 'linux_raid_member', mountpoints: [null], children: [
+        { name: 'md127', type: 'raid1', fstype: 'LVM2_member', mountpoints: [null], children: [{ name: 'oldvg-data', type: 'lvm', fstype: 'ext4', mountpoints: [null] }] }] }] },
+    { name: 'sdf', type: 'disk', size: 120e9, rota: false, tran: 'sata', model: 'X', serial: 'F', children: [
+      { name: 'sdf1', type: 'part', mountpoints: [null], children: [{ name: 'vg-root', type: 'lvm', fstype: 'ext4', mountpoints: ['/srv'] }] }] },
+  ] };
+  const by = Object.fromEntries(zp.classifyDisks(tree, {}).map((x) => [x.name, x]));
+  assert.equal(by.sde.available, true);
+  assert.match(by.sde.warn, /Used by oldvg-data, md127/);
+  assert.deepEqual(zp.releasePlan(zp.holdersOf(tree.blockdevices[0])), [['dmsetup', ['remove', '--retry', 'oldvg-data']], ['mdadm', ['--stop', '/dev/md127']]]); // deepest first
+  // Mounted somewhere deeper: not free.
+  assert.equal(by.sdf.available, false);
+  assert.match(by.sdf.reason, /In use: \/srv/);
+});
