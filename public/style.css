@@ -2127,7 +2127,9 @@ button.snap-node:hover { background: var(--glass-hover); }
 
 /* The system pages under the header, like Unraid's tabs */
 .sysbar { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 5px;
-  margin: -4px max(clamp(16px, 3vw, 36px), env(safe-area-inset-right, 0px)) 10px max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px));
+  /* As wide as its buttons, in the middle; on a narrow screen it fits the width and scrolls sideways. */
+  width: max-content; max-width: calc(100% - 2 * max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px)));
+  margin: -4px auto 10px;
   background: var(--glass); border: 1px solid var(--glass-line); border-radius: 14px;
   backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2); }
 .sysbar[hidden] { display: none; }
