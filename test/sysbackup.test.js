@@ -32,6 +32,7 @@ test('reading snapshot-dumpxml', () => {
   assert.deepEqual(snap.parseSnapshotXml(xml), {
     name: 'before-update', description: 'Before HA 2026.10 & add-ons', state: 'running', created: 1792745000000, parent: 'first', memory: true,
     disks: [{ name: 'vda', snapshot: 'external', file: '/tank/vms/haos/haos.before-update' }],
+    memFile: '/tank/vms/haos/haos.before-update.mem', // removed along with the snapshot when it is merged offline
   });
   const off = snap.parseSnapshotXml('<domainsnapshot><name>a</name><state>shutoff</state><creationTime>1</creationTime><memory snapshot=\'no\'/></domainsnapshot>');
   assert.equal(off.memory, false); assert.equal(off.parent, null);
