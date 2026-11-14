@@ -2997,6 +2997,163 @@
   // users, apps with or without their data, VMs), then one job with steps (lib/unraid.js).
   // Settings → Cooling (lib/fans.js): every temperature, every fan with its speed, and per fan Auto (the BIOS),
   // Fixed or Curve. The numbers refresh every 2 s; the forms stay as they are while you edit.
+  /* --- UPS through NUT (Settings → UPS, lib/ups.js): status, where it is connected, when the server shuts down */
+  const UPS_DRIVERS = ['usbhid-ups', 'nutdrv_qx', 'blazer_usb', 'apc_modbus', 'snmp-ups', 'blazer_ser', 'apcsmart', 'riello_usb', 'bcmxcp_usb', 'tripplite_usb'];
+  let upsRun = 0;
+  async function upsPane(el) {
+    const runId = ++upsRun;
+    el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+    let d;
+    try { d = await api.get('/api/ups'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
+    if (settingsTab() !== 'ups') return;
+    let found = null; // nut-scanner results
+    let names = null; // UPS names on another NUT server
+    const when = (ms) => new Date(ms).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+    const statusHtml = () => {
+      if (d.mode === 'off') return '';
+      if (!d.status) return `<p class="notice warn"><span>${t('The UPS does not answer.')} ${esc(tr(d.error || ''))}</span></p>`;
+      const s = d.status;
+      const state = s.lowBattery ? `<span class="pill bad">${t('Battery almost empty')}</span>`
+        : s.onBattery ? `<span class="pill warn">${t('On battery')}</span>`
+        : s.online ? `<span class="pill ok">${t('On mains power')}</span>` : `<span class="pill">${esc(s.flags.join(' ') || '–')}</span>`;
+      const row = (label, v) => (v == null || v === '' ? '' : `<dt>${label}</dt><dd>${v}</dd>`);
+      return `<dl class="kv">
+          ${row(t('Status'), state + (s.charging ? ` <span class="muted small">${t('charging')}</span>` : '') + (s.replaceBattery ? ` <span class="pill bad">${t('Replace the battery')}</span>` : ''))}
+          ${row(t('Battery'), s.charge != null ? esc(nf0.format(s.charge)) + '%' : null)}
+          ${row(t('Time left on battery'), s.runtime != null ? esc(t('{n} min', { n: nf0.format(Math.round(s.runtime / 60)) })) : null)}
+          ${row(t('Load on the UPS'), s.load != null ? esc(nf0.format(s.load)) + '%' + (s.power != null ? ` · ${esc(nf0.format(s.power))} W` : '') : null)}
+          ${row(t('Input voltage'), s.inputVoltage != null ? esc(nf0.format(s.inputVoltage)) + ' V' : null)}
+          ${row(t('Model'), s.model ? esc(s.model) + (s.serial ? ` <span class="muted small">${esc(s.serial)}</span>` : '') : null)}
+        </dl>
+        ${d.countdown && s.onBattery ? `<p class="notice warn"><span>${t('The server shuts down at {time} unless the power comes back.', { time: esc(when(d.countdown)) })}</span></p>` : ''}`;
+    };
+    const shareHtml = () => (d.share ? `
+        <h2 class="pane-title">${t('Other devices')}</h2>
+        <p class="muted small">${t('Home Assistant, a NAS or another server can follow this UPS with these details (NUT, as secondary).')}</p>
+        <dl class="kv">
+          <dt>${t('Server')}</dt><dd><code>${esc(location.hostname)}</code></dd>
+          <dt>${t('Port')}</dt><dd><code>${esc(String(d.share.port))}</code></dd>
+          <dt>${t('UPS name')}</dt><dd><code>${esc(d.share.upsName)}</code></dd>
+          <dt>${t('User')}</dt><dd><code>${esc(d.share.user)}</code></dd>
+          <dt>${t('Password')}</dt><dd><code>${esc(d.share.password)}</code> <button class="btn sm" type="button" data-copy="${esc(d.share.password)}">${t('Copy')}</button></dd>
+        </dl>` : '');
+    const eventsHtml = () => (d.events.length ? `
+        <h2 class="pane-title">${t('Log')}</h2>
+        <ul class="rows">${d.events.slice(0, 15).map((e) => `<li><div><div class="row-title">${esc(tr(e.text))}</div><div class="row-sub">${esc(when(e.at))}</div></div></li>`).join('')}</ul>` : '');
+    const draw = (mode) => {
+      const c = d.config;
+      const devList = found ? (found.length ? `<div style="margin:8px 0">${found.map((x, i) => `<label class="check"><input type="radio" name="dev" value="${i}"${i === 0 ? ' checked' : ''}> ${esc([x.vendor, x.product].filter(Boolean).join(' ') || x.driver)} <span class="muted small">${esc(x.driver)}${x.serial ? ' · ' + esc(x.serial) : ''}</span></label>`).join('')}</div>`
+        : `<p class="muted small">${t('No UPS found on USB. Check the cable, or fill in the driver yourself.')}</p>`) : '';
+      el.innerHTML = `
+        ${d.installed ? '' : `<p class="notice warn"><span>${t('NUT is not installed on the server. Update MajaOS, or run the installer again.')}</span></p>`}
+        <div data-ups-status>${statusHtml()}</div>
+        <form class="form" id="upsForm" novalidate>
+          <h2 class="pane-title">${t('Connection')}</h2>
+          <label class="fld" style="max-width:420px"><span>${t('Where is the UPS connected?')}</span><select class="field" name="mode">
+            <option value="off"${mode === 'off' ? ' selected' : ''}>${t('No UPS')}</option>
+            <option value="local"${mode === 'local' ? ' selected' : ''}>${t('On this server (USB)')}</option>
+            <option value="remote"${mode === 'remote' ? ' selected' : ''}>${t('On another NUT server (a NAS, another server)')}</option>
+          </select></label>
+          ${mode === 'local' ? `
+            <div class="btn-row" style="justify-content:flex-start"><button class="btn" type="button" data-ups-scan>${t('Search for a UPS')}</button></div>
+            ${devList}
+            <div class="fld-row">
+              <label class="fld"><span>${t('Driver')} ${hint(t('usbhid-ups fits most UPSes on USB (APC, Eaton, CyberPower). Search fills it in.'))}</span>
+                <input class="field" name="driver" list="upsDrivers" value="${esc(c.driver || 'usbhid-ups')}" autocomplete="off" spellcheck="false"></label>
+              <label class="fld"><span>${t('Port')}</span><input class="field" name="port" value="${esc(c.port || 'auto')}" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <datalist id="upsDrivers">${UPS_DRIVERS.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+            <input type="hidden" name="vendorid" value="${esc(c.extra.vendorid || '')}"><input type="hidden" name="productid" value="${esc(c.extra.productid || '')}"><input type="hidden" name="serial" value="${esc(c.extra.serial || '')}">
+            <label class="check"><input type="checkbox" name="share"${c.share ? ' checked' : ''}> ${t('Share the UPS with other devices in my network (Home Assistant, a NAS)')}</label>` : ''}
+          ${mode === 'remote' ? `
+            <p class="muted small">${t('MajaOS follows a UPS that hangs on another NUT server. Use the NUT details of that server: on a Synology the user is monuser and the password secret.')}</p>
+            <div class="fld-row">
+              <label class="fld"><span>${t('Address of the NUT server')}</span><input class="field" name="host" value="${esc(c.host || '')}" placeholder="192.168.1.20" autocomplete="off" spellcheck="false"></label>
+              <label class="fld" style="max-width:120px"><span>${t('Port')}</span><input class="field" name="hostPort" inputmode="numeric" value="${esc(String(c.hostPort || 3493))}"></label>
+            </div>
+            <div class="fld-row">
+              <label class="fld"><span>${t('UPS name')}</span><input class="field" name="upsName" list="upsNames" value="${esc(c.upsName || 'ups')}" autocomplete="off" spellcheck="false"></label>
+              <div class="fld" style="align-self:end"><button class="btn" type="button" data-ups-names>${t('Find the names')}</button></div>
+            </div>
+            <datalist id="upsNames">${(names || []).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+            ${names ? `<p class="muted small">${names.length ? t('Found: {list}', { list: esc(names.join(', ')) }) : t('That server has no UPS.')}</p>` : ''}
+            <div class="fld-row">
+              <label class="fld"><span>${t('User')}</span><input class="field" name="user" value="${esc(c.user || '')}" placeholder="monuser" autocomplete="off" spellcheck="false"></label>
+              <label class="fld"><span>${t('Password')}</span><input class="field" type="password" name="password" autocomplete="new-password" placeholder="${c.hasPassword ? t('Saved. Type a new one to replace it.') : ''}"></label>
+            </div>` : ''}
+          ${mode !== 'off' ? `
+            <h2 class="pane-title">${t('When to shut down')}</h2>
+            <p class="muted small">${t('When the battery is almost empty, NUT always shuts the server down. Apps and VMs stop first. You can shut down earlier:')}</p>
+            <div class="fld-row">
+              <label class="fld"><span>${t('After minutes on battery')} ${hint(t('0 = wait until the battery is almost empty.'))}</span><input class="field" name="minutes" inputmode="numeric" value="${esc(String(c.minutes || 0))}"></label>
+              <label class="fld"><span>${t('Or at a battery charge of (%)')} ${hint(t('0 = off.'))}</span><input class="field" name="percent" inputmode="numeric" value="${esc(String(c.percent || 0))}"></label>
+            </div>
+            <p class="muted small">${t('Tip: set the BIOS to power on after a power loss (Restore on AC power loss: Power On), so the server starts again when the power returns.')}</p>` : ''}
+          <p class="form-error" role="alert"></p>
+          <div class="btn-row"><button class="btn primary" type="submit"${d.installed ? '' : ' disabled'}>${t('Save')}</button></div>
+        </form>
+        <div data-ups-share>${shareHtml()}</div>
+        <div data-ups-events>${eventsHtml()}</div>`;
+      const form = $('#upsForm', el);
+      const f = form.elements;
+      const err = $('.form-error', form);
+      f.mode.addEventListener('change', () => { found = null; names = null; draw(f.mode.value); });
+      const pick = () => {
+        const x = found && found[Number((form.querySelector('[name="dev"]:checked') || {}).value)];
+        if (!x) return;
+        f.driver.value = x.driver; f.port.value = x.port || 'auto';
+        f.vendorid.value = x.vendorid || ''; f.productid.value = x.productid || ''; f.serial.value = x.serial || '';
+      };
+      form.addEventListener('change', (e) => { if (e.target.name === 'dev') pick(); });
+      if (found && found.length && mode === 'local') pick();
+      const scanBtn = $('[data-ups-scan]', form);
+      if (scanBtn) scanBtn.addEventListener('click', async () => {
+        scanBtn.disabled = true; scanBtn.textContent = t('Searching…'); err.textContent = '';
+        try { found = (await api.post('/api/ups/scan', {})).devices || []; draw('local'); }
+        catch (ex) { err.textContent = ex.message; scanBtn.disabled = false; scanBtn.textContent = t('Search for a UPS'); }
+      });
+      const namesBtn = $('[data-ups-names]', form);
+      if (namesBtn) namesBtn.addEventListener('click', async () => {
+        namesBtn.disabled = true; err.textContent = '';
+        const keep = { host: f.host.value, hostPort: f.hostPort.value, user: f.user.value };
+        try {
+          names = (await api.post('/api/ups/scan', { host: f.host.value, hostPort: f.hostPort.value })).names || [];
+          d.config = { ...d.config, ...keep, upsName: names[0] || f.upsName.value };
+          draw('remote');
+        } catch (ex) { err.textContent = ex.message; namesBtn.disabled = false; }
+      });
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('button[type="submit"]', form); btn.disabled = true; err.textContent = '';
+        const m = f.mode.value;
+        const body = { mode: m, minutes: f.minutes ? f.minutes.value : 0, percent: f.percent ? f.percent.value : 0 };
+        if (m === 'local') Object.assign(body, { driver: f.driver.value, port: f.port.value, share: f.share.checked, extra: { vendorid: f.vendorid.value, productid: f.productid.value, serial: f.serial.value } });
+        if (m === 'remote') Object.assign(body, { host: f.host.value, hostPort: f.hostPort.value, upsName: f.upsName.value, user: f.user.value, password: f.password.value });
+        try {
+          d = await api.post('/api/ups', body);
+          found = null; names = null;
+          toast(t('Saved.'));
+          draw(d.mode);
+        } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+      });
+    };
+    draw(d.mode);
+    // The status every 5 s while this tab is open; the form stays as it is.
+    const refresh = async () => {
+      if (runId !== upsRun || settingsTab() !== 'ups' || !el.isConnected || !$('#upsForm', el)) return;
+      try {
+        const n = await api.get('/api/ups');
+        if (settingsTab() !== 'ups' || !$('#upsForm', el)) return;
+        d = { ...n, config: d.config };
+        $('[data-ups-status]', el).innerHTML = statusHtml();
+        $('[data-ups-share]', el).innerHTML = shareHtml();
+        $('[data-ups-events]', el).innerHTML = eventsHtml();
+      } catch { /* try again next time */ }
+      setTimeout(refresh, 5000);
+    };
+    setTimeout(refresh, 5000);
+  }
+
   async function coolingPane(el) {
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
     let d;
@@ -5357,7 +5514,7 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/ups': 'ups', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
@@ -5365,11 +5522,11 @@
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', hardware: 'Hardware', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', migration: 'Migration', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', hardware: 'Hardware', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', ups: 'UPS', migration: 'Migration', about: 'About' }[tab]);
     if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null; $('#setPane').oninput = null; $('#setPane').onsubmit = null;
-    ({ general: generalPane, storage: storagePane, hardware: hardwarePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, hardware: hardwarePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, ups: upsPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
   }
 
   // Settings and the wizard only offer a language once its dictionary covers the interface.
@@ -9561,6 +9718,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/mcp', 'MCP', ['mcp', 'cursor', 'claude', 'vscode', 'codex', 'token', t('MCP')]],
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
       ['settings/cooling', 'Cooling', ['fans', 'fan', 'pwm', 'temperature', 'rpm', t('Cooling'), t('Fans')]],
+      ['settings/ups', 'UPS', ['ups', 'nut', 'battery', 'power', 'apc', 'eaton', 'cyberpower', t('Battery')]],
       ['settings/migration', 'Migration', ['unraid', 'migrate', 'import', t('Migration'), t('Move from Unraid')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));

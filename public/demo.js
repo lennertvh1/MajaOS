@@ -2967,6 +2967,7 @@
     if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidSsh ? unraidSshScan() : unraidScan();
     if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/system/details') { await wait(rnd(150, 300)); return systemDetails(); }
+    if (path === '/api/ups') return upsStatus();
     if (path === '/api/fans') return fansStatus();
     if (path === '/api/fans/detect') return demoFans.job ? { ...demoFans.job, percent: Math.round(demoFans.job.percent) } : { state: 'idle' };
     if (path === '/api/storage') return { ...storageSummary(), zfsError: null, pools: copy(pools.map((p) => (p.kind === 'mixed' ? { ...p, job: mxJob(p.name) } : demoScrub(p)))), disks: copy(disks), datasets: copy(datasets), bays: copy(bays) };
@@ -2974,6 +2975,44 @@
     if (path === '/api/ai/chats') return { chats: demoChats.map(chatBrief).sort((a, b) => b.updated.localeCompare(a.updated)) };
     { const cm = path.match(/^\/api\/ai\/chats\/([^/]+)$/); if (cm) return copy(demoChat(cm[1])); }
     throw err('Unknown endpoint', 404);
+  }
+
+  // UPS through NUT (Settings → UPS): an APC Back-UPS on USB. The same shapes as lib/ups.js.
+  const demoUps = { mode: 'off', name: 'ups', driver: 'usbhid-ups', port: 'auto', extra: {}, desc: '', share: false, host: '', hostPort: 3493, upsName: 'ups', user: '', password: '', minutes: 0, percent: 0, sharePassword: 'Kq7mW2xPz9RtLb4N', events: [] };
+  function upsStatus() {
+    const u = demoUps;
+    const status = u.mode === 'off' ? null : {
+      flags: ['OL', 'CHRG'], online: true, onBattery: false, lowBattery: false, charging: true, replaceBattery: false, overload: false, forcedShutdown: false,
+      charge: 100, runtime: 1860, load: 17 + Math.round(Math.random() * 4), inputVoltage: 231, outputVoltage: 231, batteryVoltage: 13.6,
+      power: 72, powerNominal: 405, model: u.mode === 'remote' ? 'Eaton 5E 1100i' : 'American Power Conversion Back-UPS ES 700G', serial: u.mode === 'remote' ? 'G355K12034' : '5B1234X56789', driver: 'usbhid-ups',
+    };
+    return {
+      installed: true, mode: u.mode,
+      config: { name: u.name, driver: u.driver, port: u.port, extra: u.extra, desc: u.desc, share: u.share, host: u.host, hostPort: u.hostPort, upsName: u.upsName, user: u.user, hasPassword: !!u.password, minutes: u.minutes, percent: u.percent },
+      share: u.mode === 'local' && u.share ? { port: 3493, upsName: u.name, user: 'monuser', password: u.sharePassword } : null,
+      status, vars: null, error: '', countdown: null, events: u.events,
+    };
+  }
+  function upsSave(b) {
+    const u = demoUps;
+    if (!['off', 'local', 'remote'].includes(b.mode)) throw err('Choose where the UPS is connected.');
+    const int = (v, lo, hi, msg) => { const n = Number(v == null || v === '' ? 0 : v); if (!Number.isInteger(n) || n < lo || n > hi) throw err(msg); return n; };
+    const minutes = int(b.minutes, 0, 240, 'Type a number of minutes between 0 and 240.');
+    const percent = int(b.percent, 0, 90, 'Type a battery percentage between 0 and 90.');
+    if (b.mode === 'local') {
+      if (!/^[a-z0-9_-]{2,32}$/.test(String(b.driver || ''))) throw err('Choose the driver of the UPS, for example usbhid-ups.');
+      Object.assign(u, { driver: b.driver, port: String(b.port || 'auto'), extra: b.extra || {}, share: !!b.share });
+    }
+    if (b.mode === 'remote') {
+      if (!String(b.host || '').trim()) throw err('Type the address of the NUT server, for example 192.168.1.20.');
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(String(b.upsName || ''))) throw err('Type the name of the UPS on that server, for example ups.');
+      if (!/^[A-Za-z0-9_.-]{1,32}$/.test(String(b.user || ''))) throw err('Type the NUT user name of that server, for example monuser.');
+      if (!b.password && !u.password) throw err('Type the NUT password of that server (no spaces or quotes).');
+      Object.assign(u, { host: String(b.host).trim(), hostPort: Number(b.hostPort) || 3493, upsName: b.upsName, user: b.user, password: b.password || u.password });
+    }
+    if (u.mode !== b.mode) u.events.unshift({ at: Date.now(), kind: 'config', text: b.mode === 'off' ? 'UPS monitoring is off.' : b.mode === 'local' ? 'UPS on this server.' : 'UPS on another NUT server.' });
+    Object.assign(u, { mode: b.mode, minutes, percent });
+    return upsStatus();
   }
 
   async function post(path, body = {}) {
@@ -3131,6 +3170,12 @@
     if (path === '/api/pools') { await wait(rnd(300, 600)); return demoStartCreate(body); }
     if (path.startsWith('/api/mixed-pools/')) { await wait(300); const r = mxRoute('POST', path, body); if (r !== undefined) return r; }
     if (path === '/api/unraid/migrate') { await wait(300); return unraidMigrate(body || {}); }
+    if (path === '/api/ups') { await wait(900); return upsSave(body || {}); }
+    if (path === '/api/ups/scan') {
+      await wait(1200);
+      if (body && body.host) return { names: ['ups'] };
+      return { devices: [{ driver: 'usbhid-ups', port: 'auto', vendorid: '051D', productid: '0002', vendor: 'American Power Conversion', product: 'Back-UPS ES 700G', serial: '5B1234X56789', bus: '001' }] };
+    }
     if (path === '/api/fans/probe') { await wait(1200); return { loaded: [], ...fansStatus() }; }
     if (path === '/api/fans/diagnose') { await wait(1500); return fansDiagnose(); }
     if (path === '/api/fans/install') { await wait(body && body.community ? 4000 : 2000); return fansInstall(); }

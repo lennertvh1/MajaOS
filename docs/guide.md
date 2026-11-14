@@ -313,6 +313,15 @@ Another NAS goes through SFTP (SSH: Synology, QNAP, TrueNAS, another MajaOS), SM
 
 MajaOS uses [rclone](https://rclone.org) (`install.sh` installs it). Connections are in `/var/lib/majaos/rclone.conf` (readable by root only). A sync doesn't start if the source folder is empty or the pool isn't mounted, so nothing gets deleted on the other side by accident.
 
+## UPS
+
+**Settings → UPS** works with any UPS that NUT (Network UPS Tools) knows, which is almost every UPS with a USB cable (APC, Eaton, CyberPower, …).
+
+- **On this server (USB):** plug in the cable, choose *Search for a UPS* and *Save*. MajaOS writes the NUT configuration itself. Tick *Share the UPS* to let Home Assistant (NUT integration), a NAS or another server follow it: the page shows the address, the UPS name, the user `monuser` and its password.
+- **On another NUT server:** a UPS that hangs on a Synology, Unraid or another MajaOS. Fill in its address, the UPS name (*Find the names*) and its NUT user and password (on a Synology `monuser` / `secret`).
+
+When the battery is almost empty, NUT shuts the server down; apps and VMs stop first. You can shut down earlier: after a number of minutes on battery, or at a battery percentage. With the UPS on this server, MajaOS then also tells the other devices to shut down and lets the UPS switch off at the end. Set the BIOS to power on after a power loss (*Restore on AC power loss: Power On*), so the server starts again when the power returns. The page shows the battery, the time left, the load and a log of power events.
+
 ## Restart and shut down
 
 With the power button at the top (next to Settings) you restart or shut down the server, always after a confirmation. After a restart the page comes back by itself once the server runs again.

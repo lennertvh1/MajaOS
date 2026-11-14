@@ -86,6 +86,7 @@ const keyboard = require('./lib/keyboard');
 const mixed = require('./lib/mixed');
 const unraid = require('./lib/unraid');
 const fans = require('./lib/fans');
+const ups = require('./lib/ups');
 
 const CFG = {
   port: settings.listenPort(),
@@ -370,6 +371,10 @@ async function handleApi(req, res, url) {
   let m;
   if (p === '/api/system/details' && method === 'GET') return sendJson(res, 200, await sys.details());
   if (p === '/api/hardware' && method === 'GET') return sendJson(res, 200, await hardware.inventory());
+  // UPS through NUT (lib/ups.js): status, where it is connected, and when the server shuts down.
+  if (p === '/api/ups' && method === 'GET') return sendJson(res, 200, await ups.status());
+  if (p === '/api/ups' && method === 'POST') return sendJson(res, 200, await ups.apply(await readBody(req)));
+  if (p === '/api/ups/scan' && method === 'POST') return sendJson(res, 200, await ups.scan(await readBody(req)));
   // Cooling (lib/fans.js): temperatures and fans; a channel's mode (auto, fixed, curve) and own names.
   if (p === '/api/fans' && method === 'GET') return sendJson(res, 200, await fans.status());
   if (p === '/api/fans/probe' && method === 'POST') return sendJson(res, 200, await fans.probe());
@@ -1056,6 +1061,7 @@ bind(CFG.port).then(() => {
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
     storage.watchDisks(); // a disk plugged in or taken out: a message on the dashboard
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
+    ups.startSchedule(); // the UPS: log power events and shut down early (Settings → UPS)
     mixed.startSchedule(); // parity of pools with mixed disks: sync and scrub on their schedule
   }
 }).catch((e) => {

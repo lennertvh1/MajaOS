@@ -50,6 +50,8 @@ apt-get install -y ca-certificates openssl curl gnupg nodejs smartmontools pciut
 apt-get install -y avahi-daemon || true
 # Keep the clock right: the codes of two-step verification depend on the time.
 apt-get install -y systemd-timesyncd || true
+# A UPS through NUT (Settings → UPS). Its services stay off until MajaOS writes /etc/nut (MODE=none).
+apt-get install -y nut || true
 if [ "$CHROOT" = 1 ]; then systemctl enable systemd-timesyncd || true; else timedatectl set-ntp true || true; fi
 
 step "ZFS"
