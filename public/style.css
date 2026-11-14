@@ -2139,3 +2139,5 @@ button.snap-node:hover { background: var(--glass-hover); }
 .sys-btn[aria-current="page"] { background: var(--glass-strong); border-color: var(--glass-line); color: var(--text); }
 .sys-btn[aria-current="page"] svg { color: var(--accent); }
 @media (max-width: 880px) { .sysbar { margin: 0 0 8px; } }
+/* The update dot on Settings in the menu bar */
+.sys-btn.has-dot .nav-dot { top: 4px; right: 4px; }

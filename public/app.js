@@ -9628,8 +9628,11 @@ sudo ./install.sh</pre></div>`}` : '') +
   // pageHash remembers that page; #settings/... in the address bar only opens the window.
   let pageHash = location.hash.startsWith('#settings') ? '' : location.hash;
   const settingsHash = () => location.hash.startsWith('#settings');
+  // The page under the store or Files (they open on top): what was there before, not the dashboard.
+  let underHash = popKindOf(location.hash) || location.hash.startsWith('#settings') ? '' : location.hash;
   function currentView() {
-    const h = (settingsHash() ? pageHash : location.hash) || '';
+    let h = (settingsHash() ? pageHash : location.hash) || '';
+    if (popKindOf(h)) h = underHash;
     if (h === '#vms') return 'vms';
     return 'home';
   }
@@ -9676,6 +9679,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (!settingsHash() && !location.hash.startsWith('#files')) { location.replace('#files'); return; }
     }
     const inSettings = settingsHash();
+    if (!inSettings && !popKindOf(location.hash)) underHash = location.hash;
     const view = currentView();
     const popKind = popKindOf(location.hash);
     if (S.folder && (view !== 'home' || popKind || inSettings)) closeFolder();
@@ -9701,12 +9705,13 @@ sudo ./install.sh</pre></div>`}` : '') +
     closePop();
     if (!pageChanged && view !== 'home') return;
   }
-  $('#popClose').addEventListener('click', () => { location.hash = ''; });
-  pop.addEventListener('click', (e) => { if (e.target === pop) location.hash = ''; });
+  // Closing the store or Files: back to the page that was under it (e.g. the VM page), not always the dashboard.
+  $('#popClose').addEventListener('click', () => { location.hash = underHash || ''; });
+  pop.addEventListener('click', (e) => { if (e.target === pop) location.hash = underHash || ''; });
   pop.addEventListener('close', () => {
     if (popMinimizing) { popMinimizing = false; return; }
     const h = location.hash;
-    if (h === '#store' || h.startsWith('#files')) location.hash = '';
+    if (h === '#store' || h.startsWith('#files')) location.hash = underHash || '';
   });
   const setWin = $('#setWin');
   let setTaskItem = null;
