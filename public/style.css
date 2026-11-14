@@ -2109,9 +2109,12 @@ button.snap-node:hover { background: var(--glass-hover); }
 .bays-orient { min-width: 200px; }
 
 /* Groups of bays in one case (Jonsbo N5: 8 upright on top, 4 lying below) */
-.bay-group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nas-ink-2); }
-.bay-group-label:first-of-type { margin-top: 0; }
-.bay-grid + .bay-group-label { padding-top: 10px; border-top: 1px solid var(--nas-edge); }
+.bay-groups { display: flex; flex-direction: column; gap: 10px; }
+.bay-groups > .bay-group + .bay-group { padding-top: 10px; border-top: 1px solid var(--nas-edge); }
+/* Next to each other (Jonsbo N5): a line between them instead of above */
+.bay-groups.row { flex-direction: row; align-items: flex-start; gap: 12px; }
+.bay-groups.row > .bay-group + .bay-group { padding-top: 0; border-top: 0; padding-left: 12px; border-left: 1px solid var(--nas-edge); }
+.bay-group-label { margin: 0 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nas-ink-2); }
 /* A 2.5" SSD on an adapter in a 3.5" drawer: same drawer, a small drive in it */
 .tray-ssd { flex: none; height: 24%; min-height: 34px; display: grid; place-items: center; border-radius: 2px;
   background: repeating-linear-gradient(90deg, var(--nas-vent) 0 3px, transparent 3px 6px); opacity: .95; }

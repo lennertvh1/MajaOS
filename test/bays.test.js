@@ -105,3 +105,11 @@ test('bays: groups of a case (Jonsbo N5: 8 upright on top, 4 lying below)', () =
   assert.equal(validateBays({ count: 12, columns: 5, groups: [{ count: 12, columns: 0 }], slots: {} }).groups, undefined);
   assert.equal(validateBays({ count: 12, columns: 6, groups: [{ count: 12, columns: 6, label: '<b>x</b>' }], slots: {} }).groups[0].label, 'bx/b');
 });
+
+test('bays: groups next to each other or under each other', () => {
+  const { validateBays } = require('../lib/bays');
+  const groups = [{ count: 8, columns: 8, orient: 'vertical', label: 'Upright bays' }, { count: 4, columns: 1, orient: 'horizontal', label: 'Lying cage' }];
+  assert.equal(validateBays({ count: 12, columns: 8, groups, groupsDir: 'row', slots: {} }).groupsDir, 'row');
+  assert.equal(validateBays({ count: 12, columns: 8, groups, slots: {} }).groupsDir, 'column');
+  assert.equal(validateBays({ count: 12, columns: 8, groupsDir: 'row', slots: {} }).groupsDir, undefined); // no groups, nothing to arrange
+});

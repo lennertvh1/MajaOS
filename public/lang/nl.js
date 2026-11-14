@@ -3162,4 +3162,6 @@ window.TB_LANG.nl = {
   "Top cage": "Bovenste kooi",
   "Bottom cage": "Onderste kooi",
   "3 brackets of 2": "3 houders van 2",
+  "Upright bays": "Staande bays",
+  "Lying cage": "Liggende kooi",
 };

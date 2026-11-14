@@ -2493,7 +2493,8 @@
       if (groups.some((g) => !Number.isInteger(g.count) || g.count < 1 || g.count > 60 || !Number.isInteger(g.columns) || g.columns < 1 || g.columns > 12)
         || groups.reduce((n, g) => n + g.count, 0) !== count) groups = null;
     }
-    bays = { count, columns, orient, model, ...(groups ? { groups } : {}), m2, ssd, slots };
+    const groupsDir = groups && b.groupsDir === 'row' ? 'row' : 'column';
+    bays = { count, columns, orient, model, ...(groups ? { groups, groupsDir } : {}), m2, ssd, slots };
     return copy(bays);
   }
   function storageSummary() {

@@ -2332,7 +2332,7 @@
     { id: 'jonsbo-n2', brand: 'Jonsbo', name: 'N2', ssd: 1, groups: [{ count: 5, columns: 5, orient: 'vertical', label: 'Hot-swap' }] },
     { id: 'jonsbo-n3', brand: 'Jonsbo', name: 'N3', ssd: 1, groups: [{ count: 8, columns: 8, orient: 'vertical', label: 'Hot-swap' }] },
     { id: 'jonsbo-n4', brand: 'Jonsbo', name: 'N4', ssd: 2, groups: [{ count: 4, columns: 4, orient: 'vertical', label: 'Hot-swap' }, { count: 2, columns: 2, orient: 'vertical', label: 'Fixed (cable to the motherboard)' }] },
-    { id: 'jonsbo-n5', brand: 'Jonsbo', name: 'N5', ssd: 4, groups: [{ count: 8, columns: 8, orient: 'vertical', label: 'Hot-swap (top)' }, { count: 4, columns: 1, orient: 'horizontal', label: 'Hot-swap cage (bottom)' }] },
+    { id: 'jonsbo-n5', brand: 'Jonsbo', name: 'N5', ssd: 4, groupsDir: 'row', groups: [{ count: 8, columns: 8, orient: 'vertical', label: 'Upright bays' }, { count: 4, columns: 1, orient: 'horizontal', label: 'Lying cage' }] },
     { id: 'silverstone-ds380', brand: 'SilverStone', name: 'DS380', ssd: 4, groups: [{ count: 8, columns: 1, orient: 'horizontal', label: 'Hot-swap' }] },
     { id: 'silverstone-cs351', brand: 'SilverStone', name: 'CS351', ssd: 0, groups: [{ count: 5, columns: 1, orient: 'horizontal', label: 'Hot-swap' }] },
     { id: 'silverstone-cs381', brand: 'SilverStone', name: 'CS381', ssd: 4, groups: [{ count: 8, columns: 2, orient: 'horizontal', label: 'Hot-swap' }] },
@@ -2572,8 +2572,9 @@
         <div class="bays-wrap"><div class="nas">
           <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'MajaOS')}${nasCase(cfg.model) ? `<span class="nas-model"> · ${esc(nasCase(cfg.model).brand + ' ' + nasCase(cfg.model).name)}</span>` : ''}</span>
             <span class="nas-power" title="${t('On')}"><i class="led"></i></span></div>
-          ${bayGroups().map((g) => `${g.label && bayGroups().length > 1 ? `<div class="bay-group-label">${esc(t(g.label))}</div>` : ''}
-            <div class="bay-grid${g.orient === 'horizontal' ? ' horizontal' : ''}" style="--bay-cols:${g.columns}">${Array.from({ length: g.count }, (_, i) => bayCard(g.first + i)).join('')}</div>`).join('')}
+          <div class="bay-groups${cfg.groupsDir === 'row' && bayGroups().length > 1 ? ' row' : ''}">${bayGroups().map((g) => `<div class="bay-group">
+            ${g.label && bayGroups().length > 1 ? `<div class="bay-group-label">${esc(t(g.label))}</div>` : ''}
+            <div class="bay-grid${g.orient === 'horizontal' ? ' horizontal' : ''}" style="--bay-cols:${g.columns}">${Array.from({ length: g.count }, (_, i) => bayCard(g.first + i)).join('')}</div></div>`).join('')}</div>
           ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
           ${cfg.m2 ? `<div class="m2-row">${Array.from({ length: cfg.m2 }, (_, i) => m2Card(i + 1)).join('')}</div>` : ''}
         </div></div>
@@ -2626,9 +2627,9 @@
       if (e.target.matches('[data-bay-case]')) {
         const c = nasCase(e.target.value);
         cfg.model = c ? c.id : '';
-        if (!c) delete cfg.groups;
+        if (!c) { delete cfg.groups; delete cfg.groupsDir; }
         if (c) {
-          Object.assign(cfg, { count: c.count, columns: c.groups[0].columns, orient: c.groups[0].orient, ssd: c.ssd, groups: c.groups.map((g) => ({ ...g })) });
+          Object.assign(cfg, { count: c.count, columns: c.groups[0].columns, orient: c.groups[0].orient, ssd: c.ssd, groups: c.groups.map((g) => ({ ...g })), groupsDir: c.groupsDir || 'column' });
           Object.keys(cfg.slots).forEach((b) => { const x = b.match(/^([ms]?)(\d+)$/); if (x && ((x[1] === '' && Number(x[2]) > c.count) || (x[1] === 's' && Number(x[2]) > c.ssd))) delete cfg.slots[b]; });
         }
         save(); draw(); return;
