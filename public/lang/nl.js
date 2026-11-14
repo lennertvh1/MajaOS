@@ -3115,6 +3115,10 @@ window.TB_LANG.nl = {
   "The server sees no USB devices besides its own hubs. Is MajaOS running in a virtual machine? Then pass the UPS through to that VM first.": "De server ziet geen USB-toestellen behalve zijn eigen hubs. Draait MajaOS in een virtuele machine? Geef de UPS dan eerst door aan die VM.",
   "Through the NUT server {host}": "Via de NUT-server {host}",
   "Shuts down at": "Sluit af om",
-  "Last event": "Laatste melding",
-  "Click for the UPS settings": "Klik voor de UPS-instellingen",
+  "About this server": "Over deze server",
+  "Restart or shut down…": "Herstarten of afsluiten…",
+  "Battery, charging": "Batterij, laadt op",
+  "Time left": "Resterende tijd",
+  "Load {n}%": "Belasting {n}%",
+  "UPS settings": "UPS-instellingen",
 };

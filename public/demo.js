@@ -3004,7 +3004,8 @@
     return {
       charge: 100, runtime: remote ? 2460 : 1860, online: true, onBattery: false, lowBattery: false, countdown: null,
       charging: !remote, replaceBattery: false, load: 18, power: remote ? 119 : 72, inputVoltage: remote ? 230 : 231,
-      model: remote ? 'EATON 5E 1100i' : 'American Power Conversion Back-UPS ES 700G', mode: demoUps.mode, host: remote ? demoUps.host : '',
+      model: remote ? 'EATON 5E 1100i' : 'American Power Conversion Back-UPS ES 700G', mfr: remote ? 'EATON' : 'American Power Conversion', name: remote ? '5E 1100i' : 'Back-UPS ES 700G',
+      mode: demoUps.mode, host: remote ? demoUps.host : '',
       last: last ? { at: last.at, text: last.text } : { at: Date.now() - 3 * 86400000 - 7200000, text: 'The power is back.' },
     };
   }

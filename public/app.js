@@ -9262,7 +9262,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); diskEventToasts(S.overview.diskEvents); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); statusPopRefresh(); diskEventToasts(S.overview.diskEvents); }
   // The middle of the header: how long the server has been up.
   function renderTopUptime() {
     const o = S.overview, pill = $('#topUptime');
@@ -9291,36 +9291,142 @@ sudo ./install.sh</pre></div>`}` : '') +
     const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
     btn.setAttribute('aria-label', ['UPS', state, ...parts].join(' · '));
   }
-  // Rich tooltips (hintTips, data-rich-tip): built when shown, so they always show the last reading.
-  const tipWhen = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
-  const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v != null && v !== '').map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
-  const RICH_TIPS = {
+  // The panel under the status pills in the header (#statusPop): opens on hover (with a short delay), a click, Enter or a
+  // tap, and stays open while the pointer is on the pill or the panel. Built from S.overview, so it follows every refresh.
+  const SP_ICONS = {
+    uptime: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+    ups: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3M11 9l-2 3.5h4L11 16"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+    info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    power: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>',
+  };
+  const spWhen = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+  const spRows = (rows) => {
+    const list = rows.filter(([, v]) => v != null && v !== '');
+    return list.length ? `<dl class="sp-rows">${list.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : '';
+  };
+  const spStats = (list) => `<div class="sp-big" style="--n:${list.length}">${list.map(([v, label]) => `<div class="sp-stat"><b>${esc(v)}</b><span>${esc(label)}</span></div>`).join('')}</div>`;
+  const spBar = (pct, cls) => `<div class="sp-bar ${cls || ''}" role="presentation"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
+  const SP_PANELS = {
     uptime() {
       const o = S.overview;
       if (!o || o.uptime == null) return '';
-      return `<b class="tip-title">${esc(o.hostname || t('Server'))}</b>${tipRows([
-        [t('Up for'), duration(o.uptime)],
-        [t('Started'), tipWhen(Date.now() - o.uptime * 1000)],
-        [t('System'), o.version],
-        [t('Processor'), o.cpu && o.cpu.brand],
-      ])}`;
+      const mem = o.memory || {}, cpu = o.cpu || {};
+      return `<div class="sp-head"><span class="sp-ico">${SP_ICONS.uptime}</span>
+          <div><b>${esc(o.hostname || t('Server'))}</b><span class="sub">${esc(o.version || '')}</span></div>
+          <span class="pill ok">${esc(t('Running'))}</span></div>
+        ${spStats([[duration(o.uptime), t('Up for')], [new Date(Date.now() - o.uptime * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() }), t('Started')]])}
+        ${spRows([
+          [t('Processor'), cpu.brand ? cpu.brand.replace(/\s+\d+-Core Processor$/i, '') : null],
+          ['CPU', cpu.percent != null ? nf0.format(cpu.percent) + '%' : null],
+          [t('Memory'), mem.total ? t('{used} of {total}', { used: bytes(mem.used), total: bytes(mem.total) }) : null],
+        ])}
+        <hr>
+        <button type="button" class="menu-item" data-sp="about">${SP_ICONS.info}${esc(t('About this server'))}</button>
+        <button type="button" class="menu-item" data-sp="power">${SP_ICONS.power}${esc(t('Restart or shut down…'))}</button>`;
     },
     ups() {
       const u = S.overview && S.overview.ups;
       if (!u) return '';
-      const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
-      return `<b class="tip-title">${esc(u.model || 'UPS')}</b>${tipRows([
-        [t('Status'), state + (u.charging ? ' · ' + t('charging') : '') + (u.replaceBattery ? ' · ' + t('Replace the battery') : '')],
-        [t('Battery'), u.charge != null ? nf0.format(u.charge) + '%' : null],
-        [t('Time left on battery'), u.runtime != null ? upsTime(u.runtime) : null],
-        [t('Load on the UPS'), u.load != null ? nf0.format(u.load) + '%' + (u.power != null ? ' · ' + nf0.format(u.power) + ' W' : '') : null],
-        [t('Input voltage'), u.inputVoltage != null ? nf0.format(u.inputVoltage) + ' V' : null],
-        [t('Connected'), u.mode === 'remote' ? t('Through the NUT server {host}', { host: u.host }) : t('On this server (USB)')],
-        [t('Shuts down at'), u.countdown && u.onBattery ? tipWhen(u.countdown) : null],
-        [t('Last event'), u.last ? tr(u.last.text) + ' · ' + tipWhen(u.last.at) : null],
-      ])}<div class="tip-foot">${esc(t('Click for the UPS settings'))}</div>`;
+      const state = u.lowBattery ? ['bad', t('Battery almost empty')] : u.onBattery ? ['warn', t('On battery')] : ['ok', t('On mains power')];
+      const name = u.name || u.model || 'UPS';
+      const sub = [u.mfr && u.mfr !== name ? u.mfr : null, u.mode === 'remote' ? t('Through the NUT server {host}', { host: u.host }) : 'USB'].filter(Boolean).join(' · ');
+      const charge = u.charge == null ? null : u.charge;
+      return `<div class="sp-head"><span class="sp-ico ${state[0]}">${SP_ICONS.ups}</span>
+          <div><b>${esc(name)}</b><span class="sub">${esc(sub)}</span></div>
+          <span class="pill ${state[0]}">${esc(state[1])}</span></div>
+        ${spStats([
+          [charge != null ? nf0.format(charge) + '%' : '–', u.charging ? t('Battery, charging') : t('Battery')],
+          [u.runtime != null ? upsTime(u.runtime) : '–', t('Time left')],
+          [u.power != null ? nf0.format(u.power) + ' W' : u.load != null ? nf0.format(u.load) + '%' : '–', u.power != null && u.load != null ? t('Load {n}%', { n: nf0.format(u.load) }) : t('Load on the UPS')],
+        ])}
+        ${charge != null ? spBar(charge, state[0]) : ''}
+        ${spRows([
+          [t('Input voltage'), u.inputVoltage != null ? nf0.format(u.inputVoltage) + ' V' : null],
+          [t('Shuts down at'), u.countdown && u.onBattery ? spWhen(u.countdown) : null],
+          [t('Battery'), u.replaceBattery ? t('Replace the battery') : null],
+        ])}
+        ${u.last ? `<div class="sp-event">${SP_ICONS.bolt}<div>${esc(tr(u.last.text))}<small>${esc(ago(u.last.at))} · ${esc(spWhen(u.last.at))}</small></div></div>` : ''}
+        <hr>
+        <button type="button" class="menu-item" data-sp="ups">${SP_ICONS.gear}${esc(t('UPS settings'))}</button>`;
     },
   };
+  const statusPop = { owner: null, openT: 0, closeT: 0, wired: false };
+  function statusPopRefresh() {
+    const pop = $('#statusPop');
+    if (!pop || pop.hidden || !statusPop.owner) return;
+    if (statusPop.owner.hidden) { closeStatusPop(); return; }
+    const focusAt = pop.contains(document.activeElement) && document.activeElement.dataset.sp;
+    pop.innerHTML = SP_PANELS[statusPop.owner.dataset.pop]();
+    if (focusAt) { const b = pop.querySelector(`[data-sp="${focusAt}"]`); if (b) b.focus(); }
+  }
+  function openStatusPop(pill, focus) {
+    const pop = $('#statusPop');
+    const html = SP_PANELS[pill.dataset.pop] && SP_PANELS[pill.dataset.pop]();
+    if (!pop || !html) return;
+    if (statusPop.owner && statusPop.owner !== pill) statusPop.owner.setAttribute('aria-expanded', 'false');
+    statusPop.owner = pill;
+    pop.innerHTML = html;
+    pop.setAttribute('aria-label', pill.getAttribute('aria-label') || '');
+    pop.hidden = false;
+    pill.setAttribute('aria-expanded', 'true');
+    // Centred under the pill, inside the window.
+    const b = pill.getBoundingClientRect(), r = pop.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(b.left + b.width / 2 - r.width / 2, innerWidth - r.width - 8)) + 'px';
+    pop.style.top = (b.bottom + 8) + 'px';
+    if (focus) { const first = pop.querySelector('.menu-item'); if (first) first.focus(); }
+  }
+  function closeStatusPop(focusBack) {
+    const pop = $('#statusPop');
+    clearTimeout(statusPop.openT); clearTimeout(statusPop.closeT);
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    if (statusPop.owner) { statusPop.owner.setAttribute('aria-expanded', 'false'); if (focusBack) statusPop.owner.focus(); }
+    statusPop.owner = null;
+  }
+  function wireStatusPop() {
+    if (statusPop.wired) return;
+    statusPop.wired = true;
+    const pop = $('#statusPop');
+    const later = (fn, ms) => { clearTimeout(statusPop.openT); clearTimeout(statusPop.closeT); return setTimeout(fn, ms); };
+    $$('[data-pop]').forEach((pill) => {
+      pill.addEventListener('pointerenter', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        statusPop.openT = later(() => openStatusPop(pill), statusPop.owner ? 0 : 140);
+      });
+      pill.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') statusPop.closeT = later(() => closeStatusPop(), 260); });
+      pill.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (statusPop.owner === pill && !pop.hidden) closeStatusPop(); else openStatusPop(pill, e.detail === 0);
+      });
+      pill.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && pill.tagName !== 'BUTTON') { e.preventDefault(); pill.click(); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); openStatusPop(pill, true); }
+      });
+    });
+    pop.addEventListener('pointerenter', () => { clearTimeout(statusPop.closeT); });
+    pop.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') statusPop.closeT = later(() => closeStatusPop(), 260); });
+    pop.addEventListener('keydown', (e) => {
+      const items = $$('.menu-item', pop), i = items.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); closeStatusPop(true); }
+      else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    });
+    pop.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-sp]');
+      if (!b) return;
+      const act = b.dataset.sp;
+      closeStatusPop();
+      if (act === 'ups') goSettings('settings/ups');
+      else if (act === 'about') goSettings('settings/about');
+      else if (act === 'power') $('#powerBtn').click();
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!pop.hidden && !pop.contains(e.target) && !(statusPop.owner && statusPop.owner.contains(e.target))) closeStatusPop();
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden && !pop.contains(document.activeElement)) closeStatusPop(); });
+    window.addEventListener('resize', () => closeStatusPop());
+  }
   // A disk plugged in or taken out while the server runs (lib/storage.js watchDisks): a message, once per event. What
   // happened before this page was opened isn't shown again.
   const diskSeen = { boot: null, seq: 0 };
@@ -9518,7 +9624,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     $('#powerBtn').hidden = false;
     $('#feedbackBtn').hidden = false;
-    $('#upsBtn').onclick = () => goSettings('settings/ups');
+    wireStatusPop(); // the panels under the uptime and UPS pills
     $('#termBtn').hidden = !S.config.terminal;
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
@@ -10542,12 +10648,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
     let owner = null;
     const show = (el) => {
-      const rich = el.dataset.richTip && RICH_TIPS[el.dataset.richTip];
-      const html = rich ? rich() : '';
-      if (rich && !html) return;
       owner = el;
-      tip.classList.toggle('rich', !!rich);
-      if (rich) tip.innerHTML = html; else tip.textContent = el.dataset.tip;
+      tip.textContent = el.dataset.tip;
       (el.closest('dialog') || document.body).appendChild(tip);
       tip.hidden = false;
       const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, m = 8;
@@ -10559,14 +10661,14 @@ sudo ./install.sh</pre></div>`}` : '') +
       tip.style.left = (2 * x - got.left) + 'px'; tip.style.top = (2 * y - got.top) + 'px';
     };
     const hide = () => { owner = null; tip.hidden = true; };
-    const TIPPED = '.hint, .dir-link, [data-rich-tip]';
+    const TIPPED = '.hint, .dir-link';
     document.addEventListener('pointerover', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse') show(el); });
     document.addEventListener('pointerout', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse' && owner === el) hide(); });
     document.addEventListener('focusin', (e) => { if (e.target.matches && e.target.matches(TIPPED)) show(e.target); });
     document.addEventListener('focusout', (e) => { if (owner === e.target) hide(); });
     // A tap (touch) opens and closes it; it never ticks a checkbox or submits a form it sits in.
     document.addEventListener('click', (e) => {
-      const el = e.target.closest && e.target.closest('.hint, #topUptime');
+      const el = e.target.closest && e.target.closest('.hint');
       if (!el) { if (!tip.hidden) hide(); return; }
       e.preventDefault(); e.stopPropagation();
       if (owner === el && !tip.hidden) hide(); else show(el);
