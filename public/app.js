@@ -9630,6 +9630,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   const settingsHash = () => location.hash.startsWith('#settings');
   // The page under the store or Files (they open on top): what was there before, not the dashboard.
   let underHash = popKindOf(location.hash) || location.hash.startsWith('#settings') ? '' : location.hash;
+  let lastHash = ''; // the address route() handled before: back from the store or Files to the VM page, it isn't rebuilt
   function currentView() {
     let h = (settingsHash() ? pageHash : location.hash) || '';
     if (popKindOf(h)) h = underHash;
@@ -9702,7 +9703,9 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (setWin.open) closeSettings();
     const kind = popKind;
     if (kind !== popKindNow && win.open) win.close();
-    if (view === 'vms') { closePop(); if (pageChanged) { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); } return; }
+    // The VM page, unless the store or Files opens on top of it (then it stays below, see underHash).
+    if (view === 'vms' && !kind) { closePop(); if (pageChanged && !popKindOf(lastHash)) { window.scrollTo(0, 0); renderVmPage(); loadVms().catch(() => {}); } lastHash = location.hash; return; }
+    lastHash = location.hash;
     if (kind === 'store') { showPop('store'); popKindNow = kind; loadStore(); return; }
     if (kind === 'files') { showPop('files'); popKindNow = kind; if (pageChanged) renderFiles(); return; }
     closePop();
