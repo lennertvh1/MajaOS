@@ -271,6 +271,29 @@
   // Each toast has a × to close it. Errors and long messages stay until they are closed
   // (no time to read them otherwise); short confirmations go away by themselves.
   // opts.action {label, run}: a button in the message (the message then stays until it is used or closed).
+  // Copy text to the clipboard: the clipboard API first (https), otherwise a selected text box. That box goes inside
+  // the modal dialog that is open: with showModal() everything outside it is inert, so a box in <body> can't be
+  // selected, and execCommand('copy') then reports success while the clipboard stays empty.
+  async function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(text); return true; } catch { /* blocked: try the text box */ }
+    }
+    let host = null;
+    try { host = document.querySelector('dialog:modal'); } catch { /* older browser without :modal */ }
+    host = host || [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+    const back = document.activeElement;
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.top = '0';
+    host.appendChild(ta);
+    ta.focus(); ta.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
+    ta.remove();
+    if (back && back.focus) back.focus();
+    return copied;
+  }
+
   function toast(msg, bad, opts = {}) {
     const box = $('#toasts'), text = String(msg);
     // The same message once at a time (e.g. several requests failing while the server restarts).
@@ -5623,22 +5646,8 @@
       if (e.target.closest('[data-mcp-cancel]')) { box.checked = false; box.setAttribute('aria-checked', 'false'); pwForm.hidden = true; err.textContent = ''; return; }
       const btn = e.target.closest('[data-mcp-copy]');
       if (!btn) return;
-      const text = code.textContent;
-      const ok = () => toast(t('Copied.'));
-      const fail = () => toast(t('Copying did not work in this browser.'), true);
-      // execCommand runs in this click, so it still works when the clipboard API is blocked.
-      let copied = false;
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed'; ta.style.left = '-9999px';
-        document.body.appendChild(ta); ta.select();
-        copied = document.execCommand('copy');
-        ta.remove();
-      } catch { copied = false; }
-      if (copied) { ok(); return; }
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(ok, fail);
-      else fail();
+      if (await copyText(code.textContent)) toast(t('Copied.'));
+      else toast(t('Copying did not work in this browser.'), true);
     };
   }
 
@@ -10055,9 +10064,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     const cp = e.target.closest('[data-copy]');
     if (cp) {
       const text = cp.dataset.copy;
-      const ok = () => toast(t('Copied: {text}', { text }));
-      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, () => toast(t('Copying did not work in this browser.'), true));
-      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); const r = document.execCommand('copy'); ta.remove(); if (r) ok(); else toast(t('Copying did not work in this browser.'), true); }
+      copyText(text).then((copied) => (copied ? toast(t('Copied: {text}', { text })) : toast(t('Copying did not work in this browser.'), true)));
       return;
     }
     const con = e.target.closest('[data-console]');
