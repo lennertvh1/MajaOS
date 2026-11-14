@@ -3124,7 +3124,7 @@
       body.innerHTML = `
         <div class="stat-strip sysd-summary">
           <div class="stat"><b>${c.percent == null ? '–' : nf0.format(c.percent) + '%'}</b><span>CPU</span></div>
-          <div class="stat"><b>${c.temp == null ? '–' : nf.format(c.temp) + ' °C'}</b><span>${t('CPU temperature')}</span></div>
+          <div class="stat"><b>${c.temp == null ? '–' : nf.format(c.temp) + ' °C'}</b><span>${t('CPU temperature')}${c.temp == null && c.tempWhy === 'relative' ? ' ' + hint(t('This processor (AMD from before Ryzen) only reports a relative value, not a real temperature. Load the motherboard\'s sensor driver in Settings → Cooling: then its CPU sensor is used.')) : ''}</span></div>
           <div class="stat"><b>${d.load.map((x) => nf.format(x)).join(' · ')}</b><span>${t('Load (1, 5, 15 min)')} ${hint(t('How many tasks were waiting for the processor on average. Below the number of threads ({n}) the server keeps up easily.', { n: c.threads }))}</span></div>
           <div class="stat"><b>${d.uptime != null ? esc(duration(d.uptime)) : '–'}</b><span>${t('Up for')}</span></div>
         </div>

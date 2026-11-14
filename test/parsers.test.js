@@ -283,20 +283,31 @@ test('lsblk: the disks Debian starts from (/, /boot/efi, swap, also through LVM)
 
 test('the CPU temperature: chosen by label, never an input that reads nonsense', () => {
   const { pickCpuTemp, cpuTemp } = require('../lib/system');
-  // Ryzen 5700X: Tctl is the processor; a stray input at 7 °C must not win.
-  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: null, value: 7 }, { chip: 'k10temp', label: 'Tctl', value: 44.5 }, { chip: 'k10temp', label: 'Tccd1', value: 41.3 }]), 44.5);
+  const temp = (sensors, o) => pickCpuTemp(sensors, o).temp;
+  // Ryzen 5700X (family 25): Tctl is the processor; a stray input at 7 °C must not win.
+  assert.equal(temp([{ chip: 'k10temp', label: null, value: 7 }, { chip: 'k10temp', label: 'Tctl', value: 44.5 }, { chip: 'k10temp', label: 'Tccd1', value: 41.3 }], { family: 25 }), 44.5);
   // Intel: the package.
-  assert.equal(pickCpuTemp([{ chip: 'coretemp', label: 'Core 0', value: 40 }, { chip: 'coretemp', label: 'Package id 0', value: 46 }]), 46);
+  assert.equal(temp([{ chip: 'coretemp', label: 'Core 0', value: 40 }, { chip: 'coretemp', label: 'Package id 0', value: 46 }]), 46);
   // No Tctl: the warmest core.
-  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: 'Tccd1', value: 50 }, { chip: 'k10temp', label: 'Tccd2', value: 55 }]), 55);
-  // Only nonsense, or a board chip: nothing.
-  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: 'Tctl', value: 7 }, { chip: 'nct6798', label: 'CPUTIN', value: 40 }]), null);
-  // From a hwmon folder.
+  assert.equal(temp([{ chip: 'k10temp', label: 'Tccd1', value: 50 }, { chip: 'k10temp', label: 'Tccd2', value: 55 }]), 55);
+  // AMD before Zen (family 21 = 15h, like dev-1): k10temp's unlabelled value is relative, never shown as °C ...
+  const fx = [{ chip: 'k10temp', label: null, value: 31.25 }];
+  assert.deepEqual(pickCpuTemp(fx, { family: 21 }), { temp: null, why: 'relative' });
+  // ... but the motherboard's CPU sensor is, once its driver is loaded.
+  assert.equal(temp([...fx, { chip: 'it8721', label: 'CPU Temperature', value: 38 }, { chip: 'it8721', label: 'SYSTIN', value: 30 }], { family: 21 }), 38);
+  assert.equal(temp([...fx, { chip: 'nct6775', label: 'CPUTIN', value: 41 }], { family: 21 }), 41);
+  // Only nonsense: nothing.
+  assert.equal(temp([{ chip: 'k10temp', label: 'Tctl', value: 7 }]), null);
+  // From a hwmon folder (dev-1: nvme, drivetemp, fam15h_power, k10temp at 11.25).
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hwmon-'));
   const put = (h, f, v) => { fs.mkdirSync(path.join(dir, h), { recursive: true }); fs.writeFileSync(path.join(dir, h, f), v); };
-  put('hwmon0', 'name', 'nvme\n'); put('hwmon0', 'temp1_input', '38850\n');
-  put('hwmon1', 'name', 'k10temp\n'); put('hwmon1', 'temp1_input', '7000\n');
-  put('hwmon1', 'temp2_input', '45250\n'); put('hwmon1', 'temp2_label', 'Tctl\n');
-  try { assert.equal(cpuTemp(dir), 45.3); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  put('hwmon0', 'name', 'nvme\n'); put('hwmon0', 'temp1_input', '33850\n');
+  put('hwmon4', 'name', 'fam15h_power\n');
+  put('hwmon5', 'name', 'k10temp\n'); put('hwmon5', 'temp1_input', '11250\n');
+  try {
+    assert.deepEqual(cpuTemp(dir, 21), { temp: null, why: 'relative' });
+    put('hwmon5', 'temp2_input', '45250\n'); put('hwmon5', 'temp2_label', 'Tctl\n');
+    assert.equal(cpuTemp(dir, 25).temp, 45.3);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -3198,4 +3198,5 @@ window.TB_LANG.nl = {
   "No shared folders yet": "Nog geen gedeelde mappen",
   "No backups yet": "Nog geen back-ups",
   "Back to Settings": "Terug naar Instellingen",
+  "This processor (AMD from before Ryzen) only reports a relative value, not a real temperature. Load the motherboard's sensor driver in Settings → Cooling: then its CPU sensor is used.": "Deze processor (AMD van vóór Ryzen) meldt alleen een relatieve waarde, geen echte temperatuur. Laad de sensordriver van het moederbord bij Instellingen → Koeling: dan wordt de CPU-sensor daarvan gebruikt.",
 };
