@@ -176,3 +176,13 @@ test('the instructions tell the model to ask instead of guess', async () => {
   assert.match(init.result.instructions, /Never guess missing information/);
   assert.match(init.result.instructions, /Never invent a password/);
 });
+
+test('behind a tunnel the connector addresses use https from X-Forwarded-Proto', () => {
+  const { originOf } = require('../lib/mcphttp');
+  const req = (headers, socket = {}) => ({ headers: { host: 'maja.example.be', ...headers }, socket });
+  assert.equal(originOf(req({})), 'http://maja.example.be');
+  assert.equal(originOf(req({ 'x-forwarded-proto': 'https' })), 'https://maja.example.be');
+  assert.equal(originOf(req({ 'x-forwarded-proto': 'https, http' })), 'https://maja.example.be');
+  assert.equal(originOf(req({ 'x-forwarded-proto': 'http' })), 'http://maja.example.be');
+  assert.equal(originOf(req({}, { encrypted: true })), 'https://maja.example.be');
+});
