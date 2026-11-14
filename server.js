@@ -523,7 +523,7 @@ async function handleApi(req, res, url) {
   }
   // What Cursor needs to talk to this server. The token is a normal session (30 days); the password never leaves this check.
   if (p === '/api/mcp' && method === 'GET') {
-    return sendJson(res, 200, { user: auth.userName() || '', passwordEnabled: passwordEnabled(), terminal: !!settings.getSettings().terminal, enabled: settings.getSettings().mcp !== false });
+    return sendJson(res, 200, { user: auth.userName() || '', passwordEnabled: passwordEnabled(), terminal: !!settings.getSettings().terminal, enabled: settings.getSettings().mcp !== false, publicUrl: tunnel.publicUrl() });
   }
   if (p === '/api/mcp/token' && method === 'POST') {
     const body = await readBody(req);

@@ -5543,7 +5543,10 @@
     let info;
     try { info = await api.get('/api/mcp'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     if (settingsTab() !== 'mcp') return;
-    const mcpUrl = location.origin + '/mcp';
+    // The public address from Settings → Network → Remote access, so the instructions work from the internet.
+    const publicUrl = info.publicUrl || '';
+    const mcpUrl = (publicUrl || location.origin) + '/mcp';
+    const netLink = `<a href="#settings/network">${t('Network')}</a>`;
     const security = `<a href="#settings/security">${t('Security')}</a>`;
     const on = info.enabled !== false;
     const needsPw = !S.config.demo && S.config.passwordEnabled;
@@ -5567,7 +5570,10 @@
         <select class="field" id="mcpClient" aria-label="${t('Program')}">${MCP_CLIENTS.map((c) => `<option value="${esc(c.id)}">${esc(c.nameKey ? t(c.nameKey) : c.name)}</option>`).join('')}</select>
       </label>
       <ol class="bk-steps" id="mcpSteps"></ol>
-      <p class="notice">${t('Claude connects from the internet, so that address has to be reachable there. On your own network the other programs can use it directly.')}</p>
+      ${publicUrl
+    ? `<p class="notice"><span>${publicUrl === location.origin ? t('This is the public address from Remote access in {link}.', { link: netLink })
+      : t('This is the public address from Remote access in {link}. In your home network {url} works too.', { link: netLink, url: `<code>${esc(location.origin + '/mcp')}</code>` })}</span></p>`
+    : `<p class="notice"><span>${t('Claude connects from the internet, so that address has to be reachable there. On your own network the other programs can use it directly.')} ${t('Behind a tunnel or reverse proxy, set its address under Remote access in {link}.', { link: netLink })}</span></p>`}
       ${info.terminal ? '' : `<p class="notice warn">${t('The terminal is off, so shell commands are refused. Turn it on in {link}.', { link: security })}</p>`}
       <div class="code-view" id="mcpCodeView">
         <div class="code-view-bar"><span id="mcpFile">${t('Address')}</span><button class="btn sm" type="button" data-mcp-copy>${t('Copy')}</button></div>
@@ -5816,6 +5822,61 @@
     });
   }
 
+  // Remote access: a temporary Cloudflare address, a Cloudflare tunnel token, or an own tunnel or reverse proxy
+  // (only the public address). Share links and the MCP instructions use that address.
+  async function remoteSection(box) {
+    let r;
+    try { r = await api.get('/api/remote'); } catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; return; }
+    const port = Number(S.config.port) || 80;
+    const local = `http://127.0.0.1:${port}`;
+    const code = (x) => `<code>${esc(x)}</code>`;
+    const draw = (mode) => {
+      const linked = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : '';
+      const state = r.mode === 'off' ? ''
+        : r.mode === 'quick' && !r.url ? `<p class="notice">${t('Waiting for the address…')}</p>`
+        : `<p class="notice${r.mode !== 'proxy' && !r.running ? ' warn' : ''}"><span>${r.mode !== 'proxy' && !r.running ? t('The tunnel is not running. Check the token and the address, then save again.') : t('Public address: {url}', { url: linked })}</span></p>`;
+      box.innerHTML = `
+        <h2 class="pane-title">${t('Remote access')}</h2>
+        <p class="muted small" style="margin-bottom:12px">${t('Open MajaOS from the internet without forwarding a port on your router. Share links use this address.')}</p>
+        ${state}
+        <form class="form" id="remoteForm" novalidate>
+          <label class="fld" style="max-width:420px"><span>${t('How')}</span><select class="field" name="mode">
+            <option value="off"${mode === 'off' ? ' selected' : ''}>${t('Off')}</option>
+            <option value="quick"${mode === 'quick' ? ' selected' : ''}${r.installed ? '' : ' disabled'}>${t('Temporary address (Cloudflare, no account)')}</option>
+            <option value="token"${mode === 'token' ? ' selected' : ''}${r.installed ? '' : ' disabled'}>${t('Cloudflare tunnel with a token')}</option>
+            <option value="proxy"${mode === 'proxy' ? ' selected' : ''}>${t('My own tunnel or reverse proxy')}</option>
+          </select></label>
+          ${r.installed ? '' : `<p class="muted small">${t('Remote access is not installed yet. Update MajaOS, or run the installer again.')}</p>`}
+          ${mode === 'quick' ? `<p class="muted small">${t('A temporary address is free and needs no account. It changes when you turn it off or when the server restarts, so a link you already sent stops working.')}</p>` : ''}
+          ${mode === 'token' ? `
+            <p class="muted small">${t('Create a tunnel at Cloudflare and paste the token here. Then type the address you gave that tunnel, for example https://home.example.com.')}</p>
+            <p class="muted small">${t('At Cloudflare, set the service of the route to {url} (HTTP, not HTTPS).', { url: code(local) })}</p>
+            <label class="fld"><span>${t('Tunnel token')}</span><input class="field" type="password" name="token" autocomplete="off" spellcheck="false"
+              placeholder="${r.hasToken ? t('Saved. Paste a new one to replace it.') : ''}"></label>` : ''}
+          ${mode === 'proxy' ? `
+            <p class="muted small">${t('MajaOS starts nothing itself. Type the address people use from the internet; share links and the MCP instructions use it.')}</p>
+            <p class="muted small">${t('Point the proxy at {local} when it runs on this server. From another machine use {remote} and turn off its certificate check, because MajaOS has its own certificate.', { local: code(local), remote: code('https://' + location.hostname) })}</p>` : ''}
+          ${mode === 'token' || mode === 'proxy' ? `
+            <label class="fld" style="max-width:420px"><span>${t('Public address')}</span><input class="field" name="address" value="${esc(r.address || '')}" placeholder="https://home.example.com" autocomplete="off" spellcheck="false"></label>` : ''}
+          <p class="form-error" role="alert"></p>
+          <div class="btn-row"><button class="btn primary" type="submit">${mode === 'off' ? t('Save') : t('Save and turn on')}</button></div>
+        </form>`;
+      const form = $('#remoteForm', box);
+      form.elements.mode.addEventListener('change', () => draw(form.elements.mode.value));
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('button[type="submit"]', form); btn.disabled = true;
+        const f = form.elements;
+        try {
+          r = await api.post('/api/remote', { mode: f.mode.value, token: f.token ? f.token.value : undefined, address: f.address ? f.address.value : undefined });
+          toast(t('Saved.'));
+          draw(r.mode || 'off');
+        } catch (ex) { $('.form-error', form).textContent = ex.message; btn.disabled = false; }
+      });
+    };
+    draw(r.mode || 'off');
+  }
+
   async function networkPane(el) {
     el.onchange = null;
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
@@ -5865,7 +5926,9 @@
         <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Apply')}</button></div>
-      </form>`}`;
+      </form>`}
+      <div id="remoteBox"></div>`;
+    remoteSection($('#remoteBox', el));
 
     const hostForm = $('#hostForm', el);
     hostForm.addEventListener('submit', async (e) => {

@@ -34,3 +34,24 @@ test('the tunnel unit never contains the token', () => {
   assert.match(quick, /--url http:\/\/127\.0\.0\.1:80/);
   assert.doesNotMatch(quick, /TOKEN/);
 });
+
+test('an own tunnel or reverse proxy only stores the public address', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const before = process.env.DATA_DIR;
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'majaos-remote-'));
+  try {
+    const st = await tunnel.apply({ mode: 'proxy', address: 'majaos.example.com/' });
+    assert.equal(st.mode, 'proxy');
+    assert.equal(st.url, 'https://majaos.example.com');
+    assert.equal(tunnel.publicUrl(), 'https://majaos.example.com');
+    await tunnel.retarget(); // a new web port must not start cloudflared for a proxy
+    assert.equal(tunnel.publicUrl(), 'https://majaos.example.com');
+    await assert.rejects(tunnel.apply({ mode: 'proxy', address: 'https://majaos.example.com/files' }), /https:\/\/home.example.com/);
+    assert.equal((await tunnel.apply({ mode: 'off' })).url, '');
+  } finally {
+    fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
+    if (before === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = before;
+  }
+});

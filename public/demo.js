@@ -2806,7 +2806,7 @@
   function demoRemoteSave(st) { try { localStorage.setItem('tb-remote', JSON.stringify(st)); } catch (e) { /* private window */ } }
   function demoRemoteView() {
     const st = { mode: 'off', url: '', address: '', hasToken: false, ...demoRemote() };
-    return { installed: true, running: st.mode !== 'off', mode: st.mode, url: st.mode === 'off' ? '' : (st.url || ''), address: st.address || '', hasToken: !!st.hasToken };
+    return { installed: true, running: st.mode === 'quick' || st.mode === 'token', mode: st.mode, url: st.mode === 'off' ? '' : (st.url || ''), address: st.address || '', hasToken: !!st.hasToken };
   }
   function demoLinkUrl(row) {
     const remote = demoRemoteView();
@@ -2842,7 +2842,19 @@
       demoRemoteSave({ mode: 'token', url: origin, address: origin, hasToken: true });
       return demoRemoteView();
     }
-    throw err('Choose a temporary address or a fixed address.');
+    if (body.mode === 'proxy') {
+      let origin = String(body.address || '').trim();
+      try {
+        if (!origin) throw new Error();
+        if (!/^https?:\/\//i.test(origin)) origin = 'https://' + origin;
+        const u = new URL(origin);
+        if (u.pathname !== '/' || u.search || u.hash || u.username) throw new Error();
+        origin = u.origin;
+      } catch (e) { throw err('Type an address like https://home.example.com.'); }
+      demoRemoteSave({ ...cur, mode: 'proxy', url: origin, address: origin });
+      return demoRemoteView();
+    }
+    throw err('Choose a temporary address, a fixed address or your own proxy.');
   }
 
   async function get(path) {
@@ -2877,7 +2889,7 @@
         names: ['localhost', 'demo', 'demo.local', '127.0.0.1', '192.168.1.10'], expires: new Date(Date.now() + 380 * 864e5).toISOString(),
         caFingerprint: '6D:CE:C0:A0:7B:0E:D7:79:57:5F:1E:AE:D9:21:14:10:2A:74:8D:75:4E:1B:12:90:65:49:67:5E:A2:7F:EE:AB', caExpires: new Date(Date.now() + 3650 * 864e5).toISOString() };
     }
-    if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false };
+    if (path === '/api/mcp') return { user: acct.user, passwordEnabled: true, terminal: !!demoSecurity.terminal, enabled: demoSecurity.mcp !== false, publicUrl: demoRemoteView().url };
     if (path === '/api/datetime') return dtGet();
     if (path === '/api/update') return updGet();
     if (path === '/api/onboarding') return onbGet();
