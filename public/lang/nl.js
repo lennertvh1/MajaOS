@@ -3186,4 +3186,5 @@ window.TB_LANG.nl = {
   "Used by {list} (an old RAID array or LVM). MajaOS releases it and erases the disk.": "Wordt gebruikt door {list} (een oude RAID-array of LVM). MajaOS maakt de schijf los en wist ze.",
   "{disk} is still in use: {list}. Unmount it first.": "{disk} is nog in gebruik: {list}. Ontkoppel eerst.",
   "{disk} is held by {holder} and could not be released: {error}": "{disk} wordt vastgehouden door {holder} en kon niet losgemaakt worden: {error}",
+  "libvirt could not open the VM's disks to merge this snapshot while the VM is off. Start the VM and delete the snapshot then: a running VM merges it itself.": "libvirt kon de schijven van de VM niet openen om deze snapshot samen te voegen terwijl de VM uit staat. Start de VM en verwijder de snapshot dan: een draaiende VM voegt hem zelf samen.",
 };
