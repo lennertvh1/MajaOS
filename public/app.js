@@ -9636,6 +9636,11 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (h === '#vms') return 'vms';
     return 'home';
   }
+  // The menu bar: the settings, the store or Files on top, the VM page, or the dashboard.
+  function markSysBar() {
+    const on = settingsHash() ? 'settings' : popKindOf(location.hash) || (currentView() === 'vms' ? 'vms' : 'home');
+    $$('#sysBar [data-sys]').forEach((b) => { if (b.dataset.sys === on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
   function popKindOf(h) {
     h = h || '';
     if (h === '#store') return 'store';
@@ -9689,9 +9694,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    // The menu bar: the settings, the store or files on top, the VM page, or the dashboard.
-    const sysOn = inSettings ? 'settings' : popKind || (view === 'vms' ? 'vms' : 'home');
-    $$('#sysBar [data-sys]').forEach((b) => { if (b.dataset.sys === sysOn) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    markSysBar();
     if (inSettings) { if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); } if (!setWin.open) setWin.showModal(); showSettings(); return; }
     // Always load the first time (also when the page opens right on #vms).
     const pageChanged = location.hash !== pageHash || !pageLoaded;
@@ -9721,6 +9724,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     clearInterval(netTimer); netTimer = null;
     if (settingsHash()) history.replaceState(null, '', pageHash || location.pathname + location.search);
     $$('.nav-btn[data-nav="settings"]').forEach((b) => b.removeAttribute('aria-current'));
+    markSysBar(); // replaceState gives no hashchange: light up the page below again
     if (setWin.open) setWin.close();
   }
   $('#setMinimize').addEventListener('click', () => {

@@ -2126,9 +2126,10 @@ button.snap-node:hover { background: var(--glass-hover); }
 .tag.boot { color: var(--accent); border-color: var(--accent); }
 
 /* The system pages under the header, like Unraid's tabs */
-.sysbar { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: -4px 0 6px;
-  padding: 0 clamp(16px, 3vw, 36px); padding-left: max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px));
-  padding-right: max(clamp(16px, 3vw, 36px), env(safe-area-inset-right, 0px)); }
+.sysbar { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 5px;
+  margin: -4px max(clamp(16px, 3vw, 36px), env(safe-area-inset-right, 0px)) 10px max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px));
+  background: var(--glass); border: 1px solid var(--glass-line); border-radius: 14px;
+  backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2); }
 .sysbar[hidden] { display: none; }
 .sysbar::-webkit-scrollbar { display: none; }
 .sys-btn { display: inline-flex; align-items: center; gap: 7px; flex: none; padding: 7px 12px; border: 1px solid transparent; border-radius: 10px;
@@ -2138,6 +2139,6 @@ button.snap-node:hover { background: var(--glass-hover); }
 .sys-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
 .sys-btn[aria-current="page"] { background: var(--glass-strong); border-color: var(--glass-line); color: var(--text); }
 .sys-btn[aria-current="page"] svg { color: var(--accent); }
-@media (max-width: 880px) { .sysbar { margin: 0 0 8px; } }
+@media (max-width: 880px) { .sysbar { margin-top: 0; } }
 /* The update dot on Settings in the menu bar */
 .sys-btn.has-dot .nav-dot { top: 4px; right: 4px; }
