@@ -6411,7 +6411,10 @@
             <div class="share-access">${Object.entries(sh.users).map(([u, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${esc(u)} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${Object.entries(sh.groups || {}).map(([g, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${t('group {name}', { name: esc(g) })} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${sh.guest ? `<span class="pill warn">${t('guests · read')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
-            <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div></div>
+            <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div>
+            ${sh.writable === false ? `<div class="share-warn"><p class="notice warn"><span>${t('Nobody can add or change files here: the folder belongs to {owner}, and the shared folders write as the app user ({app}).', { owner: esc(sh.owner || '?'), app: esc(d.appUser || 'app') })}
+              ${sh.fixRefused ? esc(tr(sh.fixRefused)) : ''}</span></p>
+              ${sh.fixRefused ? '' : `<button class="btn sm primary" type="button" data-share-fix="${esc(sh.name)}">${t('Make writable')}</button>`}</div>` : ''}</div>
           <div class="row-side btn-row"><button class="btn sm primary" type="button" data-share-files="${esc(sh.name)}">${t('Files')}</button>
             <button class="btn sm" type="button" data-share-edit="${esc(sh.name)}">${t('Edit')}</button>
             <button class="btn sm danger" type="button" data-share-del="${esc(sh.name)}">${t('Remove')}</button></div></li>`).join('')
@@ -6426,6 +6429,14 @@
       if (b.dataset.shareNew != null) return sharesPane(el, null);
       if (b.dataset.shareFiles) return filesOpen(b.dataset.shareFiles, '');
       if (b.dataset.shareEdit) return sharesPane(el, b.dataset.shareEdit);
+      if (b.dataset.shareFix) {
+        const name = b.dataset.shareFix, sh = d.shares.find((x) => x.name === name);
+        if (!(await ask(t('Make {name} writable? Every file and folder in {path} gets the app user ({app}) as owner, so the users of this shared folder can add, change and remove files.', { name, path: sh ? sh.path : '', app: d.appUser || 'app' }), t('Make writable')))) return;
+        b.disabled = true; b.textContent = t('Busy…');
+        try { await api.post('/api/shares/' + encodeURIComponent(name) + '/fix-owner', {}); toast(t('{name} is writable now.', { name })); sharesPane(el); }
+        catch (ex) { toast(ex.message, true); b.disabled = false; b.textContent = t('Make writable'); }
+        return;
+      }
       if (b.dataset.shareDel) {
         const name = b.dataset.shareDel;
         if (!(await ask(t('Stop sharing {name}? The files stay where they are; only the sharing stops.', { name }), t('Remove')))) return;

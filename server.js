@@ -674,6 +674,7 @@ async function handleApi(req, res, url) {
     if (method === 'DELETE') return sendJson(res, 200, files.remove(name, rel, { recursive: url.searchParams.get('recursive') === '1' }));
     if (method === 'POST') return sendJson(res, 200, files.act(name, await readBody(req)));
   }
+  if ((m = p.match(/^\/api\/shares\/([^/]+)\/fix-owner$/)) && method === 'POST') return sendJson(res, 200, await shares.fixOwner(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req), decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await shares.deleteShare(decodeURIComponent(m[1])));
   // A new user: the Samba user, its groups and permissions, and (dashboard) whether it may sign in here, all at once.

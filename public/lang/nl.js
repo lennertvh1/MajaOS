@@ -3121,4 +3121,12 @@ window.TB_LANG.nl = {
   "Time left": "Resterende tijd",
   "Load {n}%": "Belasting {n}%",
   "UPS settings": "UPS-instellingen",
+  "Nobody can add or change files here: the folder belongs to {owner}, and the shared folders write as the app user ({app}).": "Niemand kan hier bestanden toevoegen of wijzigen: de map is van {owner}, en de gedeelde mappen schrijven als de app-gebruiker ({app}).",
+  "Make writable": "Schrijfbaar maken",
+  "Make {name} writable? Every file and folder in {path} gets the app user ({app}) as owner, so the users of this shared folder can add, change and remove files.": "{name} schrijfbaar maken? Elk bestand en elke map in {path} krijgt de app-gebruiker ({app}) als eigenaar, zodat de gebruikers van deze gedeelde map bestanden kunnen toevoegen, wijzigen en verwijderen.",
+  "{name} is writable now.": "{name} is nu schrijfbaar.",
+  "Busy…": "Bezig…",
+  "This is a whole pool. Share a folder on it instead.": "Dit is een hele pool. Deel er liever een map op.",
+  "This folder holds the app data; changing its owner would break apps.": "In deze map staan de appgegevens; de eigenaar wijzigen zou apps breken.",
+  "This folder holds the disks of the VMs; libvirt manages their owner.": "In deze map staan de schijven van de VM's; libvirt beheert hun eigenaar.",
 };

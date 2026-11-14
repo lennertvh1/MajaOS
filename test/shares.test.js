@@ -74,3 +74,19 @@ test('checking a group', () => {
   assert.deepEqual(share.groups, { Family: 'ro' });
   assert.throws(() => sh.validateShare({ name: 'd2', path: '/tank/d2', users: {}, groups: { Unknown: 'ro' } }, { groups: ['Family'], roots: ['/tank'] }), /doesn't exist/);
 });
+
+test('can the app user write in a shared folder, and which folders may change owner', () => {
+  const sh = require('../lib/shares');
+  // Samba writes as the app user: owner, group or others need the write bit.
+  assert.equal(sh.writableBy({ uid: 0, gid: 0, mode: 0o40755 }, 1000, 1000), false); // an isos dataset of root
+  assert.equal(sh.writableBy({ uid: 1000, gid: 1000, mode: 0o40755 }, 1000, 1000), true);
+  assert.equal(sh.writableBy({ uid: 0, gid: 1000, mode: 0o40775 }, 1000, 1000), true);
+  assert.equal(sh.writableBy({ uid: 0, gid: 0, mode: 0o40777 }, 1000, 1000), true);
+  assert.equal(sh.writableBy(null), null);
+  const ctx = { roots: [{ name: 'tank', mountpoint: '/tank' }, { name: 'tank/isos', mountpoint: '/tank/isos' }], appdata: '/tank/appdata', vms: '/tank/vms' };
+  assert.equal(sh.fixRefusal('/tank/isos', ctx), null);
+  assert.match(sh.fixRefusal('/tank', ctx), /whole pool/);
+  assert.match(sh.fixRefusal('/tank/appdata/jellyfin', ctx), /app data/);
+  assert.match(sh.fixRefusal('/tank/vms', ctx), /VMs/);
+  assert.match(sh.fixRefusal('/', ctx), /whole pool/);
+});

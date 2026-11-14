@@ -2050,3 +2050,6 @@ button.top-pill:hover { background: var(--glass-hover); color: var(--text); }
 .sp-event small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .status-pop hr { margin: 12px 2px 6px; }
 .top-pill[aria-expanded="true"] { background: var(--glass-hover); color: var(--text); }
+/* A shared folder the app user can't write in (Shared folders) */
+.share-warn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.share-warn .notice { margin: 0; flex: 1 1 260px; font-size: 13px; padding: 9px 12px; }

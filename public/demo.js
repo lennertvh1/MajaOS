@@ -631,6 +631,13 @@
     { name: 'documents', path: '/tank/documents', comment: 'Taxes, house and school', users: {}, groups: { Parents: 'rw' }, guest: false, timemachine: false },
     { name: 'TimeMachine', path: '/tank/timemachine', comment: 'Backups of the Macs', users: { lisa: 'rw' }, groups: {}, guest: false, timemachine: true },
   ];
+  // Like folderAccess in lib/shares.js: isos and vms datasets belong to root until made writable; vms can't be changed.
+  const demoFixed = new Set();
+  function shareAccess(sh) {
+    const rootOwned = /\/(isos|vms)$/.test(sh.path || '') && !demoFixed.has(sh.path);
+    return { ...copy(sh), writable: !rootOwned, owner: rootOwned ? 'root' : 'lennert',
+      fixRefused: /\/vms$/.test(sh.path || '') ? 'This folder holds the disks of the VMs; libvirt manages their owner.' : /^\/[^/]+$/.test(sh.path || '') ? 'This is a whole pool. Share a folder on it instead.' : null };
+  }
   // Like effectiveUsers in lib/shares.js.
   function shareEffective(sh, groups = shareGroups) {
     const out = { ...sh.users };
@@ -900,7 +907,7 @@
       return { installed: true, running: true, shares: [], users: [], groups: [], roots: [], admin: null,
         places: filePlaces().filter((x) => x.kind === 'share' && mine[x.id]).map((x) => ({ ...x, readOnly: mine[x.id] !== 'rw' })) };
     }
-    return { installed: true, running: true, hostname: net.hostname, shares: copy(shareList), places: filePlaces(), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
+    return { installed: true, running: true, hostname: net.hostname, shares: shareList.map(shareAccess), places: filePlaces(), groups: copy(shareGroups), appUser: 'lennert', roots: shareRoots(),
       connections: { total: 2, perShare: { media: 2, photos: 1 } }, admin: acct.user,
       users: shareUsers.slice().sort().map((name) => ({ name, managed: true, shares: shareList.filter((x) => shareEffective(x)[name]).map((x) => x.name),
         groups: shareGroups.filter((g) => g.members.includes(name)).map((g) => g.name), dashboard: accountView(name) })) };
@@ -923,7 +930,7 @@
       shareTrees[name] = shareTrees[original] || filesDir({});
       delete shareTrees[original];
     } else if (!shareTrees[name]) shareTrees[name] = filesDir({});
-    return share;
+    return shareAccess(share);
   }
   function shareUserCreate(b) {
     const name = String(b.name || '').trim();
@@ -3174,6 +3181,16 @@
       return { ejected: true, name: hit.name };
     }
     { const q = parseFilesApi(path); if (q) { await wait(rnd(150, 400)); return filesAct(q, body); } }
+    const fixm = path.match(/^\/api\/shares\/([^/]+)\/fix-owner$/);
+    if (fixm) {
+      await wait(rnd(600, 1200));
+      const sh = shareList.find((x) => x.name === decodeURIComponent(fixm[1]));
+      if (!sh) throw err('This shared folder no longer exists.', 404);
+      const a = shareAccess(sh);
+      if (a.fixRefused) throw err(a.fixRefused, 409);
+      demoFixed.add(sh.path);
+      return { name: sh.name, ...shareAccess(sh) };
+    }
     const shm = path.match(/^\/api\/shares\/([^/]+)$/);
     if (shm) { await wait(rnd(300, 600)); return shareSave(body, decodeURIComponent(shm[1])); }
     if (path === '/api/share-users') { await wait(rnd(300, 600)); return shareUserCreate(body); }
