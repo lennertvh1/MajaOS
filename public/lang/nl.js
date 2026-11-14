@@ -3164,4 +3164,6 @@ window.TB_LANG.nl = {
   "3 brackets of 2": "3 houders van 2",
   "Upright bays": "Staande bays",
   "Lying cage": "Liggende kooi",
+  "Boot drive": "Opstartschijf",
+  "Debian starts from this disk": "Debian start van deze schijf",
 };

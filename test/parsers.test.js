@@ -265,3 +265,18 @@ test('hot plug: disks added and taken out, by serial number (a name can move to 
   assert.deepEqual(diffDisks([a, b], [a, c]), { added: [c], removed: [b] }); // sdb is now another disk
   assert.deepEqual(diffDisks([a], [a, v]), { added: [v], removed: [] });
 });
+
+test('lsblk: the disks Debian starts from (/, /boot/efi, swap, also through LVM)', () => {
+  const { bootDisks } = require('../lib/storage');
+  const json = { blockdevices: [
+    { name: 'sda', type: 'disk', mountpoints: [null], children: [{ name: 'sda1', type: 'part', mountpoints: [null] }] }, // a pool disk
+    { name: 'nvme0n1', type: 'disk', mountpoints: [null], children: [
+      { name: 'nvme0n1p1', type: 'part', mountpoints: ['/boot/efi'] },
+      { name: 'nvme0n1p2', type: 'part', mountpoints: [null], children: [{ name: 'vg-root', type: 'lvm', mountpoints: ['/'] }] },
+    ] },
+    { name: 'sdb', type: 'disk', mountpoint: null, children: [{ name: 'sdb1', type: 'part', mountpoint: '[SWAP]' }] }, // older lsblk
+    { name: 'sdc', type: 'disk', mountpoints: [null], children: [{ name: 'sdc1', type: 'part', mountpoints: ['/mnt/usb'] }] },
+  ] };
+  assert.deepEqual([...bootDisks(json)].sort(), ['nvme0n1', 'sdb']);
+  assert.deepEqual([...bootDisks(null)], []);
+});

@@ -2122,3 +2122,5 @@ button.snap-node:hover { background: var(--glass-hover); }
   color: var(--nas-ink); background: var(--nas-tray-2); border: 1px solid var(--nas-tray-edge); box-shadow: 0 1px 3px rgba(0, 0, 0, .45); white-space: nowrap; }
 .bay-grid.horizontal .tray-ssd { height: 100%; min-height: 0; width: 46px; background: repeating-linear-gradient(0deg, var(--nas-vent) 0 3px, transparent 3px 6px); }
 .bay-grid.horizontal .tray-ssd-drive { width: 80%; height: 64%; font-size: 8px; }
+/* The disk Debian starts from, in the drive bays */
+.tag.boot { color: var(--accent); border-color: var(--accent); }

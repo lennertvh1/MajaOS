@@ -1866,7 +1866,7 @@
     disk('sde', 'ST4000VN006 IronWolf', 4e12, true, 'sata', 31, null, null),
     disk('sdf', 'ST4000VN006 IronWolf', 4e12, true, 'sata', 32, null, null),
     disk('sdg', 'WDC WD30EFRX', 3e12, true, 'sata', 30, null, null),
-    disk('sdi', 'Samsung SSD 870 EVO', 1e12, false, 'sata', 29, null, null),
+    { ...disk('sdi', 'Samsung SSD 870 EVO', 1e12, false, 'sata', 29, null, null), boot: true }, // Debian starts from it
   ];
   // What lib/zpool.js poolOptions() returns (the system disk sdh is not among Storage's disks).
   const SYS_DISK = { name: 'sdh', size: 240e9, model: 'KINGSTON SA400S37240G', serial: 'DEMOSDH', rotational: false, transport: 'sata', byId: '/dev/disk/by-id/ata-KINGSTON_SA400S37240G_DEMOSDH', available: false, reason: 'System disk (Debian is on it)', warn: null };

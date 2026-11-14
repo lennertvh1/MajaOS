@@ -2478,6 +2478,7 @@
     const poolNames = (s.pools || []).map((p) => p.name);
     const tags = (d) => {
       const pool = d.pool ? `<span class="tag pool p${(poolNames.indexOf(d.pool) % 5) + 1}">${esc(d.pool)}${d.role && d.role !== 'data' ? ' · ' + esc(d.role) : ''}</span>`
+        : d.boot ? `<span class="tag boot" title="${esc(t('Debian starts from this disk'))}">${t('Boot drive')}</span>`
         : `<span class="tag">${t('No pool')}</span>`;
       const tc = d.temp == null ? 'sleep' : d.temp >= 50 ? 'bad' : d.temp >= 45 ? 'warn' : 'ok';
       return pool + `<span class="tag temp ${tc}">${d.temp != null ? d.temp + ' °C' : t('Standby')}</span>`;
