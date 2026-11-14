@@ -93,3 +93,15 @@ test('bays: upright or lying drawers, and the case model', () => {
   assert.equal(validateBays({ count: 5, columns: 5, orient: 'sideways', slots: {} }).orient, 'vertical');
   assert.equal(validateBays({ count: 5, columns: 5, model: '<script>', slots: {} }).model, '');
 });
+
+test('bays: groups of a case (Jonsbo N5: 8 upright on top, 4 lying below)', () => {
+  const { validateBays } = require('../lib/bays');
+  const groups = [{ count: 8, columns: 8, orient: 'vertical', label: 'Hot-swap (top)' }, { count: 4, columns: 1, orient: 'horizontal', label: 'Hot-swap cage (bottom)' }];
+  const v = validateBays({ count: 12, columns: 8, model: 'jonsbo-n5', groups, slots: { 12: { key: 's:SSD' } } });
+  assert.deepEqual(v.groups, groups);
+  assert.deepEqual(Object.keys(v.slots), ['12']); // the last bay of the lower cage
+  // Groups that don't add up to the number of bays, or with a wrong number, are dropped: one grid then.
+  assert.equal(validateBays({ count: 10, columns: 5, groups, slots: {} }).groups, undefined);
+  assert.equal(validateBays({ count: 12, columns: 5, groups: [{ count: 12, columns: 0 }], slots: {} }).groups, undefined);
+  assert.equal(validateBays({ count: 12, columns: 6, groups: [{ count: 12, columns: 6, label: '<b>x</b>' }], slots: {} }).groups[0].label, 'bx/b');
+});

@@ -2481,7 +2481,19 @@
       seen.add(v.key); slots[m[1] + n] = { key: String(v.key), label: String(v.label || '') };
     }
     const orient = b.orient === 'horizontal' ? 'horizontal' : 'vertical', model = /^[a-z0-9-]{0,40}$/.test(String(b.model || '')) ? String(b.model || '') : '';
-    bays = { count, columns, orient, model, m2, ssd, slots };
+    const body = b;
+    // A case with more than one block of bays (Jonsbo N5: 8 upright on top, 4 lying in a cage below): each group has its
+    // own count, columns and drawers; the bay numbers run on. Groups that don't add up to count are dropped.
+    let groups = null;
+    if (Array.isArray(body.groups) && body.groups.length && body.groups.length <= 8) {
+      groups = body.groups.map((g) => ({
+        count: Number(g && g.count), columns: Number(g && g.columns), orient: g && g.orient === 'horizontal' ? 'horizontal' : 'vertical',
+        label: String((g && g.label) || '').replace(/[<>]/g, '').slice(0, 40),
+      }));
+      if (groups.some((g) => !Number.isInteger(g.count) || g.count < 1 || g.count > 60 || !Number.isInteger(g.columns) || g.columns < 1 || g.columns > 12)
+        || groups.reduce((n, g) => n + g.count, 0) !== count) groups = null;
+    }
+    bays = { count, columns, orient, model, ...(groups ? { groups } : {}), m2, ssd, slots };
     return copy(bays);
   }
   function storageSummary() {

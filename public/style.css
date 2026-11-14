@@ -2107,3 +2107,15 @@ button.snap-node:hover { background: var(--glass-hover); }
 .nas-model { color: var(--nas-ink-2); font-weight: 600; letter-spacing: .08em; }
 .bays-case { min-width: 240px; }
 .bays-orient { min-width: 200px; }
+
+/* Groups of bays in one case (Jonsbo N5: 8 upright on top, 4 lying below) */
+.bay-group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nas-ink-2); }
+.bay-group-label:first-of-type { margin-top: 0; }
+.bay-grid + .bay-group-label { padding-top: 10px; border-top: 1px solid var(--nas-edge); }
+/* A 2.5" SSD on an adapter in a 3.5" drawer: same drawer, a small drive in it */
+.tray-ssd { flex: none; height: 24%; min-height: 34px; display: grid; place-items: center; border-radius: 2px;
+  background: repeating-linear-gradient(90deg, var(--nas-vent) 0 3px, transparent 3px 6px); opacity: .95; }
+.tray-ssd-drive { display: grid; place-items: center; width: 74%; height: 70%; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: .04em;
+  color: var(--nas-ink); background: var(--nas-tray-2); border: 1px solid var(--nas-tray-edge); box-shadow: 0 1px 3px rgba(0, 0, 0, .45); white-space: nowrap; }
+.bay-grid.horizontal .tray-ssd { height: 100%; min-height: 0; width: 46px; background: repeating-linear-gradient(0deg, var(--nas-vent) 0 3px, transparent 3px 6px); }
+.bay-grid.horizontal .tray-ssd-drive { width: 80%; height: 64%; font-size: 8px; }
