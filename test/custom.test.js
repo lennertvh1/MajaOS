@@ -96,9 +96,8 @@ test('home screen layout with widgets and VMs between the apps', () => {
   assert.deepEqual(validateLayout({ items: [{ page: 'storage' }, { folder: 'f9', name: 'A', apps: [{ page: 'storage' }, 'plex', 'jellyfin'] }] }).items,
     [{ page: 'storage' }, { folder: 'f9', name: 'A', apps: ['plex', 'jellyfin'] }]);
   assert.deepEqual(validateLayout({ items: [{ folder: 'f2', name: 'One', apps: [{ page: 'vms' }] }] }).items, [{ page: 'vms' }]);
-  const fresh = validateLayout(defaultLayout());
-  assert.equal(fresh.items[0].folder, 'fsystem');
-  assert.deepEqual(fresh.items[0].apps.map((n) => n.page), ['storage', 'shares', 'vms', 'store', 'files', 'backup']);
+  // The built-in pages are in the menu bar under the header: a new installation starts with an empty home screen.
+  assert.deepEqual(validateLayout(defaultLayout()).items, []);
   const cuts = validateLayout({ items: ['plex', { shortcut: 's0123abcd' }, { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }] });
   assert.deepEqual(cuts.items, ['plex', { shortcut: 's0123abcd' }, { shortcut: 'sabcdef01' }]);
   assert.throws(() => validateLayout({ items: [{ shortcut: 'nope' }] }), /not a valid shortcut/);

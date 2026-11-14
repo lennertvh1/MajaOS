@@ -638,9 +638,7 @@
     backup: { name: 'Backups', open: 'backup', color: '#4f5fb3', svg: '<path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/>' },
   };
   function visiblePages() {
-    if (S.filter !== 'all') return [];
-    const q = S.search.trim().toLowerCase();
-    return PAGE_IDS.filter((id) => !q || t(PAGE_META[id].name).toLowerCase().includes(q) || id.includes(q));
+    return []; // the system pages are in the menu bar under the header now, not between the apps
   }
   function pageIcon(id) {
     const p = PAGE_META[id];
@@ -1036,10 +1034,7 @@
         if (vmNames.has(it.vm) && !placedVm.has(it.vm)) { placedVm.add(it.vm); out.push({ vm: it.vm }); }
         continue;
       }
-      if (it && it.page) {
-        if (PAGE_IDS.includes(it.page) && !placedP.has(it.page)) { placedP.add(it.page); out.push({ page: it.page }); }
-        continue;
-      }
+      if (it && it.page) continue; // the system pages are in the menu bar under the header (#sysBar)
       if (it && it.shortcut) {
         if (shortcutById(it.shortcut) && !placedS.has(it.shortcut)) { placedS.add(it.shortcut); out.push({ shortcut: it.shortcut }); }
         continue;
@@ -1047,20 +1042,12 @@
       if (!it || !it.apps) continue;
       const apps = [];
       for (const n of it.apps) {
-        if (n && n.page) {
-          if (PAGE_IDS.includes(n.page) && !placedP.has(n.page)) { placedP.add(n.page); apps.push({ page: n.page }); }
-        } else if (typeof n === 'string' && names.has(n) && !placed.has(n)) { placed.add(n); apps.push(n); }
+        if (typeof n === 'string' && names.has(n) && !placed.has(n)) { placed.add(n); apps.push(n); }
       }
       if (apps.length > 1) out.push({ ...it, apps }); else if (apps.length === 1) out.push(apps[0]);
     }
     S.apps.forEach((a) => { if (!placed.has(a.name)) out.push(a.name); });
     (S.shortcuts || []).forEach((s) => { if (!placedS.has(s.id)) out.push({ shortcut: s.id }); });
-    // Built-in pages that nobody has placed yet share one folder. A saved layout keeps its own order.
-    const missing = PAGE_IDS.filter((id) => !placedP.has(id));
-    if (missing.length > 1) {
-      const folder = out.some((it) => it && it.folder === 'fsystem') ? 'fosapps' : 'fsystem';
-      out.unshift({ folder, name: 'System', apps: missing.map((page) => ({ page })) });
-    } else if (missing.length === 1) out.unshift({ page: missing[0] });
     return out;
   }
   // Folder names that are interface text ("System") are translated; a name you typed stays as it is.
@@ -9698,6 +9685,9 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (b.dataset.open === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $$('.nav-btn[data-nav="settings"]').forEach((b) => { if (inSettings) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    // The menu bar: the settings, the store or files on top, the VM page, or the dashboard.
+    const sysOn = inSettings ? 'settings' : popKind || (view === 'vms' ? 'vms' : 'home');
+    $$('#sysBar [data-sys]').forEach((b) => { if (b.dataset.sys === sysOn) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     if (inSettings) { if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); } if (!setWin.open) setWin.showModal(); showSettings(); return; }
     // Always load the first time (also when the page opens right on #vms).
     const pageChanged = location.hash !== pageHash || !pageLoaded;
@@ -9739,6 +9729,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   window.addEventListener('hashchange', () => { if (!$('.topnav').hidden) route(); });
 
   function setChrome(on) {
+    $('#sysBar').hidden = !on || document.body.classList.contains('role-user');
     $('.topnav').hidden = !on;
     $('#topActions').hidden = !on;
     $('#spot').hidden = !on;
@@ -9767,6 +9758,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   const isUserRole = () => !!(S.config && S.config.role === 'user');
   function userDesk() {
     document.body.classList.add('role-user');
+    $('#sysBar').hidden = true; // users only have Files and their own security
     $('#loginScreen').hidden = true; setChrome(true);
     $('#logoutBtn').hidden = false;
     ['#powerBtn', '#feedbackBtn', '#termBtn', '#noteBtn', '#spot'].forEach((x) => { const e = $(x); if (e) e.hidden = true; });
