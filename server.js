@@ -222,6 +222,7 @@ async function apiOverview() {
     hostname: os.hostname(), uptime: sys.uptime(), version: sys.osName(),
     cpu: { ...sys.cpuInfo(), percent: cpu }, memory: sys.memory(),
     storage: store ? { ...store, repair: found && found.repair, alerts: (found && found.alerts) || [] } : store, gpu, gpus, gpuError: sys.gpuError(), diskEvents: storage.diskEvents(),
+    ups: ups.brief(),
   };
 }
 

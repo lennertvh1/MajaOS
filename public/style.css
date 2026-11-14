@@ -2006,3 +2006,10 @@ h2 .hint, h3 .hint { margin-left: 8px; }
 .win-adv .toggle-ui::after { width: 16px; height: 16px; }
 .win-adv input:checked + .toggle-ui::after { transform: translateX(16px); }
 #storeForm [data-full] > h3:first-child { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--glass-line); }
+
+/* UPS in the header: charge and time left (lib/ups.js through /api/overview) */
+.ups-chip { font-variant-numeric: tabular-nums; font-size: 0.85rem; padding: 0.5em 0.6em; white-space: nowrap; }
+.ups-chip .ups-level { fill: currentColor; stroke: none; }
+.ups-chip.on-battery { color: var(--warn); }
+.ups-chip.low { color: var(--bad); }
+@media (max-width: 720px) { .ups-chip #upsText { display: none; } }

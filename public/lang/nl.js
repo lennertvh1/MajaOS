@@ -3107,4 +3107,7 @@ window.TB_LANG.nl = {
   "UPS on another NUT server.": "UPS aan een andere NUT-server.",
   "Load on the UPS": "Belasting van de UPS",
   "When to shut down": "Wanneer afsluiten",
+  "All details ({n})": "Alle gegevens ({n})",
+  "Input": "Ingang",
+  "Output": "Uitgang",
 };

@@ -2585,6 +2585,7 @@
       storage: storageSummary(), gpu: nvidia.loaded ? gpu() : null,
       gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }],
       diskEvents: copy(diskEvents),
+      ups: upsBrief(),
     };
   }
 
@@ -2978,19 +2979,42 @@
   }
 
   // UPS through NUT (Settings → UPS): an APC Back-UPS on USB. The same shapes as lib/ups.js.
-  const demoUps = { mode: 'off', name: 'ups', driver: 'usbhid-ups', port: 'auto', extra: {}, desc: '', share: false, host: '', hostPort: 3493, upsName: 'ups', user: '', password: '', minutes: 0, percent: 0, sharePassword: 'Kq7mW2xPz9RtLb4N', events: [] };
+  const demoUps = { mode: 'local', name: 'ups', driver: 'usbhid-ups', port: 'auto', extra: {}, desc: '', share: false, host: '', hostPort: 3493, upsName: 'ups', user: '', password: '', minutes: 0, percent: 0, sharePassword: 'Kq7mW2xPz9RtLb4N', events: [] };
+  // What upsc prints for an APC Back-UPS ES 700G on usbhid-ups (the remote one: an Eaton 5E).
+  function upsVars(remote) {
+    const load = String(17 + Math.round(Math.random() * 4));
+    return remote ? {
+      'battery.charge': '100', 'battery.runtime': '2460', 'battery.type': 'PbAc', 'device.mfr': 'EATON', 'device.model': '5E 1100i', 'device.serial': 'G355K12034', 'device.type': 'ups',
+      'driver.name': 'usbhid-ups', 'driver.version': '2.8.1', 'input.voltage': '230.0', 'output.voltage': '230.0', 'ups.load': load, 'ups.status': 'OL', 'ups.realpower.nominal': '660',
+    } : {
+      'battery.charge': '100', 'battery.charge.low': '10', 'battery.charge.warning': '50', 'battery.date': '2001/09/25', 'battery.mfr.date': '2024/03/12', 'battery.runtime': '1860',
+      'battery.runtime.low': '120', 'battery.type': 'PbAc', 'battery.voltage': '13.6', 'battery.voltage.nominal': '12.0',
+      'device.mfr': 'American Power Conversion', 'device.model': 'Back-UPS ES 700G', 'device.serial': '5B1234X56789', 'device.type': 'ups',
+      'driver.name': 'usbhid-ups', 'driver.parameter.pollfreq': '30', 'driver.parameter.pollinterval': '2', 'driver.parameter.port': 'auto', 'driver.parameter.synchronous': 'auto',
+      'driver.version': '2.8.1', 'driver.version.data': 'APC HID 0.100', 'driver.version.internal': '0.52',
+      'input.sensitivity': 'medium', 'input.transfer.high': '266', 'input.transfer.low': '180', 'input.transfer.reason': 'input voltage out of range', 'input.voltage': '231.0', 'input.voltage.nominal': '230',
+      'ups.beeper.status': 'enabled', 'ups.delay.shutdown': '20', 'ups.firmware': '871.O3 .I', 'ups.firmware.aux': 'O3', 'ups.load': load, 'ups.mfr': 'American Power Conversion',
+      'ups.mfr.date': '2024/03/12', 'ups.model': 'Back-UPS ES 700G', 'ups.productid': '0002', 'ups.realpower.nominal': '405', 'ups.serial': '5B1234X56789', 'ups.status': 'OL CHRG',
+      'ups.test.result': 'No test initiated', 'ups.timer.reboot': '0', 'ups.timer.shutdown': '-1', 'ups.vendorid': '051d',
+    };
+  }
+  function upsBrief() {
+    if (demoUps.mode === 'off') return null;
+    return { charge: 100, runtime: demoUps.mode === 'remote' ? 2460 : 1860, online: true, onBattery: false, lowBattery: false, countdown: null };
+  }
   function upsStatus() {
     const u = demoUps;
+    const vars = u.mode === 'off' ? null : upsVars(u.mode === 'remote');
     const status = u.mode === 'off' ? null : {
       flags: ['OL', 'CHRG'], online: true, onBattery: false, lowBattery: false, charging: true, replaceBattery: false, overload: false, forcedShutdown: false,
-      charge: 100, runtime: 1860, load: 17 + Math.round(Math.random() * 4), inputVoltage: 231, outputVoltage: 231, batteryVoltage: 13.6,
+      charge: 100, runtime: Number(vars['battery.runtime']), load: Number(vars['ups.load']), inputVoltage: 231, outputVoltage: 231, batteryVoltage: 13.6,
       power: 72, powerNominal: 405, model: u.mode === 'remote' ? 'Eaton 5E 1100i' : 'American Power Conversion Back-UPS ES 700G', serial: u.mode === 'remote' ? 'G355K12034' : '5B1234X56789', driver: 'usbhid-ups',
     };
     return {
       installed: true, mode: u.mode,
       config: { name: u.name, driver: u.driver, port: u.port, extra: u.extra, desc: u.desc, share: u.share, host: u.host, hostPort: u.hostPort, upsName: u.upsName, user: u.user, hasPassword: !!u.password, minutes: u.minutes, percent: u.percent },
       share: u.mode === 'local' && u.share ? { port: 3493, upsName: u.name, user: 'monuser', password: u.sharePassword } : null,
-      status, vars: null, error: '', countdown: null, events: u.events,
+      status, vars, error: '', countdown: null, events: u.events,
     };
   }
   function upsSave(b) {

@@ -3037,6 +3037,20 @@
           <dt>${t('User')}</dt><dd><code>${esc(d.share.user)}</code></dd>
           <dt>${t('Password')}</dt><dd><code>${esc(d.share.password)}</code> <button class="btn sm" type="button" data-copy="${esc(d.share.password)}">${t('Copy')}</button></dd>
         </dl>` : '');
+    // Everything the UPS reports (upsc), grouped by the first part of the name: battery, device, input, output, ups, driver.
+    const UPS_GROUPS = { battery: 'Battery', device: 'Device', input: 'Input', output: 'Output', ups: 'UPS', driver: 'Driver' };
+    const varsHtml = (open = false) => {
+      const vars = d.vars || {};
+      const keys = Object.keys(vars).sort();
+      if (!keys.length) return '';
+      const groups = {};
+      for (const k of keys) { const g = k.split('.')[0]; (groups[g] = groups[g] || []).push(k); }
+      const order = [...Object.keys(UPS_GROUPS).filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !UPS_GROUPS[g])];
+      return `<details class="ups-vars"${open ? ' open' : ''}><summary class="pane-title">${t('All details ({n})', { n: keys.length })}</summary>
+        ${order.map((g) => `<h3 class="muted small" style="margin:12px 0 4px">${esc(UPS_GROUPS[g] ? t(UPS_GROUPS[g]) : g)}</h3>
+          <dl class="kv">${groups[g].map((k) => `<dt><code>${esc(k)}</code></dt><dd>${esc(vars[k])}</dd>`).join('')}</dl>`).join('')}
+      </details>`;
+    };
     const eventsHtml = () => (d.events.length ? `
         <h2 class="pane-title">${t('Log')}</h2>
         <ul class="rows">${d.events.slice(0, 15).map((e) => `<li><div><div class="row-title">${esc(tr(e.text))}</div><div class="row-sub">${esc(when(e.at))}</div></div></li>`).join('')}</ul>` : '');
@@ -3093,6 +3107,7 @@
           <div class="btn-row"><button class="btn primary" type="submit"${d.installed ? '' : ' disabled'}>${t('Save')}</button></div>
         </form>
         <div data-ups-share>${shareHtml()}</div>
+        <div data-ups-vars>${varsHtml()}</div>
         <div data-ups-events>${eventsHtml()}</div>`;
       const form = $('#upsForm', el);
       const f = form.elements;
@@ -3147,6 +3162,8 @@
         d = { ...n, config: d.config };
         $('[data-ups-status]', el).innerHTML = statusHtml();
         $('[data-ups-share]', el).innerHTML = shareHtml();
+        const open = $('[data-ups-vars] details', el);
+        $('[data-ups-vars]', el).innerHTML = varsHtml(open && open.open);
         $('[data-ups-events]', el).innerHTML = eventsHtml();
       } catch { /* try again next time */ }
       setTimeout(refresh, 5000);
@@ -9232,7 +9249,27 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); diskEventToasts(S.overview.diskEvents); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderUpsChip(); diskEventToasts(S.overview.diskEvents); }
+  // The UPS in the header: charge and time left, orange on battery, red when the battery is almost empty.
+  const upsTime = (sec) => {
+    const m = Math.max(0, Math.round(sec / 60));
+    return m < 60 ? t('{n} min', { n: nf0.format(m) }) : t('{h} h {m} min', { h: nf0.format(Math.floor(m / 60)), m: nf0.format(m % 60) });
+  };
+  function renderUpsChip() {
+    const u = S.overview && S.overview.ups;
+    const btn = $('#upsBtn');
+    if (!btn) return;
+    btn.hidden = !u || S.config.role === 'user';
+    if (btn.hidden) return;
+    const parts = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null].filter(Boolean);
+    $('#upsText').textContent = parts.join(' · ');
+    $('#upsLevel').setAttribute('width', String(Math.max(0.5, 13 * Math.min(100, Math.max(0, u.charge == null ? 100 : u.charge)) / 100)));
+    btn.classList.toggle('on-battery', !!u.onBattery && !u.lowBattery);
+    btn.classList.toggle('low', !!u.lowBattery);
+    const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
+    const label = ['UPS', state, ...parts].join(' · ');
+    btn.title = label; btn.setAttribute('aria-label', label);
+  }
   // A disk plugged in or taken out while the server runs (lib/storage.js watchDisks): a message, once per event. What
   // happened before this page was opened isn't shown again.
   const diskSeen = { boot: null, seq: 0 };
@@ -9430,6 +9467,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     $('#powerBtn').hidden = false;
     $('#feedbackBtn').hidden = false;
+    $('#upsBtn').onclick = () => goSettings('settings/ups');
     $('#termBtn').hidden = !S.config.terminal;
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
