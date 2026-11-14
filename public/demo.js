@@ -2480,7 +2480,8 @@
       if (seen.has(v.key)) throw err('A disk can only be in one bay.');
       seen.add(v.key); slots[m[1] + n] = { key: String(v.key), label: String(v.label || '') };
     }
-    bays = { count, columns, m2, ssd, slots };
+    const orient = b.orient === 'horizontal' ? 'horizontal' : 'vertical', model = /^[a-z0-9-]{0,40}$/.test(String(b.model || '')) ? String(b.model || '') : '';
+    bays = { count, columns, orient, model, m2, ssd, slots };
     return copy(bays);
   }
   function storageSummary() {

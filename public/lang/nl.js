@@ -3149,4 +3149,11 @@ window.TB_LANG.nl = {
   "Back to the current snapshot…": "Terug naar de huidige snapshot…",
   "Manage snapshots…": "Snapshots beheren…",
   "{vm} has no snapshot yet. Take one first.": "{vm} heeft nog geen snapshot. Maak er eerst een.",
+  "Case": "Kast",
+  "My own layout": "Eigen indeling",
+  "{n} bays": "{n} bays",
+  "4 hot-swap + 2 fixed": "4 hot-swap + 2 vast",
+  "Drawers": "Lades",
+  "Upright, side by side": "Rechtop, naast elkaar",
+  "Lying, stacked": "Liggend, boven elkaar",
 };

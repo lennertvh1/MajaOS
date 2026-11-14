@@ -2324,8 +2324,27 @@
     return d.pool ? 'ok' : 'idle';
   }
   const diskLabel = (d) => [d.model || d.name, d.serial].filter(Boolean).join(' · ');
+  // Cases people build a NAS in, and how their drive bays sit at the front. Choosing one fills in the bays (count, per
+  // row, upright or lying drawers, 2.5" slots); M.2 depends on the motherboard and stays as it is. Everything can still
+  // be changed by hand afterwards.
+  const NAS_CASES = [
+    { id: 'jonsbo-n1', brand: 'Jonsbo', name: 'N1', count: 5, columns: 5, orient: 'vertical', ssd: 1 },
+    { id: 'jonsbo-n2', brand: 'Jonsbo', name: 'N2', count: 5, columns: 5, orient: 'vertical', ssd: 1 },
+    { id: 'jonsbo-n3', brand: 'Jonsbo', name: 'N3', count: 8, columns: 8, orient: 'vertical', ssd: 1 },
+    { id: 'jonsbo-n4', brand: 'Jonsbo', name: 'N4', count: 6, columns: 4, orient: 'vertical', ssd: 2, note: '4 hot-swap + 2 fixed' },
+    { id: 'jonsbo-n5', brand: 'Jonsbo', name: 'N5', count: 12, columns: 6, orient: 'vertical', ssd: 4 },
+    { id: 'silverstone-ds380', brand: 'SilverStone', name: 'DS380', count: 8, columns: 1, orient: 'horizontal', ssd: 4 },
+    { id: 'silverstone-cs351', brand: 'SilverStone', name: 'CS351', count: 5, columns: 1, orient: 'horizontal', ssd: 0 },
+    { id: 'silverstone-cs381', brand: 'SilverStone', name: 'CS381', count: 8, columns: 2, orient: 'horizontal', ssd: 4 },
+    { id: 'silverstone-cs382', brand: 'SilverStone', name: 'CS382', count: 8, columns: 2, orient: 'horizontal', ssd: 3 },
+    { id: 'fractal-define-r5', brand: 'Fractal Design', name: 'Define R5', count: 8, columns: 1, orient: 'horizontal', ssd: 2 },
+    { id: 'fractal-node-304', brand: 'Fractal Design', name: 'Node 304', count: 6, columns: 3, orient: 'horizontal', ssd: 0 },
+    { id: 'fractal-node-804', brand: 'Fractal Design', name: 'Node 804', count: 8, columns: 2, orient: 'vertical', ssd: 2 },
+  ];
+  const nasCase = (id) => NAS_CASES.find((c) => c.id === id) || null;
   function mountBays(el, s) {
-    let cfg = JSON.parse(JSON.stringify(s.bays || { count: 0, columns: 12, m2: 0, ssd: 0, slots: {} }));
+    let cfg = JSON.parse(JSON.stringify(s.bays || { count: 0, columns: 12, orient: 'vertical', model: '', m2: 0, ssd: 0, slots: {} }));
+    if (!cfg.orient) cfg.orient = 'vertical';
     if (cfg.m2 == null) cfg.m2 = 0;
     if (cfg.ssd == null) cfg.ssd = 0;
     // A place is a bay ("3"), an M.2 slot ("m1") or a 2.5" slot ("s1"), all in cfg.slots.
@@ -2530,6 +2549,13 @@
         <div class="bays-head"><h3>${t('Drive bays')}</h3>
           <button class="btn sm${edit ? ' primary' : ''}" type="button" data-bay-edit>${edit ? t('Ready') : t('Edit layout')}</button></div>
         ${edit ? `<div class="bays-cfg">
+            <label class="fld bays-case"><span>${t('Case')}</span><select class="field" data-bay-case>
+              <option value="">${t('My own layout')}</option>
+              ${[...new Set(NAS_CASES.map((c) => c.brand))].map((b) => `<optgroup label="${esc(b)}">${NAS_CASES.filter((c) => c.brand === b).map((c) => `<option value="${esc(c.id)}"${cfg.model === c.id ? ' selected' : ''}>${esc(c.brand + ' ' + c.name)} · ${esc(t('{n} bays', { n: c.count }))}${c.note ? ' (' + esc(t(c.note)) + ')' : ''}</option>`).join('')}</optgroup>`).join('')}
+            </select></label>
+            <label class="fld bays-orient"><span>${t('Drawers')}</span><select class="field" data-bay-cfg="orient">
+              <option value="vertical"${cfg.orient !== 'horizontal' ? ' selected' : ''}>${t('Upright, side by side')}</option>
+              <option value="horizontal"${cfg.orient === 'horizontal' ? ' selected' : ''}>${t('Lying, stacked')}</option></select></label>
             <label class="fld"><span>${t('Number of bays')}</span><input class="field" type="number" min="1" max="60" step="1" data-bay-cfg="count" value="${cfg.count}"></label>
             <label class="fld"><span>${t('Bays per row')}</span><input class="field" type="number" min="1" max="12" step="1" data-bay-cfg="columns" value="${cfg.columns}"></label>
             <label class="fld"><span>${t('2.5" slots')}</span><input class="field" type="number" min="0" max="16" step="1" data-bay-cfg="ssd" value="${cfg.ssd}"></label>
@@ -2537,9 +2563,9 @@
           </div>
           <p class="muted small">${t('Drag a disk to a bay. On a full bay the two swap places. Can\'t drag? Tap a disk and then a bay.')}</p>` : ''}
         <div class="bays-wrap"><div class="nas">
-          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'MajaOS')}</span>
+          <div class="nas-top"><span class="nas-name">${esc((S.overview && S.overview.hostname) || 'MajaOS')}${nasCase(cfg.model) ? `<span class="nas-model"> · ${esc(nasCase(cfg.model).brand + ' ' + nasCase(cfg.model).name)}</span>` : ''}</span>
             <span class="nas-power" title="${t('On')}"><i class="led"></i></span></div>
-          <div class="bay-grid" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
+          <div class="bay-grid${cfg.orient === 'horizontal' ? ' horizontal' : ''}" style="--bay-cols:${cfg.columns}">${Array.from({ length: cfg.count }, (_, i) => bayCard(i + 1)).join('')}</div>
           ${cfg.ssd ? `<div class="sff-row">${Array.from({ length: cfg.ssd }, (_, i) => ssdCard(i + 1)).join('')}</div>` : ''}
           ${cfg.m2 ? `<div class="m2-row">${Array.from({ length: cfg.m2 }, (_, i) => m2Card(i + 1)).join('')}</div>` : ''}
         </div></div>
@@ -2588,6 +2614,17 @@
       if (e.target.closest('[data-unplace]') && picked) unplace(picked);
     });
     el.addEventListener('change', (e) => {
+      // A case from the list: its bays, drawers and 2.5" slots; disks in bays that no longer exist come out of them.
+      if (e.target.matches('[data-bay-case]')) {
+        const c = nasCase(e.target.value);
+        cfg.model = c ? c.id : '';
+        if (c) {
+          Object.assign(cfg, { count: c.count, columns: c.columns, orient: c.orient, ssd: c.ssd });
+          Object.keys(cfg.slots).forEach((b) => { const x = b.match(/^([ms]?)(\d+)$/); if (x && ((x[1] === '' && Number(x[2]) > c.count) || (x[1] === 's' && Number(x[2]) > c.ssd))) delete cfg.slots[b]; });
+        }
+        save(); draw(); return;
+      }
+      if (e.target.dataset.bayCfg === 'orient') { cfg.orient = e.target.value === 'horizontal' ? 'horizontal' : 'vertical'; cfg.model = ''; save(); draw(); return; }
       const k = e.target.dataset.bayCfg; if (!k) return;
       const v = Math.round(Number(e.target.value));
       if (k === 'count' && !(v >= 1 && v <= 60)) { toast(t('Choose between 1 and 60 bays.'), true); draw(); return; }
@@ -2598,7 +2635,7 @@
       if (k === 'count' && cfg.columns === Math.min(12, cfg.count)) cfg.columns = Math.min(12, v);
       const prefix = { count: '', m2: 'm', ssd: 's' }[k];
       if (prefix != null) Object.keys(cfg.slots).forEach((b) => { const x = b.match(/^([ms]?)(\d+)$/); if (x && x[1] === prefix && Number(x[2]) > v) delete cfg.slots[b]; });
-      cfg[k] = v; save(); draw();
+      cfg[k] = v; if (k !== 'm2') cfg.model = ''; save(); draw();
     });
     // Dragging (mouse); on touch screens tapping works.
     el.addEventListener('dragstart', (e) => {

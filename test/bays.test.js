@@ -16,7 +16,7 @@ test('recognise a disk by serial number, otherwise by name', () => {
 
 test('checking the layout', () => {
   const ok = bays.validateBays({ count: 4, columns: 2, slots: { 1: { key: 's:A', label: 'WDC · A' }, 3: { key: 's:B' }, 6: { key: 's:C' } } });
-  assert.deepEqual(ok, { count: 4, columns: 2, m2: 0, ssd: 0, slots: { 1: { key: 's:A', label: 'WDC · A' }, 3: { key: 's:B', label: '' } } }); // bay 6 no longer exists
+  assert.deepEqual(ok, { count: 4, columns: 2, orient: 'vertical', model: '', m2: 0, ssd: 0, slots: { 1: { key: 's:A', label: 'WDC · A' }, 3: { key: 's:B', label: '' } } }); // bay 6 no longer exists
   assert.throws(() => bays.validateBays({ count: 61, columns: 4 }), /between 0 and 60/);
   assert.throws(() => bays.validateBays({ count: 4, columns: 0 }), /between 1 and 12/);
   assert.throws(() => bays.validateBays({ count: 4, columns: 4, slots: { 1: { key: 's:A' }, 2: { key: 's:A' } } }), /only be in one bay/);
@@ -82,4 +82,14 @@ test('the serial number from the kernel when udev has none for a moment (zpool c
   // Only filled in when lsblk has none, so the key stays the same as before.
   assert.equal(bays.diskKey(bays.withSerial({ name: 'sdb', serial: null })), 's:WD-WX12A3456789');
   assert.equal(bays.withSerial({ name: 'sdb', serial: 'OTHER' }).serial, 'OTHER');
+});
+
+test('bays: upright or lying drawers, and the case model', () => {
+  const { validateBays } = require('../lib/bays');
+  const v = validateBays({ count: 8, columns: 1, orient: 'horizontal', model: 'silverstone-ds380', ssd: 4, slots: {} });
+  assert.equal(v.orient, 'horizontal');
+  assert.equal(v.model, 'silverstone-ds380');
+  assert.equal(validateBays({ count: 5, columns: 5, slots: {} }).orient, 'vertical'); // older bays.json: upright
+  assert.equal(validateBays({ count: 5, columns: 5, orient: 'sideways', slots: {} }).orient, 'vertical');
+  assert.equal(validateBays({ count: 5, columns: 5, model: '<script>', slots: {} }).model, '');
 });

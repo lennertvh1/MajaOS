@@ -2091,3 +2091,19 @@ button.snap-node:hover { background: var(--glass-hover); }
 .snap-detail .notice { margin: 8px 0; font-size: 13px; padding: 9px 12px; }
 .snap-empty { display: grid; justify-items: center; gap: 8px; padding: 26px 12px; text-align: center; }
 .snap-empty svg { width: 34px; height: 34px; fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Lying drawers stacked (Silverstone DS380, Fractal): wide and low, vents on the left, the handle on the right */
+.bay-grid.horizontal { grid-template-columns: repeat(var(--bay-cols, 1), 250px); }
+.bay-grid.horizontal .bay { height: 64px; }
+.bay-grid.horizontal .tray { flex-direction: row; align-items: center; gap: 8px; padding: 5px 24px 5px 6px; }
+.bay-grid.horizontal .tray-top { flex-direction: column; justify-content: center; gap: 5px; align-self: stretch; }
+.bay-grid.horizontal .tray-vents { height: 100%; min-height: 0; width: 34px; background: repeating-linear-gradient(0deg, var(--nas-vent) 0 3px, transparent 3px 6px); }
+.bay-grid.horizontal .tray-info { flex: 1 1 auto; }
+.bay-grid.horizontal .tray-info .bay-sub:nth-child(n+4) { display: none; }
+.bay-grid.horizontal .tray-tags { margin: 0; flex: none; max-width: 70px; }
+.bay-grid.horizontal .tray-handle { left: auto; right: 7px; top: 16%; bottom: 16%; width: 8px; height: auto; }
+.bay-grid.horizontal .slot-hole { flex-direction: row; align-items: center; gap: 10px; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 9px); }
+.bay-grid.horizontal .bay-empty { margin: 0 auto; }
+.nas-model { color: var(--nas-ink-2); font-weight: 600; letter-spacing: .08em; }
+.bays-case { min-width: 240px; }
+.bays-orient { min-width: 200px; }
