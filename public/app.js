@@ -3008,6 +3008,7 @@
     if (settingsTab() !== 'ups') return;
     let found = null; // nut-scanner (and lsusb) results
     let foundNote = ''; // why nut-scanner found nothing
+    let foundOthers = []; // the other USB devices, when no UPS was found
     let names = null; // UPS names on another NUT server
     const when = (ms) => new Date(ms).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
     const statusHtml = () => {
@@ -3059,7 +3060,10 @@
       const c = d.config;
       const devList = found ? (found.length ? `<div style="margin:8px 0">${found.map((x, i) => `<label class="check"><input type="radio" name="dev" value="${i}"${i === 0 ? ' checked' : ''}> ${esc([x.vendor, x.product].filter(Boolean).join(' ') || x.driver)} <span class="muted small">${esc(x.driver)}${x.serial ? ' · ' + esc(x.serial) : ''}${x.vendorid ? ' · ' + esc(x.vendorid + ':' + x.productid) : ''}${x.source === 'lsusb' ? ' · ' + t('found on USB, the driver is a suggestion') : ''}</span></label>`).join('')}</div>`
         : `<p class="muted small">${t('No UPS found on USB. Check the cable, or fill in the driver yourself.')}</p>`) : '';
-      const scanNote = found && !found.length && foundNote ? `<p class="muted small"><code>${esc(foundNote)}</code></p>` : '';
+      const scanNote = !found || found.length ? '' : `${foundNote ? `<p class="muted small"><code>${esc(foundNote)}</code></p>` : ''}
+        ${foundOthers.length ? `<p class="muted small">${t('These USB devices are on the server. If one of them is the UPS, choose it:')}</p>
+          <div style="margin:8px 0">${foundOthers.map((x, i) => `<label class="check"><input type="radio" name="usbdev" value="${i}"> ${esc(x.product || x.vendorid + ':' + x.productid)} <span class="muted small">${esc(x.vendorid + ':' + x.productid)}</span></label>`).join('')}</div>`
+        : `<p class="muted small">${t('The server sees no USB devices besides its own hubs. Is MajaOS running in a virtual machine? Then pass the UPS through to that VM first.')}</p>`}`;
       el.innerHTML = `
         ${d.installed ? '' : `<p class="notice warn"><span>${t('NUT is not installed on the server. Update MajaOS, or run the installer again.')}</span></p>`}
         <div data-ups-status>${statusHtml()}</div>
@@ -3121,12 +3125,19 @@
         f.driver.value = x.driver; f.port.value = x.port || 'auto';
         f.vendorid.value = x.vendorid || ''; f.productid.value = x.productid || ''; f.serial.value = x.serial || '';
       };
-      form.addEventListener('change', (e) => { if (e.target.name === 'dev') pick(); });
+      form.addEventListener('change', (e) => {
+        if (e.target.name === 'dev') pick();
+        // A USB device the user points out as the UPS: usbhid-ups with its id, the driver most UPSes use.
+        if (e.target.name === 'usbdev') {
+          const x = foundOthers[Number(e.target.value)];
+          if (x) { f.driver.value = 'usbhid-ups'; f.port.value = 'auto'; f.vendorid.value = x.vendorid; f.productid.value = x.productid; f.serial.value = ''; }
+        }
+      });
       if (found && found.length && mode === 'local') pick();
       const scanBtn = $('[data-ups-scan]', form);
       if (scanBtn) scanBtn.addEventListener('click', async () => {
         scanBtn.disabled = true; scanBtn.textContent = t('Searching…'); err.textContent = '';
-        try { const r = await api.post('/api/ups/scan', {}); found = r.devices || []; foundNote = r.note || ''; draw('local'); }
+        try { const r = await api.post('/api/ups/scan', {}); found = r.devices || []; foundNote = r.note || ''; foundOthers = r.others || []; draw('local'); }
         catch (ex) { err.textContent = ex.message; scanBtn.disabled = false; scanBtn.textContent = t('Search for a UPS'); }
       });
       const namesBtn = $('[data-ups-names]', form);

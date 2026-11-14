@@ -134,3 +134,12 @@ Bus 001 Device 007: ID 1234:5678 Some Brand Mini UPS
   // The id it suggests passes the checks.
   assert.equal(ups.validate({ mode: 'local', driver: 'usbhid-ups', port: 'auto', extra: { vendorid: list[0].vendorid, productid: list[0].productid } }, { mode: 'off', events: [] }).extra.vendorid, '0463');
 });
+
+test('lsusb with all: every USB device except the root hubs, for choosing a UPS with an unknown id', () => {
+  const all = ups.parseLsusb(`Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 001 Device 006: ID 046d:c52b Logitech, Inc. Unifying Receiver
+Bus 001 Device 008: ID 0627:0001 Adomax Technology Co., Ltd QEMU USB Tablet
+`, true);
+  assert.deepEqual(all.map((d) => d.vendorid + ':' + d.productid), ['046D:C52B', '0627:0001']);
+  assert.deepEqual(ups.parseLsusb('Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub\n', true), []);
+});
