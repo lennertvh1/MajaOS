@@ -3188,4 +3188,10 @@ window.TB_LANG.nl = {
   "{disk} is held by {holder} and could not be released: {error}": "{disk} wordt vastgehouden door {holder} en kon niet losgemaakt worden: {error}",
   "libvirt could not open the VM's disks to merge this snapshot while the VM is off. Start the VM and delete the snapshot then: a running VM merges it itself.": "libvirt kon de schijven van de VM niet openen om deze snapshot samen te voegen terwijl de VM uit staat. Start de VM en verwijder de snapshot dan: een draaiende VM voegt hem zelf samen.",
   "Dashboard": "Dashboard",
+  "{n} of {total}": "{n} van {total}",
+  "All off": "Alles uit",
+  "None yet": "Nog geen",
+  "{n} task": "{n} taak",
+  "{n} tasks": "{n} taken",
+  "Home": "Start",
 };

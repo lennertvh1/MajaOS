@@ -106,6 +106,8 @@
     <main class="desk" id="desk">
       <div id="diskAlerts" class="disk-alerts" hidden></div>
       <div id="gpuBar" class="gpu-bar" role="status" hidden></div>
+      <!-- On a phone: equal tiles instead of the widgets and the app grid (renderMobileHome) -->
+      <section class="m-home" id="mHome" aria-label="Home"></section>
       <aside class="widgets" aria-label="Overview" id="widgets">
         <div class="widget-slot" data-widget="clock" data-item="w:clock">
           <section class="widget clock-widget">
@@ -189,7 +191,7 @@
       <section class="apps-area" aria-labelledby="appsTitle">
         <div class="apps-bar">
           <div class="apps-title">
-            <h1 id="appsTitle">Apps <span class="count" id="appCount"></span></h1>
+            <h1 id="appsTitle"><button class="m-back" type="button" data-m-back aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>Apps <span class="count" id="appCount"></span></h1>
             <div class="upd-info" id="updInfo" aria-live="polite"></div>
           </div>
           <div class="apps-tools">

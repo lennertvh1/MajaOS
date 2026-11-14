@@ -325,6 +325,7 @@
     $('#date').textContent = d.charAt(0).toUpperCase() + d.slice(1);
     const h = now.getHours();
     $('#greeting').textContent = t(h < 6 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+    const mt = document.querySelector('#mHome .m-time'); if (mt) { mt.textContent = $('#clock').textContent; $('#mHome .m-date').textContent = $('#date').textContent; $('#mHome .m-greet').textContent = $('#greeting').textContent; }
   }
 
   /* ------------------------------------------------------------ widgets */
@@ -968,7 +969,7 @@
   /* --- widget: shared folders */
   async function loadShares() {
     try { S.shares = await api.get('/api/shares'); S.sharesError = null; } catch (e) { S.sharesError = e.message; }
-    renderSharesWidget();
+    renderSharesWidget(); renderMobileHome();
   }
   function renderSharesWidget() {
     const ul = $('#shareMini'), pill = $('#shareConn'), d = S.shares;
@@ -993,7 +994,7 @@
   async function loadBackups() {
     try { S.backup = await api.get('/api/backup?brief=1'); S.backupError = null; } catch (e) { S.backupError = e.message; }
     renderBackupWidget();
-    renderNotes();
+    renderNotes(); renderMobileHome();
   }
   function renderBackupWidget() {
     const ul = $('#bkMini'), pill = $('#bkState'), d = S.backup;
@@ -1012,6 +1013,87 @@
       + (d.devices ? `<li><span class="name">${t('Devices', null, 'backup')}</span><span class="muted small">${esc(t(d.devices === 1 ? '{n} device' : '{n} devices', { n: d.devices }))}</span></li>` : '')
       || `<li class="muted small">${t('No backups yet. Click to create one.')}</li>`;
   }
+
+
+  /* --- phone home screen (≤ 640 px): equal tiles like an iOS or Android app, and Apps as a tile of its own (#apps) */
+  const mqPhone = window.matchMedia('(max-width: 640px)');
+  const M_ICONS = {
+    apps: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
+    sys: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    ai: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/>',
+    ups: '<rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3M11 9l-2 3.5h4L11 16"/>',
+  };
+  function renderMobileHome() {
+    const box = $('#mHome');
+    if (!box || !mqPhone.matches) return;
+    const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
+    const o = S.overview || {};
+    const txt = (sel) => { const el = $(sel); return el ? el.textContent.trim() : ''; };
+    const tile = ({ key, open, color, icon, label, big, sub, pill, extra = '', small = false }) => `
+      <button type="button" class="m-tile" ${open}>
+        <span class="m-tile-head"><span class="m-ico" style="--c:${color}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span>
+          <span class="m-label">${esc(label)}</span>${pill ? `<span class="pill ${pill[1] || ''}">${esc(pill[0])}</span>` : ''}</span>
+        ${extra}
+        <span class="m-big${small ? ' small' : ''}">${big}</span>
+        ${sub ? `<span class="m-sub">${esc(sub)}</span>` : ''}
+      </button>`.replace(/^\s+/gm, '');
+    const tiles = [];
+    // Apps: four icons, how many run, updates.
+    const apps = S.apps || [];
+    const running = apps.filter(isRunning).length, upd = apps.filter((a) => a.update === true).length;
+    tiles.push(tile({ key: 'apps', open: 'data-m-apps', color: '#3e8e7e', icon: M_ICONS.apps, label: t('Apps'),
+      extra: `<span class="m-app-icons">${apps.slice(0, 4).map((a) => iconHtml(a)).join('')}</span>`,
+      big: esc(t('{n} of {total}', { n: running, total: apps.length })), small: true,
+      sub: upd ? t(upd === 1 ? '{n} update' : '{n} updates', { n: upd }) : t('running') }));
+    if (!hidden.has('sys')) {
+      const cpu = o.cpu && o.cpu.percent, mem = o.memory && o.memory.percent;
+      tiles.push(tile({ key: 'sys', open: 'data-open="system"', color: '#4a6fb5', icon: M_ICONS.sys, label: t('System'),
+        big: cpu == null ? '–' : esc(Math.round(cpu) + '%') + `<small> CPU</small>`,
+        sub: [mem == null ? null : 'RAM ' + Math.round(mem) + '%', o.uptime != null ? duration(o.uptime) : null].filter(Boolean).join(' · ') }));
+    }
+    if (!hidden.has('storage')) {
+      const s = o.storage, pct = s && s.total ? (s.used / s.total) * 100 : 0;
+      tiles.push(tile({ key: 'storage', open: 'data-open="storage"', color: PAGE_META.storage.color, icon: PAGE_META.storage.svg, label: t('Storage'),
+        big: s && s.pools ? esc(bytes(s.free)) + `<small> ${esc(t('free'))}</small>` : '–', sub: txt('#storeLine'),
+        pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null,
+        extra: s && s.pools ? `<span class="m-bar"><i class="${level(pct, 80, 92)}" style="width:${pct.toFixed(1)}%"></i></span>` : '' }));
+    }
+    if (!hidden.has('vms')) {
+      const vms = S.vms || [], on = vms.filter((v) => vmKind(v.state) === 'on');
+      tiles.push(tile({ key: 'vms', open: 'data-open="vms"', color: PAGE_META.vms.color, icon: PAGE_META.vms.svg, label: t('VMs'),
+        big: esc(t('{n} of {total}', { n: on.length, total: vms.length })), small: true,
+        sub: on.length ? on.map((v) => v.name).join(', ') : t(vms.length ? 'All off' : 'No VMs yet') }));
+    }
+    if (!hidden.has('shares')) {
+      const d = S.shares;
+      tiles.push(tile({ key: 'shares', open: 'data-open="shares"', color: PAGE_META.shares.color, icon: PAGE_META.shares.svg, label: t('Shared folders'),
+        big: d && d.shares ? esc(String(d.shares.length)) : '–', sub: txt('#shareConn') }));
+    }
+    if (!hidden.has('backup')) {
+      const d = S.backup;
+      tiles.push(tile({ key: 'backup', open: 'data-open="backup"', color: PAGE_META.backup.color, icon: PAGE_META.backup.svg, label: t('Backups'),
+        big: `<span class="${$('#bkState').classList.contains('bad') ? 'temp-bad' : ''}">${esc(txt('#bkState') || (d && d.jobs && d.jobs.length ? '' : t('None yet')))}</span>`, small: true,
+        sub: d && d.jobs ? t(d.jobs.length === 1 ? '{n} task' : '{n} tasks', { n: d.jobs.length }) : '' }));
+    }
+    if (!hidden.has('ai') && !(S.ai && S.ai.enabled === false)) {
+      tiles.push(tile({ key: 'ai', open: 'data-open="ai"', color: '#7a5bc4', icon: M_ICONS.ai, label: 'AI',
+        big: esc(txt('#aiLine') || '–'), small: true, sub: txt('#aiState') }));
+    }
+    const u = o.ups;
+    if (u) {
+      tiles.push(tile({ key: 'ups', open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS',
+        big: u.charge != null ? esc(nf0.format(u.charge) + '%') : '–', sub: [u.runtime != null ? upsTime(u.runtime) : null, t(u.onBattery ? 'On battery' : 'On mains power')].filter(Boolean).join(' · ') }));
+    }
+    box.innerHTML = `
+      <div class="m-hero"><span class="m-greet">${esc(txt('#greeting'))}</span><span class="m-time">${esc(txt('#clock'))}</span><span class="m-date">${esc(txt('#date'))}</span></div>
+      <div class="m-grid">${tiles.join('')}</div>`;
+  }
+  mqPhone.addEventListener('change', renderMobileHome);
+  $('#mHome').addEventListener('click', (e) => {
+    if (e.target.closest('[data-m-apps]')) { location.hash = 'apps'; return; }
+    if (e.target.closest('[data-m-ups]')) goSettings('settings/ups');
+  });
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-m-back]')) location.hash = ''; });
 
   /* --- home screen: order and folders (like on an iPad) */
   const appByName = (n) => S.apps.find((a) => a.name === n);
@@ -9410,7 +9492,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); statusPopRefresh(); diskEventToasts(S.overview.diskEvents); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); statusPopRefresh(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
   // The middle of the header: how long the server has been up.
   function renderTopUptime() {
     const o = S.overview, pill = $('#topUptime');
@@ -9594,16 +9676,16 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     diskSeen.seq = Math.max(diskSeen.seq, max);
   }
-  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); if (S.apps.some(updating)) watchUpdates(); }
+  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); renderMobileHome(); if (S.apps.some(updating)) watchUpdates(); }
   async function loadVms() {
     try { S.vms = await api.get('/api/vms'); S.vmError = null; }
     catch (e) { S.vmError = e.message; throw e; }
-    finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); renderNotes(); }
+    finally { S.vmsLoaded = true; renderVmWidget(); renderVmPage(); renderNotes(); renderMobileHome(); }
   }
   async function loadAi() {
     try { S.ai = await api.get('/api/ai'); S.aiError = null; S.aiDown = false; }
     catch (e) { S.aiError = e.message; S.aiDown = !!(e.data && e.data.notRunning); }
-    renderAiWidget();
+    renderAiWidget(); renderMobileHome();
     applyAiChrome();
   }
 
@@ -9686,6 +9768,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const inSettings = settingsHash();
     if (!inSettings && !popKindOf(location.hash)) underHash = location.hash;
+    document.body.classList.toggle('m-apps', location.hash === '#apps'); // the Apps tile on a phone
     const view = currentView();
     const popKind = popKindOf(location.hash);
     if (S.folder && (view !== 'home' || popKind || inSettings)) closeFolder();
