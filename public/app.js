@@ -2332,7 +2332,7 @@
     { id: 'jonsbo-n2', brand: 'Jonsbo', name: 'N2', ssd: 1, groups: [{ count: 5, columns: 5, orient: 'vertical', label: 'Hot-swap' }] },
     { id: 'jonsbo-n3', brand: 'Jonsbo', name: 'N3', ssd: 1, groups: [{ count: 8, columns: 8, orient: 'vertical', label: 'Hot-swap' }] },
     { id: 'jonsbo-n4', brand: 'Jonsbo', name: 'N4', ssd: 2, groups: [{ count: 4, columns: 4, orient: 'vertical', label: 'Hot-swap' }, { count: 2, columns: 2, orient: 'vertical', label: 'Fixed (cable to the motherboard)' }] },
-    { id: 'jonsbo-n5', brand: 'Jonsbo', name: 'N5', ssd: 4, groupsDir: 'row', groups: [{ count: 8, columns: 8, orient: 'vertical', label: 'Upright bays' }, { count: 4, columns: 1, orient: 'horizontal', label: 'Lying cage' }] },
+    { id: 'jonsbo-n5', brand: 'Jonsbo', name: 'N5', ssd: 4, groupsDir: 'row', groups: [{ count: 4, columns: 1, orient: 'horizontal', label: 'Lying cage', start: 9 }, { count: 8, columns: 8, orient: 'vertical', label: 'Upright bays', start: 1 }] },
     { id: 'silverstone-ds380', brand: 'SilverStone', name: 'DS380', ssd: 4, groups: [{ count: 8, columns: 1, orient: 'horizontal', label: 'Hot-swap' }] },
     { id: 'silverstone-cs351', brand: 'SilverStone', name: 'CS351', ssd: 0, groups: [{ count: 5, columns: 1, orient: 'horizontal', label: 'Hot-swap' }] },
     { id: 'silverstone-cs381', brand: 'SilverStone', name: 'CS381', ssd: 4, groups: [{ count: 8, columns: 2, orient: 'horizontal', label: 'Hot-swap' }] },
@@ -2495,8 +2495,9 @@
     // The blocks of bays: the case's groups, or one grid of count × columns. first = the number of its first bay.
     const bayGroups = () => {
       const list = Array.isArray(cfg.groups) && cfg.groups.reduce((n, g) => n + g.count, 0) === cfg.count ? cfg.groups : [{ count: cfg.count, columns: cfg.columns, orient: cfg.orient }];
+      // A group's own start number (the N5's cage on the left is 9–12), otherwise the numbers run on.
       let first = 1;
-      return list.map((g) => { const out = { ...g, first }; first += g.count; return out; });
+      return list.map((g) => { const out = { ...g, first: Number.isInteger(g.start) ? g.start : first }; first += g.count; return out; });
     };
     // A 2.5" SATA SSD in a 3.5" bay: the drawer stays the same size, with the small SSD on an adapter in it.
     const isSsd = (d) => d && d.transport !== 'nvme' && !d.rotational;

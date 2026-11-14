@@ -113,3 +113,13 @@ test('bays: groups next to each other or under each other', () => {
   assert.equal(validateBays({ count: 12, columns: 8, groups, slots: {} }).groupsDir, 'column');
   assert.equal(validateBays({ count: 12, columns: 8, groupsDir: 'row', slots: {} }).groupsDir, undefined); // no groups, nothing to arrange
 });
+
+test('bays: own start numbers per group (the N5 cage on the left is 9–12)', () => {
+  const { validateBays } = require('../lib/bays');
+  const groups = [{ count: 4, columns: 1, orient: 'horizontal', label: 'Lying cage', start: 9 }, { count: 8, columns: 8, orient: 'vertical', label: 'Upright bays', start: 1 }];
+  const v = validateBays({ count: 12, columns: 1, groups, groupsDir: 'row', slots: {} });
+  assert.deepEqual(v.groups.map((g) => g.start), [9, 1]);
+  // Overlapping or missing numbers: the starts are dropped and the numbers run on.
+  const bad = validateBays({ count: 12, columns: 1, groups: [{ ...groups[0], start: 5 }, groups[1]], slots: {} });
+  assert.deepEqual(bad.groups.map((g) => g.start), [undefined, undefined]);
+});

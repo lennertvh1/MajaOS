@@ -2493,6 +2493,13 @@
       if (groups.some((g) => !Number.isInteger(g.count) || g.count < 1 || g.count > 60 || !Number.isInteger(g.columns) || g.columns < 1 || g.columns > 12)
         || groups.reduce((n, g) => n + g.count, 0) !== count) groups = null;
     }
+    // Own bay numbers per group (start), when the drawing order isn't the numbering: the N5's cage sits on the left but
+    // its bays are 9–12, after the 8 of the main backplane. Kept only when together they number 1…count exactly once.
+    if (groups && b.groups.every((g) => g && g.start != null)) {
+      const starts = b.groups.map((g) => Number(g.start));
+      const nums = groups.flatMap((g, i) => Array.from({ length: g.count }, (_, k) => starts[i] + k)).sort((a, b) => a - b);
+      if (starts.every(Number.isInteger) && nums.every((n, i) => n === i + 1)) groups.forEach((g, i) => { g.start = starts[i]; });
+    }
     const groupsDir = groups && b.groupsDir === 'row' ? 'row' : 'column';
     bays = { count, columns, orient, model, ...(groups ? { groups, groupsDir } : {}), m2, ssd, slots };
     return copy(bays);
