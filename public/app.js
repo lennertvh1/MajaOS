@@ -9270,8 +9270,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     pill.hidden = !o || o.uptime == null || S.config.role === 'user';
     if (pill.hidden) return;
     $('#topUptimeText').textContent = duration(o.uptime);
-    const label = t('Up for {time}', { time: duration(o.uptime) });
-    pill.title = label; pill.setAttribute('aria-label', label);
+    pill.setAttribute('aria-label', t('Up for {time}', { time: duration(o.uptime) }));
   }
   // The UPS in the header: charge and time left, orange on battery, red when the battery is almost empty.
   const upsTime = (sec) => {
@@ -9290,9 +9289,38 @@ sudo ./install.sh</pre></div>`}` : '') +
     btn.classList.toggle('on-battery', !!u.onBattery && !u.lowBattery);
     btn.classList.toggle('low', !!u.lowBattery);
     const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
-    const label = ['UPS', state, ...parts].join(' · ');
-    btn.title = label; btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-label', ['UPS', state, ...parts].join(' · '));
   }
+  // Rich tooltips (hintTips, data-rich-tip): built when shown, so they always show the last reading.
+  const tipWhen = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+  const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v != null && v !== '').map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  const RICH_TIPS = {
+    uptime() {
+      const o = S.overview;
+      if (!o || o.uptime == null) return '';
+      return `<b class="tip-title">${esc(o.hostname || t('Server'))}</b>${tipRows([
+        [t('Up for'), duration(o.uptime)],
+        [t('Started'), tipWhen(Date.now() - o.uptime * 1000)],
+        [t('System'), o.version],
+        [t('Processor'), o.cpu && o.cpu.brand],
+      ])}`;
+    },
+    ups() {
+      const u = S.overview && S.overview.ups;
+      if (!u) return '';
+      const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
+      return `<b class="tip-title">${esc(u.model || 'UPS')}</b>${tipRows([
+        [t('Status'), state + (u.charging ? ' · ' + t('charging') : '') + (u.replaceBattery ? ' · ' + t('Replace the battery') : '')],
+        [t('Battery'), u.charge != null ? nf0.format(u.charge) + '%' : null],
+        [t('Time left on battery'), u.runtime != null ? upsTime(u.runtime) : null],
+        [t('Load on the UPS'), u.load != null ? nf0.format(u.load) + '%' + (u.power != null ? ' · ' + nf0.format(u.power) + ' W' : '') : null],
+        [t('Input voltage'), u.inputVoltage != null ? nf0.format(u.inputVoltage) + ' V' : null],
+        [t('Connected'), u.mode === 'remote' ? t('Through the NUT server {host}', { host: u.host }) : t('On this server (USB)')],
+        [t('Shuts down at'), u.countdown && u.onBattery ? tipWhen(u.countdown) : null],
+        [t('Last event'), u.last ? tr(u.last.text) + ' · ' + tipWhen(u.last.at) : null],
+      ])}<div class="tip-foot">${esc(t('Click for the UPS settings'))}</div>`;
+    },
+  };
   // A disk plugged in or taken out while the server runs (lib/storage.js watchDisks): a message, once per event. What
   // happened before this page was opened isn't shown again.
   const diskSeen = { boot: null, seq: 0 };
@@ -10514,8 +10542,12 @@ sudo ./install.sh</pre></div>`}` : '') +
     tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
     let owner = null;
     const show = (el) => {
+      const rich = el.dataset.richTip && RICH_TIPS[el.dataset.richTip];
+      const html = rich ? rich() : '';
+      if (rich && !html) return;
       owner = el;
-      tip.textContent = el.dataset.tip;
+      tip.classList.toggle('rich', !!rich);
+      if (rich) tip.innerHTML = html; else tip.textContent = el.dataset.tip;
       (el.closest('dialog') || document.body).appendChild(tip);
       tip.hidden = false;
       const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, m = 8;
@@ -10527,14 +10559,14 @@ sudo ./install.sh</pre></div>`}` : '') +
       tip.style.left = (2 * x - got.left) + 'px'; tip.style.top = (2 * y - got.top) + 'px';
     };
     const hide = () => { owner = null; tip.hidden = true; };
-    const TIPPED = '.hint, .dir-link';
+    const TIPPED = '.hint, .dir-link, [data-rich-tip]';
     document.addEventListener('pointerover', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse') show(el); });
     document.addEventListener('pointerout', (e) => { const el = e.target.closest && e.target.closest(TIPPED); if (el && e.pointerType === 'mouse' && owner === el) hide(); });
     document.addEventListener('focusin', (e) => { if (e.target.matches && e.target.matches(TIPPED)) show(e.target); });
     document.addEventListener('focusout', (e) => { if (owner === e.target) hide(); });
     // A tap (touch) opens and closes it; it never ticks a checkbox or submits a form it sits in.
     document.addEventListener('click', (e) => {
-      const el = e.target.closest && e.target.closest('.hint');
+      const el = e.target.closest && e.target.closest('.hint, #topUptime');
       if (!el) { if (!tip.hidden) hide(); return; }
       e.preventDefault(); e.stopPropagation();
       if (owner === el && !tip.hidden) hide(); else show(el);

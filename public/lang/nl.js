@@ -3113,4 +3113,8 @@ window.TB_LANG.nl = {
   "found on USB, the driver is a suggestion": "gevonden op USB, de driver is een voorstel",
   "These USB devices are on the server. If one of them is the UPS, choose it:": "Deze USB-toestellen hangen aan de server. Is een ervan de UPS, kies hem dan:",
   "The server sees no USB devices besides its own hubs. Is MajaOS running in a virtual machine? Then pass the UPS through to that VM first.": "De server ziet geen USB-toestellen behalve zijn eigen hubs. Draait MajaOS in een virtuele machine? Geef de UPS dan eerst door aan die VM.",
+  "Through the NUT server {host}": "Via de NUT-server {host}",
+  "Shuts down at": "Sluit af om",
+  "Last event": "Laatste melding",
+  "Click for the UPS settings": "Klik voor de UPS-instellingen",
 };

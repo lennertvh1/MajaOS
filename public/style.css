@@ -2026,3 +2026,10 @@ button.top-pill:hover { background: var(--glass-hover); color: var(--text); }
 @container (max-width: 1100px) { #topUptime > span { display: none; } #topUptime { padding: 0.38em 0.5em; } }
 @container (max-width: 900px) { .top-pill > span { display: none; } .top-pill { padding: 0.38em 0.5em; } }
 @media (max-width: 880px) { .top-status { order: 2; flex: 0 0 auto; } }
+/* A tooltip with more than one line (the uptime and UPS pills in the header) */
+.tip.rich { max-width: 380px; padding: 10px 12px; }
+.tip.rich b.tip-title { display: block; margin-bottom: 6px; font-weight: 600; }
+.tip.rich dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; }
+.tip.rich dt { color: var(--muted); }
+.tip.rich dd { margin: 0; font-variant-numeric: tabular-nums; }
+.tip.rich .tip-foot { margin-top: 8px; color: var(--muted); font-size: 12px; }
