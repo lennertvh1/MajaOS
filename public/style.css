@@ -2053,3 +2053,41 @@ button.top-pill:hover { background: var(--glass-hover); color: var(--text); }
 /* A shared folder the app user can't write in (Shared folders) */
 .share-warn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .share-warn .notice { margin: 0; flex: 1 1 260px; font-size: 13px; padding: 9px 12px; }
+
+/* VM snapshot manager (like VMware): the history as a tree, details of the chosen snapshot */
+.snap-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 12px; }
+.snap-bar .btn svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.snap-bar .muted { margin-left: auto; }
+.snap-make { padding: 12px 14px; margin-bottom: 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); }
+.snap-manager { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 10px; }
+@media (max-width: 720px) { .snap-manager { grid-template-columns: 1fr; } }
+.snap-tree-box, .snap-detail { border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); padding: 10px; min-width: 0; }
+.snap-tree-box { max-height: 420px; overflow: auto; }
+.snap-tree, .snap-tree ul { list-style: none; margin: 0; padding: 0; }
+.snap-tree ul { margin-left: 15px; padding-left: 12px; border-left: 1.5px solid var(--glass-line); }
+.snap-tree li { position: relative; }
+.snap-tree ul > li::before { content: ""; position: absolute; left: -12px; top: 21px; width: 10px; border-top: 1.5px solid var(--glass-line); }
+.snap-node { display: flex; align-items: center; gap: 9px; width: 100%; margin: 2px 0; padding: 6px 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; color: inherit; font: inherit; }
+button.snap-node { cursor: pointer; }
+button.snap-node:hover { background: var(--glass-hover); }
+.snap-node.sel { background: var(--glass-strong); border-color: var(--accent); }
+.snap-node:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.snap-node.here { color: var(--accent); }
+.snap-txt { display: grid; min-width: 0; }
+.snap-txt b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snap-txt small { font-size: 12px; color: var(--muted); }
+.snap-node.here .snap-txt small { color: var(--muted); }
+.snap-ico { position: relative; flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--glass-strong); border: 1px solid var(--glass-line); color: var(--muted); }
+.snap-node.current .snap-ico { color: var(--accent); border-color: var(--accent); }
+.snap-ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.snap-ico.mem::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); border: 2px solid var(--body-bg); }
+.snap-ico.big { width: 40px; height: 40px; border-radius: 12px; }
+.snap-ico.big svg { width: 22px; height: 22px; }
+.snap-detail-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.snap-detail-head b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.snap-detail-head small { display: block; color: var(--muted); font-size: 12.5px; }
+.snap-desc { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.snap-detail .kv { margin: 8px 0; }
+.snap-detail .notice { margin: 8px 0; font-size: 13px; padding: 9px 12px; }
+.snap-empty { display: grid; justify-items: center; gap: 8px; padding: 26px 12px; text-align: center; }
+.snap-empty svg { width: 34px; height: 34px; fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }

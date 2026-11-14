@@ -1876,6 +1876,8 @@
   }
 
   const MENU_ICONS = {
+    snapshot: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    snapshots: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2"/>',
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     start: '<path d="M7 5l12 7-12 7z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
     restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', update: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
@@ -1931,7 +1933,7 @@
     menu.dataset.forApp = a.id; // not data-app: the tiles' click handling reacts to that
     placeMenu(x, y, opener);
   }
-  const VM_MENU_ICON = { reboot: 'restart', edit: 'settings' };
+  const VM_MENU_ICON = { reboot: 'restart', edit: 'settings', 'snap-revert': 'restart' };
   function openVmMenu(v, x, y, opener) {
     const kind = vmKind(v.state), busy = S.vmBusy[v.id];
     const items = [
@@ -1944,6 +1946,10 @@
       '-',
       (kind === 'on' || kind === 'paused' || kind === 'stopping' || kind === 'bad') && ['force-stop', t('Force off'), 'danger'],
       kind === 'on' && ['reset', t('Hard reset'), 'danger'],
+      '-',
+      ['snapshot', t('Take snapshot…')],
+      ['snap-revert', t('Back to the current snapshot…')],
+      ['snapshots', t('Manage snapshots…')],
       '-',
       ['edit', t('Edit')],
     ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
@@ -4304,6 +4310,7 @@
       : kind === 'stopping' ? ''
       : btn('start', 'primary')) +
       (kind === 'on' || kind === 'paused' ? consoleLink(v.id, 'btn') : '') +
+      `<button class="btn" type="button" data-vm-snaps="${esc(v.id)}"${busy ? ' disabled' : ''}>${t('Snapshots')}</button>` +
       `<button class="btn" type="button" data-vm-edit="${esc(v.id)}"${busy ? ' disabled' : ''}>${t('Edit')}</button>`;
     const force = kind === 'on' ? btn('force-stop', 'sm danger') + btn('reset', 'sm danger') : kind === 'off' ? '' : btn('force-stop', 'sm danger');
     const foot = kind === 'off' ? `<span class="row-sub">${t('No longer needed?')}</span>${btn('delete', 'sm danger')}`
@@ -4374,6 +4381,20 @@
     if (!v || S.vmBusy[v.id]) return;
     if (act === 'console') return openConsole(v.id);
     if (act === 'edit') return vmEditWindow(v.id);
+    if (act === 'snapshot') return vmEditWindow(v.id, 'snapshots', { snapNew: true });
+    if (act === 'snapshots') return vmEditWindow(v.id, 'snapshots');
+    if (act === 'snap-revert') {
+      // Like VMware's Revert to current snapshot: the one the VM runs on now.
+      let cur;
+      try { cur = ((await api.get('/api/vms/' + encodeURIComponent(v.id) + '/snapshots')).snapshots || []).find((x) => x.current); }
+      catch (ex) { toast(ex.message, true); return; }
+      if (!cur) { toast(t('{vm} has no snapshot yet. Take one first.', { vm: v.name })); return; }
+      if (!(await ask(t('Restore {vm} to {name}? Everything that changed in the VM since then is gone.', { vm: v.name, name: cur.name }), t('Restore')))) return;
+      try { await api.post('/api/vms/' + encodeURIComponent(v.id) + '/snapshots/' + encodeURIComponent(cur.name) + '/revert', {}); toast(t('{vm} is back at {name}.', { vm: v.name, name: cur.name })); }
+      catch (ex) { toast(ex.message, true); }
+      loadVms().catch(() => {});
+      return;
+    }
     const def = VM_ACTS[act];
     if (!def || act === 'delete') return;
     if (def.ask && !(await ask(def.ask(v.name), t(def.yes)))) return;
@@ -4384,6 +4405,8 @@
     if (e.target.closest('[data-vm-retry]')) { loadVms().catch(() => {}); return; }
     const edit = e.target.closest('[data-vm-edit]');
     if (edit) { vmEditWindow(edit.dataset.vmEdit); return; }
+    const snaps = e.target.closest('[data-vm-snaps]');
+    if (snaps) { vmEditWindow(snaps.dataset.vmSnaps, 'snapshots'); return; }
     const b = e.target.closest('[data-vm]'); if (!b) return;
     const v = S.vms.find((x) => x.id === b.dataset.vm); const act = b.dataset.do;
     if (!v || !VM_ACTS[act] || S.vmBusy[v.id]) return;
@@ -4474,7 +4497,7 @@
   const NIC_MODELS = [['virtio', 'virtio (fastest: Linux, Home Assistant)'], ['e1000e', 'e1000e (Windows without extra drivers)'], ['rtl8139', 'rtl8139 (old systems)']];
   const VM_TABS = [['general', 'General'], ['cpu', 'CPU and memory'], ['net', 'Network'], ['storage', 'Storage'], ['devices', 'Devices'], ['snapshots', 'Snapshots'], ['screen', 'Screen']];
 
-  async function vmEditWindow(id, tab = 'general') {
+  async function vmEditWindow(id, tab = 'general', vmOpts = {}) {
     openWindow(t('Edit VM'), `<p class="lead">${t('Loading…')}</p>`);
     let d, opts;
     try { [d, opts] = await Promise.all([api.get('/api/vms/' + encodeURIComponent(id)), vmOptions()]); }
@@ -4595,50 +4618,112 @@
     drawCpu(); drawNet(); drawStorage(); drawDevices();
     /* Snapshots: carried out right away, not through Save */
     const snapPane = pane('snapshots');
-    async function drawSnaps() {
-      snapPane.innerHTML = `<p class="muted">${t('Loading…')}</p>`;
+    // Snapshot manager, like VMware's: the history as a tree (each snapshot under the one it was taken from), "You are
+    // here" under the snapshot the VM runs on now, details of the chosen snapshot, and taking one right here.
+    const snapSel = { name: null, making: !!vmOpts.snapNew };
+    const SNAP_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+    const HERE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>';
+    const snapWhen = (iso, long) => (iso ? new Date(iso).toLocaleString(LOCALE, long ? { dateStyle: 'full', timeStyle: 'short', ...clockOpts() } : { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', ...clockOpts() }) : '');
+    const snapKind = (x) => t(x.memory ? 'with memory' : x.state === 'shutoff' ? 'switched off' : 'disks only');
+    let snapList = [];
+    async function drawSnaps(keep) {
+      if (!keep) snapPane.innerHTML = `<p class="muted">${t('Loading…')}</p>`;
       let r;
       try { r = await api.get('/api/vms/' + encodeURIComponent(id) + '/snapshots'); }
       catch (ex) { snapPane.innerHTML = `<p class="form-error">${esc(ex.message)}</p>`; return; }
       if (!snapPane.isConnected) return;
+      snapList = r.snapshots || [];
+      if (snapSel.name && !snapList.some((x) => x.name === snapSel.name)) snapSel.name = null;
+      if (!snapSel.name) { const cur = snapList.find((x) => x.current); snapSel.name = cur ? cur.name : (snapList[snapList.length - 1] || {}).name || null; }
+      paintSnaps();
+    }
+    function paintSnaps() {
       const on = vmKind(d.state) === 'on';
+      const cur = snapList.find((x) => x.current);
+      // Oldest first, like VMware; a snapshot whose parent is gone hangs at the top, so nothing gets lost.
+      const known = new Set(snapList.map((x) => x.name));
+      const up = (x) => (x.parent && known.has(x.parent) ? x.parent : null);
+      const kids = (parent) => snapList.filter((x) => up(x) === parent).sort((a, b) => new Date(a.created) - new Date(b.created));
+      // A node, its children, and "You are here" right under the current snapshot (or at the top without one).
+      const node = (x) => `<li>
+          <button type="button" class="snap-node${snapSel.name === x.name ? ' sel' : ''}${x.current ? ' current' : ''}" data-snap-pick="${esc(x.name)}" aria-pressed="${snapSel.name === x.name}">
+            <span class="snap-ico${x.memory ? ' mem' : ''}" title="${esc(snapKind(x))}">${SNAP_ICON}</span>
+            <span class="snap-txt"><b>${esc(x.name)}</b><small>${esc(snapWhen(x.created))}</small></span></button>
+          ${kids(x.name).length || x.current ? `<ul>${kids(x.name).map(node).join('')}${x.current ? hereNode : ''}</ul>` : ''}</li>`;
+      const hereNode = `<li><div class="snap-node here"><span class="snap-ico">${HERE_ICON}</span><span class="snap-txt"><b>${t('You are here')}</b><small>${esc(vmStateText(d.state))}</small></span></div></li>`;
+      const tree = snapList.length ? `<ul class="snap-tree">${kids(null).map(node).join('')}${cur ? '' : hereNode}</ul>` : '';
+      const sel = snapList.find((x) => x.name === snapSel.name);
+      const parent = sel && sel.parent ? snapList.find((x) => x.name === sel.parent) : null;
+      const details = sel ? `
+          <div class="snap-detail-head"><span class="snap-ico big${sel.memory ? ' mem' : ''}">${SNAP_ICON}</span>
+            <div><b>${esc(sel.name)}</b><small>${esc(snapWhen(sel.created, true))}</small></div></div>
+          ${sel.description ? `<p class="snap-desc">${esc(sel.description)}</p>` : `<p class="muted small">${t('No description.')}</p>`}
+          <dl class="kv">
+            <dt>${t('Contains')}</dt><dd>${esc(snapKind(sel))}</dd>
+            <dt>${t('Taken from')}</dt><dd>${parent ? esc(parent.name) : t('The start (no earlier snapshot)')}</dd>
+            <dt>${t('Later snapshots')}</dt><dd>${nf0.format(kids(sel.name).length)}</dd>
+          </dl>
+          ${sel.current ? `<p class="notice"><span>${t('The VM runs on this snapshot now: changes since then belong to "You are here".')}</span></p>` : ''}
+          <div class="btn-row" style="justify-content:flex-start">
+            <button class="btn primary" type="button" data-snap-revert="${esc(sel.name)}">${t('Go back to this snapshot')}</button>
+            <button class="btn danger" type="button" data-snap-del="${esc(sel.name)}">${t('Remove')}</button></div>`
+        : `<p class="muted">${t('Choose a snapshot to see its details.')}</p>`;
       snapPane.innerHTML = `
-        <p class="muted small">${t('A snapshot captures the VM as it is now. If you go back later, everything that changed afterwards is gone. Handy before an update. A snapshot is not a backup: it is on the same disk.')}</p>
-        <div class="fld-row">
-          <label class="fld"><span>${t('Name')} ${hint(t('Empty = the date and time.'))}</span><input class="field" data-snap="name" maxlength="48" spellcheck="false" autocomplete="off" placeholder="${t('e.g. before-update')}"></label>
-          <label class="fld"><span>${t('Description')} <em class="muted">${t('(optional)')}</em></span><input class="field" data-snap="description" maxlength="200"></label>
+        <div class="snap-bar">
+          <button class="btn primary" type="button" data-snap-new aria-expanded="${snapSel.making}">${SNAP_ICON}${t('Take snapshot')}</button>
+          ${cur ? `<button class="btn" type="button" data-snap-revert="${esc(cur.name)}" data-snap-current>${t('Back to the current snapshot')}</button>` : ''}
+          <span class="muted small">${t(snapList.length === 1 ? '{n} snapshot' : '{n} snapshots', { n: snapList.length })}</span>
         </div>
-        ${on ? `<label class="check"><input type="checkbox" data-snap="diskOnly"> ${t('Disks only (faster, without memory)')}</label>
-          <p class="muted small" style="margin-top:-6px">${t('With memory, the VM continues where it was after restoring. Without, it is as if the power failed at that moment.')}</p>` : ''}
-        <div class="btn-row"><button class="btn primary" type="button" data-snap-make>${t('Create snapshot')}</button></div>
-        <ul class="rows">${r.snapshots.map((x) => `<li>
-            <div><div class="row-title">${esc(x.name)}${x.current ? ` <span class="pill ok">${t('now')}</span>` : ''} <span class="pill">${t(x.memory ? 'with memory' : x.state === 'shutoff' ? 'switched off' : 'disks only')}</span></div>
-              <div class="row-sub">${esc([x.created ? new Date(x.created).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short', ...clockOpts() }) : '', x.description].filter(Boolean).join(' · '))}</div></div>
-            <div class="row-side btn-row"><button class="btn sm" type="button" data-snap-revert="${esc(x.name)}">${t('Restore')}</button>
-              <button class="btn sm danger" type="button" data-snap-del="${esc(x.name)}">${t('Remove')}</button></div></li>`).join('')
-          || `<li><span class="muted">${t('No snapshots yet.')}</span></li>`}</ul>`;
+        <div class="snap-make" ${snapSel.making ? '' : 'hidden'}>
+          <div class="fld-row">
+            <label class="fld"><span>${t('Name')} ${hint(t('Empty = the date and time.'))}</span><input class="field" data-snap="name" maxlength="48" spellcheck="false" autocomplete="off" placeholder="${t('e.g. before-update')}"></label>
+            <label class="fld"><span>${t('Description')} <em class="muted">${t('(optional)')}</em></span><input class="field" data-snap="description" maxlength="200"></label>
+          </div>
+          ${on ? `<label class="check"><input type="checkbox" data-snap="diskOnly"> ${t('Disks only (faster, without memory)')}</label>
+            <p class="muted small" style="margin-top:-6px">${t('With memory, the VM continues where it was after restoring. Without, it is as if the power failed at that moment.')}</p>` : ''}
+          <div class="btn-row" style="justify-content:flex-start"><button class="btn primary" type="button" data-snap-make>${t('Create snapshot')}</button>
+            <button class="btn" type="button" data-snap-cancel>${t('Cancel')}</button></div>
+        </div>
+        ${snapList.length ? `<div class="snap-manager">
+            <div class="snap-tree-box" aria-label="${t('Snapshot history')}">${tree}</div>
+            <div class="snap-detail">${details}</div></div>`
+          : `<div class="empty snap-empty">${SNAP_ICON}<p>${t('No snapshots yet. Take one before an update or a big change, then you can always go back.')}</p></div>`}
+        <p class="muted small">${t('A snapshot captures the VM as it is now. If you go back later, everything that changed afterwards is gone. A snapshot is not a backup: it is on the same disk.')}</p>`;
+      if (snapSel.making) { const f = $('[data-snap="name"]', snapPane); if (f) f.focus(); }
     }
     snapPane.addEventListener('click', async (e) => {
+      const pick = e.target.closest('[data-snap-pick]');
+      if (pick) { snapSel.name = pick.dataset.snapPick; paintSnaps(); const again = $(`[data-snap-pick="${CSS.escape(snapSel.name)}"]`, snapPane); if (again) again.focus(); return; }
       const b = e.target.closest('button'); if (!b) return;
       const base = '/api/vms/' + encodeURIComponent(id) + '/snapshots';
+      if (b.dataset.snapNew != null) { snapSel.making = !snapSel.making; paintSnaps(); return; }
+      if (b.dataset.snapCancel != null) { snapSel.making = false; paintSnaps(); return; }
       if (b.dataset.snapMake != null) {
         const v = (k) => $(`[data-snap="${k}"]`, snapPane);
         const bodyS = { name: v('name').value.trim(), description: v('description').value, diskOnly: v('diskOnly') ? v('diskOnly').checked : false };
-        return withBusy(b, async () => { const r = await api.post(base, bodyS); toast(t('Snapshot {name} created.', { name: r.name })); drawSnaps(); });
+        return withBusy(b, async () => { const r = await api.post(base, bodyS); toast(t('Snapshot {name} created.', { name: r.name })); snapSel.making = false; snapSel.name = r.name; drawSnaps(true); });
       }
       if (b.dataset.snapRevert) {
         const n = b.dataset.snapRevert;
         if (!(await ask(t('Restore {vm} to {name}? Everything that changed in the VM since then is gone.', { vm: d.name, name: n }), t('Restore')))) return;
-        return withBusy(b, async () => { await api.post(base + '/' + encodeURIComponent(n) + '/revert', {}); toast(t('{vm} is back at {name}.', { vm: d.name, name: n })); drawSnaps(); loadVms().catch(() => {}); });
+        return withBusy(b, async () => { await api.post(base + '/' + encodeURIComponent(n) + '/revert', {}); toast(t('{vm} is back at {name}.', { vm: d.name, name: n })); snapSel.name = n; drawSnaps(true); loadVms().catch(() => {}); });
       }
       if (b.dataset.snapDel) {
         const n = b.dataset.snapDel;
         if (!(await ask(t('Remove snapshot {name}? The VM itself doesn\'t change; you just can\'t go back to this moment anymore.', { name: n }), t('Remove')))) return;
-        return withBusy(b, async () => { await api.del(base + '/' + encodeURIComponent(n)); toast(t('Snapshot {name} removed.', { name: n })); drawSnaps(); });
+        return withBusy(b, async () => { await api.del(base + '/' + encodeURIComponent(n)); toast(t('Snapshot {name} removed.', { name: n })); snapSel.name = null; drawSnaps(true); });
       }
     });
-    // Enter in a snapshot field doesn't submit the VM's form, but creates the snapshot.
-    snapPane.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); const mk = $('[data-snap-make]', snapPane); if (mk && !mk.disabled) mk.click(); } });
+    // Enter in a snapshot field doesn't submit the VM's form, but creates the snapshot; arrows walk the tree.
+    snapPane.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); const mk = $('[data-snap-make]', snapPane); if (mk && !mk.disabled) mk.click(); return; }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.matches('[data-snap-pick]')) {
+        e.preventDefault();
+        const nodes = $$('[data-snap-pick]', snapPane), i = nodes.indexOf(e.target);
+        const next = nodes[i + (e.key === 'ArrowDown' ? 1 : -1)];
+        if (next) next.click();
+      }
+    });
     let snapsLoaded = false;
     const showTab = (k) => {
       $$('[data-vtab]', body).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vtab === k)));

@@ -2610,8 +2610,11 @@
 
   /* ---- snapshots of VMs */
   const vmSnaps = {
+    // A branch, like after going back once: test-zigbee was tried and left, the VM went on from before-2026.10.
     'Home Assistant OS': [
-      { name: 'before-2026.10', description: 'Before the update to Home Assistant 2026.10', state: 'running', created: Date.now() - 6 * 86400000, parent: null, memory: true, current: false },
+      { name: 'clean-install', description: 'Fresh Home Assistant OS, onboarding done', state: 'shutoff', created: Date.now() - 21 * 86400000, parent: null, memory: false, current: false },
+      { name: 'before-2026.10', description: 'Before the update to Home Assistant 2026.10', state: 'running', created: Date.now() - 6 * 86400000, parent: 'clean-install', memory: true, current: false },
+      { name: 'test-zigbee', description: 'Trying the new Zigbee coordinator', state: 'running', created: Date.now() - 5 * 86400000, parent: 'before-2026.10', memory: true, current: false },
       { name: 'snapshot-20261021-2210', description: '', state: 'running', created: Date.now() - 2 * 86400000, parent: 'before-2026.10', memory: false, current: true },
     ],
   };
@@ -2635,7 +2638,13 @@
     const s = list.find((x) => x.name === name);
     if (!s) throw err('This snapshot doesn\'t exist (anymore).', 404);
     if (method === 'POST' && m[3]) { list.forEach((x) => { x.current = x === s; }); v.state = s.memory ? 'RUNNING' : 'SHUTOFF'; return { reverted: name }; }
-    if (method === 'DELETE') { list.splice(list.indexOf(s), 1); if (s.current && list.length) list[list.length - 1].current = true; return { removed: name }; }
+    if (method === 'DELETE') {
+      // Like libvirt: the children hang under the parent, and the parent becomes current.
+      list.splice(list.indexOf(s), 1);
+      list.forEach((x) => { if (x.parent === s.name) x.parent = s.parent; });
+      if (s.current) { const p = list.find((x) => x.name === s.parent); if (p) p.current = true; }
+      return { removed: name };
+    }
     return undefined;
   }
 
