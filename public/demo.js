@@ -1918,7 +1918,15 @@
       byId: '/dev/disk/by-id/' + (d.transport === 'nvme' ? 'nvme-' : 'ata-') + d.model.replace(/\s+/g, '_') + '_' + d.serial,
       available: !d.pool, reason: d.pool ? 'In pool ' + d.pool : null, warn: d.name === 'sdg' ? 'Has partitions (ntfs). They will be erased.' : null })).concat(copy(SYS_DISK));
     return { disks: list.sort((a, b) => Number(b.available) - Number(a.available) || a.name.localeCompare(b.name, undefined, { numeric: true })),
-      pools: pools.map((p) => p.name), layouts: ['stripe', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'mirrors'], compression: ['lz4', 'zstd', 'off'] };
+      pools: pools.map((p) => p.name), layouts: ['stripe', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'mirrors'], compression: ['lz4', 'zstd', 'off'], homes: demoHomes() };
+  }
+  // Like homeFolders in lib/migrate.js: where the default folders are now.
+  function demoHomes() {
+    const poolOf = (dir) => (pools.find((p) => dir === '/' + p.name || dir.startsWith('/' + p.name + '/')) || {}).name || null;
+    const out = ['appdata', 'isos', 'vms'].map((kind) => ({ kind, path: sp[kind], pool: poolOf(sp[kind]) }));
+    for (const f of ['media', 'backups']) { const d = datasets.find((x) => x.name.endsWith('/' + f)); if (d) out.push({ kind: f, path: d.mountpoint, pool: d.name.split('/')[0] }); }
+    out.push({ kind: 'shares', path: sp.shares, pool: poolOf(sp.shares) });
+    return out.filter((x) => x.pool);
   }
   // A pool with mixed disks (lib/mixed.js): the same checks; parity jobs take ~8 s.
   const mxJobs = {};
@@ -2336,14 +2344,27 @@
       error: done && failed ? 'Not everything could be taken over. See the steps.' : null, lines: [], started: new Date(j.at).toISOString(), state: done ? (failed ? 'failed' : 'done') : 'running' };
   }
   let demoCreating = null;
+  function demoMove(name, kinds) {
+    const list = Array.isArray(kinds) ? kinds : [];
+    if (!list.length) return null;
+    if (list.includes('backups')) throw err("The backups can't move along: devices and the backup app use that folder. They stay where they are.");
+    if (list.includes('vms')) { const on = vms.filter((v) => v.state === 'RUNNING').map((v) => v.name); if (on.length) throw err('Shut down the VMs first, then their disks can move: ' + on.join(', ') + '.', 409); }
+    for (const k of ['isos', 'vms']) if (list.includes(k)) sp[k] = '/' + name + '/' + k;
+    if (list.includes('shares')) sp.shares = '/' + name;
+    if (list.includes('media')) { const d = datasets.find((x) => x.name.endsWith('/media')); if (d) { shareList.forEach((x) => { if (x.path.startsWith(d.mountpoint)) x.path = '/' + name + '/media' + x.path.slice(d.mountpoint.length); }); d.name = name + '/media'; d.mountpoint = '/' + name + '/media'; } }
+    if (list.includes('appdata') && sp.appdata !== '/' + name + '/appdata') { spJob = { start: Date.now(), from: sp.appdata, to: '/' + name + '/appdata', apps: spApps().map((a) => a.compose) }; return spMigration(); }
+    return { state: 'done' };
+  }
   function demoStartCreate(b) {
     if (demoCreating && !demoProgress().done) throw err('A pool is already being created. Wait until it is ready.', 409);
+    if (Array.isArray(b.move) && b.move.includes('vms') && vms.some((v) => v.state === 'RUNNING')) throw err('Shut down the VMs first, then their disks can move: ' + vms.filter((v) => v.state === 'RUNNING').map((v) => v.name).join(', ') + '.', 409);
     const isMixed = b.kind === 'mixed';
     const disks = isMixed ? (b.disks || []).map((d) => d.name) : [...new Set(b.disks || [])];
     const result = demoCreatePool(b);
     const steps = [...disks.map((n) => ({ id: 'disk:' + n, label: isMixed ? 'Formatting disk {name}' : 'Erasing disk {name}', name: n, secs: isMixed ? 2 : 1 })),
       { id: 'create', label: isMixed ? 'Mounting the disks' : 'Creating the pool', secs: 2 },
-      ...(b.folders !== false ? [{ id: 'folders', label: 'Creating the folders', secs: 1 }] : [])];
+      ...(result.folders.length ? [{ id: 'folders', label: 'Creating the folders', secs: 1 }] : []),
+      ...(Array.isArray(b.move) && b.move.length ? [{ id: 'move', label: 'Starting to move the folders', secs: 1 }] : [])];
     demoCreating = { name: result.name, kind: isMixed ? 'mixed' : 'zfs', steps, result, at: Date.now(), started: new Date().toISOString() };
     return { started: true, name: result.name, progress: demoProgress() };
   }
@@ -2382,9 +2403,11 @@
       scrub: { kind: null, running: false, progress: null, errors: null, last: null } });
     chosen.forEach((c) => { const d = disks.find((x) => x.name === c.name); Object.assign(d, { pool: name, role: 'data', vdev: label, state: 'ONLINE' }); });
     datasets.push({ name, used: 0, free: usable, mountpoint: '/' + name, compress: 1 });
-    const folders = b.folders === false ? [] : ['appdata', 'media', 'backups', 'vms', 'isos'];
+    // A second pool: the default folders aren't made twice; the chosen ones move here instead.
+    const hasHomes = demoHomes().some((h) => ['appdata', 'media', 'isos', 'vms'].includes(h.kind));
+    const folders = b.folders === true || (b.folders !== false && !hasHomes) ? ['appdata', 'media', 'backups', 'vms', 'isos'] : [];
     folders.forEach((f) => datasets.push({ name: name + '/' + f, used: 0, free: usable, mountpoint: '/' + name + '/' + f, compress: 1 }));
-    return { name, folders, uses: [] }; // in the demo app data, VMs and ISOs already have a place
+    return { name, folders, uses: [], migration: demoMove(name, b.move) }; // in the demo app data, VMs and ISOs already have a place
   }
   /* ---- storage locations (Settings → Storage) and moving app data (simulated, ~10 s) */
   let spJob = null;

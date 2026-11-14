@@ -2771,8 +2771,17 @@
       const b = Object.keys((bays && bays.slots) || {}).find((x) => bays.slots[x].key === k);
       return !b ? '' : b.startsWith('m') ? t('M.2 slot {n}', { n: b.slice(1) }) : b.startsWith('s') ? t('2.5" slot {n}', { n: b.slice(1) }) : t('bay {n}', { n: b });
     };
+    // A second pool: the default folders already have a place. They aren't made again; you can move them here instead.
+    const homes = o.homes || [];
+    const HOME_KINDS = {
+      appdata: ['App data', 'The apps that use it stop for a moment and start again from the new folder.'],
+      media: ['Media', 'Apps and shared folders that use it follow.'],
+      isos: ['ISO files', 'VMs that use an ISO follow.'],
+      vms: ['VM disks', 'All VMs must be off and without snapshots.'],
+      shares: ['New shared folders', 'Nothing is copied: new shared folders are made on this pool.'],
+    };
     const W = { step: 0, kind: 'zfs', picked: new Set(), role: new Map(), layout: 'stripe', layoutByUser: false,
-      name: '', nameByUser: false, compression: 'lz4', folders: true, ok: false };
+      name: '', nameByUser: false, compression: 'lz4', folders: !homes.length, move: new Set(), ok: false };
     const STEPS = [t('Kind'), t('Disks'), t('Protection'), t('Name'), t('Overview')];
     const zfsDisks = () => free.filter((d) => W.picked.has(d.name));
     const mixedOf = (r) => free.filter((d) => W.role.get(d.name) === r);
@@ -2881,8 +2890,13 @@
             <input class="field" data-wz-name value="${esc(W.name)}" maxlength="${W.kind === 'zfs' ? 64 : 32}" autocomplete="off" spellcheck="false"></label>
           ${W.kind === 'zfs' && !beginner ? `<label class="fld"><span>${t('Compression')}</span><select class="field" data-wz-compression>
             ${[['lz4', t('lz4 (recommended: fast and saves space)')], ['zstd', t('zstd (saves more, a bit slower)')], ['off', t('Off')]].map(([v, l]) => `<option value="${v}"${W.compression === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
-          <label class="check"><input type="checkbox" data-wz-folders${W.folders ? ' checked' : ''}> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
-            ${hint(t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.'))}</span></label>`;
+          ${homes.length ? `<fieldset class="fld wz-move"><span>${t('Move the default folders to this pool?')} ${hint(t('They are not made twice. What you tick moves here after the pool is made; the old folders stay until you remove them. You can also do this later in Settings → Storage.'))}</span>
+            ${homes.filter((h) => HOME_KINDS[h.kind]).map((h) => `<label class="check"><input type="checkbox" data-wz-move="${esc(h.kind)}"${W.move.has(h.kind) ? ' checked' : ''}>
+              <span><b>${t(HOME_KINDS[h.kind][0])}</b> <span class="muted small">${esc(h.path)}</span><br><span class="muted small">${t(HOME_KINDS[h.kind][1])}</span></span></label>`).join('')}
+            ${homes.some((h) => h.kind === 'backups') ? `<p class="muted small">${t('The backups stay on {pool}: devices and the backup app use that folder.', { pool: esc(homes.find((h) => h.kind === 'backups').pool) })}</p>` : ''}
+          </fieldset>`
+          : `<label class="check"><input type="checkbox" data-wz-folders${W.folders ? ' checked' : ''}> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
+            ${hint(t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.'))}</span></label>`}`;
       }
       // Overview: everything at a glance, and the confirmation that the disks are erased.
       const d = chosen(), sum = summary();
@@ -2896,7 +2910,7 @@
           <dt>${t('Space')}</dt><dd>${esc(bytes(sum.usable))}</dd>
           <dt>${t('Protection')}</dt><dd class="${sum.failures ? '' : 'temp-warn'}">${esc(sum.safe)}</dd>
           ${W.kind === 'zfs' ? `<dt>${t('Compression')}</dt><dd>${esc(W.compression)}</dd>` : ''}
-          <dt>${t('Folders')}</dt><dd>${W.folders ? 'appdata, media, backups, vms, isos' : '–'}</dd>
+          <dt>${t('Folders')}</dt><dd>${homes.length ? (W.move.size ? esc(t('Move here: {list}', { list: [...W.move].map((k) => t(HOME_KINDS[k][0])).join(', ') })) : t('The default folders stay where they are')) : W.folders ? 'appdata, media, backups, vms, isos' : '–'}</dd>
         </dl>
         ${d.some((x) => x.warn) ? d.filter((x) => x.warn).map((x) => `<p class="small temp-warn">${esc(x.name)}: ${esc(tr(x.warn))}</p>`).join('') : ''}
         <label class="check wz-confirm"><input type="checkbox" data-wz-ok${W.ok ? ' checked' : ''}> <span>${esc(t('I understand that everything on {list} will be erased', { list: d.map((x) => x.name).join(', ') }))}</span></label>`;
@@ -2932,14 +2946,15 @@
       const next = $('[data-wz-next]', body); next.disabled = true; next.textContent = t('Creating…');
       const d = chosen();
       const payload = W.kind === 'zfs'
-        ? { name: W.name, layout: W.layout, disks: d.map((x) => x.name), compression: W.compression, confirm: W.name, folders: W.folders }
-        : { kind: 'mixed', name: W.name, confirm: W.name, folders: W.folders, disks: d.map((x) => ({ name: x.name, role: W.role.get(x.name) })) };
+        ? { name: W.name, layout: W.layout, disks: d.map((x) => x.name), compression: W.compression, confirm: W.name, folders: W.folders, move: [...W.move] }
+        : { kind: 'mixed', name: W.name, confirm: W.name, folders: W.folders, move: [...W.move], disks: d.map((x) => ({ name: x.name, role: W.role.get(x.name) })) };
       try {
         const res = await createPoolJob($('[data-wz]', body), payload);
         const folders = res.folders || [];
         toast(folders.length ? t('Pool {name} was created with the folders {list}.', { name: W.name, list: folders.join(', ') }) : t('Pool {name} was created and is mounted at /{name}.', { name: W.name }));
         if (res.warning) toast(tr(res.warning), true);
         loadOverview().catch(() => {});
+        if (res.migration) { toast(t('The folders are moving to {name}. Follow it in Settings → Storage.', { name: W.name })); goSettings('settings/storage'); return; }
         if (body.isConnected) storageWindow();
       } catch (ex) { if (!body.isConnected) return; draw(); $('.form-error', body).textContent = ex.message; }
     });
@@ -2949,6 +2964,7 @@
       if (tg.name === 'wzLayout') { W.layout = tg.value; W.layoutByUser = true; draw(); return; }
       if (tg.matches('[data-wz-compression]')) { W.compression = tg.value; return; }
       if (tg.matches('[data-wz-folders]')) { W.folders = tg.checked; return; }
+      if (tg.matches('[data-wz-move]')) { if (tg.checked) W.move.add(tg.dataset.wzMove); else W.move.delete(tg.dataset.wzMove); return; }
       if (tg.matches('[data-wz-ok]')) { W.ok = tg.checked; const n = $('[data-wz-next]', body); if (n) n.disabled = !!problem(); $('.form-error', body).textContent = ''; }
     });
     body.addEventListener('input', (e) => {
@@ -3726,7 +3742,7 @@
     const layoutIntro = poolBeginner && !wiz ? `<p class="muted small pool-beginner-intro">${t('When you use more than one disk, MajaOS can keep your photos, films and app data safe if one disk stops working. Not sure? Choose Recommended.')}</p>` : '';
     const compressionFld = poolBeginner ? '<input type="hidden" name="compression" value="lz4">' : `<label class="fld"><span>${t('Compression')}</span><select class="field" name="compression">
             <option value="lz4">${t('lz4 (recommended: fast and saves space)')}</option><option value="zstd">${t('zstd (saves more, a bit slower)')}</option><option value="off">${t('Off')}</option></select></label>`;
-    const foldersCheck = `<label class="check${wiz ? ' check-compact' : ''}"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
+    const foldersCheck = (o.homes || []).length ? '' : `<label class="check${wiz ? ' check-compact' : ''}"><input type="checkbox" name="folders" checked> <span>${t('Create default folders: {list}', { list: 'appdata, media, backups, vms, isos' })}
           ${wiz ? '' : `${hint(t('Apps, VMs and ISOs that have no place yet go on this pool. You can move them later in Settings → Storage.'))}`}</span></label>`;
     body.innerHTML = wiz ? `
       <form class="form pool-form-wizard${poolBeginner ? ' pool-form-beginner' : ''}" id="poolForm" novalidate>

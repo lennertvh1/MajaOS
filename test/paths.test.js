@@ -76,3 +76,14 @@ test('finding an existing folder for app data', () => {
   assert.equal(paths.pickFolder('vms', { list, existsFn: has(['/tank/vms']) }), '/tank/vms');
   assert.equal(paths.pickFolder('isos', { list, existsFn: has([]) }), null);
 });
+
+test('moving the default folders to a new pool: what may move', async () => {
+  const migrate = require('../lib/migrate');
+  assert.deepEqual(await migrate.checkMove([]), []);
+  await assert.rejects(migrate.checkMove(['backups']), /backups can't move along/);
+  await assert.rejects(migrate.checkMove(['appdata', 'photos']), /Unknown kind of folder/);
+  assert.deepEqual(await migrate.checkMove(['appdata', 'media', 'appdata']), ['appdata', 'media']); // no VMs involved: no virsh needed
+  // Paths in a VM's XML follow, but only full paths.
+  assert.equal(migrate.replacePath("<source file='/tank/vms/ha/disk.qcow2'/><source file='/tank/vms2/x.img'/>", '/tank/vms', '/data/vms'),
+    "<source file='/data/vms/ha/disk.qcow2'/><source file='/tank/vms2/x.img'/>");
+});
