@@ -280,3 +280,23 @@ test('lsblk: the disks Debian starts from (/, /boot/efi, swap, also through LVM)
   assert.deepEqual([...bootDisks(json)].sort(), ['nvme0n1', 'sdb']);
   assert.deepEqual([...bootDisks(null)], []);
 });
+
+test('the CPU temperature: chosen by label, never an input that reads nonsense', () => {
+  const { pickCpuTemp, cpuTemp } = require('../lib/system');
+  // Ryzen 5700X: Tctl is the processor; a stray input at 7 °C must not win.
+  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: null, value: 7 }, { chip: 'k10temp', label: 'Tctl', value: 44.5 }, { chip: 'k10temp', label: 'Tccd1', value: 41.3 }]), 44.5);
+  // Intel: the package.
+  assert.equal(pickCpuTemp([{ chip: 'coretemp', label: 'Core 0', value: 40 }, { chip: 'coretemp', label: 'Package id 0', value: 46 }]), 46);
+  // No Tctl: the warmest core.
+  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: 'Tccd1', value: 50 }, { chip: 'k10temp', label: 'Tccd2', value: 55 }]), 55);
+  // Only nonsense, or a board chip: nothing.
+  assert.equal(pickCpuTemp([{ chip: 'k10temp', label: 'Tctl', value: 7 }, { chip: 'nct6798', label: 'CPUTIN', value: 40 }]), null);
+  // From a hwmon folder.
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hwmon-'));
+  const put = (h, f, v) => { fs.mkdirSync(path.join(dir, h), { recursive: true }); fs.writeFileSync(path.join(dir, h, f), v); };
+  put('hwmon0', 'name', 'nvme\n'); put('hwmon0', 'temp1_input', '38850\n');
+  put('hwmon1', 'name', 'k10temp\n'); put('hwmon1', 'temp1_input', '7000\n');
+  put('hwmon1', 'temp2_input', '45250\n'); put('hwmon1', 'temp2_label', 'Tctl\n');
+  try { assert.equal(cpuTemp(dir), 45.3); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
