@@ -3006,7 +3006,8 @@
     let d;
     try { d = await api.get('/api/ups'); } catch (e) { el.innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     if (settingsTab() !== 'ups') return;
-    let found = null; // nut-scanner results
+    let found = null; // nut-scanner (and lsusb) results
+    let foundNote = ''; // why nut-scanner found nothing
     let names = null; // UPS names on another NUT server
     const when = (ms) => new Date(ms).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
     const statusHtml = () => {
@@ -3056,8 +3057,9 @@
         <ul class="rows">${d.events.slice(0, 15).map((e) => `<li><div><div class="row-title">${esc(tr(e.text))}</div><div class="row-sub">${esc(when(e.at))}</div></div></li>`).join('')}</ul>` : '');
     const draw = (mode) => {
       const c = d.config;
-      const devList = found ? (found.length ? `<div style="margin:8px 0">${found.map((x, i) => `<label class="check"><input type="radio" name="dev" value="${i}"${i === 0 ? ' checked' : ''}> ${esc([x.vendor, x.product].filter(Boolean).join(' ') || x.driver)} <span class="muted small">${esc(x.driver)}${x.serial ? ' · ' + esc(x.serial) : ''}</span></label>`).join('')}</div>`
+      const devList = found ? (found.length ? `<div style="margin:8px 0">${found.map((x, i) => `<label class="check"><input type="radio" name="dev" value="${i}"${i === 0 ? ' checked' : ''}> ${esc([x.vendor, x.product].filter(Boolean).join(' ') || x.driver)} <span class="muted small">${esc(x.driver)}${x.serial ? ' · ' + esc(x.serial) : ''}${x.vendorid ? ' · ' + esc(x.vendorid + ':' + x.productid) : ''}${x.source === 'lsusb' ? ' · ' + t('found on USB, the driver is a suggestion') : ''}</span></label>`).join('')}</div>`
         : `<p class="muted small">${t('No UPS found on USB. Check the cable, or fill in the driver yourself.')}</p>`) : '';
+      const scanNote = found && !found.length && foundNote ? `<p class="muted small"><code>${esc(foundNote)}</code></p>` : '';
       el.innerHTML = `
         ${d.installed ? '' : `<p class="notice warn"><span>${t('NUT is not installed on the server. Update MajaOS, or run the installer again.')}</span></p>`}
         <div data-ups-status>${statusHtml()}</div>
@@ -3070,7 +3072,7 @@
           </select></label>
           ${mode === 'local' ? `
             <div class="btn-row" style="justify-content:flex-start"><button class="btn" type="button" data-ups-scan>${t('Search for a UPS')}</button></div>
-            ${devList}
+            ${devList}${scanNote}
             <div class="fld-row">
               <label class="fld"><span>${t('Driver')} ${hint(t('usbhid-ups fits most UPSes on USB (APC, Eaton, CyberPower). Search fills it in.'))}</span>
                 <input class="field" name="driver" list="upsDrivers" value="${esc(c.driver || 'usbhid-ups')}" autocomplete="off" spellcheck="false"></label>
@@ -3124,7 +3126,7 @@
       const scanBtn = $('[data-ups-scan]', form);
       if (scanBtn) scanBtn.addEventListener('click', async () => {
         scanBtn.disabled = true; scanBtn.textContent = t('Searching…'); err.textContent = '';
-        try { found = (await api.post('/api/ups/scan', {})).devices || []; draw('local'); }
+        try { const r = await api.post('/api/ups/scan', {}); found = r.devices || []; foundNote = r.note || ''; draw('local'); }
         catch (ex) { err.textContent = ex.message; scanBtn.disabled = false; scanBtn.textContent = t('Search for a UPS'); }
       });
       const namesBtn = $('[data-ups-names]', form);

@@ -3110,4 +3110,5 @@ window.TB_LANG.nl = {
   "All details ({n})": "Alle gegevens ({n})",
   "Input": "Ingang",
   "Output": "Uitgang",
+  "found on USB, the driver is a suggestion": "gevonden op USB, de driver is een voorstel",
 };

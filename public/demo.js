@@ -3198,7 +3198,7 @@
     if (path === '/api/ups/scan') {
       await wait(1200);
       if (body && body.host) return { names: ['ups'] };
-      return { devices: [{ driver: 'usbhid-ups', port: 'auto', vendorid: '051D', productid: '0002', vendor: 'American Power Conversion', product: 'Back-UPS ES 700G', serial: '5B1234X56789', bus: '001' }] };
+      return { devices: [{ driver: 'usbhid-ups', port: 'auto', vendorid: '051D', productid: '0002', vendor: 'American Power Conversion', product: 'Back-UPS ES 700G', serial: '5B1234X56789', bus: '001' }], note: '' };
     }
     if (path === '/api/fans/probe') { await wait(1200); return { loaded: [], ...fansStatus() }; }
     if (path === '/api/fans/diagnose') { await wait(1500); return fansDiagnose(); }

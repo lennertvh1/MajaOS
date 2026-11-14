@@ -117,3 +117,20 @@ test('shutting down early: after minutes on battery or at a percentage, once', (
   // Nothing set: NUT's own low battery decides.
   assert.equal(ups.decide(99 * 60000, { onBattery: true, charge: 5 }, { minutes: 0, percent: 0 }, { since: 1 }).shutdown, null);
 });
+
+test('lsusb: a UPS of a known maker, or with UPS in its name; not the other devices', () => {
+  const list = ups.parseLsusb(`Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 001 Device 004: ID 0463:ffff MGE UPS Systems UPS
+Bus 001 Device 005: ID 051d:0002 American Power Conversion Uninterruptible Power Supply
+Bus 001 Device 006: ID 046d:c52b Logitech, Inc. Unifying Receiver
+Bus 001 Device 007: ID 1234:5678 Some Brand Mini UPS
+`);
+  assert.deepEqual(list.map((d) => [d.vendor, d.driver, d.vendorid, d.productid]), [
+    ['Eaton', 'usbhid-ups', '0463', 'FFFF'],
+    ['APC', 'usbhid-ups', '051D', '0002'],
+    ['', 'usbhid-ups', '1234', '5678'],
+  ]);
+  assert.equal(list[0].source, 'lsusb');
+  // The id it suggests passes the checks.
+  assert.equal(ups.validate({ mode: 'local', driver: 'usbhid-ups', port: 'auto', extra: { vendorid: list[0].vendorid, productid: list[0].productid } }, { mode: 'off', events: [] }).extra.vendorid, '0463');
+});
