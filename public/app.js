@@ -1034,9 +1034,11 @@
     const meter = (label, p, value, cls) => `<li class="m-meter"><span class="m-k">${esc(label)}</span><span class="m-bar"><i class="${cls != null ? cls : p == null ? '' : level(p)}" style="width:${p == null ? 0 : Math.max(2, Math.min(100, p)).toFixed(1)}%"></i></span><span class="m-v">${esc(value)}</span></li>`;
     const row = (dot, name, value) => `<li class="m-row"><span class="m-dot ${dot || ''}"></span><span class="m-n">${esc(name)}</span><span class="m-v">${esc(value || '')}</span></li>`;
     const more = (n) => (n > 0 ? `<li class="m-more">${esc(t('and {n} more', { n }))}</li>` : '');
-    const tile = ({ open, color, icon, label, pill, body, foot }) => `<button type="button" class="m-tile" ${open}>
+    // pillBelow: the status label on its own line under the title, so a long title stays readable.
+    const tile = ({ open, color, icon, label, pill, pillBelow, body, foot }) => `<button type="button" class="m-tile" ${open}>
         <span class="m-tile-head"><span class="m-ico" style="--c:${color}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span>
-          <span class="m-label">${esc(label)}</span>${pill ? `<span class="pill ${pill[1] || ''}">${esc(pill[0])}</span>` : ''}</span>
+          <span class="m-label">${esc(label)}</span>${pill && !pillBelow ? `<span class="pill ${pill[1] || ''}">${esc(pill[0])}</span>` : ''}</span>
+        ${pill && pillBelow ? `<span class="m-pill-row"><span class="pill ${pill[1] || ''}">${esc(pill[0])}</span></span>` : ''}
         <span class="m-body">${body}</span>${foot ? `<span class="m-sub">${esc(foot)}</span>` : ''}</button>`;
     const tiles = [];
 
@@ -1067,7 +1069,7 @@
         ? `<span class="m-big">${esc(bytes(s.free))}<small> ${esc(t('free'))}</small></span><ul class="m-lines">${pools.slice(0, 3).map((p) => meter(p.name, p.total ? (p.used / p.total) * 100 : null, pct(p.total ? (p.used / p.total) * 100 : null))).join('')}${more(pools.length - 3)}</ul>`
         : `<span class="m-big small">${esc(txt('#storeLine') || '–')}</span>`;
       tiles.push(tile({ open: 'data-open="storage"', color: PAGE_META.storage.color, icon: PAGE_META.storage.svg, label: t('Storage'),
-        pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null, body }));
+        pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null, pillBelow: true, body }));
     }
     // VMs: each VM with its state, and CPU and RAM of the ones that run.
     if (!hidden.has('vms')) {
@@ -1111,7 +1113,7 @@
     const u = o.ups;
     if (u) {
       const state = u.lowBattery ? ['Battery almost empty', 'bad'] : u.onBattery ? ['On battery', 'warn'] : ['On mains power', 'ok'];
-      tiles.push(tile({ open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS', pill: [t(state[0]), state[1]],
+      tiles.push(tile({ open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS', pill: [t(state[0]), state[1]], pillBelow: true,
         body: `<span class="m-big">${u.charge != null ? esc(nf0.format(u.charge) + '%') : '–'}</span><ul class="m-lines">${u.charge != null ? meter(t('Battery'), u.charge, '', u.charge <= 20 ? 'bad' : u.charge <= 50 ? 'warn' : '') : ''}${u.runtime != null ? row('', t('Time left'), upsTime(u.runtime)) : ''}${u.load != null ? row('', t('UPS load'), nf0.format(u.load) + '%' + (u.power != null ? ' · ' + nf0.format(u.power) + ' W' : '')) : ''}</ul>` }));
     }
     box.innerHTML = `
@@ -5793,11 +5795,21 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/ups': 'ups', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
+  const settingsTab = () => ({ '#settings/general': 'general', '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/ups': 'ups', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
     mountTaskbar(setWin);
+    // On a phone, like iOS and Android: #settings is the list of categories, a category opens full screen with a back button.
+    const list = mqPhone.matches && location.hash === '#settings';
+    setWin.classList.toggle('set-list', list);
+    if (list) {
+      $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', 'false'); a.setAttribute('aria-checked', 'false'); });
+      $('#setWinTitle').textContent = t('Settings');
+      clearInterval(netTimer); netTimer = null;
+      $('#setPane').innerHTML = '';
+      return;
+    }
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
@@ -9849,6 +9861,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     setWin.close(); setWin.classList.add('window-minimized'); requestAnimationFrame(() => window.scrollTo(0, y));
   });
   $('#setClose').addEventListener('click', closeSettings);
+  $('#setBack').addEventListener('click', () => { location.hash = 'settings'; }); // on a phone: back to the list
+  mqPhone.addEventListener('change', () => { if (setWin.open && settingsHash()) showSettings(true); });
   setWin.addEventListener('click', (e) => { if (e.target === setWin) closeSettings(); });
   setWin.addEventListener('cancel', (e) => { e.preventDefault(); closeSettings(); }); // Escape
   window.addEventListener('hashchange', () => { if (!$('.topnav').hidden) route(); });

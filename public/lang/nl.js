@@ -3197,4 +3197,5 @@ window.TB_LANG.nl = {
   "UPS load": "Belasting",
   "No shared folders yet": "Nog geen gedeelde mappen",
   "No backups yet": "Nog geen back-ups",
+  "Back to Settings": "Terug naar Instellingen",
 };

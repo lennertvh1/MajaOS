@@ -380,7 +380,7 @@
   <dialog class="window settings-win" id="setWin" aria-labelledby="setWinTitle">
     <nav class="set-side" role="tablist" aria-orientation="vertical" aria-label="Settings" id="setTabs">
       <p class="set-side-title">Settings</p>
-      <a role="tab" href="#settings" data-tab="general" id="tab-general" aria-controls="setPane">
+      <a role="tab" href="#settings/general" data-tab="general" id="tab-general" aria-controls="setPane">
         <span class="set-ico gray"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></span>General</a>
       <a role="tab" href="#settings/storage" data-tab="storage" id="tab-storage" aria-controls="setPane">
         <span class="set-ico teal"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>Storage</a>
@@ -413,6 +413,7 @@
     </nav>
     <div class="set-main">
       <header class="win-head">
+        <button class="set-back" type="button" id="setBack" aria-label="Back to Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Settings</span></button>
         <h2 id="setWinTitle">General</h2>
         <div class="win-tools"><button class="close" type="button" id="setMinimize" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18h14"/></svg></button>
         <button class="close" type="button" id="setClose" aria-label="Close">

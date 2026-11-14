@@ -2202,3 +2202,37 @@ button.snap-node:hover { background: var(--glass-hover); }
 .m-more { color: var(--muted); font-size: 11.5px; }
 .m-app-icons { grid-template-columns: repeat(3, 1fr); margin-top: 0; width: 100%; gap: 8px; }
 .m-app-icons .app-icon { width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; }
+/* The status label under the title in a phone tile (Storage, UPS) */
+.m-pill-row { display: flex; margin-top: -2px; }
+.m-pill-row .pill { font-size: 11px; }
+
+/* ---- Settings on a phone, like iOS and Android: the list of categories (#settings), then one page with a back button */
+.set-back { display: none; }
+@media (max-width: 640px) {
+  .window.settings-win { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .window.settings-win[open] { display: flex; flex-direction: column; }
+  .settings-win .set-main { order: 1; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .settings-win .set-side { order: 2; }
+  .settings-win #setMinimize { display: none; }
+  /* the list */
+  .settings-win.set-list .set-main { flex: none; }
+  .settings-win.set-list #setPane { display: none; }
+  .settings-win.set-list #setWinTitle { font-size: 30px; font-weight: 700; letter-spacing: -.01em; }
+  .settings-win.set-list .set-side { display: flex; flex-direction: column; gap: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
+    padding: 4px 16px calc(24px + env(safe-area-inset-bottom, 0px)); background: transparent; border: 0; }
+  .settings-win.set-list .set-side a { padding: 12px 14px; border-radius: 0; background: var(--glass); border-bottom: 1px solid var(--glass-line); font-size: 16px; }
+  .settings-win.set-list .set-side a:first-of-type { border-radius: 16px 16px 0 0; }
+  .settings-win.set-list .set-side a:last-of-type { border-radius: 0 0 16px 16px; border-bottom: 0; }
+  .settings-win.set-list .set-side a::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid var(--faint); border-top: 2px solid var(--faint); transform: rotate(45deg); flex: none; }
+  .settings-win.set-list .set-side a[aria-selected="true"] { background: var(--glass); color: inherit; font-weight: inherit; }
+  .settings-win.set-list .set-side .set-ico { width: 30px; height: 30px; border-radius: 8px; }
+  .settings-win.set-list .tab-badge { margin-left: auto; margin-right: 8px; }
+  /* one category */
+  .settings-win:not(.set-list) .set-side { display: none; }
+  .settings-win:not(.set-list) .set-back { display: inline-flex; align-items: center; gap: 2px; margin: -4px 4px -4px -8px; padding: 6px 8px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--accent); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .settings-win:not(.set-list) .set-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .settings-win:not(.set-list) .set-back span { font-size: 15px; }
+  .settings-win:not(.set-list) .win-head { flex-wrap: nowrap; }
+  .settings-win:not(.set-list) #setPane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+}
