@@ -6412,7 +6412,7 @@
               ${Object.entries(sh.groups || {}).map(([g, a]) => `<span class="pill${a === 'rw' ? ' ok' : ''}">${t('group {name}', { name: esc(g) })} · ${t(a === 'rw' ? 'write' : 'read')}</span>`).join('')}
               ${sh.guest ? `<span class="pill warn">${t('guests · read')}</span>` : ''}${sh.timemachine ? `<span class="pill">Time Machine</span>` : ''}</div>
             <div class="share-addr">smb://${esc(host)}.local/${esc(sh.name)} · \\\\${esc(host)}\\${esc(sh.name)}</div>
-            ${sh.writable === false ? `<div class="share-warn"><p class="notice warn"><span>${t('Nobody can add or change files here: the folder belongs to {owner}, and the shared folders write as the app user ({app}).', { owner: esc(sh.owner || '?'), app: esc(d.appUser || 'app') })}
+            ${sh.writable === false && [...Object.values(sh.users || {}), ...Object.values(sh.groups || {})].includes('rw') ? `<div class="share-warn"><p class="notice warn"><span>${t('Nobody can add or change files here: the folder belongs to {owner}, and the shared folders write as the app user ({app}).', { owner: esc(sh.owner || '?'), app: esc(d.appUser || 'app') })}
               ${sh.fixRefused ? esc(tr(sh.fixRefused)) : ''}</span></p>
               ${sh.fixRefused ? '' : `<button class="btn sm primary" type="button" data-share-fix="${esc(sh.name)}">${t('Make writable')}</button>`}</div>` : ''}</div>
           <div class="row-side btn-row"><button class="btn sm primary" type="button" data-share-files="${esc(sh.name)}">${t('Files')}</button>

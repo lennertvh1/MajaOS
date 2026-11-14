@@ -930,6 +930,9 @@
       shareTrees[name] = shareTrees[original] || filesDir({});
       delete shareTrees[original];
     } else if (!shareTrees[name]) shareTrees[name] = filesDir({});
+    // Like writableOnShare: someone may write, so the folder goes to the app user (not the VM folder or a pool).
+    const writes = Object.values(users).includes('rw') || Object.values(groups).includes('rw');
+    if (writes && !shareAccess(share).fixRefused) demoFixed.add(share.path);
     return shareAccess(share);
   }
   function shareUserCreate(b) {
