@@ -2748,6 +2748,7 @@ window.TB_LANG.fr = {
   "Copy to": "Copier vers",
   "Create a pool first to copy shared folders to.": "Créez d'abord un pool vers lequel copier les dossiers partagés.",
   "The password is wrong, or this user may not sign in over SSH.": "Le mot de passe est incorrect, ou cet utilisateur ne peut pas se connecter en SSH.",
+  "MajaOS could not give the password to ssh: {error}": "MajaOS n'a pas pu transmettre le mot de passe à ssh : {error}",
   "SSH is off on that server. Turn it on in Unraid under Settings → Management Access.": "SSH est désactivé sur ce serveur. Activez-le dans Unraid sous Settings → Management Access.",
   "{host} can't be reached. Check the address and that it is on.": "{host} est injoignable. Vérifiez l'adresse et qu'il est allumé.",
   "Fill in the address of your Unraid server, e.g. 192.168.1.10 or tower.local.": "Indiquez l'adresse de votre serveur Unraid, p. ex. 192.168.1.10 ou tower.local.",

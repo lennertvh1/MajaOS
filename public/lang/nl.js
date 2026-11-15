@@ -2752,6 +2752,7 @@ window.TB_LANG.nl = {
   "Copy to": "Kopiëren naar",
   "Create a pool first to copy shared folders to.": "Maak eerst een pool om gedeelde mappen naartoe te kopiëren.",
   "The password is wrong, or this user may not sign in over SSH.": "Het wachtwoord is fout, of deze gebruiker mag niet aanmelden via SSH.",
+  "MajaOS could not give the password to ssh: {error}": "MajaOS kon het wachtwoord niet aan ssh geven: {error}",
   "SSH is off on that server. Turn it on in Unraid under Settings → Management Access.": "SSH staat uit op die server. Zet het aan in Unraid onder Settings → Management Access.",
   "{host} can't be reached. Check the address and that it is on.": "{host} is niet bereikbaar. Controleer het adres en of hij aanstaat.",
   "Fill in the address of your Unraid server, e.g. 192.168.1.10 or tower.local.": "Vul het adres van je Unraid-server in, bv. 192.168.1.10 of tower.local.",

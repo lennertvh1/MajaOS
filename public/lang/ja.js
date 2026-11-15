@@ -2748,6 +2748,7 @@ window.TB_LANG.ja = {
   "Copy to": "コピー先",
   "Create a pool first to copy shared folders to.": "共有フォルダーのコピー先として、先にプールを作成してください。",
   "The password is wrong, or this user may not sign in over SSH.": "パスワードが違うか、このユーザーは SSH でサインインできません。",
+  "MajaOS could not give the password to ssh: {error}": "MajaOS が ssh にパスワードを渡せませんでした: {error}",
   "SSH is off on that server. Turn it on in Unraid under Settings → Management Access.": "そのサーバーでは SSH がオフです。Unraid の Settings → Management Access でオンにしてください。",
   "{host} can't be reached. Check the address and that it is on.": "{host} に接続できません。アドレスと電源が入っているかを確認してください。",
   "Fill in the address of your Unraid server, e.g. 192.168.1.10 or tower.local.": "Unraid サーバーのアドレスを入力してください（例: 192.168.1.10、tower.local）。",

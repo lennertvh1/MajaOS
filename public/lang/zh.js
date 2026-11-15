@@ -2748,6 +2748,7 @@ window.TB_LANG.zh = {
   "Copy to": "复制到",
   "Create a pool first to copy shared folders to.": "请先创建一个存储池，用于复制共享文件夹。",
   "The password is wrong, or this user may not sign in over SSH.": "密码错误，或该用户不能通过 SSH 登录。",
+  "MajaOS could not give the password to ssh: {error}": "MajaOS 无法将密码传给 ssh：{error}",
   "SSH is off on that server. Turn it on in Unraid under Settings → Management Access.": "该服务器上的 SSH 已关闭。请在 Unraid 的 Settings → Management Access 中开启。",
   "{host} can't be reached. Check the address and that it is on.": "无法连接 {host}。请检查地址以及它是否已开机。",
   "Fill in the address of your Unraid server, e.g. 192.168.1.10 or tower.local.": "请填写 Unraid 服务器的地址，例如 192.168.1.10 或 tower.local。",
