@@ -371,7 +371,14 @@
     // A driver that is there but nvidia-smi doesn't answer: say so (its message on hover).
     else (o.gpus || []).slice(0, 2).forEach((c) => facts.push(['GPU', c.name.replace(/^(GeForce|Radeon)\s+/, '') + (!c.ready ? ' · ' + t('no driver') : c.vendor === 'nvidia' && o.gpuError ? ' · ' + t('nvidia-smi doesn\'t answer') : ''), c.vendor === 'nvidia' ? o.gpuError : null]));
     if (o.version) facts.push([t('System'), o.version.replace(' GNU/Linux', '')]);
-    $('#sysFacts').innerHTML = facts.map(([k, v, why]) => `<dt>${esc(k)}</dt><dd title="${esc(why ? v + ' – ' + why : v)}">${esc(v)}</dd>`).join('');
+    // The UPS (lib/ups.js): charge and time left; orange on battery, red when the battery is almost empty.
+    const u = o.ups;
+    if (u) {
+      const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : null;
+      const v = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null, state].filter(Boolean).join(' · ') || t('On mains power');
+      facts.push(['UPS', v, u.onBattery || u.lowBattery ? null : t('On mains power'), u.lowBattery ? 'temp-bad' : u.onBattery ? 'temp-warn' : '']);
+    }
+    $('#sysFacts').innerHTML = facts.map(([k, v, why, cls]) => `<dt>${esc(k)}</dt><dd${cls ? ` class="${cls}"` : ''} title="${esc(why ? v + ' – ' + why : v)}">${esc(v)}</dd>`).join('');
 
     const s = o.storage;
     const st = $('#arrayState');
@@ -1154,7 +1161,7 @@
         if (vmNames.has(it.vm) && !placedVm.has(it.vm)) { placedVm.add(it.vm); out.push({ vm: it.vm }); }
         continue;
       }
-      if (it && it.page) continue; // the system pages are in the menu bar under the header (#sysBar)
+      if (it && it.page) continue; // the system pages are in the menu bar in the header (#sysBar)
       if (it && it.shortcut) {
         if (shortcutById(it.shortcut) && !placedS.has(it.shortcut)) { placedS.add(it.shortcut); out.push({ shortcut: it.shortcut }); }
         continue;
@@ -9704,171 +9711,12 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderTopUptime(); renderUpsChip(); statusPopRefresh(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
-  // The middle of the header: how long the server has been up.
-  function renderTopUptime() {
-    const o = S.overview, pill = $('#topUptime');
-    if (!pill) return;
-    pill.hidden = !o || o.uptime == null || S.config.role === 'user';
-    if (pill.hidden) return;
-    $('#topUptimeText').textContent = duration(o.uptime);
-    pill.setAttribute('aria-label', t('Up for {time}', { time: duration(o.uptime) }));
-  }
-  // The UPS in the header: charge and time left, orange on battery, red when the battery is almost empty.
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
+  // Time left on the UPS battery: "31 min", "1 h 5 min".
   const upsTime = (sec) => {
     const m = Math.max(0, Math.round(sec / 60));
     return m < 60 ? t('{n} min', { n: nf0.format(m) }) : t('{h} h {m} min', { h: nf0.format(Math.floor(m / 60)), m: nf0.format(m % 60) });
   };
-  function renderUpsChip() {
-    const u = S.overview && S.overview.ups;
-    const btn = $('#upsBtn');
-    if (!btn) return;
-    btn.hidden = !u || S.config.role === 'user';
-    if (btn.hidden) return;
-    const parts = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null].filter(Boolean);
-    $('#upsText').textContent = parts.join(' · ');
-    $('#upsLevel').setAttribute('width', String(Math.max(0.5, 13 * Math.min(100, Math.max(0, u.charge == null ? 100 : u.charge)) / 100)));
-    btn.classList.toggle('on-battery', !!u.onBattery && !u.lowBattery);
-    btn.classList.toggle('low', !!u.lowBattery);
-    const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : t('On mains power');
-    btn.setAttribute('aria-label', ['UPS', state, ...parts].join(' · '));
-  }
-  // The panel under the status pills in the header (#statusPop): opens on hover (with a short delay), a click, Enter or a
-  // tap, and stays open while the pointer is on the pill or the panel. Built from S.overview, so it follows every refresh.
-  const SP_ICONS = {
-    uptime: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
-    ups: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3M11 9l-2 3.5h4L11 16"/></svg>',
-    gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-    info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
-    power: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>',
-    bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>',
-  };
-  const spWhen = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() });
-  const spRows = (rows) => {
-    const list = rows.filter(([, v]) => v != null && v !== '');
-    return list.length ? `<dl class="sp-rows">${list.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : '';
-  };
-  const spStats = (list) => `<div class="sp-big" style="--n:${list.length}">${list.map(([v, label]) => `<div class="sp-stat"><b>${esc(v)}</b><span>${esc(label)}</span></div>`).join('')}</div>`;
-  const spBar = (pct, cls) => `<div class="sp-bar ${cls || ''}" role="presentation"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
-  const SP_PANELS = {
-    uptime() {
-      const o = S.overview;
-      if (!o || o.uptime == null) return '';
-      const mem = o.memory || {}, cpu = o.cpu || {};
-      return `<div class="sp-head"><span class="sp-ico">${SP_ICONS.uptime}</span>
-          <div><b>${esc(o.hostname || t('Server'))}</b><span class="sub">${esc(o.version || '')}</span></div>
-          <span class="pill ok">${esc(t('Running'))}</span></div>
-        ${spStats([[duration(o.uptime), t('Up for')], [new Date(Date.now() - o.uptime * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...clockOpts() }), t('Started')]])}
-        ${spRows([
-          [t('Processor'), cpu.brand ? cpu.brand.replace(/\s+\d+-Core Processor$/i, '') : null],
-          ['CPU', cpu.percent != null ? nf0.format(cpu.percent) + '%' : null],
-          [t('Memory'), mem.total ? t('{used} of {total}', { used: bytes(mem.used), total: bytes(mem.total) }) : null],
-        ])}
-        <hr>
-        <button type="button" class="menu-item" data-sp="about">${SP_ICONS.info}${esc(t('About this server'))}</button>
-        <button type="button" class="menu-item" data-sp="power">${SP_ICONS.power}${esc(t('Restart or shut down…'))}</button>`;
-    },
-    ups() {
-      const u = S.overview && S.overview.ups;
-      if (!u) return '';
-      const state = u.lowBattery ? ['bad', t('Battery almost empty')] : u.onBattery ? ['warn', t('On battery')] : ['ok', t('On mains power')];
-      const name = u.name || u.model || 'UPS';
-      const sub = [u.mfr && u.mfr !== name ? u.mfr : null, u.mode === 'remote' ? t('Through the NUT server {host}', { host: u.host }) : 'USB'].filter(Boolean).join(' · ');
-      const charge = u.charge == null ? null : u.charge;
-      return `<div class="sp-head"><span class="sp-ico ${state[0]}">${SP_ICONS.ups}</span>
-          <div><b>${esc(name)}</b><span class="sub">${esc(sub)}</span></div>
-          <span class="pill ${state[0]}">${esc(state[1])}</span></div>
-        ${spStats([
-          [charge != null ? nf0.format(charge) + '%' : '–', u.charging ? t('Battery, charging') : t('Battery')],
-          [u.runtime != null ? upsTime(u.runtime) : '–', t('Time left')],
-          [u.power != null ? nf0.format(u.power) + ' W' : u.load != null ? nf0.format(u.load) + '%' : '–', u.power != null && u.load != null ? t('Load {n}%', { n: nf0.format(u.load) }) : t('Load on the UPS')],
-        ])}
-        ${charge != null ? spBar(charge, state[0]) : ''}
-        ${spRows([
-          [t('Input voltage'), u.inputVoltage != null ? nf0.format(u.inputVoltage) + ' V' : null],
-          [t('Shuts down at'), u.countdown && u.onBattery ? spWhen(u.countdown) : null],
-          [t('Battery'), u.replaceBattery ? t('Replace the battery') : null],
-        ])}
-        ${u.last ? `<div class="sp-event">${SP_ICONS.bolt}<div>${esc(tr(u.last.text))}<small>${esc(ago(u.last.at))} · ${esc(spWhen(u.last.at))}</small></div></div>` : ''}
-        <hr>
-        <button type="button" class="menu-item" data-sp="ups">${SP_ICONS.gear}${esc(t('UPS settings'))}</button>`;
-    },
-  };
-  const statusPop = { owner: null, openT: 0, closeT: 0, wired: false };
-  function statusPopRefresh() {
-    const pop = $('#statusPop');
-    if (!pop || pop.hidden || !statusPop.owner) return;
-    if (statusPop.owner.hidden) { closeStatusPop(); return; }
-    const focusAt = pop.contains(document.activeElement) && document.activeElement.dataset.sp;
-    pop.innerHTML = SP_PANELS[statusPop.owner.dataset.pop]();
-    if (focusAt) { const b = pop.querySelector(`[data-sp="${focusAt}"]`); if (b) b.focus(); }
-  }
-  function openStatusPop(pill, focus) {
-    const pop = $('#statusPop');
-    const html = SP_PANELS[pill.dataset.pop] && SP_PANELS[pill.dataset.pop]();
-    if (!pop || !html) return;
-    if (statusPop.owner && statusPop.owner !== pill) statusPop.owner.setAttribute('aria-expanded', 'false');
-    statusPop.owner = pill;
-    pop.innerHTML = html;
-    pop.setAttribute('aria-label', pill.getAttribute('aria-label') || '');
-    pop.hidden = false;
-    pill.setAttribute('aria-expanded', 'true');
-    // Centred under the pill, inside the window.
-    const b = pill.getBoundingClientRect(), r = pop.getBoundingClientRect();
-    pop.style.left = Math.max(8, Math.min(b.left + b.width / 2 - r.width / 2, innerWidth - r.width - 8)) + 'px';
-    pop.style.top = (b.bottom + 8) + 'px';
-    if (focus) { const first = pop.querySelector('.menu-item'); if (first) first.focus(); }
-  }
-  function closeStatusPop(focusBack) {
-    const pop = $('#statusPop');
-    clearTimeout(statusPop.openT); clearTimeout(statusPop.closeT);
-    if (!pop || pop.hidden) return;
-    pop.hidden = true;
-    if (statusPop.owner) { statusPop.owner.setAttribute('aria-expanded', 'false'); if (focusBack) statusPop.owner.focus(); }
-    statusPop.owner = null;
-  }
-  function wireStatusPop() {
-    if (statusPop.wired) return;
-    statusPop.wired = true;
-    const pop = $('#statusPop');
-    const later = (fn, ms) => { clearTimeout(statusPop.openT); clearTimeout(statusPop.closeT); return setTimeout(fn, ms); };
-    $$('[data-pop]').forEach((pill) => {
-      pill.addEventListener('pointerenter', (e) => {
-        if (e.pointerType !== 'mouse') return;
-        statusPop.openT = later(() => openStatusPop(pill), statusPop.owner ? 0 : 140);
-      });
-      pill.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') statusPop.closeT = later(() => closeStatusPop(), 260); });
-      pill.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (statusPop.owner === pill && !pop.hidden) closeStatusPop(); else openStatusPop(pill, e.detail === 0);
-      });
-      pill.addEventListener('keydown', (e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && pill.tagName !== 'BUTTON') { e.preventDefault(); pill.click(); }
-        if (e.key === 'ArrowDown') { e.preventDefault(); openStatusPop(pill, true); }
-      });
-    });
-    pop.addEventListener('pointerenter', () => { clearTimeout(statusPop.closeT); });
-    pop.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') statusPop.closeT = later(() => closeStatusPop(), 260); });
-    pop.addEventListener('keydown', (e) => {
-      const items = $$('.menu-item', pop), i = items.indexOf(document.activeElement);
-      if (e.key === 'Escape') { e.preventDefault(); closeStatusPop(true); }
-      else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
-    });
-    pop.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-sp]');
-      if (!b) return;
-      const act = b.dataset.sp;
-      closeStatusPop();
-      if (act === 'ups') goSettings('settings/ups');
-      else if (act === 'about') goSettings('settings/about');
-      else if (act === 'power') $('#powerBtn').click();
-    });
-    document.addEventListener('pointerdown', (e) => {
-      if (!pop.hidden && !pop.contains(e.target) && !(statusPop.owner && statusPop.owner.contains(e.target))) closeStatusPop();
-    }, true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden && !pop.contains(document.activeElement)) closeStatusPop(); });
-    window.addEventListener('resize', () => closeStatusPop());
-  }
   // A disk plugged in or taken out while the server runs (lib/storage.js watchDisks): a message, once per event. What
   // happened before this page was opened isn't shown again.
   const diskSeen = { boot: null, seq: 0 };
@@ -9936,6 +9784,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   // The menu bar: the settings, the store or Files on top, the VM page, or the dashboard.
   function markSysBar() {
     const on = settingsHash() ? 'settings' : popKindOf(location.hash) || (currentView() === 'vms' ? 'vms' : 'home');
+    $$('#sysBar [data-sys]').forEach((b) => { const l = $('span:not(.nav-dot)', b); if (l) b.title = l.textContent; });
     $$('#sysBar [data-sys]').forEach((b) => { if (b.dataset.sys === on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   }
   function popKindOf(h) {
@@ -10088,7 +9937,6 @@ sudo ./install.sh</pre></div>`}` : '') +
     $('#logoutBtn').hidden = !S.config.passwordEnabled;
     $('#powerBtn').hidden = false;
     $('#feedbackBtn').hidden = false;
-    wireStatusPop(); // the panels under the uptime and UPS pills
     $('#termBtn').hidden = !S.config.terminal;
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);

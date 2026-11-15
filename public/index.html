@@ -56,20 +56,17 @@
           <div class="spot-list" id="spotList" role="listbox" aria-label="Search results"></div>
         </div>
       </div>
-      <div class="top-status" id="topStatus">
-        <span class="top-pill" id="topUptime" hidden tabindex="0" role="button" data-pop="uptime" aria-haspopup="dialog" aria-expanded="false" aria-controls="statusPop">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-          <span id="topUptimeText"></span>
-        </span>
-        <button class="top-pill ups-chip" type="button" id="upsBtn" hidden aria-label="UPS" data-pop="ups" aria-haspopup="dialog" aria-expanded="false" aria-controls="statusPop">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 10.5v3"/><rect class="ups-level" id="upsLevel" x="4.5" y="9" width="13" height="6" rx="0.8"/></svg>
-          <span id="upsText"></span>
-        </button>
-        <button class="top-pill mig-pill" type="button" id="migPill" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="mig-run" d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/><path class="mig-ok" d="m5 12.5 4.5 4.5L19 7.5"/><path class="mig-bad" d="M12 6v8M12 18v.5"/></svg>
-          <span id="migPillText"></span>
-        </button>
-      </div>
+      <!-- The system pages in a bar inside the header, like Unraid's tabs: they used to be the System folder on the home screen. -->
+      <nav class="sysbar" id="sysBar" aria-label="System" hidden>
+        <button class="sys-btn" type="button" data-open="home" data-sys="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg><span>Dashboard</span></button>
+        <button class="sys-btn" type="button" data-open="storage" data-sys="storage"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span>Storage</span></button>
+        <button class="sys-btn" type="button" data-open="shares" data-sys="shares"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg><span>Shared folders</span></button>
+        <button class="sys-btn" type="button" data-open="files" data-sys="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/></svg><span>Files</span></button>
+        <button class="sys-btn" type="button" data-open="vms" data-sys="vms"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>VMs</span></button>
+        <button class="sys-btn" type="button" data-open="store" data-sys="store"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span>App store</span></button>
+        <button class="sys-btn" type="button" data-open="backup" data-sys="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/></svg><span>Backups</span></button>
+        <a class="sys-btn has-dot" href="#settings" data-sys="settings"><span class="nav-dot" id="updDot" hidden></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
+      </nav>
       <nav class="topnav" aria-label="Management">
         <button class="nav-btn" data-open="ai" type="button" title="AI">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2.1 2.2.9-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.9z"/></svg>
@@ -77,6 +74,10 @@
         </button>
       </nav>
       <div class="top-actions" id="topActions">
+        <button class="top-pill mig-pill" type="button" id="migPill" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="mig-run" d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4"/><path class="mig-ok" d="m5 12.5 4.5 4.5L19 7.5"/><path class="mig-bad" d="M12 6v8M12 18v.5"/></svg>
+          <span id="migPillText"></span>
+        </button>
         <button class="nav-btn icon-only has-dot" type="button" id="noteBtn" aria-label="Notifications" title="Notifications" aria-expanded="false" aria-controls="noteSide">
           <span class="nav-count" id="noteDot" hidden></span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
@@ -95,17 +96,6 @@
         </button>
       </div>
     </header>
-    <!-- The system pages, like Unraid's tabs: they used to be the System folder on the home screen. -->
-    <nav class="sysbar" id="sysBar" aria-label="System" hidden>
-      <button class="sys-btn" type="button" data-open="home" data-sys="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5.5v-5h-5v5H4z"/></svg><span>Dashboard</span></button>
-      <button class="sys-btn" type="button" data-open="storage" data-sys="storage"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span>Storage</span></button>
-      <button class="sys-btn" type="button" data-open="shares" data-sys="shares"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="1.8"/><path d="M8.8 17a3.2 3.2 0 0 1 6.4 0"/></svg><span>Shared folders</span></button>
-      <button class="sys-btn" type="button" data-open="files" data-sys="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M7 12.5h10M7 16h6"/></svg><span>Files</span></button>
-      <button class="sys-btn" type="button" data-open="vms" data-sys="vms"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>VMs</span></button>
-      <button class="sys-btn" type="button" data-open="store" data-sys="store"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.1a2 2 0 0 1-2 1.9H8.2a2 2 0 0 1-2-1.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span>App store</span></button>
-      <button class="sys-btn" type="button" data-open="backup" data-sys="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.8 8a4.3 4.3 0 0 1-.3 8.5"/><path d="M12 20.5v-8M8.8 15.5 12 12.3l3.2 3.2"/></svg><span>Backups</span></button>
-      <a class="sys-btn has-dot" href="#settings" data-sys="settings"><span class="nav-dot" id="updDot" hidden></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
-    </nav>
 
     <main class="desk" id="desk">
       <div id="diskAlerts" class="disk-alerts" hidden></div>
@@ -486,7 +476,6 @@
   <div class="menu" id="fileMenu" role="menu" aria-label="Actions for this file" hidden></div>
 
   <!-- Power: menu at the button at the top, and a window while the server restarts or is off -->
-  <div class="menu status-pop" id="statusPop" role="dialog" hidden></div>
   <div class="menu" id="powerMenu" role="menu" aria-label="Restart or shut down" hidden>
     <button type="button" role="menuitem" class="menu-item" data-power="reboot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>Restart</button>
     <button type="button" role="menuitem" class="menu-item danger" data-power="shutdown"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>Shut down</button>
