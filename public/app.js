@@ -3652,15 +3652,6 @@
       backupWindow('system');
       toast(t('Create app and VM backups on storage the new server can reach, then restore them there.'));
     });
-    $('[data-mig-ssh]', el).addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = e.currentTarget, err = $('.mig-net .form-error', el), btn = $('[type=submit]', f);
-      err.textContent = ''; btn.disabled = true; btn.textContent = t('Connecting…');
-      try {
-        const r = await api.post('/api/unraid/connect', { host: f.elements.host.value.trim(), user: f.elements.user.value.trim(), password: f.elements.password.value });
-        unraidFlow(el, false, r);
-      } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Connect'); }
-    });
   }
   // given: the answer of /api/unraid/connect (over SSH); otherwise the stick (or the connection that is open) is read.
   async function unraidFlow(el, fresh, given) {
@@ -3703,7 +3694,7 @@
       return `<li><label class="check ur-item"><input type="checkbox" data-ur-vm="${i}"${v.disks.some((d) => d.at) ? ' checked' : ' disabled'}>
         <span><b>${esc(v.name)}</b><br><span class="muted small">${esc(notes.join(' · '))}</span></span></label></li>`;
     };
-    body.innerHTML = `
+    body.innerHTML = `<div data-ur-form>
       <p class="lead">${esc(t('Unraid server {name}', { name: r.name || '' }))}${r.version ? ` <span class="muted small">${esc(t('version {v}', { v: r.version }))}</span>` : ''}${net ? ` <span class="muted small">· ${esc(r.host)}</span>` : ''}</p>
       ${r.warnings.map((w) => `<p class="small temp-warn">${esc(tr(w))}</p>`).join('')}
       ${net ? '' : `<section class="pool-card plain ur-sec">
@@ -3736,7 +3727,8 @@
       ${r.vms.length ? `<section class="pool-card plain ur-sec"><div class="sub-head">${t('VMs')} ${hint(t('The VM\'s disk is copied into the VM folder, with the same vCPUs, memory and firmware.'))}</div>
         <ul class="rows">${r.vms.map(vmRow).join('')}</ul></section>` : ''}
       <p class="form-error" role="alert"></p>
-      <div class="btn-row"><button class="btn primary" type="button" data-ur-go>${t('Take over')}</button>${back}<button class="btn" type="button" data-ur-again>${t('Look again')}</button></div>`;
+      <div class="btn-row"><button class="btn primary" type="button" data-ur-go>${t('Next')}</button>${back}<button class="btn" type="button" data-ur-again>${t('Look again')}</button></div></div>
+      <div data-ur-review hidden></div>`;
     const usePool = () => { const c = $('[data-ur-pool]', body); return !!(c && c.checked); };
     const copied = () => (net ? $$('[data-ur-share]:checked', body).map((c) => r.shares[c.dataset.urShare].name) : []);
     // When the disks don't come along (or a share isn't copied): a folder for each share the chosen apps use.
@@ -3770,16 +3762,67 @@
       };
       if (pool && !pool.data.length) { err.textContent = t('Choose at least one data disk.'); return; }
       if (payload.users.some((u) => u.password.length < 8)) { err.textContent = t('Choose a new password of at least 8 characters for each user you take over.'); return; }
-      if (pool && pool.parity.length) {
-        const a = await ask(t('Take over the data disks as the pool {name}? The parity disk {list} is erased; the files on the data disks stay.', { name: pool.name, list: pool.parity.join(', ') }),
-          t('Take over'), t('I understand that {list} will be erased', { list: pool.parity.join(', ') }));
-        if (!a) return;
-        if (!a.checked) { err.textContent = t('Tick that the parity disk may be erased.'); return; }
-      }
-      const go = $('[data-ur-go]', body); go.disabled = true; go.textContent = t('Starting…');
-      try { await api.post('/api/unraid/migrate', payload); unraidProgress(body); }
-      catch (ex) { err.textContent = ex.message; go.disabled = false; go.textContent = t('Take over'); }
+      if (!pool && !payload.shares.length && !payload.users.length && !payload.apps.length && !payload.vms.length) { err.textContent = t('Choose at least one thing to take over.'); return; }
+      showReview(payload);
     });
+    // The overview before anything starts: every step in the order it runs, with what was ticked, and a second confirmation.
+    const showReview = (payload) => {
+      const form = $('[data-ur-form]', body), box = $('[data-ur-review]', body);
+      const { pool } = payload;
+      const li = (title, lines) => `<li><b>${esc(title)}</b>${lines.filter(Boolean).length ? `<ul class="ur-review-sub">${lines.filter(Boolean).map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</li>`;
+      const warn = (x) => `<span class="temp-warn">${esc(x)}</span>`;
+      const appOf = (a) => r.apps.find((x) => x.file === a.file) || { name: a.file };
+      const vmOf = (n) => r.vms.find((x) => x.name === n) || { name: n, disks: [] };
+      const vmOn = (v) => net && v.state && !/shut off/i.test(v.state);
+      const steps = [];
+      if (pool) steps.push(li(t('Pool {name} with mixed disks', { name: pool.name }), [
+        esc(t('Data disks: {list}. Their files stay; nothing is formatted.', { list: pool.data.join(', ') })),
+        pool.parity.length ? warn(t('Parity disk: {list}. It is erased and gets new parity (hours).', { list: pool.parity.join(', ') })) : warn(t('No parity disk: the files aren\'t protected against a failing disk.')),
+      ]));
+      if (payload.users.length) steps.push(li(t('Users ({n})', { n: payload.users.length }), [esc(payload.users.map((u) => u.name).join(', ')), esc(t('Each one gets the new password you chose.'))]));
+      if (payload.shares.length) steps.push(li(t('Shared folders ({n})', { n: payload.shares.length }), [
+        esc(payload.shares.join(', ')),
+        net ? esc(t('Copied over the network to the pool {name}.', { name: payload.target || '–' })) : esc(t('Files that were still on the cache are copied onto the pool.')),
+      ]));
+      if (payload.apps.length) steps.push(li(t('Apps ({n})', { n: payload.apps.length }), payload.apps.map((a) => {
+        const x = appOf(a);
+        return esc([x.name, a.data ? (x.dataSize != null ? t('with app data ({size})', { size: bytes(x.dataSize) }) : t('with app data')) : t('without app data'),
+          net && x.state === 'running' ? t('stops on Unraid') : null].filter(Boolean).join(' · '));
+      }).concat(Object.keys(payload.folders).length ? [esc(t('Folders: {list}', { list: Object.entries(payload.folders).map(([k, v]) => `/mnt/user/${k} → ${v}`).join(', ') }))] : [])));
+      if (payload.vms.length) steps.push(li(t('VMs ({n})', { n: payload.vms.length }), payload.vms.map((n) => {
+        const v = vmOf(n);
+        return esc([v.name, v.disks.length > 1 ? t('only the first disk') : null, v.passthrough ? t('without passed-through devices') : null,
+          vmOn(v) ? t('is shut down on Unraid') : null].filter(Boolean).join(' · '));
+      })));
+      const left = [
+        r.shares.length && !payload.shares.length ? t('shared folders') : null,
+        r.users.length && !payload.users.length ? t('users') : null,
+        r.apps.length && !payload.apps.length ? t('apps') : null,
+        r.vms.length && !payload.vms.length ? t('VMs') : null,
+      ].filter(Boolean);
+      const onUnraid = net && (payload.apps.some((a) => appOf(a).state === 'running') || payload.vms.some((n) => vmOn(vmOf(n))));
+      box.innerHTML = `<p class="lead">${t('Check what will happen')}</p>
+        <section class="pool-card plain ur-sec"><div class="sub-head">${t('Steps, in this order')}</div><ol class="ur-review">${steps.join('')}</ol>
+          ${!pool && !net ? `<p class="muted small">${t('The disks stay as they are. MajaOS only reads from them.')}</p>` : ''}
+          ${left.length ? `<p class="muted small">${esc(t('Not taken over: {list}', { list: left.join(', ') }))}</p>` : ''}
+          ${onUnraid ? `<p class="small temp-warn">${t('Running apps and VMs you chose are stopped on Unraid while they are copied.')}</p>` : ''}
+          <p class="muted small">${t('If one step fails, the others still run. You see the result of each step.')}</p></section>
+        <label class="check"><input type="checkbox" data-ur-ok> ${t('I checked this overview')}</label>
+        ${pool && pool.parity.length ? `<label class="check"><input type="checkbox" data-ur-erase> ${esc(t('I understand that {list} will be erased', { list: pool.parity.join(', ') }))}</label>` : ''}
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="button" data-ur-start disabled>${t('Start the move')}</button><button class="btn" type="button" data-ur-edit>${t('Change choices')}</button></div>`;
+      form.hidden = true; box.hidden = false;
+      box.scrollIntoView({ block: 'start' });
+      const start = $('[data-ur-start]', box);
+      box.onchange = () => { start.disabled = !$$('[data-ur-ok], [data-ur-erase]', box).every((c) => c.checked); };
+      $('[data-ur-edit]', box).addEventListener('click', () => { box.hidden = true; box.innerHTML = ''; form.hidden = false; });
+      start.addEventListener('click', async () => {
+        const err = $('.form-error', box); err.textContent = '';
+        start.disabled = true; start.textContent = t('Starting…');
+        try { await api.post('/api/unraid/migrate', payload); unraidProgress(body); }
+        catch (ex) { err.textContent = ex.message; start.disabled = false; start.textContent = t('Start the move'); }
+      });
+    };
   }
   // The job: each step with its state, failures with their reason, the log behind Details.
   async function unraidProgress(body) {
