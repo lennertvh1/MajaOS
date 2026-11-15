@@ -1569,6 +1569,7 @@ window.TB_LANG.nl = {
   "Start": "Starten",
   "Start automatically when the server starts": "Automatisch starten als de server opstart",
   "Start with the server": "Starten met de server",
+  "load {n}%": "belasting {n}%",
   "Rename\u2026": "Naam wijzigen…",
   "New name for {name}": "Nieuwe naam voor {name}",
   "Renamed to {name}": "Nieuwe naam: {name}",

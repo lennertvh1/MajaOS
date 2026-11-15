@@ -1566,6 +1566,7 @@ window.TB_LANG.de = {
   "Start": "Starten",
   "Start automatically when the server starts": "Automatisch starten, wenn der Server startet",
   "Start with the server": "Mit dem Server starten",
+  "load {n}%": "Last {n} %",
   "Rename\u2026": "Umbenennen…",
   "New name for {name}": "Neuer Name für {name}",
   "Renamed to {name}": "Umbenannt in {name}",

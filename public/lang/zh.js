@@ -1566,6 +1566,7 @@ window.TB_LANG.zh = {
   "Start": "启动",
   "Start automatically when the server starts": "服务器启动时自动启动",
   "Start with the server": "随服务器启动",
+  "load {n}%": "负载 {n}%",
   "Rename\u2026": "重命名…",
   "New name for {name}": "{name} 的新名称",
   "Renamed to {name}": "已重命名为 {name}",

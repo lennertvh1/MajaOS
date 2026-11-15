@@ -1566,6 +1566,7 @@ window.TB_LANG.ja = {
   "Start": "起動",
   "Start automatically when the server starts": "サーバー起動時に自動で起動",
   "Start with the server": "サーバーと一緒に起動",
+  "load {n}%": "負荷 {n}%",
   "Rename\u2026": "名前を変更…",
   "New name for {name}": "{name} の新しい名前",
   "Renamed to {name}": "{name} に名前を変更しました",

@@ -375,7 +375,9 @@
     const u = o.ups;
     if (u) {
       const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : null;
-      const v = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null, state].filter(Boolean).join(' · ') || t('On mains power');
+      // The load in watts (or as a percentage when the UPS doesn't report watts).
+      const load = u.power != null ? nf0.format(u.power) + ' W' : u.load != null ? t('load {n}%', { n: nf0.format(u.load) }) : null;
+      const v = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null, load, state].filter(Boolean).join(' · ') || t('On mains power');
       facts.push(['UPS', v, u.onBattery || u.lowBattery ? null : t('On mains power'), u.lowBattery ? 'temp-bad' : u.onBattery ? 'temp-warn' : '']);
     }
     $('#sysFacts').innerHTML = facts.map(([k, v, why, cls]) => `<dt>${esc(k)}</dt><dd${cls ? ` class="${cls}"` : ''} title="${esc(why ? v + ' – ' + why : v)}">${esc(v)}</dd>`).join('');
