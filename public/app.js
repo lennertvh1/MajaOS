@@ -3824,32 +3824,85 @@
       });
     };
   }
-  // The job: each step with its state, failures with their reason, the log behind Details.
-  async function unraidProgress(body) {
+  // The job: each step with its state, failures with their reason, the log behind Details (it stays open or closed as
+  // the user left it while the steps update). own: opened from the header pill, so Close instead of Back.
+  async function unraidProgress(body, { own = false } = {}) {
     body.innerHTML = '<div class="pool-progress" role="status" aria-live="polite"></div><div class="btn-row" data-ur-btns></div>';
     const box = $('.pool-progress', body);
+    let logOpen = null; // null = the user didn't touch it yet
+    box.addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('details.job-log') && e.isTrusted !== false && box.dataset.drawing !== '1') logOpen = e.target.open; }, true);
+    box.addEventListener('click', (e) => { const sm = e.target.closest('details.job-log > summary'); if (sm) logOpen = !sm.parentElement.open; });
+    watchMigration();
     for (;;) {
       let p;
       try { p = await api.get('/api/unraid/progress'); } catch (e) { await new Promise((x) => setTimeout(x, 1500)); continue; }
       if (!body.isConnected) return;
-      const cur = (p.steps || []).find((x) => x.state === 'running');
+      const steps = p.steps || [];
+      const cur = steps.find((x) => x.state === 'running');
+      const failed = steps.filter((x) => x.state === 'failed').length, worked = steps.filter((x) => x.state === 'done').length;
       const head = p.done ? (p.ok ? t('Everything was taken over.') : tr(p.error || 'Not everything could be taken over. See the steps.')) : cur ? t(cur.label, { name: cur.name }) : t('Starting…');
       const pct = p.percent || 0;
-      box.innerHTML = `<div class="pp-head"><b>${esc(head)}</b><span class="muted">${nf0.format(pct)}%</span></div>
+      const pre = $('details.job-log pre', box);
+      const stick = !pre || pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8, top = pre ? pre.scrollTop : 0;
+      const open = logOpen != null ? logOpen : !!(p.done && !p.ok);
+      box.dataset.drawing = '1';
+      box.innerHTML = `${p.done ? `<div class="ur-done ${p.ok ? 'ok' : 'bad'}">
+          <span class="ur-done-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${p.ok ? '<path d="m6 12.5 4 4 8-9"/>' : '<path d="M12 7v6M12 16.5v.5"/>'}</svg></span>
+          <div><b>${p.ok ? t('The migration is done.') : t('The migration is done, but not everything worked.')}</b>
+          <div class="small">${esc(t('{done} of {total} steps worked.', { done: worked, total: steps.length }))}${failed ? ' ' + esc(t('The steps in red show what went wrong.')) : ''}</div></div></div>` : ''}
+        <div class="pp-head"><b>${esc(head)}</b><span class="muted">${nf0.format(pct)}%</span></div>
         <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span class="${p.done && !p.ok ? 'bad' : ''}" style="width:${pct}%"></span></div>
-        <ol class="pp-steps">${(p.steps || []).map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}
+        <ol class="pp-steps">${steps.map((x) => `<li class="${esc(x.state)}"><span class="pp-dot" aria-hidden="true"></span>${esc(t(x.label, { name: x.name }))}
           ${x.state === 'running' && x.percent ? ` <span class="muted small">${nf0.format(x.percent)}%</span>` : ''}${x.secs >= 5 ? ` <span class="muted small">${esc(elapsed(x.secs))}</span>` : ''}
           ${x.error ? `<br><span class="small temp-bad">${esc(tr(x.error))}</span>` : ''}</li>`).join('')}</ol>
-        ${(p.lines || []).length ? `<details class="job-log"${p.done && !p.ok ? ' open' : ''}><summary>${t('Details')}</summary><pre>${esc(p.lines.map((l) => tr(l)).join('\n'))}</pre></details>` : ''}
-        ${p.done ? '' : `<p class="muted small">${t('You can close this window: it goes on on the server.')}</p>`}`;
+        ${(p.lines || []).length ? `<details class="job-log"${open ? ' open' : ''}><summary>${t('Details')}</summary><pre>${esc(p.lines.map((l) => tr(l)).join('\n'))}</pre></details>` : ''}
+        ${p.done ? '' : `<p class="muted small">${t('You can close this window. The migration goes on, and the pill at the top shows how far it is.')}</p>`}`;
+      const npre = $('details.job-log pre', box);
+      if (npre) npre.scrollTop = stick ? npre.scrollHeight : top;
+      setTimeout(() => { delete box.dataset.drawing; }, 0);
       if (p.done) {
-        $('[data-ur-btns]', body).innerHTML = `<button class="btn primary" type="button" data-ur-back>${t('Back')}</button>`;
+        migrationSeen(p.started);
+        const btns = $('[data-ur-btns]', body);
+        btns.innerHTML = own ? `<button class="btn primary" type="button" data-ur-close>${t('Close')}</button>` : `<button class="btn primary" type="button" data-ur-back>${t('Back')}</button>`;
+        const c = $('[data-ur-close]', btns);
+        if (c) c.addEventListener('click', () => { api.post('/api/unraid/close').catch(() => {}); win.close(); });
         loadOverview().catch(() => {}); loadApps().catch(() => {});
         return;
       }
       await new Promise((x) => setTimeout(x, 1500));
     }
   }
+  // The pill in the header while a migration runs, and once it is done until its result was seen; a click opens it.
+  let migTimer = null;
+  const MIG_SEEN = 'tb-migration-seen';
+  function migrationSeen(started) {
+    try { localStorage.setItem(MIG_SEEN, String(started || '')); } catch (e) { /* private window */ }
+    const pill = $('#migPill'); if (pill && !pill.classList.contains('running')) pill.hidden = true;
+  }
+  async function watchMigration() {
+    clearTimeout(migTimer);
+    const pill = $('#migPill');
+    if (!pill || isUserRole()) return;
+    let p = null;
+    try { p = await api.get('/api/unraid/progress'); } catch (e) { /* not now */ }
+    let seen = null; try { seen = localStorage.getItem(MIG_SEEN); } catch (e) { /* private window */ }
+    const state = p ? p.state : 'idle';
+    pill.hidden = !(state === 'running' || ((state === 'done' || state === 'failed') && String(p.started || '') !== seen));
+    pill.classList.remove('running', 'done', 'failed');
+    if (!pill.hidden) {
+      pill.classList.add(state);
+      const text = state === 'running' ? t('Migration {pct}%', { pct: nf0.format(p.percent || 0) }) : state === 'done' ? t('Migration done') : t('Migration has errors');
+      $('#migPillText').textContent = text;
+      pill.setAttribute('aria-label', text + ' – ' + t('Show the migration'));
+      pill.title = t('Show the migration');
+    }
+    if (state === 'running') migTimer = setTimeout(watchMigration, 3000);
+  }
+  function openMigrationProgress() {
+    openWindow(t('Migrate from Unraid to MajaOS'), '<div class="ur-root"></div>');
+    unraidProgress($('.ur-root', $('#winBody')), { own: true });
+  }
+  $('#migPill').addEventListener('click', openMigrationProgress);
 
   // Creating a pool is a job (POST /api/pools, then /api/pools/progress): its steps show in place of the form, a bar
   // and each disk, the pool and the folders. Returns the result; on an error the form is back and this throws.
@@ -9988,6 +10041,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     loadLayout();
     reopenWindow(); // the window that was open before a refresh
     loadUpdate();
+    watchMigration(); // a migration from Unraid that runs (or finished) while this page was closed
     loadDebianNote();
     timers.forEach(clearInterval);
     timers = [

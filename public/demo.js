@@ -2341,7 +2341,10 @@
         webui: null, ports: [], compose: { project: x.app.slug, service: x.app.slug }, canUpdate: true, update: false, updateChecked: null, updateError: null, storeId: null, dataDirs: [AD() + '/' + x.app.slug] }));
     }
     return { steps, percent: done ? 100 : Math.min(99, Math.round(((Date.now() - j.at) / 1000 / total) * 100)), done, ok: done ? failed === 0 : null,
-      error: done && failed ? 'Not everything could be taken over. See the steps.' : null, lines: [], started: new Date(j.at).toISOString(), state: done ? (failed ? 'failed' : 'done') : 'running' };
+      error: done && failed ? 'Not everything could be taken over. See the steps.' : null, started: new Date(j.at).toISOString(), state: done ? (failed ? 'failed' : 'done') : 'running',
+      // A log like rsync's: a few lines per step that started.
+      lines: steps.filter((x) => x.state !== 'waiting').flatMap((x) => [x.id + ': ' + (x.state === 'failed' ? 'failed' : x.state === 'done' ? 'done' : 'running'),
+        ...(x.state !== 'waiting' && /^(app|share|vm):/.test(x.id) ? Array.from({ length: 6 }, (_, k) => `  sending incremental file list ${x.name || x.id}/file-${k + 1}`) : [])]) };
   }
   let demoCreating = null;
   function demoMove(name, kinds) {

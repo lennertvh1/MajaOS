@@ -1943,7 +1943,22 @@ body.role-user #desk, body.role-user .topnav [data-open]:not([data-open="files"]
 .pp-steps li.running, .pp-steps li.done { color: var(--text); }
 .pp-steps li.failed { color: var(--bad); }
 .pp-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--glass-line); box-sizing: border-box; flex: none; }
-.pp-steps .done .pp-dot { background: var(--ok); border-color: var(--ok); }
+.pp-steps .done .pp-dot { background: var(--ok); border-color: var(--ok); position: relative; }
+.pp-steps .done .pp-dot::after { content: ''; position: absolute; left: 3.5px; top: 1px; width: 3px; height: 6.5px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.pp-steps .failed .pp-dot { position: relative; }
+.pp-steps .failed .pp-dot::after { content: '!'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 800; line-height: 1; color: var(--accent-ink); }
+.ur-done { display: flex; gap: 12px; align-items: center; padding: 14px 16px; margin-bottom: 14px; border-radius: 14px; border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.ur-done.bad { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.ur-done b { font-size: 1.05rem; }
+.ur-done-ico { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--ok); color: var(--accent-ink); }
+.ur-done.bad .ur-done-ico { background: var(--warn); }
+.ur-done-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.mig-pill .mig-ok, .mig-pill .mig-bad { display: none; }
+.mig-pill.running { color: var(--text); border-color: var(--accent); }
+.mig-pill.done { color: var(--ok); border-color: var(--ok); }
+.mig-pill.failed { color: var(--warn); border-color: var(--warn); }
+.mig-pill.done .mig-run, .mig-pill.failed .mig-run { display: none; }
+.mig-pill.done .mig-ok, .mig-pill.failed .mig-bad { display: inline; }
 .pp-steps .running .pp-dot { border-color: var(--accent); border-right-color: transparent; animation: pp-spin .8s linear infinite; }
 .pp-steps .failed .pp-dot { background: var(--bad); border-color: var(--bad); }
 @keyframes pp-spin { to { transform: rotate(360deg); } }
