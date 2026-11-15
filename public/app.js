@@ -9786,9 +9786,37 @@ sudo ./install.sh</pre></div>`}` : '') +
   // The menu bar: the settings, the store or Files on top, the VM page, or the dashboard.
   function markSysBar() {
     const on = settingsHash() ? 'settings' : popKindOf(location.hash) || (currentView() === 'vms' ? 'vms' : 'home');
-    $$('#sysBar [data-sys]').forEach((b) => { const l = $('span:not(.nav-dot)', b); if (l) b.title = l.textContent; });
     $$('#sysBar [data-sys]').forEach((b) => { if (b.dataset.sys === on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   }
+  // When the menu bar shows only icons: the name in a label under the button, right away on hover or keyboard focus
+  // (not the browser's tooltip, which waits). Fixed in the page, because the bar itself scrolls and would clip it.
+  (function wireBarTips() {
+    const bar = $('#sysBar'), tip = $('#barTip');
+    if (!bar || !tip) return;
+    let owner = null;
+    const labelOf = (b) => $('span:not(.nav-dot)', b);
+    const hide = () => { tip.hidden = true; tip.classList.remove('show'); owner = null; };
+    const show = (b) => {
+      const l = labelOf(b);
+      // Only when the label isn't visible on the button itself.
+      if (!l || l.getBoundingClientRect().width > 2) { hide(); return; }
+      owner = b;
+      tip.textContent = l.textContent;
+      tip.hidden = false;
+      const r = b.getBoundingClientRect(), w = tip.offsetWidth;
+      tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
+      tip.style.top = (r.bottom + 8) + 'px';
+      tip.style.setProperty('--arrow', (r.left + r.width / 2 - parseFloat(tip.style.left)) + 'px');
+      tip.classList.remove('show'); void tip.offsetWidth; tip.classList.add('show');
+    };
+    bar.addEventListener('pointerover', (e) => { const b = e.target.closest('.sys-btn'); if (b && b !== owner && e.pointerType !== 'touch') show(b); });
+    bar.addEventListener('pointerleave', hide);
+    bar.addEventListener('focusin', (e) => { const b = e.target.closest('.sys-btn'); if (b && b.matches(':focus-visible')) show(b); });
+    bar.addEventListener('focusout', hide);
+    bar.addEventListener('click', hide);
+    bar.addEventListener('scroll', hide, { passive: true });
+    window.addEventListener('resize', hide);
+  })();
   function popKindOf(h) {
     h = h || '';
     if (h === '#store') return 'store';
