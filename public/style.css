@@ -2254,3 +2254,9 @@ button.snap-node:hover { background: var(--glass-hover); }
   .settings-win:not(.set-list) .win-head { flex-wrap: nowrap; }
   .settings-win:not(.set-list) #setPane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 }
+/* An on/off item in a menu (role menuitemcheckbox), e.g. Start with the server in the app menu. */
+.menu-switch { margin-left: auto; flex: none; width: 28px; height: 16px; border-radius: 99px; background: var(--glass-line); position: relative; transition: background .15s; }
+.menu-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text); transition: transform .15s; }
+[aria-checked="true"] > .menu-switch { background: var(--accent); }
+[aria-checked="true"] > .menu-switch::after { transform: translateX(12px); background: var(--accent-ink); }
+@media (prefers-reduced-motion: reduce) { .menu-switch, .menu-switch::after { transition: none; } }

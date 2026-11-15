@@ -3303,8 +3303,11 @@
       const w = String(body.webui || '').trim(), ic = String(body.icon || '').trim();
       if (w && !/^(https?:\/\/|\[IP\])/i.test(w)) throw err('The web interface address must start with http:// or https://, e.g. http://[IP]:[PORT:8080]/');
       if (ic && !/^https?:\/\//i.test(ic)) throw err('The icon must be an address that starts with http:// or https://.');
-      appOvr[a.name] = { ...(w ? { webui: w } : {}), ...(ic ? { icon: ic } : {}) };
-      a.autoStart = !!body.autoStart;
+      const o = { ...(appOvr[a.name] || {}) };
+      if ('webui' in body) { if (w) o.webui = w; else delete o.webui; }
+      if ('icon' in body) { if (ic) o.icon = ic; else delete o.icon; }
+      appOvr[a.name] = o;
+      if (body.autoStart != null) a.autoStart = !!body.autoStart;
       return { ok: true };
     }
     mm = path.match(/^\/api\/apps\/([^/]+)\/compose-form$/);

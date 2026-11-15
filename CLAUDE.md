@@ -147,7 +147,7 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 | POST | `/api/apps/custom/inspect` | {image: name or link} → image, name, ports, volumes, env, webui, icon, storeMatch, warnings, folders, networks, networkDefault, appdataDir, stacksDir, appdataMissing |
 | POST | `/api/apps/custom` | install an own app {name, image, restart, privileged, network, ip, ports, volumes, env, devices, labels, webui, icon} → {job, name, file} |
 | GET | `/api/apps/:id/settings` | name, image, ports, autoStart, restartPolicy, webui/webuiDefault/webuiAuto, icon/iconDefault, compose {project, service, files, file, workingDir, editable, text, form (see `serviceForm`) or formError} |
-| POST | `/api/apps/:id/settings` | {webui, icon, autoStart}: own address and icon (in `DATA_DIR/apps.json`, by container name) + `docker update --restart` |
+| POST | `/api/apps/:id/settings` | {webui, icon, autoStart}: own address and icon (in `DATA_DIR/apps.json`, by container name) + `docker update --restart`; only the keys that are sent change (the app menu's *Start with the server* sends only `autoStart`) |
 | POST | `/api/apps/:id/compose` | {text}: first `docker compose config -q`, then `.bak` and `up -d` → {ok, backup} |
 | POST | `/api/apps/:id/compose-form` | {form}: change this app's service through the form (`applyServiceForm`), then the same as `/compose` |
 | POST | `/api/apps/:id/exec` | {cmd, cwd} → {output, cwd, exitCode}: one command with sh in the container (`EXEC_SCRIPT`, no TTY) |

@@ -2002,6 +2002,7 @@
     reset: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', 'force-stop': '<path d="M12 3v9M7.5 6.5a7 7 0 1 0 9 0"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     remove: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
+    autostart: '<path d="M12 3v8M7.5 6.5a7 7 0 1 0 9 0"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>',
     rename: '<path d="M4 20h4l10-10-4-4L4 16zM13 7l4 4"/>',
     download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
@@ -2038,12 +2039,16 @@
       a.updateJob && ['updlog', updating(a) ? t('Update progress') : t('Update log')],
       !a.canUpdate && a.update && ['update', t('Updating only works for compose apps'), 'off'], '-',
       ['logs', t('Logs')], run && ['console', t('Console')], ['settings', t('Settings')], '-',
+      ['autostart', t('Start with the server'), 'switch'], '-',
       ['tofolder', t('Move to folder…')], folderOf(a.name) && ['outfolder', t('Remove from folder')],
       (a.storeId || a.custom) && '-', (a.storeId || a.custom) && ['remove', t('Remove'), 'danger'],
     ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
     menu.innerHTML = `<div class="menu-head"><b>${esc(prettyName(a.name))}</b><span>${esc(busy ? t(APP_ACTS[busy].noun) + '…' : a.status || a.state)}</span>
         ${a.update && !busy ? `<span class="menu-upd">${t('A new version is available')}</span>` : ''}</div>` +
-      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
+      items.map((it) => (it === '-' ? '<hr>' : it[2] === 'switch'
+        ? `<button type="button" role="menuitemcheckbox" aria-checked="${a.autoStart ? 'true' : 'false'}" class="menu-item" data-menu="${it[0]}"${S.appBusy[a.id] === 'autostart' ? ' disabled' : ''}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}<span class="menu-switch" aria-hidden="true"></span></button>`
+        : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${(busy && APP_ACTS[it[0]]) || it[2] === 'off' ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}</button>`)).join('');
     delete menu.dataset.forVm;
     menu.dataset.forApp = a.id; // not data-app: the tiles' click handling reacts to that
@@ -2124,11 +2129,23 @@
     if (act === 'remove') return removeApp(a);
     if (act === 'tofolder') return folderPickWindow(a);
     if (act === 'outfolder') { takeOutOfFolder(a.name); return; }
+    if (act === 'autostart') return toggleAutoStart(a);
     if (act === 'stop' && !(await ask(t('Stop {name}? Whatever runs on it will no longer be reachable.', { name: label }), t('Stop')))) return;
     S.appBusy[a.id] = act; renderApps();
     try { await api.post(appPath(a, '/' + act)); toast(t(APP_ACTS[act].done) + ': ' + label); }
     catch (e) { toast(t('{action} {name} failed: {error}', { action: t(APP_ACTS[act].noun), name: label, error: e.message }), true); }
     delete S.appBusy[a.id];
+    await loadApps().catch(() => renderApps());
+  }
+
+  // Start with the server: Docker's restart policy (unless-stopped or no), the same switch as in the app's settings.
+  async function toggleAutoStart(a) {
+    const on = !a.autoStart, label = prettyName(a.name);
+    try {
+      await api.post(appPath(a, '/settings'), { autoStart: on });
+      a.autoStart = on;
+      toast(on ? t('{name} now starts with the server.', { name: label }) : t('{name} no longer starts with the server.', { name: label }));
+    } catch (e) { toast(t('Changing the start of {name} failed: {error}', { name: label, error: e.message }), true); }
     await loadApps().catch(() => renderApps());
   }
 
