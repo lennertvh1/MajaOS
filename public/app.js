@@ -106,9 +106,15 @@
   const KNOWN = { 'open-webui': 'Open WebUI', pihole: 'Pi-hole', qbittorrent: 'qBittorrent', 'nginx-proxy-manager': 'Nginx Proxy Manager',
     'paperless-ngx': 'Paperless-ngx', 'uptime-kuma': 'Uptime Kuma', zigbee2mqtt: 'Zigbee2MQTT', homeassistant: 'Home Assistant',
     'home-assistant': 'Home Assistant', adguardhome: 'AdGuard Home', nextcloud: 'Nextcloud', immich: 'Immich' };
+  // The name of an app as the user named it (Rename…), otherwise one made from the container name.
+  let appLabels = {}; // container name → own name, from /api/apps
   function prettyName(n) {
+    const own = appLabels[n];
+    return own || autoName(n);
+  }
+  function autoName(n) {
     if (KNOWN[n.toLowerCase()]) return KNOWN[n.toLowerCase()];
-    return n.replace(/[-_]+/g, ' ').replace(/\b(ngx|npm|mqtt|ai|vm|os|ui)\b/gi, (m) => m.toUpperCase())
+    return n.replace(/[-_]+/g, ' ').replace(/\b(ngx|npm|mqtt|ai|vm|os|ui|ddns|dns|vpn|nas|api|smb|nfs|ssh|ftp|sftp|db|iot|nvr|sql|http|https|url|rss|ups|dlna|vnc|rdp|ldap|sso|tts|stt|llm|gpu)\b/gi, (m) => m.toUpperCase())
       .replace(/^\w/, (c) => c.toUpperCase());
   }
   const PALETTE = ['#2f6f9f', '#3e8e7e', '#7a5ea8', '#b05a3c', '#3d7a3a', '#a2457a', '#4f5fb3', '#8a6d1f', '#26738a', '#9b4d4d'];
@@ -1959,15 +1965,28 @@
 
   // Own confirmation (also works where confirm() is blocked).
   // With checkLabel a checkbox is added and ask() returns { checked } instead of true.
-  function ask(text, yesLabel, checkLabel) {
-    const d = $('#ask');
+  // input {value, placeholder, label, max}: a text field too; then ask() returns {value} (and checked).
+  function ask(text, yesLabel, checkLabel, input) {
+    const d = $('#ask'), field = $('#askInput');
     $('#askText').textContent = text; $('#askYes').textContent = yesLabel || t('Continue');
     $('#askCheckWrap').hidden = !checkLabel; $('#askCheck').checked = false; $('#askCheckText').textContent = checkLabel || '';
-    d.showModal(); $('#askNo').focus();
+    field.hidden = !input;
+    if (input) {
+      field.value = input.value || ''; field.placeholder = input.placeholder || '';
+      field.setAttribute('aria-label', input.label || text);
+      if (input.max) field.maxLength = input.max; else field.removeAttribute('maxlength');
+    }
+    d.showModal();
+    if (input) { field.focus(); field.select(); } else $('#askNo').focus();
     return new Promise((resolve) => {
-      const done = (v) => { d.close(); $('#askYes').onclick = $('#askNo').onclick = null; d.onclose = null; resolve(v); };
-      $('#askYes').onclick = () => done(checkLabel ? { checked: $('#askCheck').checked } : true);
+      const done = (v) => { d.close(); $('#askYes').onclick = $('#askNo').onclick = field.onkeydown = null; d.onclose = null; resolve(v); };
+      const yes = () => {
+        if (!input) return done(checkLabel ? { checked: $('#askCheck').checked } : true);
+        done({ value: field.value, ...(checkLabel ? { checked: $('#askCheck').checked } : {}) });
+      };
+      $('#askYes').onclick = yes;
       $('#askNo').onclick = () => done(false);
+      field.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); yes(); } };
       d.onclose = () => resolve(false);
     });
   }
@@ -2038,7 +2057,7 @@
       a.canUpdate && !updating(a) && (a.update ? ['update', t('Update to the new version'), 'accent'] : ['update', t('Update')]),
       a.updateJob && ['updlog', updating(a) ? t('Update progress') : t('Update log')],
       !a.canUpdate && a.update && ['update', t('Updating only works for compose apps'), 'off'], '-',
-      ['logs', t('Logs')], run && ['console', t('Console')], ['settings', t('Settings')], '-',
+      ['logs', t('Logs')], run && ['console', t('Console')], ['settings', t('Settings')], ['rename', t('Rename…')], '-',
       ['autostart', t('Start with the server'), 'switch'], '-',
       ['tofolder', t('Move to folder…')], folderOf(a.name) && ['outfolder', t('Remove from folder')],
       (a.storeId || a.custom) && '-', (a.storeId || a.custom) && ['remove', t('Remove'), 'danger'],
@@ -2130,11 +2149,27 @@
     if (act === 'tofolder') return folderPickWindow(a);
     if (act === 'outfolder') { takeOutOfFolder(a.name); return; }
     if (act === 'autostart') return toggleAutoStart(a);
+    if (act === 'rename') return renameApp(a);
     if (act === 'stop' && !(await ask(t('Stop {name}? Whatever runs on it will no longer be reachable.', { name: label }), t('Stop')))) return;
     S.appBusy[a.id] = act; renderApps();
     try { await api.post(appPath(a, '/' + act)); toast(t(APP_ACTS[act].done) + ': ' + label); }
     catch (e) { toast(t('{action} {name} failed: {error}', { action: t(APP_ACTS[act].noun), name: label, error: e.message }), true); }
     delete S.appBusy[a.id];
+    await loadApps().catch(() => renderApps());
+  }
+
+  // Rename: only the name on the dashboard (DATA_DIR/apps.json); the container, its folders and compose project stay.
+  async function renameApp(a) {
+    const old = prettyName(a.name);
+    const r = await ask(t('New name for {name}', { name: old }), t('Rename'), null, { value: old, placeholder: autoName(a.name), label: t('Name'), max: 40 });
+    if (!r) return;
+    const value = r.value.replace(/\s+/g, ' ').trim();
+    if (value === old) return;
+    const label = value === autoName(a.name) ? '' : value; // the automatic name again = no own name
+    try {
+      await api.post(appPath(a, '/settings'), { label });
+      toast(t('Renamed to {name}', { name: label || autoName(a.name) }));
+    } catch (e) { toast(t('Renaming {name} failed: {error}', { name: old, error: e.message }), true); }
     await loadApps().catch(() => renderApps());
   }
 
@@ -2254,6 +2289,8 @@
         ${c ? `<dt>${t('Compose project')}</dt><dd>${esc(c.project)}</dd>` : ''}
       </dl>
       <form class="form" id="appSetForm" novalidate style="margin-top:16px">
+        <label class="fld"><span>${t('Name')} ${hint(t('The name on the dashboard. The container keeps its own name. Leave empty = automatic.'))}</span>
+          <input class="field" name="label" value="${esc(s.label || '')}" placeholder="${esc(autoName(a.name))}" maxlength="40" autocomplete="off"></label>
         <label class="fld"><span>${t('Web interface address (WebUI)')}</span>
           <input class="field" name="webui" value="${esc(s.webui)}" placeholder="${esc(s.webuiDefault || s.webuiAuto || 'http://[IP]:[PORT:8080]/')}" autocomplete="off" spellcheck="false">
           <small>${t('This opens when you click the app. {ip} becomes the address of your server, {port} the port on the server that is mapped to port 80 in the app.', { ip: '<code>[IP]</code>', port: '<code>[PORT:80]</code>' })}
@@ -2286,7 +2323,7 @@
       const err = $('.form-error', form), btn = $('[type=submit]', form);
       err.textContent = ''; btn.disabled = true;
       try {
-        await api.post(appPath(a, '/settings'), { webui: form.elements.webui.value, icon: form.elements.icon.value, autoStart: form.elements.autoStart.checked });
+        await api.post(appPath(a, '/settings'), { label: form.elements.label.value, webui: form.elements.webui.value, icon: form.elements.icon.value, autoStart: form.elements.autoStart.checked });
         toast(t('Saved: {name}', { name: label }));
         await loadApps().catch(() => {});
       } catch (ex) { err.textContent = t('Saving failed: {error}', { error: ex.message }); }
@@ -9851,7 +9888,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     diskSeen.seq = Math.max(diskSeen.seq, max);
   }
-  async function loadApps() { S.apps = await api.get('/api/apps'); renderApps(); renderMobileHome(); if (S.apps.some(updating)) watchUpdates(); }
+  async function loadApps() { S.apps = await api.get('/api/apps'); appLabels = Object.fromEntries(S.apps.filter((x) => x.label).map((x) => [x.name, x.label])); renderApps(); renderMobileHome(); if (S.apps.some(updating)) watchUpdates(); }
   async function loadVms() {
     try { S.vms = await api.get('/api/vms'); S.vmError = null; }
     catch (e) { S.vmError = e.message; throw e; }

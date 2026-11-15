@@ -2990,7 +2990,7 @@
     if (ms) {
       const a = findApp(ms[1]), o = appOvr[a.name] || {};
       return { name: a.name, image: a.image, ports: copy(a.ports), restartPolicy: a.autoStart ? 'unless-stopped' : 'no', autoStart: a.autoStart,
-        webui: o.webui || '', webuiDefault: '', webuiAuto: a.webui, icon: o.icon || '', iconDefault: a.icon || '',
+        webui: o.webui || '', webuiDefault: '', webuiAuto: a.webui, icon: o.icon || '', iconDefault: a.icon || '', label: o.label || '',
         compose: a.compose ? { project: a.compose, files: ['/opt/stacks/' + a.compose + '/compose.yaml'], file: '/opt/stacks/' + a.compose + '/compose.yaml',
           workingDir: '/opt/stacks/' + a.compose, editable: true, service: a.name, text: composeText[a.compose] || demoCompose(a), form: demoForm(a),
           dockerNetworks: dnets.filter((n) => !n.builtin).map((n) => ({ name: n.name, driver: n.driver, subnet: n.subnet })).sort((x, y) => x.name.localeCompare(y.name)) } : null };
@@ -3306,6 +3306,13 @@
       const o = { ...(appOvr[a.name] || {}) };
       if ('webui' in body) { if (w) o.webui = w; else delete o.webui; }
       if ('icon' in body) { if (ic) o.icon = ic; else delete o.icon; }
+      if ('label' in body) {
+        const l = String(body.label || '').replace(/\s+/g, ' ').trim();
+        if (l.length > 40) throw err('Choose a name of at most 40 characters.');
+        if (/[<>]/.test(l)) throw err('A name can\'t contain < or >.');
+        if (l) o.label = l; else delete o.label;
+        a.label = l || null;
+      }
       appOvr[a.name] = o;
       if (body.autoStart != null) a.autoStart = !!body.autoStart;
       return { ok: true };

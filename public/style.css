@@ -941,6 +941,8 @@ select.field { padding-right: 8px; }
 .chat textarea { min-height: 72px; padding: 10px 12px; resize: vertical; height: auto; }
 
 .ask { width: min(400px, calc(100vw - 32px)); }
+#askInput { flex: none; }
+#askInput[hidden] { display: none; }
 .ask .win-body { padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 18px; }
 .ask p { font-size: 16px; font-weight: 500; }
 .ask-row { justify-content: flex-end; }
