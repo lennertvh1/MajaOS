@@ -1898,7 +1898,22 @@
     const top = [...modalStack].reverse().find((dialog) => dialog.open); if (top) mountTaskbar(top);
   }
   function mountTaskbar(dialog) { const bar = $('#minimizedWindows'); if (bar.children.length) { bar.hidden = false; dialog.appendChild(bar); } }
+  // After a refresh you come back where you were: pages have their own address (#vms, #store, #files, #settings/…),
+  // windows are remembered per browser tab in sessionStorage (tb-window: [kind, …args]) and opened again by startDesk.
+  // Opening another window or closing it forgets it.
+  function rememberWindow(...args) { try { sessionStorage.setItem('tb-window', JSON.stringify(args)); } catch (e) { /* private mode */ } }
+  function forgetWindow() { try { sessionStorage.removeItem('tb-window'); } catch (e) { /* private mode */ } }
+  function reopenWindow() {
+    let w = null;
+    try { w = JSON.parse(sessionStorage.getItem('tb-window') || 'null'); } catch (e) { w = null; }
+    if (!Array.isArray(w) || settingsHash()) return;
+    const [kind, a, b] = w;
+    const open = { storage: () => storageWindow(), shares: () => sharesWindow(), backup: () => backupWindow(a), system: () => systemWindow(),
+      ai: () => aiWindow(), vm: () => vmEditWindow(a, b || 'general') }[kind];
+    if (open) open(); else forgetWindow();
+  }
   function openWindow(title, html, after) {
+    forgetWindow(); // the window that opens now remembers itself again (rememberWindow) if it can come back
     const recovered = recoveredWindowTasks.get(title); if (recovered) { recovered.remove(); forgetTask(recovered.dataset.windowId); recoveredWindowTasks.delete(title); hideMinimizedBarIfEmpty(); }
     win.classList.remove('win-wide', 'file-win', 'chat-win'); // only the storage window is wide; the editor is a bit wider
     const gear = $('#winGear'); if (gear) gear.hidden = true;
@@ -1940,7 +1955,7 @@
   win.addEventListener('click', (e) => { if (e.target.closest('a[href^="#settings"]')) win.close(); });
   win.addEventListener('click', (e) => { if (e.target === win || e.target.closest('[data-close]')) win.close(); });
   // The close event comes asynchronously: if a new window is already open by then, don't empty that one.
-  win.addEventListener('close', () => { if (minimizingWindow) { minimizingWindow = false; return; } if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
+  win.addEventListener('close', () => { if (minimizingWindow) { minimizingWindow = false; return; } forgetWindow(); if (onWinClose) { onWinClose(); onWinClose = null; } if (!win.open) $('#winBody').innerHTML = ''; });
 
   // Own confirmation (also works where confirm() is blocked).
   // With checkLabel a checkbox is added and ask() returns { checked } instead of true.
@@ -3109,6 +3124,7 @@
   // memory split up, the GPU and the network per card. Refreshes every 2 s while it is open.
   async function systemWindow() {
     openWindow(t('System'), `<p class="lead">${t('Loading…')}</p>`);
+    rememberWindow('system');
     win.classList.add('win-wide');
     const body = $('#winBody');
     let timer = null;
@@ -4058,7 +4074,7 @@
     const again = opt && opt.again;
     const scroll = again ? $('#winBody').scrollTop : 0;
     let s;
-    if (!again) { openWindow(t('Storage'), `<p class="lead">${t('Loading disks…')}</p>`); win.classList.add('win-wide'); }
+    if (!again) { openWindow(t('Storage'), `<p class="lead">${t('Loading disks…')}</p>`); win.classList.add('win-wide'); rememberWindow('storage'); }
     try { s = await api.get('/api/storage'); } catch (e) { if (!again) $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     if (again) { if (!win.open || !$('#poolsBox')) return; openWindow(t('Storage'), ''); win.classList.add('win-wide'); }
     const pct = s.total ? (s.used / s.total) * 100 : 0;
@@ -4892,6 +4908,7 @@
     });
     let snapsLoaded = false;
     const showTab = (k) => {
+      rememberWindow('vm', id, k); // a refresh comes back to this VM and this tab
       $$('[data-vtab]', body).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vtab === k)));
       $$('[data-vpane]', body).forEach((p) => { p.hidden = p.dataset.vpane !== k; });
       $('[data-vsave]', form).hidden = k === 'snapshots';
@@ -6632,6 +6649,7 @@
   /* --- Shared folders (Samba) and their users: a window of its own, in the menu at the top */
   function sharesWindow() {
     openWindow(t('Shared folders'), `<p class="lead">${t('Loading…')}</p>`, (body) => sharesPane(body));
+    rememberWindow('shares');
     onWinClose = () => loadShares(); // update the widget after changes
   }
   function filesJoin(dir, name) { return [dir, name].filter(Boolean).join('/'); }
@@ -7521,6 +7539,7 @@
   function backupWindow(tab) {
     if (tab) bk.tab = tab;
     openWindow(t('Backups'), `<p class="lead">${t('Loading…')}</p>`, (body) => backupPane(body));
+    rememberWindow('backup', bk.tab);
     onWinClose = () => { clearTimeout(bk.timer); bk.timer = null; loadBackups(); }; // update the widget after changes
   }
   function ago(ms) {
@@ -7572,7 +7591,7 @@
       <div class="seg vm-tabs" role="tablist" aria-label="${t('Sections')}">${BK_TABS.map(([k, label]) =>
         `<button type="button" role="tab" aria-selected="${k === bk.tab}" data-bktab="${k}">${t(label, null, 'backup')}</button>`).join('')}</div>
       <div id="bkBody"></div>`;
-    el.onclick = (e) => { const b = e.target.closest('[data-bktab]'); if (b) { bk.tab = b.dataset.bktab; backupPane(el); } };
+    el.onclick = (e) => { const b = e.target.closest('[data-bktab]'); if (b) { bk.tab = b.dataset.bktab; rememberWindow('backup', bk.tab); backupPane(el); } };
     const box = $('#bkBody', el);
     ({ jobs: bkJobs, system: bkSystem, devices: bkDevices, remotes: bkRemotes })[bk.tab](box, d, el);
     if (quiet) el.scrollTop = scroll;
@@ -9208,6 +9227,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
   async function aiWindow() {
     openWindow(t('AI'), `<p class="lead">${t('Loading…')}</p>`);
+    rememberWindow('ai');
     win.classList.add('chat-win');
     const gear = $('#winGear'); if (gear) gear.hidden = false;
     try { await loadAi(true); } catch (e) { /* the message below uses S.ai */ }
@@ -9753,7 +9773,9 @@ sudo ./install.sh</pre></div>`}` : '') +
   let pageHash = location.hash.startsWith('#settings') ? '' : location.hash;
   const settingsHash = () => location.hash.startsWith('#settings');
   // The page under the store or Files (they open on top): what was there before, not the dashboard.
-  let underHash = popKindOf(location.hash) || location.hash.startsWith('#settings') ? '' : location.hash;
+  // Kept in sessionStorage too, so after a refresh on #store the page under it is still known.
+  let underHash = popKindOf(location.hash) ? (() => { try { return sessionStorage.getItem('tb-under') || ''; } catch (e) { return ''; } })()
+    : location.hash.startsWith('#settings') ? '' : location.hash;
   let lastHash = ''; // the address route() handled before: back from the store or Files to the VM page, it isn't rebuilt
   function currentView() {
     let h = (settingsHash() ? pageHash : location.hash) || '';
@@ -9809,7 +9831,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (!settingsHash() && !location.hash.startsWith('#files')) { location.replace('#files'); return; }
     }
     const inSettings = settingsHash();
-    if (!inSettings && !popKindOf(location.hash)) underHash = location.hash;
+    if (!inSettings && !popKindOf(location.hash)) { underHash = location.hash; try { sessionStorage.setItem('tb-under', underHash); } catch (e) { /* private mode */ } }
     document.body.classList.toggle('m-apps', location.hash === '#apps'); // the Apps tile on a phone
     const view = currentView();
     const popKind = popKindOf(location.hash);
@@ -9921,6 +9943,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     if (S.config.onboarding && !onbWin.open) openOnboarding();
     refresh(true);
     loadLayout();
+    reopenWindow(); // the window that was open before a refresh
     loadUpdate();
     loadDebianNote();
     timers.forEach(clearInterval);
