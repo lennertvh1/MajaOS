@@ -47,7 +47,7 @@ test('the share file points Windows at those snapshots', () => {
   const conf = shares.buildSmbConf([
     { name: 'media', path: '/tank/media', users: { lisa: 'rw' }, guest: false },
   ], { mounts });
-  assert.match(conf, /vfs objects = catia fruit streams_xattr shadow_copy2/);
+  assert.match(conf, /vfs objects = (full_audit )?catia fruit streams_xattr shadow_copy2/);
   assert.match(conf, /shadow:snapdir = \.zfs\/snapshot/);
   assert.match(conf, /shadow:format = GMT-%Y\.%m\.%d-%H\.%M\.%S/);
   const plain = shares.buildSmbConf([{ name: 'media', path: '/tank/media', users: { lisa: 'rw' } }]);

@@ -2924,6 +2924,60 @@
     throw err('Choose a temporary address, a fixed address or your own proxy.');
   }
 
+  // Settings → Logs (lib/activity.js): sample activity and system logs, the same shapes as /api/activity and /api/logs/system.
+  const demoActivityList = (() => {
+    const now = Date.now(), m = 60000, h = 60 * m;
+    const e = (ago, who, via, kind, action, target, extra = {}) => ({ at: now - ago, who, via, kind, action, target, ok: true, ip: via === 'smb' ? '192.168.1.42' : '192.168.1.20', ...extra });
+    return [
+      e(3 * m, 'lennert', 'web', 'apps', 'Restarted an app', 'jellyfin'),
+      e(9 * m, 'emma', 'smb', 'files', 'Saved a file', 'documents/Belastingen 2025.pdf'),
+      e(11 * m, 'emma', 'smb', 'files', 'Made a folder', 'documents/Huis'),
+      e(14 * m, 'emma', 'smb', 'files', 'Renamed or moved', 'documents/scan001.pdf → documents/Huis/Verzekering.pdf'),
+      e(26 * m, 'lennert', 'web', 'files', 'Uploaded a file', 'media/Films/Vakantie 2025.mp4'),
+      e(41 * m, 'lennert', 'ai', 'apps', 'Stopped an app', 'qbittorrent'),
+      e(52 * m, 'noah', 'smb', 'files', 'Deleted', 'photos/IMG_2041.HEIC'),
+      e(58 * m, 'noah', 'web', 'signin', 'Signed in', ''),
+      e(61 * m, 'noah', 'web', 'signin', 'Sign-in failed', '', { ok: false, error: 'Wrong password' }),
+      e(2 * h, 'lennert', 'web', 'shares', 'Changed a shared folder', 'documents'),
+      e(3 * h, 'lennert', 'mcp', 'vms', 'Took a snapshot', 'homeassistant'),
+      e(5 * h, 'lennert', 'web', 'settings', 'Changed the UPS', ''),
+      e(7 * h, 'emma', 'web', 'files', 'Downloaded', 'photos/2024/Zomer.zip'),
+      e(20 * h, 'lennert', 'web', 'system', 'Ran a command on the server', 'zpool status'),
+      e(23 * h, 'lennert', 'web', 'apps', 'Updated an app', 'immich'),
+      e(26 * h, 'lennert', 'web', 'storage', 'Started a pool check', 'tank'),
+      e(27 * h, 'lennert', 'web', 'signin', 'Signed in', ''),
+      e(30 * h, 'emma', 'smb', 'files', 'Saved a file', 'documents/Recepten.docx'),
+    ];
+  })();
+  function demoActivity(path) {
+    const q = new URL(path, 'http://demo.local').searchParams;
+    const who = q.get('who') || '', kind = q.get('kind') || '', via = q.get('via') || '', needle = (q.get('q') || '').toLowerCase(), before = Number(q.get('before')) || 0;
+    const entries = demoActivityList.filter((e) => (!who || e.who === who) && (!kind || e.kind === kind) && (!via || e.via === via) && (!before || e.at < before)
+      && (!needle || `${e.action} ${e.target} ${e.who}`.toLowerCase().includes(needle)));
+    return { entries, more: false, people: [...new Set(demoActivityList.map((e) => e.who))].sort(), kinds: ['signin', 'files', 'apps', 'vms', 'storage', 'shares', 'users', 'backup', 'network', 'settings', 'system', 'ai', 'other'] };
+  }
+  function demoSystemLog(path) {
+    const q = new URL(path, 'http://demo.local').searchParams;
+    const source = q.get('source') || 'majaos', level = q.get('level') || 'all', needle = (q.get('q') || '').toLowerCase();
+    const now = Date.now(), s = 1000;
+    const lines = {
+      majaos: [['majaos', 'info', 'MajaOS listens on http://0.0.0.0:80 and https://0.0.0.0:443'], ['majaos', 'info', 'UPS: the driver now reads the power every 5 s.'], ['majaos', 'warning', 'Checking for updates: GitHub answered 403 (rate limit), trying again later.'], ['majaos', 'info', 'A command ran through the terminal from 192.168.1.20.']],
+      docker: [['docker', 'info', 'Container jellyfin restarted'], ['containerd', 'info', 'shim disconnected id=4f2a…'], ['docker', 'warning', 'Health check for container immich_server exceeded timeout']],
+      samba: [['smbd', 'info', 'smbd version 4.22.3-Debian started.'], ['smbd_audit', 'info', 'emma|192.168.1.42|documents|openat|ok|w|Belastingen 2025.pdf']],
+      vms: [['libvirtd', 'info', 'Domain homeassistant started'], ['virtqemud', 'warning', 'cannot get CPU stats: guest agent not responding']],
+      zfs: [['zfs-zed', 'info', 'eid=42 class=scrub_finish pool=\'tank\''], ['zfs-zed', 'info', 'eid=41 class=scrub_start pool=\'tank\'']],
+      ups: [['nut-server', 'info', 'Connected to UPS [ups]: usbhid-ups-ups'], ['nut-monitor', 'warning', 'UPS ups@localhost on battery'], ['nut-monitor', 'info', 'UPS ups@localhost on line power']],
+      network: [['networking', 'info', 'Raising network interfaces…'], ['dhcpcd', 'info', 'enp5s0: leased 192.168.1.10 for 86400 seconds']],
+      ssh: [['ssh', 'info', 'Server listening on 0.0.0.0 port 22.']],
+      updates: [['unattended-upgrades', 'info', 'Packages that were upgraded: openssl libssl3t64'], ['apt-daily', 'info', 'Finished apt-daily.service']],
+      kernel: [['kernel', 'info', 'r8169 0000:05:00.0 enp5s0: Link is Up - 2.5Gbps/Full'], ['kernel', 'error', 'ata3.00: failed command: READ FPDMA QUEUED'], ['kernel', 'warning', 'nvidia: module verification failed: signature and/or required key missing']],
+    };
+    const pick = source === 'all' ? Object.values(lines).flat() : lines[source] || [];
+    const min = { all: 0, info: 0, warning: 1, error: 2 }[level] || 0, rank = { info: 0, warning: 1, error: 2 };
+    const entries = pick.map(([unit, lv, text], i) => ({ at: now - (i * 7 + 1) * 60 * s, unit, level: lv, text }))
+      .filter((e) => rank[e.level] >= min && (!needle || e.text.toLowerCase().includes(needle)));
+    return { source, level, sources: Object.keys(lines).concat('all'), entries, more: false };
+  }
   async function get(path) {
     await wait(rnd(120, 300));
     { const r = path.includes('/snapshots') ? snapRoute('GET', path) : path.startsWith('/api/sysbackups') ? sysRoute('GET', path) : undefined; if (r !== undefined) return r; }
@@ -3034,6 +3088,8 @@
     if (path.startsWith('/api/unraid') && !path.startsWith('/api/unraid/')) return unraidJob && !unraidProgress().done ? { found: true, running: true } : unraidSsh ? unraidSshScan() : unraidScan();
     if (path === '/api/unraid/progress') return unraidProgress();
     if (path === '/api/system/details') { await wait(rnd(150, 300)); return systemDetails(); }
+    if (path === '/api/activity' || path.startsWith('/api/activity?')) return demoActivity(path);
+    if (path.startsWith('/api/logs/system')) return demoSystemLog(path);
     if (path === '/api/ups') return upsStatus();
     if (path === '/api/fans') return fansStatus();
     if (path === '/api/fans/detect') return demoFans.job ? { ...demoFans.job, percent: Math.round(demoFans.job.percent) } : { state: 'idle' };

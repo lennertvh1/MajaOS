@@ -2269,3 +2269,31 @@ button.snap-node:hover { background: var(--glass-hover); }
 .pool-mini .bar { grid-column: 1 / -1; height: 5px; margin: 0; }
 .home-widget .pool-mini { flex: 1; min-height: 0; overflow: hidden; align-content: start; gap: 5px; margin-top: 6px; }
 .home-widget.short .pool-mini { display: none; }
+
+/* Settings → Logs: activity and system logs */
+.log-tools .log-search { flex: 1 1 180px; width: auto; min-width: 140px; }
+.log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.log-day { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 4px; }
+.log-day:first-child { margin-top: 2px; }
+.log-row { display: grid; grid-template-columns: 74px minmax(70px, 120px) minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+  padding: 7px 10px; border-radius: 10px; background: var(--glass); font-size: 13.5px; }
+.log-row.failed { box-shadow: inset 3px 0 0 var(--bad); }
+.log-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.log-who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-what { min-width: 0; overflow-wrap: anywhere; }
+.log-what b { font-weight: 500; }
+.log-target { color: var(--muted); font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.log-via { color: var(--faint); font-size: 12px; white-space: nowrap; }
+.log-row.sys { grid-template-columns: 74px minmax(60px, 130px) minmax(0, 1fr); }
+.log-unit { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-text { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.log-row.sys.warning { box-shadow: inset 3px 0 0 var(--warn); }
+.log-row.sys.error { box-shadow: inset 3px 0 0 var(--bad); }
+.log-row.sys.error .log-text { color: var(--bad); }
+.log-more { margin: 12px auto 0; display: block; }
+@media (max-width: 640px) {
+  .log-row { grid-template-columns: auto minmax(0, 1fr); }
+  .log-what, .log-text { grid-column: 1 / -1; }
+  .log-via { grid-column: 1 / -1; }
+  .log-row.sys { grid-template-columns: auto minmax(0, 1fr); }
+}

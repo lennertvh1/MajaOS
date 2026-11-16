@@ -61,6 +61,7 @@ const disks = require('./lib/disks');
 const layout = require('./lib/layout');
 const shortcuts = require('./lib/shortcuts');
 const terminal = require('./lib/terminal');
+const activity = require('./lib/activity');
 const mcphttp = require('./lib/mcphttp');
 const chats = require('./lib/chats');
 const tlsCert = require('./lib/tls');
@@ -134,6 +135,7 @@ async function requestJson(urlStr, opts = {}) {
 }
 
 function sendJson(res, status, obj) {
+  if (status >= 400 && obj && obj.error) res.auditError = obj.error; // for the activity log
   let body = JSON.stringify(obj);
   const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
   // Send large responses (the app catalogue is ~2 MB) compressed.
@@ -288,6 +290,7 @@ async function handleApi(req, res, url) {
         return sendJson(res, 200, { setupMfa: true, pending: auth.newPending(Date.now(), { who, step: 'setup' }), ...auth.beginSetup(label(who), who), ...extra });
       }
       auth.succeeded(ip); setSession(res, body.remember, who || '');
+      activity.add({ kind: 'signin', action: 'Signed in', who: who || auth.userName() || '', ip });
       return sendJson(res, 200, { ok: true, ...extra });
     };
     if (p === '/api/login') {
@@ -295,10 +298,10 @@ async function handleApi(req, res, url) {
       const name = String(body.user || '').trim().toLowerCase();
       let who;
       if (auth.account(name)) {
-        if (!auth.verifyAccount(name, body.password)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
+        if (!auth.verifyAccount(name, body.password)) { auth.failed(ip); activity.add({ kind: 'signin', action: 'Sign-in failed', who: name, ip, ok: false, error: 'Wrong password' }); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
         who = name;
       } else {
-        if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
+        if (!checkPassword(body.password) || !auth.checkUser(body.user)) { auth.failed(ip); activity.add({ kind: 'signin', action: 'Sign-in failed', who: name.slice(0, 40), ip, ok: false, error: 'Wrong user name or password' }); await slow(); return sendJson(res, 401, { error: 'Wrong user name or password' }); }
         auth.claimUser(body.user);
         who = null;
       }
@@ -308,7 +311,7 @@ async function handleApi(req, res, url) {
     if (p === '/api/login/mfa') {
       const r = auth.usePending(body.pending, body.code);
       if (r.result === 'expired') return sendJson(res, 401, { error: 'Your sign-in expired. Type your password again.', expired: true });
-      if (r.result !== 'ok') { auth.failed(ip); await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
+      if (r.result !== 'ok') { auth.failed(ip); activity.add({ kind: 'signin', action: 'Sign-in failed', who: (auth.peekPending(body.pending) || {}).who || auth.userName() || '', ip, ok: false, error: 'That code is not correct.' }); await slow(); return sendJson(res, 401, { error: 'That code is not correct.' }); }
       return next(r.who, { recovery: !!r.recovery, recoveryLeft: r.recoveryLeft });
     }
     const pend = auth.peekPending(body.pending);
@@ -362,6 +365,20 @@ async function handleApi(req, res, url) {
   // verification. Everything else is refused here, before any route.
   const USER_ROUTES = /^\/api\/(mfa(\/(setup|enable|disable|recovery))?|password|shares|shares\/[^/]+\/files|files\/locate)$/;
   if (who.role === 'user' && !USER_ROUTES.test(p)) return sendJson(res, 403, { error: 'Your account can\'t do this. Ask an administrator.' });
+
+  // The activity log (lib/activity.js): what this request did, by whom, once the answer is sent. An app is logged
+  // by its name (looked up now: after Remove it is gone).
+  if (activity.describe(method, p, url.searchParams)) {
+    const appId = (p.match(/^\/api\/apps\/([^/]+)/) || [])[1];
+    const appName = appId && !/^(custom|compose|check-updates|draft)$/.test(appId)
+      ? docker.docker('GET', `/containers/${encodeURIComponent(decodeURIComponent(appId))}/json`).then((c) => String((c && c.Name) || '').replace(/^\//, '')).catch(() => '') : null;
+    const via = /^(mcp|ai)$/.test(req.headers['x-majaos-via'] || '') ? req.headers['x-majaos-via'] : 'web';
+    res.on('finish', async () => {
+      const name = appName ? await appName : '';
+      const extra = { ...(name ? { target: name } : {}), ...(req.audit || {}) };
+      activity.fromRequest({ method, path: p, query: url.searchParams, who: who.name, via, ip: clientIp(req), status: res.statusCode, extra, error: res.auditError });
+    });
+  }
 
   // Protection against CSRF: requests that change things must come from the same origin.
   if (method !== 'GET') {
@@ -545,6 +562,7 @@ async function handleApi(req, res, url) {
       await new Promise((r) => setTimeout(r, 800)); // slow down guessing
       return sendJson(res, 401, { error: 'Wrong password' });
     }
+    req.audit = { action: 'Opened the terminal' };
     return sendJson(res, 200, { ticket: terminal.newTicket() });
   }
   // One command on the server (the MCP server). Same switch and password as the terminal.
@@ -557,6 +575,7 @@ async function handleApi(req, res, url) {
       return sendJson(res, 401, { error: 'Wrong password' });
     }
     console.log('A command ran through the terminal' + (clientIp(req) ? ' from ' + clientIp(req) : '') + '.');
+    req.audit = { target: String(body.command || '').slice(0, 300) };
     return sendJson(res, 200, await terminal.runCommand(body.command, { timeout: body.timeout }));
   }
   // Manage two-step verification (Settings → Security). Password needed to start, password + code to turn it off.
@@ -618,6 +637,15 @@ async function handleApi(req, res, url) {
   if (p === '/api/onboarding/finish' && method === 'POST') return sendJson(res, 200, onboarding.finish({ skipped: !!(await readBody(req)).skipped }));
   if (p === '/api/onboarding/reset' && method === 'POST') return sendJson(res, 200, onboarding.reset());
   if (p === '/api/about' && method === 'GET') return sendJson(res, 200, await about.about());
+  // Settings → Logs: who did what (lib/activity.js), and the system logs per service (journalctl).
+  if (p === '/api/activity' && method === 'GET') {
+    const q = url.searchParams;
+    return sendJson(res, 200, activity.list({ who: q.get('who') || '', kind: q.get('kind') || '', via: q.get('via') || '', q: q.get('q') || '', before: Number(q.get('before')) || 0, limit: Math.min(500, Number(q.get('limit')) || 200) }));
+  }
+  if (p === '/api/logs/system' && method === 'GET') {
+    const q = url.searchParams;
+    return sendJson(res, 200, await activity.system({ source: q.get('source') || 'majaos', level: q.get('level') || 'all', q: q.get('q') || '', lines: Number(q.get('lines')) || 300, before: Number(q.get('before')) || 0 }));
+  }
   if (p === '/api/network' && method === 'GET') return sendJson(res, 200, await network.getNetwork());
   if (p === '/api/network' && method === 'POST') return sendJson(res, 200, await network.applyNetwork(await readBody(req)));
   if (p === '/api/network/confirm' && method === 'POST') return sendJson(res, 200, network.confirmNetwork());
@@ -672,7 +700,14 @@ async function handleApi(req, res, url) {
     if (method === 'GET') return sendJson(res, 200, files.list(name, rel));
     if (method === 'PUT') return sendJson(res, 200, await files.upload(req, name, rel, { overwrite: url.searchParams.get('overwrite') === '1' }));
     if (method === 'DELETE') return sendJson(res, 200, files.remove(name, rel, { recursive: url.searchParams.get('recursive') === '1' }));
-    if (method === 'POST') return sendJson(res, 200, files.act(name, await readBody(req)));
+    if (method === 'POST') {
+      const body = await readBody(req);
+      const at = name + '/' + (body.path || '');
+      req.audit = body.action === 'mkdir' ? { action: 'Made a folder', target: at }
+        : body.action === 'rename' ? { action: 'Renamed or moved', target: at + ' → ' + (body.name || '') }
+        : body.action === 'copy' ? { action: 'Made a copy', target: at } : null;
+      return sendJson(res, 200, files.act(name, body));
+    }
   }
   if ((m = p.match(/^\/api\/shares\/([^/]+)\/fix-owner$/)) && method === 'POST') return sendJson(res, 200, await shares.fixOwner(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/shares\/([^/]+)$/)) && method === 'POST') return sendJson(res, 200, await shares.saveShare(await readBody(req), decodeURIComponent(m[1])));
@@ -1063,6 +1098,8 @@ bind(CFG.port).then(() => {
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
     storage.watchDisks(); // a disk plugged in or taken out: a message on the dashboard
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
+    activity.startSchedule(); // the activity log: who changed what in the shared folders (Samba full_audit)
+    shares.upgradeConf().catch((e) => console.error('Shared folders: ' + e.message));
     ups.startSchedule(); // the UPS: log power events and shut down early (Settings → UPS)
     mixed.startSchedule(); // parity of pools with mixed disks: sync and scrub on their schedule
   }

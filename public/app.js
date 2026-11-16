@@ -6057,7 +6057,109 @@
   }
 
   /* --- settings (own page at #settings, #settings/network, #settings/docker, #settings/about) */
-  const settingsTab = () => ({ '#settings/general': 'general', '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/ups': 'ups', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
+  // Settings → Logs: Activity (who did what: lib/activity.js) and System (journalctl per service).
+  const LOG_KINDS = { signin: 'Sign-in', files: 'Files', apps: 'Apps', vms: 'Virtual machines', storage: 'Storage', shares: 'Shared folders',
+    users: 'Users', backup: 'Backups', network: 'Network', settings: 'Settings', system: 'System', ai: 'AI', other: 'Other' };
+  const LOG_VIA = { web: 'Web page', smb: 'Shared folder (SMB)', ai: 'AI', mcp: 'MCP' };
+  const LOG_SOURCES = { majaos: 'MajaOS', docker: 'Docker', samba: 'Shared folders (Samba)', vms: 'Virtual machines', zfs: 'ZFS', ups: 'UPS',
+    network: 'Network', ssh: 'SSH', updates: 'Updates', kernel: 'Kernel', all: 'Everything' };
+  const logState = { tab: 'activity', who: '', kind: '', via: '', q: '', source: 'majaos', level: 'all', sq: '' };
+  let logRun = 0;
+  async function logsPane(el) {
+    const run = ++logRun;
+    const st = logState;
+    const day = (ms) => { const d = new Date(ms).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }); return d.charAt(0).toUpperCase() + d.slice(1); };
+    const time = (ms) => new Date(ms).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', second: '2-digit', ...clockOpts() });
+    const opts = (map, cur, all) => `<option value="">${esc(all)}</option>` + Object.entries(map).map(([k, v]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(t(v))}</option>`).join('');
+    el.innerHTML = `
+      <div class="seg vm-tabs" role="tablist" aria-label="${t('Sections')}">
+        <button type="button" role="tab" aria-selected="${st.tab === 'activity'}" data-ltab="activity">${t('Activity')}</button>
+        <button type="button" role="tab" aria-selected="${st.tab === 'system'}" data-ltab="system">${t('System logs')}</button></div>
+      <div id="logBody"><p class="lead">${t('Loading…')}</p></div>`;
+    el.onclick = (e) => { const b = e.target.closest('[data-ltab]'); if (b && b.dataset.ltab !== st.tab) { st.tab = b.dataset.ltab; logsPane(el); } };
+    el.onchange = null;
+    const body = $('#logBody', el);
+    const fail = (e) => { if (run === logRun) body.innerHTML = `<p class="notice bad"><span>${esc(tr(e.message))}</span></p>`; };
+    // Rows grouped per day, newest first; "Show more" fetches what came before the last one.
+    const paint = (box, entries, more, rowHtml, onMore) => {
+      let last = '';
+      box.innerHTML = entries.length ? `<ol class="log-list">${entries.map((e) => {
+        const d = day(e.at), head = d !== last ? `<li class="log-day">${esc(d)}</li>` : '';
+        last = d;
+        return head + rowHtml(e);
+      }).join('')}</ol>${more ? `<button class="btn sm log-more" type="button">${t('Show more')}</button>` : ''}`
+        : `<p class="muted">${t('Nothing found.')}</p>`;
+      const b = $('.log-more', box); if (b) b.addEventListener('click', onMore);
+    };
+
+    if (st.tab === 'activity') {
+      body.innerHTML = `
+        <div class="log-tools">
+          <select class="field" data-lf="who" aria-label="${t('Person')}"><option value="">${t('Everyone')}</option></select>
+          <select class="field" data-lf="kind" aria-label="${t('What')}">${opts(LOG_KINDS, st.kind, t('Everything'))}</select>
+          <select class="field" data-lf="via" aria-label="${t('Through')}">${opts(LOG_VIA, st.via, t('Everywhere'))}</select>
+          <input class="field log-search" type="search" data-lf="q" value="${esc(st.q)}" placeholder="${t('Search a file, app or address')}" aria-label="${t('Search')}">
+          ${hint(t('Changes through this page, the AI and MCP, sign-ins, and what users save, rename or delete in the shared folders (not Time Machine). Kept up to about 16 MB of entries.'))}
+        </div>
+        <div id="actList"><p class="lead">${t('Loading…')}</p></div>`;
+      const list = $('#actList', body);
+      let shown = [];
+      const row = (e) => `<li class="log-row${e.ok ? '' : ' failed'}">
+          <span class="log-time">${esc(time(e.at))}</span>
+          <span class="log-who" title="${esc(e.ip || '')}">${esc(e.who || t('Unknown'))}</span>
+          <span class="log-what"><b>${esc(tr(e.action))}</b>${e.target ? ` <span class="log-target">${esc(e.target)}</span>` : ''}${e.ok ? '' : ` <span class="pill bad">${t('Failed')}</span>${e.error ? ` <span class="muted small">${esc(tr(e.error))}</span>` : ''}`}</span>
+          <span class="log-via">${esc(t(LOG_VIA[e.via] || e.via))}</span></li>`;
+      const load = async (before) => {
+        const q = new URLSearchParams({ who: st.who, kind: st.kind, via: st.via, q: st.q, limit: '200', ...(before ? { before: String(before) } : {}) });
+        let d;
+        try { d = await api.get('/api/activity?' + q); } catch (e) { fail(e); return; }
+        if (run !== logRun) return;
+        const sel = $('[data-lf="who"]', body);
+        if (sel && sel.options.length === 1) sel.insertAdjacentHTML('beforeend', d.people.map((p) => `<option value="${esc(p)}"${p === st.who ? ' selected' : ''}>${esc(p)}</option>`).join(''));
+        shown = before ? [...shown, ...d.entries] : d.entries;
+        paint(list, shown, d.more, row, () => load(shown[shown.length - 1].at));
+      };
+      let typing = null;
+      body.addEventListener('change', (e) => { const f = e.target.closest('[data-lf]'); if (f && f.tagName === 'SELECT') { st[f.dataset.lf] = f.value; load(); } });
+      body.addEventListener('input', (e) => { const f = e.target.closest('[data-lf="q"]'); if (!f) return; clearTimeout(typing); typing = setTimeout(() => { st.q = f.value.trim(); load(); }, 300); });
+      load();
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="log-tools">
+        <select class="field" data-sf="source" aria-label="${t('Service')}">${Object.entries(LOG_SOURCES).map(([k, v]) => `<option value="${k}"${k === st.source ? ' selected' : ''}>${esc(t(v))}</option>`).join('')}</select>
+        <div class="seg" role="radiogroup" aria-label="${t('Level')}">${[['all', 'All'], ['warning', 'Warnings'], ['error', 'Errors']].map(([k, v]) => `<button type="button" role="radio" aria-checked="${st.level === k}" data-level="${k}">${t(v)}</button>`).join('')}</div>
+        <input class="field log-search" type="search" data-sf="sq" value="${esc(st.sq)}" placeholder="${t('Search')}" aria-label="${t('Search')}">
+        <button class="btn sm" type="button" data-sys-refresh>${t('Refresh')}</button>
+      </div>
+      <div id="sysList"><p class="lead">${t('Loading…')}</p></div>`;
+    const list = $('#sysList', body);
+    let shown = [];
+    const row = (e) => `<li class="log-row sys ${e.level}">
+        <span class="log-time">${esc(time(e.at))}</span>
+        <span class="log-unit">${esc(e.unit)}</span>
+        <span class="log-text">${esc(e.text)}</span></li>`;
+    const load = async (before) => {
+      const q = new URLSearchParams({ source: st.source, level: st.level, q: st.sq, lines: '300', ...(before ? { before: String(before) } : {}) });
+      if (!before) list.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
+      let d;
+      try { d = await api.get('/api/logs/system?' + q); } catch (e) { fail(e); return; }
+      if (run !== logRun) return;
+      shown = before ? [...shown, ...d.entries] : d.entries;
+      paint(list, shown, d.more, row, () => load(shown[shown.length - 1].at));
+    };
+    let typing = null;
+    body.addEventListener('change', (e) => { const f = e.target.closest('[data-sf="source"]'); if (f) { st.source = f.value; load(); } });
+    body.addEventListener('click', (e) => {
+      const lv = e.target.closest('[data-level]');
+      if (lv) { st.level = lv.dataset.level; $$('[data-level]', body).forEach((b) => b.setAttribute('aria-checked', String(b === lv))); load(); }
+      if (e.target.closest('[data-sys-refresh]')) load();
+    });
+    body.addEventListener('input', (e) => { const f = e.target.closest('[data-sf="sq"]'); if (!f) return; clearTimeout(typing); typing = setTimeout(() => { st.sq = f.value.trim(); load(); }, 400); });
+    load();
+  }
+  const settingsTab = () => ({ '#settings/logs': 'logs', '#settings/general': 'general', '#settings/storage': 'storage', '#settings/hardware': 'hardware', '#settings/network': 'network', '#settings/docker': 'docker', '#settings/vmnet': 'vmnet', '#settings/security': 'security', '#settings/users': 'users', '#settings/ai': 'ai', '#settings/mcp': 'mcp', '#settings/update': 'update', '#settings/cooling': 'cooling', '#settings/ups': 'ups', '#settings/migration': 'migration', '#settings/about': 'about' })[location.hash] || 'general';
   let netTimer = null;
   function showSettings(keepScroll) {
     if (setWin.classList.contains('window-minimized')) { setWin.classList.remove('window-minimized'); if (setTaskItem) { setTaskItem.remove(); forgetTask(setTaskItem.dataset.windowId); setTaskItem = null; } hideMinimizedBarIfEmpty(); }
@@ -6075,11 +6177,11 @@
     const tab = settingsTab();
     $$('#setTabs [role="tab"]').forEach((a) => { a.setAttribute('aria-selected', String(a.dataset.tab === tab)); a.setAttribute('aria-checked', String(a.dataset.tab === tab)); });
     $('#setPane').setAttribute('aria-labelledby', 'tab-' + tab);
-    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', hardware: 'Hardware', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', ups: 'UPS', migration: 'Migration', about: 'About' }[tab]);
+    $('#setWinTitle').textContent = t({ general: 'General', storage: 'Storage', hardware: 'Hardware', network: 'Network', docker: 'Docker networks', vmnet: 'VM networks', security: 'Security', users: 'Users', ai: 'AI', mcp: 'MCP', update: 'Software update', cooling: 'Cooling', ups: 'UPS', logs: 'Logs', migration: 'Migration', about: 'About' }[tab]);
     if (!keepScroll) $('#setPane').scrollTop = 0;
     clearInterval(netTimer); netTimer = null;
     $('#setPane').onclick = null; $('#setPane').onchange = null; $('#setPane').oninput = null; $('#setPane').onsubmit = null;
-    ({ general: generalPane, storage: storagePane, hardware: hardwarePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, ups: upsPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
+    ({ general: generalPane, storage: storagePane, hardware: hardwarePane, network: networkPane, docker: dockerNetPane, vmnet: vmNetPane, security: securityPane, users: usersPane, ai: aiPane, mcp: mcpPane, update: updatePane, cooling: coolingPane, ups: upsPane, logs: logsPane, migration: migrationPane, about: aboutPane })[tab]($('#setPane'));
   }
 
   // Settings and the wizard only offer a language once its dictionary covers the interface.
@@ -10348,6 +10450,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ['settings/update', 'Software update', ['debian', 'apt', 'github', t('Software update')]],
       ['settings/cooling', 'Cooling', ['fans', 'fan', 'pwm', 'temperature', 'rpm', t('Cooling'), t('Fans')]],
       ['settings/ups', 'UPS', ['ups', 'nut', 'battery', 'power', 'apc', 'eaton', 'cyberpower', t('Battery')]],
+      ['settings/logs', 'Logs', ['log', 'logs', 'activity', 'audit', 'journal', 'who', t('Logs'), t('Activity')]],
       ['settings/migration', 'Migration', ['unraid', 'migrate', 'import', t('Migration'), t('Move from Unraid')]],
       ['settings/about', 'About', ['version', 'hardware', 'ecc', t('About')]],
     ].map(([hash, title, keys], i) => item({ id: 's:' + hash, group: 'settings', title: t(title), keys, hint: t('Settings'), order: i, ico: spotIco('settings'), run: () => goSettings(hash) }));
