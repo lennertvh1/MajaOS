@@ -9714,8 +9714,8 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* ------------------------------------------------------------ loading */
   async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
-  // The UPS's power: watts, or the apparent power (VA) of UPSes that only report that (e.g. Eaton Ellipse ECO); '' when unknown.
-  const upsWatts = (u) => (u.power != null ? nf0.format(u.power) + ' W' : u.va ? nf0.format(u.va) + ' VA' : '');
+  // The UPS's power in watts; "≈" when it is estimated from the VA (UPSes like the Eaton Ellipse ECO report no watts); '' when unknown.
+  const upsWatts = (u) => (u.power != null ? (u.powerEstimated ? '≈ ' : '') + nf0.format(u.power) + ' W' : '');
   // Time left on the UPS battery: "31 min", "1 h 5 min".
   const upsTime = (sec) => {
     const m = Math.max(0, Math.round(sec / 60));
