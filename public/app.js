@@ -1734,6 +1734,72 @@
     });
   }
 
+  // New folder… (the dashboard's own menu): a name and the apps that go in it. A folder needs at least two apps:
+  // one with a single app becomes a plain app again (tidy). Apps already in another folder move.
+  function newFolderWindow() {
+    const apps = S.apps.slice().sort((x, y) => prettyName(x.name).localeCompare(prettyName(y.name)));
+    openWindow(t('New folder'), `
+      <form class="form" id="nfForm">
+        <label class="fld"><span>${t('Name')}</span><input class="field" name="name" maxlength="40" placeholder="${t('e.g. Media')}" autocomplete="off" required></label>
+        <div class="fld"><span>${t('Apps in this folder')} ${hint(t('Choose at least two apps. Later you can drag apps onto the folder or out of it.'))}</span>
+        <div class="nf-apps">${apps.map((a) => {
+          const f = folderOf(a.name);
+          return `<label class="check"><input type="checkbox" name="app" value="${esc(a.name)}">${memberMini(a.name)}<span>${esc(prettyName(a.name))}${f ? ` <span class="muted small">· ${esc(t('in {folder}', { folder: folderLabel(f.name) }))}</span>` : ''}</span></label>`;
+        }).join('') || `<p class="muted">${t('No apps yet.')}</p>`}</div></div>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Create folder')}</button></div>
+      </form>`, (body) => {
+      const form = $('#nfForm', body);
+      setTimeout(() => form.elements.name.focus(), 0);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = form.elements.name.value.trim().slice(0, 40);
+        const picked = $$('input[name="app"]:checked', form).map((x) => x.value);
+        const err = $('.form-error', form);
+        if (!name) { err.textContent = t('Give the folder a name.'); return; }
+        if (picked.length < 2) { err.textContent = t('Choose at least two apps.'); return; }
+        // The folder takes the place of the first chosen app on the home screen.
+        let items = homeItems();
+        const at = items.findIndex((it) => (typeof it === 'string' && picked.includes(it)) || (it && it.apps && it.apps.some((n) => picked.includes(n))));
+        for (const n of picked) items = without(items, n);
+        items.splice(at < 0 ? items.length : Math.min(at, items.length), 0, { folder: newFolderId(), name, apps: picked });
+        win.close();
+        setLayout(items);
+        toast(t('Folder {name} created.', { name }));
+      });
+    });
+  }
+  // Right-click on an empty spot of the dashboard: a menu of its own (new folder, shortcut, app, view, hidden widgets).
+  function openDeskMenu(x, y) {
+    const hidden = (((S.layout && S.layout.widgets) || {}).hidden || []).filter((id) => WIDGET_IDS.includes(id) && (id !== 'ai' || !S.ai || S.ai.enabled !== false));
+    const items = [
+      ['newfolder', t('New folder…')], ['shortcut', t('New shortcut…')], ['store', t('Add app…')], '-',
+      S.view === 'list' ? ['grid', t('Show as grid')] : ['list', t('Show as list')],
+      ...(hidden.length ? ['-', ...hidden.map((id) => ['widget:' + id, t('Show widget: {name}', { name: t(WIDGET_NAMES[id] || id) })])] : []),
+    ];
+    menu.innerHTML = `<div class="menu-head"><b>${esc(t('Dashboard'))}</b></div>` +
+      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item" data-menu="${esc(it[0])}"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0].startsWith('widget:') ? 'widget' : it[0]] || ''}</svg>${esc(it[1])}</button>`)).join('');
+    delete menu.dataset.forApp; delete menu.dataset.forVm;
+    menu.dataset.forDesk = '1';
+    placeMenu(x, y, null);
+  }
+  function deskCommand(act) {
+    if (act === 'newfolder') return newFolderWindow();
+    if (act === 'shortcut') return shortcutWindow();
+    if (act === 'store') { location.hash = 'store'; return; }
+    if (act === 'grid' || act === 'list') { const b = $(`#viewSeg [data-view="${act}"]`); if (b) b.click(); return; }
+    if (act.startsWith('widget:')) setWidgetHidden(act.slice(7), false);
+  }
+  $('#desk').addEventListener('contextmenu', (e) => {
+    if (e.defaultPrevented || S.config.role === 'user') return;
+    // Keep the browser's own menu where it is useful: fields, links, selected text, and the tiles that have their own menu.
+    if (e.target.closest('input, textarea, select, a[href], [contenteditable], [data-app], [data-shortcut], [data-vm]')) return;
+    const sel = window.getSelection && String(window.getSelection());
+    if (sel && sel.trim()) return;
+    e.preventDefault();
+    openDeskMenu(e.clientX, e.clientY);
+  });
+
   // Under the title: how many updates there are, with View, Update all and Check now.
   function renderUpdateInfo() {
     const el = $('#updInfo');
@@ -2020,6 +2086,12 @@
   }
 
   const MENU_ICONS = {
+    newfolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
+    shortcut: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    store: '<path d="M12 5v14M5 12h14"/>',
+    grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11M4.8 6h.01M4.8 12h.01M4.8 18h.01"/>',
+    widget: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 11h16M11 11v9"/>',
     snapshot: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
     snapshots: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2"/>',
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -2078,7 +2150,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}<span class="menu-switch" aria-hidden="true"></span></button>`
         : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${(busy && APP_ACTS[it[0]]) || it[2] === 'off' ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}</button>`)).join('');
-    delete menu.dataset.forVm;
+    delete menu.dataset.forVm; delete menu.dataset.forDesk;
     menu.dataset.forApp = a.id; // not data-app: the tiles' click handling reacts to that
     placeMenu(x, y, opener);
   }
@@ -2105,12 +2177,13 @@
     menu.innerHTML = `<div class="menu-head"><b>${esc(v.name)}</b><span>${esc(busy ? t(VM_ACTS[busy].noun) + '…' : vmStateText(v.state))}</span></div>` +
       items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${busy && VM_ACTS[it[0]] ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[VM_MENU_ICON[it[0]] || it[0]] || ''}</svg>${it[1]}</button>`)).join('');
-    delete menu.dataset.forApp;
+    delete menu.dataset.forApp; delete menu.dataset.forDesk;
     menu.dataset.forVm = v.id;
     placeMenu(x, y, opener);
   }
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('[data-menu]'); if (!b) return;
+    if (menu.dataset.forDesk) { const act = b.dataset.menu; closeMenu(false); deskCommand(act); return; }
     if (menu.dataset.forVm) {
       const v = S.vms.find((x) => x.id === menu.dataset.forVm);
       const act = b.dataset.menu;
