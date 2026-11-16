@@ -397,10 +397,23 @@
     $('#storeLine').textContent = fix || t(s.pools > 1 ? '{used} of {total} used in {n} pools' : '{used} of {total} used', { used: bytes(s.used), total: bytes(s.total), n: s.pools });
     const [label, cls] = s.repair && s.repair.state === 'rebuilding' ? [t('Rebuilding'), 'warn'] : poolHealth(s.health);
     st.textContent = label; st.className = 'pill ' + cls;
+    // With more than one pool: each pool with its own bar, free space and capacity.
+    const poolsEl = $('#storePools'), list = (s.list || []).filter((p) => p && p.total);
+    if (poolsEl) {
+      poolsEl.hidden = list.length < 2;
+      poolsEl.innerHTML = list.length < 2 ? '' : list.map((p) => {
+        const pp = Math.min(100, (p.used / p.total) * 100);
+        const bad = p.health && !/^(ONLINE|HEALTHY|OK)$/i.test(p.health);
+        return `<li title="${esc(t('{used} of {total} used', { used: bytes(p.used), total: bytes(p.total) }))}">
+          <span class="name">${esc(p.name)}${bad ? ` <span class="pill ${poolHealth(p.health)[1]}">${esc(poolHealth(p.health)[0])}</span>` : ''}</span>
+          <span class="val">${esc(t('{free} free of {total}', { free: bytes(Math.max(0, p.total - p.used)), total: bytes(p.total) }))}</span>
+          <span class="bar"><span class="${level(pp, 80, 92)}" style="width:${pp.toFixed(1)}%"></span></span></li>`;
+      }).join('');
+    }
     const extra = [];
-    if (s.used != null) extra.push([t('Used'), bytes(s.used)]);
-    if (s.total != null) extra.push([t('Capacity'), bytes(s.total)]);
-    if (s.pools) extra.push([t('Pools'), String(s.pools)]);
+    if (list.length < 2 && s.used != null) extra.push([t('Used'), bytes(s.used)]);
+    if (list.length < 2 && s.total != null) extra.push([t('Capacity'), bytes(s.total)]);
+    if (list.length < 2 && s.pools) extra.push([t('Pools'), String(s.pools)]);
     const factsEl = $('#storeFacts');
     if (factsEl) factsEl.innerHTML = extra.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
     renderDiskAlerts();

@@ -3259,4 +3259,5 @@ window.TB_LANG.nl = {
   "Show as list": "Als lijst tonen",
   "Show widget: {name}": "Widget tonen: {name}",
   "e.g. Media": "bv. Media",
+  "{free} free of {total}": "{free} vrij van {total}",
 };

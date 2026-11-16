@@ -2259,3 +2259,13 @@ button.snap-node:hover { background: var(--glass-hover); }
 .nf-apps .check:hover { background: var(--glass); }
 .nf-apps .mini { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center; overflow: hidden; color: #fff; font-size: 12px; font-weight: 700; }
 .nf-apps .mini img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Storage widget: each pool with its own bar (only with more than one pool) */
+.pool-mini { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 7px; }
+.pool-mini li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 10px; font-size: 13px; min-width: 0; }
+.pool-mini .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pool-mini .name .pill { font-size: 10.5px; padding: 1px 6px; margin-left: 4px; font-weight: 500; }
+.pool-mini .val { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pool-mini .bar { grid-column: 1 / -1; height: 5px; margin: 0; }
+.home-widget .pool-mini { flex: 1; min-height: 0; overflow: hidden; align-content: start; gap: 5px; margin-top: 6px; }
+.home-widget.short .pool-mini { display: none; }
