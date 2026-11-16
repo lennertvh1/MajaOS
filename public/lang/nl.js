@@ -3260,4 +3260,5 @@ window.TB_LANG.nl = {
   "Show widget: {name}": "Widget tonen: {name}",
   "e.g. Media": "bv. Media",
   "{free} free of {total}": "{free} vrij van {total}",
+  "The UPS service had stopped. MajaOS started it again.": "De UPS-dienst was gestopt. MajaOS heeft hem opnieuw gestart.",
 };
