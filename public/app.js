@@ -376,7 +376,7 @@
     if (u) {
       const state = u.lowBattery ? t('Battery almost empty') : u.onBattery ? t('On battery') : null;
       // The load in watts (or as a percentage when the UPS doesn't report watts).
-      const load = u.power != null ? nf0.format(u.power) + ' W' : u.load != null ? t('load {n}%', { n: nf0.format(u.load) }) : null;
+      const load = upsWatts(u) ? upsWatts(u) : u.load != null ? t('load {n}%', { n: nf0.format(u.load) }) : null;
       const v = [u.charge != null ? nf0.format(u.charge) + '%' : null, u.runtime != null ? upsTime(u.runtime) : null, load, state].filter(Boolean).join(' · ') || t('On mains power');
       facts.push(['UPS', v, u.onBattery || u.lowBattery ? null : t('On mains power'), u.lowBattery ? 'temp-bad' : u.onBattery ? 'temp-warn' : '']);
     }
@@ -1129,7 +1129,7 @@
     if (u) {
       const state = u.lowBattery ? ['Battery almost empty', 'bad'] : u.onBattery ? ['On battery', 'warn'] : ['On mains power', 'ok'];
       tiles.push(tile({ open: 'data-m-ups', color: u.lowBattery ? '#c0392b' : u.onBattery ? '#d4881c' : '#2f8f5b', icon: M_ICONS.ups, label: 'UPS', pill: [t(state[0]), state[1]], pillBelow: true,
-        body: `<span class="m-big">${u.charge != null ? esc(nf0.format(u.charge) + '%') : '–'}</span><ul class="m-lines">${u.charge != null ? meter(t('Battery'), u.charge, '', u.charge <= 20 ? 'bad' : u.charge <= 50 ? 'warn' : '') : ''}${u.runtime != null ? row('', t('Time left'), upsTime(u.runtime)) : ''}${u.load != null ? row('', t('UPS load'), nf0.format(u.load) + '%' + (u.power != null ? ' · ' + nf0.format(u.power) + ' W' : '')) : ''}</ul>` }));
+        body: `<span class="m-big">${u.charge != null ? esc(nf0.format(u.charge) + '%') : '–'}</span><ul class="m-lines">${u.charge != null ? meter(t('Battery'), u.charge, '', u.charge <= 20 ? 'bad' : u.charge <= 50 ? 'warn' : '') : ''}${u.runtime != null ? row('', t('Time left'), upsTime(u.runtime)) : ''}${u.load != null ? row('', t('UPS load'), nf0.format(u.load) + '%' + (upsWatts(u) ? ' · ' + upsWatts(u) : '')) : ''}</ul>` }));
     }
     box.innerHTML = `
       <div class="m-hero"><span class="m-greet">${esc(txt('#greeting'))}</span><span class="m-time">${esc(txt('#clock'))}</span><span class="m-date">${esc(txt('#date'))}</span></div>
@@ -3274,7 +3274,7 @@
           ${row(t('Status'), state + (s.charging ? ` <span class="muted small">${t('charging')}</span>` : '') + (s.replaceBattery ? ` <span class="pill bad">${t('Replace the battery')}</span>` : ''))}
           ${row(t('Battery'), s.charge != null ? esc(nf0.format(s.charge)) + '%' : null)}
           ${row(t('Time left on battery'), s.runtime != null ? esc(t('{n} min', { n: nf0.format(Math.round(s.runtime / 60)) })) : null)}
-          ${row(t('Load on the UPS'), s.load != null ? esc(nf0.format(s.load)) + '%' + (s.power != null ? ` · ${esc(nf0.format(s.power))} W` : '') : null)}
+          ${row(t('Load on the UPS'), s.load != null ? esc(nf0.format(s.load)) + '%' + (upsWatts(s) ? ` · ${esc(upsWatts(s))}` : '') : null)}
           ${row(t('Input voltage'), s.inputVoltage != null ? esc(nf0.format(s.inputVoltage)) + ' V' : null)}
           ${row(t('Model'), s.model ? esc(s.model) + (s.serial ? ` <span class="muted small">${esc(s.serial)}</span>` : '') : null)}
         </dl>
@@ -9714,6 +9714,8 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   /* ------------------------------------------------------------ loading */
   async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
+  // The UPS's power: watts, or the apparent power (VA) of UPSes that only report that (e.g. Eaton Ellipse ECO); '' when unknown.
+  const upsWatts = (u) => (u.power != null ? nf0.format(u.power) + ' W' : u.va ? nf0.format(u.va) + ' VA' : '');
   // Time left on the UPS battery: "31 min", "1 h 5 min".
   const upsTime = (sec) => {
     const m = Math.max(0, Math.round(sec / 60));

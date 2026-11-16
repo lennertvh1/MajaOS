@@ -44,6 +44,19 @@ test('upsc: values and the status flags', () => {
   assert.equal(ups.readStatus({}).charge, null);
 });
 
+test('upsc: a UPS that reports load 0 but the apparent power of its outlets (Eaton Ellipse ECO)', () => {
+  const st = ups.readStatus(ups.parseUpsc('ups.load: 0\nups.realpower: 0\nups.power.nominal: 650\noutlet.power: 25\nups.status: OL\n'));
+  assert.equal(st.load, 4); // 25 VA of 650 VA
+  assert.equal(st.power, null); // no watts known: not 0 W
+  assert.equal(st.va, 25);
+  // Really nothing connected: 0 stays 0.
+  const idle = ups.readStatus(ups.parseUpsc('ups.load: 0\nups.realpower: 0\nups.status: OL\n'));
+  assert.equal(idle.load, 0);
+  assert.equal(idle.power, 0);
+  // Real watts win.
+  assert.equal(ups.readStatus(ups.parseUpsc('ups.load: 12\nups.realpower: 48\noutlet.power: 60\n')).power, 48);
+});
+
 test('upsc -l and nut-scanner', () => {
   assert.deepEqual(ups.parseUpsList('ups\nrack-ups\n\nInit SSL without certificate database\n'), ['ups', 'rack-ups']);
   const [d] = ups.parseScanner(SCANNER);
