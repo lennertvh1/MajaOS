@@ -9841,7 +9841,8 @@ sudo ./install.sh</pre></div>`}` : '') +
 
   let failures = 0;
   async function refresh(all) {
-    const jobs = [loadOverview(), loadApps()];
+    // The overview (CPU, memory, UPS power) has its own faster timer; here only at the start.
+    const jobs = [all ? loadOverview() : null, loadApps()].filter(Boolean);
     // On the VM page a separate, faster timer fetches the VMs.
     if (all || currentView() !== 'vms') jobs.push(loadVms().catch(() => {}));
     if (all) jobs.push(loadAi(true), loadShares(), loadBackups());
@@ -10066,6 +10067,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     timers.forEach(clearInterval);
     timers = [
       setInterval(() => { if (!document.hidden) refresh(false); }, 10000),
+      setInterval(() => { if (!document.hidden) loadOverview().catch(() => {}); }, 5000), // live: CPU, memory, the UPS's power
       setInterval(() => { if (!document.hidden && currentView() === 'vms') loadVms().catch(() => {}); }, 3000), // live CPU/RAM
       setInterval(() => { if (!document.hidden) { loadAi(true); loadShares(); loadBackups(); loadUpdate(); loadDebianNote(); } }, 30000),
     ];

@@ -72,6 +72,7 @@ test('the files for a UPS on this server, shared with the network', () => {
     desc: 'Rack', share: true, monPassword: 'mon-secret', sharePassword: 'share-secret' });
   assert.match(f['nut.conf'], /^MODE=netserver$/m);
   assert.match(f['ups.conf'], /\[ups\]\n\tdriver = "usbhid-ups"\n\tport = "auto"\n\tdesc = "Rack"\n\tvendorid = "051D"/);
+  assert.match(f['ups.conf'], /\tpollfreq = 5\n/); // the power stays live
   assert.match(f['upsd.conf'], /LISTEN 0\.0\.0\.0 3493/);
   assert.match(f['upsd.users'], /\[majaos\]\n\tpassword = "mon-secret"\n\tupsmon primary/);
   assert.match(f['upsd.users'], /\[monuser\]\n\tpassword = "share-secret"\n\tupsmon secondary/);
