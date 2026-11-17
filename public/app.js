@@ -3864,9 +3864,9 @@
     const ROLE_NAME = { data: 'Data disk', parity: 'Parity disk', cache: 'Cache', encrypted: 'Encrypted', zfs: 'ZFS pool', other: 'Other disk' };
     const kindOf = (d) => (d.transport === 'nvme' ? 'NVMe' : d.rotational ? 'HDD' : 'SSD');
     const poolDisks = r.disks.filter((d) => ['data', 'parity'].includes(d.role) || (d.role === 'other' && !d.fs));
-    const appRow = (a, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-app="${i}"${a.installed ? ' checked' : ''}>
+    const appRow = (a, i) => `<li data-ur-find="${esc((a.name + ' ' + a.image).toLowerCase())}"><label class="check ur-item"><input type="checkbox" data-ur-app="${i}"${a.installed ? ' checked' : ''}>
         <span class="ur-icon">${a.icon ? `<img src="${esc(a.icon)}" alt="" loading="lazy">` : ''}</span>
-        <span><b>${esc(a.name)}</b><br><span class="muted small">${esc(a.image)}${a.installed ? '' : ' · ' + esc(t('not installed anymore'))}${net && a.state === 'running' ? ' · ' + esc(t('stops on Unraid')) : ''}</span></span></label>
+        <span class="ur-text"><b>${esc(a.name)}</b>${net && a.installed ? ` <span class="pill${a.state === 'running' ? ' ok' : ''}">${esc(a.state === 'running' ? t('Running') : t('Stopped'))}</span>` : ''}<br><span class="muted small">${esc(a.image)}${net && a.state === 'running' ? ' · ' + esc(t('stops on Unraid')) : ''}</span></span></label>
       <div class="row-side"><select class="field sm" data-ur-appdata="${i}">
         <option value="1">${esc(a.dataSize != null ? t('With app data ({size})', { size: bytes(a.dataSize) }) : t('With app data'))}</option>
         <option value="0">${t('Without app data')}</option></select></div></li>`;
@@ -3878,6 +3878,11 @@
       return `<li><label class="check ur-item"><input type="checkbox" data-ur-vm="${i}"${v.disks.some((d) => d.at) ? ' checked' : ' disabled'}>
         <span><b>${esc(v.name)}</b><br><span class="muted small">${esc(notes.join(' · '))}</span></span></label></li>`;
     };
+    // The head of a list: its title, how many are ticked and one button that ticks all of them (or none).
+    const head = (title, help) => `<div class="ur-head"><div class="sub-head">${title} ${help ? hint(help) : ''}</div>
+      <span class="muted small" data-ur-count></span><button class="btn sm" type="button" data-ur-all>${t('Select all')}</button></div>`;
+    const liveApps = r.apps.map((a, i) => [a, i]).filter(([a]) => a.installed);
+    const oldApps = r.apps.map((a, i) => [a, i]).filter(([a]) => !a.installed);
     body.innerHTML = `<div data-ur-form>
       <p class="lead">${esc(t('Unraid server {name}', { name: r.name || '' }))}${r.version ? ` <span class="muted small">${esc(t('version {v}', { v: r.version }))}</span>` : ''}${net ? ` <span class="muted small">· ${esc(r.host)}</span>` : ''}</p>
       ${r.warnings.map((w) => `<p class="small temp-warn">${esc(tr(w))}</p>`).join('')}
@@ -3895,20 +3900,26 @@
         </div>
         <p class="muted small" data-ur-nopool hidden>${t('The disks stay as they are. MajaOS only reads from them.')}</p>
       </section>`}
-      ${r.shares.length ? `<section class="pool-card plain ur-sec" data-ur-shares><div class="sub-head">${t('Shared folders')} ${hint(net ? t('Their files are copied over the network to the pool you choose. That can take hours for a large folder.') : t('They come along with the data disks. Files that were still on the cache are copied onto the pool.'))}</div>
+      ${r.shares.length ? `<section class="pool-card plain ur-sec" data-ur-shares data-ur-group>${head(t('Shared folders'), net ? t('Their files are copied over the network to the pool you choose. That can take hours for a large folder.') : t('They come along with the data disks. Files that were still on the cache are copied onto the pool.'))}
         ${net ? ((r.pools || []).length ? `<label class="fld"><span>${t('Copy to')}</span><select class="field" data-ur-target>${r.pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(t('{size} free', { size: bytes(p.free) }))}</option>`).join('')}</select></label>`
           : `<p class="small temp-warn">${t('Create a pool first to copy shared folders to.')}</p>`) : ''}
         <ul class="rows">${r.shares.map((sh, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-share="${i}"${!net && sh.exported && (sh.onData.length || sh.onCache.length) ? ' checked' : ''}${net && !(r.pools || []).length ? ' disabled' : ''}>
           <span><b>${esc(sh.name)}</b>${sh.comment ? ` <span class="muted">${esc(sh.comment)}</span>` : ''}<br><span class="muted small">${esc([
             sh.exported ? (sh.guest ? t('everyone can read') : t('users: {list}', { list: Object.keys(sh.users).join(', ') || '–' })) : t('not shared on the network'),
             sh.onCache.length ? t('partly on the cache') : null].filter(Boolean).join(' · '))}</span></span></label></li>`).join('')}</ul></section>` : ''}
-      ${r.users.length ? `<section class="pool-card plain ur-sec"><div class="sub-head">${t('Users')} ${hint(t('Unraid doesn\'t give out its passwords: choose a new one for each user you take over (at least 8 characters).'))}</div>
+      ${r.users.length ? `<section class="pool-card plain ur-sec" data-ur-group>${head(t('Users'), t('Unraid doesn\'t give out its passwords: choose a new one for each user you take over (at least 8 characters).'))}
         <ul class="rows">${r.users.map((n, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-user="${i}" checked><span><b>${esc(n)}</b></span></label>
           <div class="row-side"><input class="field sm" type="password" data-ur-pw="${i}" placeholder="${esc(t('New password'))}" autocomplete="new-password"></div></li>`).join('')}</ul></section>` : ''}
-      ${r.apps.length ? `<section class="pool-card plain ur-sec"><div class="sub-head">${t('Apps')} ${hint(t('With app data, the app\'s folder (settings, database) is copied, so it continues where it was. Without, it starts empty with the same settings.'))}</div>
-        <ul class="rows">${r.apps.map(appRow).join('')}</ul>
+      ${r.apps.length ? `<section class="pool-card plain ur-sec">
+        <div data-ur-group>${head(net ? t('Apps on Unraid') : t('Apps'), t('With app data, the app\'s folder (settings, database) is copied, so it continues where it was. Without, it starts empty with the same settings.'))}
+          ${r.apps.length > 8 ? `<input class="field" type="search" data-ur-filter placeholder="${esc(t('Search apps'))}" aria-label="${esc(t('Search apps'))}" autocomplete="off" spellcheck="false">` : ''}
+          ${liveApps.length ? `<ul class="rows">${liveApps.map(([a, i]) => appRow(a, i)).join('')}</ul>` : `<p class="muted small">${t('No containers found on Unraid.')}</p>`}</div>
+        ${oldApps.length ? `<details class="ur-old"><summary>${esc(t('Old templates ({n})', { n: oldApps.length }))} <span class="muted small">${t('no container on Unraid anymore')}</span>
+            ${hint(t('Unraid keeps the template of every app you ever installed, also after you removed it. These have no container on Unraid anymore, so you probably don\'t need them.'))}</summary>
+          <div data-ur-group>${head('', '')}
+          <ul class="rows">${oldApps.map(([a, i]) => appRow(a, i)).join('')}</ul></div></details>` : ''}
         <div data-ur-folders></div></section>` : ''}
-      ${r.vms.length ? `<section class="pool-card plain ur-sec"><div class="sub-head">${t('VMs')} ${hint(t('The VM\'s disk is copied into the VM folder, with the same vCPUs, memory and firmware.'))}</div>
+      ${r.vms.length ? `<section class="pool-card plain ur-sec" data-ur-group>${head(t('VMs'), t('The VM\'s disk is copied into the VM folder, with the same vCPUs, memory and firmware.'))}
         <ul class="rows">${r.vms.map(vmRow).join('')}</ul></section>` : ''}
       <p class="form-error" role="alert"></p>
       <div class="btn-row"><button class="btn primary" type="button" data-ur-go>${t('Next')}</button>${back}<button class="btn" type="button" data-ur-again>${t('Look again')}</button></div></div>
@@ -3929,8 +3940,30 @@
       box.innerHTML = need.length ? `<div class="sub-head">${t('Folders for the apps')} ${hint(t('The apps use these Unraid folders. Choose where they are on this server; leave a field empty to leave that folder out.'))}</div>
         ${need.map((sh) => `<label class="fld"><span>/mnt/user/${esc(sh)}</span><input class="field" data-ur-folder="${esc(sh)}" value="${esc(keep[sh] != null ? keep[sh] : '')}" placeholder="/tank/${esc(sh)}" autocomplete="off" spellcheck="false"></label>`).join('')}` : '';
     };
-    body.addEventListener('change', drawFolders);
-    drawFolders();
+    // The boxes a Select all button works on: the ones that can be ticked and aren't hidden by the search.
+    const boxesOf = (g) => $$('.ur-item input[type=checkbox]', g).filter((c) => !c.disabled && !c.closest('li').hidden);
+    const drawCounts = () => $$('[data-ur-group]', body).forEach((g) => {
+      const all = $$('.ur-item input[type=checkbox]', g), on = all.filter((c) => c.checked).length, can = boxesOf(g);
+      $('[data-ur-count]', g).textContent = t('{n} of {total} chosen', { n: on, total: all.length });
+      const btn = $('[data-ur-all]', g);
+      btn.disabled = !can.length;
+      btn.textContent = can.length && can.every((c) => c.checked) ? t('Select none') : t('Select all');
+    });
+    body.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-ur-all]'); if (!btn) return;
+      const can = boxesOf(btn.closest('[data-ur-group]')), on = !can.every((c) => c.checked);
+      can.forEach((c) => { c.checked = on; });
+      drawFolders(); drawCounts();
+    });
+    const filter = $('[data-ur-filter]', body);
+    if (filter) filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      $$('[data-ur-find]', body).forEach((li) => { li.hidden = !!q && !li.dataset.urFind.includes(q); });
+      const old = $('.ur-old', body); if (old && q && $$('[data-ur-find]', old).some((li) => !li.hidden)) old.open = true;
+      drawCounts();
+    });
+    body.addEventListener('change', () => { drawFolders(); drawCounts(); });
+    drawFolders(); drawCounts();
     $('[data-ur-go]', body).addEventListener('click', async () => {
       const err = $('.form-error', body); err.textContent = '';
       const roles = $$('[data-ur-role]', body).map((x) => [x.dataset.urRole, x.value]);

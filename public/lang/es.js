@@ -3064,4 +3064,12 @@ window.TB_LANG.es = {
   "Own DNS servers": "Servidores DNS propios",
   "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "La dirección sigue viniendo del router; los servidores DNS son los que indicas, p. ej. un Pi-hole o 1.1.1.1.",
   "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf lo gestiona otro programa (es un enlace). MajaOS no puede cambiar los servidores DNS.",
+  "Select none": "No seleccionar nada",
+  "{n} of {total} chosen": "{n} de {total} elegidos",
+  "Search apps": "Buscar apps",
+  "Apps on Unraid": "Apps en Unraid",
+  "No containers found on Unraid.": "No se encontraron contenedores en Unraid.",
+  "Old templates ({n})": "Plantillas antiguas ({n})",
+  "no container on Unraid anymore": "ya sin contenedor en Unraid",
+  "Unraid keeps the template of every app you ever installed, also after you removed it. These have no container on Unraid anymore, so you probably don't need them.": "Unraid guarda la plantilla de cada app que instalaste, incluso después de quitarla. Estas ya no tienen contenedor en Unraid, así que probablemente no las necesitas.",
 };

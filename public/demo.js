@@ -2313,7 +2313,13 @@
       { file: 'my-plex.xml', name: 'Plex-Media-Server', slug: 'plex-media-server', image: 'plexinc/pms-docker', icon: ICON('plex'), network: 'host', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 4.2e9 },
       { file: 'my-sonarr.xml', name: 'sonarr', slug: 'sonarr', image: 'lscr.io/linuxserver/sonarr', icon: ICON('sonarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 3.1e8 },
       { file: 'my-homarr.xml', name: 'homarr', slug: 'homarr', image: 'ghcr.io/ajnart/homarr', icon: ICON('homarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: [], dataSize: 2.4e7 },
+      { file: 'my-radarr.xml', name: 'radarr', slug: 'radarr', image: 'lscr.io/linuxserver/radarr', icon: ICON('radarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 2.2e8 },
+      { file: 'my-prowlarr.xml', name: 'prowlarr', slug: 'prowlarr', image: 'lscr.io/linuxserver/prowlarr', icon: ICON('prowlarr'), network: 'bridge', ip: null, installed: true, folders: [], shares: [], dataSize: 6.1e7 },
+      { file: 'my-qbittorrent.xml', name: 'qbittorrent', slug: 'qbittorrent', image: 'lscr.io/linuxserver/qbittorrent', icon: ICON('qbittorrent'), network: 'bridge', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 1.4e7 },
+      { file: 'my-jellyfin.xml', name: 'jellyfin', slug: 'jellyfin', image: 'jellyfin/jellyfin', icon: ICON('jellyfin'), network: 'host', ip: null, installed: true, folders: [], shares: ['media'], dataSize: 1.9e9 },
       { file: 'my-nextcloud.xml', name: 'nextcloud', slug: 'nextcloud', image: 'lscr.io/linuxserver/nextcloud', icon: ICON('nextcloud'), network: 'bridge', ip: null, installed: false, folders: [], shares: ['documents'], dataSize: null },
+      { file: 'my-tautulli.xml', name: 'tautulli', slug: 'tautulli', image: 'lscr.io/linuxserver/tautulli', icon: ICON('tautulli'), network: 'bridge', ip: null, installed: false, folders: [], shares: [], dataSize: null },
+      { file: 'my-heimdall.xml', name: 'heimdall', slug: 'heimdall', image: 'lscr.io/linuxserver/heimdall', icon: ICON('heimdall'), network: 'bridge', ip: null, installed: false, folders: [], shares: [], dataSize: null },
     ],
     vms: [
       { name: 'Home Assistant', memory: 4 * 1073741824, vcpus: 2, firmware: 'uefi', nic: 'virtio', os: 'haos', passthrough: 1, disks: [{ path: '/mnt/user/domains/Home Assistant/haos.qcow2', at: '/x', size: 32e9 }] },
@@ -2325,7 +2331,7 @@
   const unraidSshScan = () => {
     const x = unraidScan();
     return { ...x, mode: 'ssh', host: unraidSsh, disks: [], shares: x.shares.map((sh) => ({ ...sh, onData: [], onCache: [] })),
-      apps: x.apps.map((a) => ({ ...a, state: a.installed ? 'running' : null })), vms: x.vms.map((v, i) => ({ ...v, state: i ? 'shut off' : 'running' })),
+      apps: x.apps.map((a) => ({ ...a, state: a.installed ? (a.name === 'prowlarr' ? 'exited' : 'running') : null })), vms: x.vms.map((v, i) => ({ ...v, state: i ? 'shut off' : 'running' })),
       pools: pools.map((p) => ({ name: p.name, mountpoint: '/' + p.name, free: p.free })) };
   };
   function unraidConnect(b) {
