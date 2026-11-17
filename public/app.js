@@ -6740,6 +6740,11 @@
     draw(r.mode || 'off');
   }
 
+  // Settings → Network, like ZimaOS: the server on top, then a card per network card with what it has now, and its
+  // settings to change right there. Reset sits apart at the bottom.
+  const NET_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="13" rx="2"/><path d="M8 17v3M16 17v3M8 9h1M11 9h2M15 9h1M8 12h8"/></svg>';
+  const SERVER_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01M11 7.5h6M11 16.5h6"/></svg>';
+  const speedText = (s) => (s ? (s >= 1000 ? nf.format(s / 1000) + ' Gbit/s' : s + ' Mbit/s') : null);
   async function networkPane(el) {
     el.onchange = null;
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
@@ -6747,53 +6752,60 @@
     try { n = await api.get('/api/network'); }
     catch (e) { el.innerHTML = `<p class="lead">${t('The network settings could not be loaded: {error}', { error: esc(e.message) })}</p>`; return; }
     if (settingsTab() !== 'network') return;
-    const c = n.config;
-    const linkRows = n.links.map((l) => `<li>
-        <div><div class="row-title">${esc(l.name)} <span class="pill ${l.up ? 'ok' : ''}">${l.up ? t('Connected') : t('Not connected')}</span></div>
-          <div class="row-sub">${esc([l.kind === 'bridge' ? t('Bridge') : t('Network card'), l.speed ? (l.speed >= 1000 ? nf.format(l.speed / 1000) + ' Gbit/s' : l.speed + ' Mbit/s') : null,
-            l.master ? t('in bridge {name}', { name: l.master }) : null, l.mac].filter(Boolean).join(' · '))}</div></div>
-        <div class="row-side">${l.ipv4.map((a) => esc(a.address) + (a.dynamic ? ' <span class="muted">(DHCP)</span>' : '')).join('<br>') || '–'}
-          ${l.gateway ? `<div>${t('gateway {ip}', { ip: esc(l.gateway) })}</div>` : ''}</div></li>`).join('');
+    const linkOf = (name) => n.links.find((l) => l.name === name) || null;
+    // What a card has now: its own addresses, or those of the bridge it is in.
+    const now = (card) => {
+      const l = linkOf(card) || { name: card };
+      const br = l.master ? linkOf(l.master) : null;
+      const src = br || l;
+      return { link: l, bridge: br, ipv4: src.ipv4 || [], gateway: src.gateway || null };
+    };
+    const gwCard = n.physical.find((p) => now(p).gateway);
+    const row = (k, v) => (v ? `<div class="net-kv"><span>${esc(k)}</span><b>${v}</b></div>` : '');
+    const cardHtml = (card) => {
+      const c = n.cards ? n.cards[card] : null, x = now(card), l = x.link;
+      const connected = l.up || (x.bridge && x.bridge.up);
+      const ip = x.ipv4.map((a) => esc(a.address)).join('<br>');
+      const how = c ? (c.mode === 'static' ? t('Fixed address') : t('Automatic (DHCP)')) : t('Not used');
+      return `<article class="net-card${connected ? ' on' : ''}" data-card="${esc(card)}">
+        <header class="net-head">
+          <span class="net-ico">${NET_ICON}</span>
+          <div class="net-title"><h3>${esc(card)}${card === gwCard ? ` <span class="pill ok">${t('Internet')}</span>` : ''}</h3>
+            <p class="row-sub">${esc([speedText(l.speed), l.mac].filter(Boolean).join(' · '))}</p></div>
+          <span class="pill ${connected ? 'ok' : ''}">${connected ? t('Connected') : t('No cable')}</span>
+        </header>
+        <div class="net-body">
+          ${row(t('IP address'), ip || '–')}
+          ${row(t('Gets its address'), esc(how))}
+          ${row(t('Gateway'), x.gateway ? esc(x.gateway) : '')}
+          ${c && c.bridge ? row(t('For VMs'), esc(t('Bridge {name}', { name: c.bridgeName }))) : ''}
+        </div>
+        ${n.editable ? `<div class="btn-row net-actions"><button class="btn" type="button" data-net-edit="${esc(card)}"${n.pending ? ' disabled' : ''}>${t('Change')}</button></div>` : ''}
+        <div class="net-edit" hidden></div>
+      </article>`;
+    };
     el.innerHTML = `
       <div id="netPending"></div>
-      <h2 class="pane-title">${t('Now')}</h2>
-      <ul class="rows">${linkRows || `<li><span class="muted">${t('No network cards found.')}</span></li>`}</ul>
-      <p class="muted small" style="margin-top:8px">${t('DNS servers: {list}', { list: esc(n.dns.join(', ') || '–') })}</p>
-
-      <h2 class="pane-title">${t('Hostname')}</h2>
-      <form class="inline-form" id="hostForm">
-        <input class="field" name="hostname" value="${esc(n.hostname)}" maxlength="63" autocomplete="off" spellcheck="false" aria-label="${t('Hostname')}">
-        <button class="btn" type="submit">${t('Save')}</button>
-      </form>
-      <p class="muted small" style="margin-top:6px">${t('The name of the server in your network. The connection keeps working.')}</p>
-
-      <h2 class="pane-title">${t('IP address')}</h2>
-      ${!n.editable ? `<p class="lead">${t('This network is managed by {who}. MajaOS can only change it when Debian uses ifupdown (/etc/network/interfaces), the default for a server without a desktop.', { who: esc(n.manager || t('another program')) })}</p>` : `
-      <form class="form" id="netForm" novalidate>
-        <div class="fld-row">
-          <label class="fld"><span>${t('Network card')}</span><select class="field" name="interface">${n.physical.map((p) => `<option${c && c.interface === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
-          <label class="fld"><span>${t('Get an address')}</span><select class="field" name="mode">
-            <option value="dhcp"${c && c.mode === 'dhcp' ? ' selected' : ''}>${t('Automatic (DHCP from your router)')}</option>
-            <option value="static"${c && c.mode === 'static' ? ' selected' : ''}>${t('Fixed address')}</option></select></label>
-        </div>
-        <div class="fld-row" data-static>
-          <label class="fld"><span>${t('IP address and netmask')} ${hint(t('/24 means netmask 255.255.255.0, which fits most home networks.'))}</span><input class="field" name="address" value="${esc(c ? c.address : '')}" placeholder="192.168.1.10/24" spellcheck="false">
-            </label>
-          <label class="fld"><span>${t('Gateway')} ${hint(t('Usually the address of your router.'))}</span><input class="field" name="gateway" value="${esc(c ? c.gateway : '')}" placeholder="192.168.1.1" spellcheck="false">
-            </label>
-        </div>
-        <label class="fld" data-static><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span><input class="field" name="dns" value="${esc(c ? c.dns.join(', ') : '')}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false">
-          </label>
-        <label class="check"><input type="checkbox" name="bridge"${c && c.bridge ? ' checked' : ''}> ${t('Create bridge br0 for VMs')}</label>
-        <p class="muted small" style="margin-top:-6px">${t('New VMs use br0 by default when it is available. Apps can choose their own address in the home network from the Network menu.')}</p>
-        <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
-        <p class="form-error" role="alert"></p>
-        <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Apply')}</button></div>
-      </form>
-      <h2 class="pane-title">${t('Reset network settings')} ${hint(t('Can\'t reach the page at all? On the server\'s own screen: node /opt/majaos/lib/network.js --reset'))}</h2>
-      <p class="muted small">${t('Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.')}</p>
-      <div class="btn-row"><button class="btn danger" type="button" id="netReset"${n.pending ? ' disabled' : ''}>${t('Reset network settings')}</button></div>`}
-      <div id="remoteBox"></div>`;
+      <section class="net-card net-server">
+        <header class="net-head">
+          <span class="net-ico">${SERVER_ICON}</span>
+          <div class="net-title"><h3>${t('This server')}</h3><p class="row-sub">${esc(t('DNS servers: {list}', { list: n.dns.join(', ') || '–' }))}</p></div>
+        </header>
+        <form class="inline-form" id="hostForm">
+          <label class="fld" style="flex:1"><span>${t('Hostname')} ${hint(t('The name of the server in your network. The connection keeps working.'))}</span>
+            <input class="field" name="hostname" value="${esc(n.hostname)}" maxlength="63" autocomplete="off" spellcheck="false"></label>
+          <button class="btn" type="submit">${t('Save')}</button>
+        </form>
+      </section>
+      <div class="section-head"><h2>${t('Network cards')}</h2></div>
+      ${!n.editable ? `<p class="notice">${t('This network is managed by {who}. MajaOS can only change it when Debian uses ifupdown (/etc/network/interfaces), the default for a server without a desktop.', { who: esc(n.manager || t('another program')) })}</p>` : ''}
+      <div class="net-cards">${n.physical.map(cardHtml).join('') || `<p class="muted">${t('No network cards found.')}</p>`}</div>
+      <div id="remoteBox"></div>
+      ${n.editable ? `<section class="net-card net-reset">
+        <div><h3>${t('Reset network settings')} ${hint(t('Can\'t reach the page at all? On the server\'s own screen: node /opt/majaos/lib/network.js --reset'))}</h3>
+          <p class="row-sub">${t('Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.')}</p></div>
+        <button class="btn danger" type="button" id="netReset"${n.pending ? ' disabled' : ''}>${t('Reset')}</button>
+      </section>` : ''}`;
     remoteSection($('#remoteBox', el));
 
     const hostForm = $('#hostForm', el);
@@ -6809,24 +6821,67 @@
       catch (ex) { toast(ex.message, true); }
       btn.disabled = false;
     });
-    const form = $('#netForm', el);
-    if (form) {
-      const sync = () => $$('[data-static]', form).forEach((x) => { x.hidden = form.elements.mode.value !== 'static'; });
-      form.elements.mode.addEventListener('change', sync); sync();
+
+    // Changing a card: in the card itself, one at a time.
+    const closeEdit = (art) => { const box = $('.net-edit', art); box.hidden = true; box.innerHTML = ''; $('.net-actions', art).hidden = false; art.classList.remove('editing'); };
+    const openEdit = (art) => {
+      $$('.net-card.editing', el).forEach(closeEdit);
+      const card = art.dataset.card;
+      const c = (n.cards && n.cards[card]) || { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false };
+      // A fixed address starts from what DHCP gave, so you only change what you want.
+      const x = now(card), cur = x.ipv4[0] ? x.ipv4[0].address : '';
+      const box = $('.net-edit', art);
+      art.classList.add('editing'); $('.net-actions', art).hidden = true; box.hidden = false;
+      box.innerHTML = `<form class="form" novalidate>
+        <div class="seg kind-seg" role="radiogroup" aria-label="${t('Gets its address')}">
+          <button type="button" role="radio" data-mode="dhcp" aria-checked="${c.mode !== 'static'}">${t('Automatic (DHCP)')}</button>
+          <button type="button" role="radio" data-mode="static" aria-checked="${c.mode === 'static'}">${t('Fixed address')}</button></div>
+        <p class="muted small" data-dhcp>${t('Your router gives the address. Reserve one for this card\'s MAC address in your router to keep it the same.')}</p>
+        <div class="fld-row" data-static>
+          <label class="fld"><span>${t('IP address and netmask')} ${hint(t('/24 means netmask 255.255.255.0, which fits most home networks.'))}</span>
+            <input class="field" name="address" value="${esc(c.address || cur)}" placeholder="192.168.1.10/24" spellcheck="false"></label>
+          <label class="fld"><span>${t('Gateway')} ${hint(t('Usually the address of your router.'))}</span>
+            <input class="field" name="gateway" value="${esc(c.gateway || x.gateway || '')}" placeholder="192.168.1.1" spellcheck="false"></label>
+        </div>
+        <label class="fld" data-static><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span>
+          <input class="field" name="dns" value="${esc((c.dns.length ? c.dns : n.dns).join(', '))}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false"></label>
+        <label class="toggle">
+          <input type="checkbox" role="switch" name="bridge"${c.bridge ? ' checked' : ''}>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span><b>${t('VMs in your home network')}</b><span class="muted small">${t('Puts this card in bridge br0. New VMs use it and get an address from your router.')}</span></span>
+        </label>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Apply')}</button><button class="btn" type="button" data-net-cancel>${t('Cancel')}</button>
+          ${hint(t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.'))}</div>
+      </form>`;
+      const form = $('form', box);
+      let mode = c.mode === 'static' ? 'static' : 'dhcp';
+      const sync = () => {
+        $$('[data-mode]', form).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
+        $$('[data-static]', form).forEach((x2) => { x2.hidden = mode !== 'static'; });
+        $('[data-dhcp]', form).hidden = mode === 'static';
+      };
+      sync();
+      $$('[data-mode]', form).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; sync(); }));
+      $('[data-net-cancel]', form).addEventListener('click', () => closeEdit(art));
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
-        const body = { interface: form.elements.interface.value, mode: form.elements.mode.value, address: form.elements.address.value.trim(),
-          gateway: form.elements.gateway.value.trim(), dns: form.elements.dns.value, bridge: form.elements.bridge.checked };
+        const body = { interface: card, mode, address: form.elements.address.value.trim(), gateway: form.elements.gateway.value.trim(),
+          dns: form.elements.dns.value, bridge: form.elements.bridge.checked };
         if (!(await ask(t('Apply the network settings? The connection drops for a moment. Then confirm within 2 minutes, or the old settings come back.'), t('Apply')))) return;
         btn.disabled = true;
         try {
           const r = await api.post('/api/network', body);
           const newUrl = r.address && r.address !== location.hostname ? location.protocol + '//' + r.address + (location.port ? ':' + location.port : '') + '/#settings/network' : null;
+          closeEdit(art);
           renderPending(el, r.pending, newUrl, body.mode === 'dhcp');
         } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
       });
-    }
+      const first = $('[aria-checked="true"]', form); if (first) first.focus();
+    };
+    $$('[data-net-edit]', el).forEach((b) => b.addEventListener('click', () => openEdit(b.closest('.net-card'))));
+
     const resetBtn = $('#netReset', el);
     if (resetBtn) resetBtn.addEventListener('click', async () => {
       if (!(await ask(t('Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.'), t('Reset')))) return;
@@ -6840,8 +6895,7 @@
   // Waiting for confirmation, with a countdown. Meanwhile the page asks for the state (also at a new address).
   function renderPending(el, p, newUrl, dhcp) {
     const box = $('#netPending', el); if (!box) return;
-    const btn = $('#netForm [type=submit]', el); if (btn) btn.disabled = true;
-    const rb = $('#netReset', el); if (rb) rb.disabled = true;
+    $$('[data-net-edit], #netReset', el).forEach((b) => { b.disabled = true; });
     box.innerHTML = `<div class="notice warn">
       <p><b>${t('New network settings are active.')}</b> ${t('Does everything work? Then confirm them. Otherwise they are restored in')} <b id="netLeft"></b>.</p>
       ${newUrl ? `<p>${t('The server\'s address changes. Open')} <a href="${esc(newUrl)}">${esc(newUrl)}</a> ${t('and confirm there (you may have to sign in again).')}</p>` : ''}

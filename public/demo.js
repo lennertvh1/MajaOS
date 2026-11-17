@@ -372,11 +372,17 @@
     };
   }
   const net = {
-    hostname: 'demo', manager: 'ifupdown', editable: true, physical: ['enp5s0'], dns: ['192.168.1.1', '1.1.1.1'], resolvManaged: false, pending: null,
+    hostname: 'demo', manager: 'ifupdown', editable: true, physical: ['enp5s0', 'enp6s0'], dns: ['192.168.1.1', '1.1.1.1'], resolvManaged: false, pending: null,
     links: [
       { name: 'enp5s0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'ethernet', master: 'br0', ipv4: [], ipv6: [], gateway: null, speed: 2500 },
       { name: 'br0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'bridge', master: null, ipv4: [{ address: '192.168.1.10/24', dynamic: false }], ipv6: [], gateway: '192.168.1.1', speed: null },
+      { name: 'enp6s0', mac: 'a8:a1:59:3c:21:7f', up: false, state: 'DOWN', kind: 'ethernet', master: null, ipv4: [], ipv6: [], gateway: null, speed: null },
     ],
+    // Like cardConfigs in lib/network.js: what the file says per card.
+    cards: {
+      enp5s0: { mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: ['192.168.1.1', '1.1.1.1'], bridge: true, bridgeName: 'br0' },
+      enp6s0: { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' },
+    },
     config: { interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: ['192.168.1.1', '1.1.1.1'], bridge: true, bridgeName: 'br0' },
   };
   let netBackup = null;
@@ -397,6 +403,7 @@
     if (path === '/api/network/reset') {
       const { pending, ...rest } = net; netBackup = JSON.stringify(rest);
       net.config = { interface: 'enp5s0', mode: 'dhcp', address: '', gateway: '', dns: [], bridge: true, bridgeName: 'br0' };
+      net.cards = { enp5s0: { ...net.config }, enp6s0: { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' } };
       net.pending = { until: Date.now() + 120000 };
       return { pending: net.pending, address: null };
     }
@@ -413,7 +420,11 @@
       address = a;
     }
     const { pending, ...rest } = net; netBackup = JSON.stringify(rest);
-    net.config = { ...net.config, mode: body.mode, address: body.address, gateway: body.gateway, dns: String(body.dns || '').split(/[\s,]+/).filter(Boolean), bridge: !!body.bridge };
+    if (!net.physical.includes(body.interface)) throw err('Choose one of the server\'s network cards.');
+    net.config = { ...net.config, interface: body.interface, mode: body.mode, address: body.address, gateway: body.gateway, dns: String(body.dns || '').split(/[\s,]+/).filter(Boolean), bridge: !!body.bridge };
+    // A bridge is on one card: putting another card in br0 takes it off the first.
+    if (body.bridge) for (const k of Object.keys(net.cards)) net.cards[k] = { ...net.cards[k], bridge: false };
+    net.cards[body.interface] = { mode: body.mode, address: body.mode === 'static' ? body.address : '', gateway: body.mode === 'static' ? body.gateway : '', dns: body.mode === 'static' ? net.config.dns : [], bridge: !!body.bridge, bridgeName: 'br0' };
     net.pending = { until: Date.now() + 120000 };
     // In the demo the page stays at the same address, so you can confirm right away.
     return { pending: net.pending, address: null };

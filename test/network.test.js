@@ -164,3 +164,27 @@ test('reset: the card behind the default route (also through a bridge) goes in b
   // No route anywhere: the first card that is up.
   assert.equal(nw.resetPlan(['enp5s0', 'enp6s0'], [{ name: 'enp5s0', up: false }, { name: 'enp6s0', up: true }]).home, 'enp6s0');
 });
+
+test('per card: the bridge it is in, its own stanza, or nothing', () => {
+  const nw = require('../lib/network');
+  const text = `auto lo
+iface lo inet loopback
+
+iface enp5s0 inet manual
+
+auto br0
+iface br0 inet static
+    bridge_ports enp5s0
+    address 192.168.1.10
+    netmask 255.255.255.0
+    gateway 192.168.1.1
+    dns-nameservers 192.168.1.1 1.1.1.1
+
+allow-hotplug enp6s0
+iface enp6s0 inet dhcp
+`;
+  const c = nw.cardConfigs(nw.parseInterfaces(text), ['enp5s0', 'enp6s0', 'enp7s0']);
+  assert.deepEqual(c.enp5s0, { mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: ['192.168.1.1', '1.1.1.1'], bridge: true, bridgeName: 'br0' });
+  assert.deepEqual(c.enp6s0, { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' });
+  assert.equal(c.enp7s0, null);
+});

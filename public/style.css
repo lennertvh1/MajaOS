@@ -2306,3 +2306,29 @@ button.snap-node:hover { background: var(--glass-hover); }
 .smart-test b { font-weight: 650; font-variant-numeric: tabular-nums; }
 .smart-test .bar { grid-column: 1 / -1; height: 5px; margin: 0; }
 .smart-test .smart-left { grid-column: 1 / -1; font-size: 12px; }
+
+/* Settings → Network: the server and a card per network card (networkPane) */
+.net-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; align-items: start; }
+.net-card { background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px; padding: 16px 18px; display: grid; gap: 14px; min-width: 0; }
+.net-card.editing { grid-column: 1 / -1; border-color: var(--accent); }
+.net-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.net-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); background: var(--track); }
+.net-card.on .net-ico, .net-server .net-ico { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.net-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.net-title { flex: 1; min-width: 0; }
+.net-title h3 { margin: 0 0 2px; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.net-title h3 .pill { font-size: 11px; }
+.net-title .row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-body { display: grid; gap: 6px; }
+.net-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.net-kv span { color: var(--muted); }
+.net-kv b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.net-actions { margin: 0; }
+.net-edit { border-top: 1px solid var(--glass-line); padding-top: 14px; }
+.net-edit .seg { background: var(--track); }
+.net-edit .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+.net-server .inline-form { align-items: end; }
+.net-server { margin-bottom: 4px; }
+.net-reset { grid-template-columns: 1fr auto; align-items: center; margin-top: 26px; }
+.net-reset h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+@media (max-width: 640px) { .net-reset { grid-template-columns: 1fr; } .net-cards { grid-template-columns: 1fr; } }
