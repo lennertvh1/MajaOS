@@ -561,6 +561,15 @@
         cuts.add(id);
         return { shortcut: id };
       }
+      if (it && it.heading != null) {
+        const id = String(it.heading);
+        if (!/^h[0-9a-z]{1,16}$/.test(id)) throw err('A heading in the layout is not valid.');
+        return { heading: id, name: String(it.name || '').trim().slice(0, 60) };
+      }
+      if (it && it.spacer != null) {
+        if (!/^g[0-9a-z]{1,16}$/.test(String(it.spacer))) throw err('An empty spot in the layout is not valid.');
+        return { spacer: String(it.spacer) };
+      }
       const members = [];
       for (const n of it.apps || []) {
         if (n && typeof n === 'object' && n.page) {

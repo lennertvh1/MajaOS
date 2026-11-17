@@ -646,7 +646,7 @@
     const flat = !!q || S.filter !== 'all', listView = S.view === 'list';
     if ((flat || listView) && S.placing) S.placing = false;
     grid.classList.toggle('app-list', listView);
-    const mixed = !flat && !listView && (S.placing || homeItems().some((it) => it && it.widget));
+    const mixed = !flat && !listView;
     grid.classList.toggle('home-mix', mixed);
     grid.classList.toggle('placing', !!S.placing && mixed);
     $$('#viewSeg [data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === S.view)));
@@ -758,6 +758,7 @@
   function homeListRows() {
     return homeItems().flatMap((it) => {
       if (typeof it === 'string') { const a = appByName(it); return a ? [appRow(a)] : []; }
+      if (it && it.heading) return it.name ? [`<h3 class="list-heading">${esc(it.name)}</h3>`] : [];
       if (it && it.page) return [pageRow(it.page)];
       if (it && it.shortcut) { const s = shortcutById(it.shortcut); return s ? [shortcutRow(s)] : []; }
       if (it && it.apps) return it.apps.flatMap((n) => {
@@ -804,6 +805,21 @@
         </button>
       </div>`;
   }
+  // A heading over the whole width: it starts a section. Its menu (⋯ or a right click) renames or removes it.
+  function headingTile(it) {
+    const name = it.name || t('Section');
+    return `<div class="home-heading" data-item="h:${esc(it.heading)}">
+        <h3 class="home-heading-name">${esc(name)}</h3>
+        <button class="app-more" type="button" data-heading-menu="${esc(it.heading)}" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+      </div>`;
+  }
+  // An empty spot: only visible (dashed) while something is dragged.
+  const spacerTile = (it) => `<div class="home-spacer" data-item="g:${esc(it.spacer)}"></div>`;
+  function homeTileHtml(it) {
+    const a = typeof it === 'string' ? appByName(it) : null;
+    return a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page)
+      : it.shortcut ? shortcutTile(it.shortcut) : it.heading ? headingTile(it) : it.spacer ? spacerTile(it) : '';
+  }
   function vmHomeTile(name) {
     const v = (S.vms || []).find((x) => x.name === name);
     if (!v) return '';
@@ -834,6 +850,8 @@
     if (it.vm) return 'vm:' + it.vm;
     if (it.page) return 'p:' + it.page;
     if (it.shortcut) return 's:' + it.shortcut;
+    if (it.heading) return 'h:' + it.heading;
+    if (it.spacer) return 'g:' + it.spacer;
     return '';
   }
   function homeCols() {
@@ -923,13 +941,11 @@
         if (!el) return;
         applyWidgetChrome(el, it.w, it.h);
       } else if (!el) {
-        const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : it.shortcut ? shortcutTile(it.shortcut) : '';
+        const html = homeTileHtml(it);
         if (!html) return;
         el = htmlNode(html);
-      } else if (!(drag && drag.el === el)) {
-        const a = typeof it === 'string' ? appByName(it) : null;
-        const html = a ? appTile(a) : it.folder ? folderTile(it) : it.vm ? vmHomeTile(it.vm) : it.page ? pageTile(it.page) : it.shortcut ? shortcutTile(it.shortcut) : '';
+      } else if (!(drag && drag.el === el) && !it.spacer) {
+        const html = homeTileHtml(it);
         if (html) { const next = htmlNode(html); el.replaceWith(next); el = next; }
       }
       const ref = [...grid.children].filter((x) => x.dataset.item)[i];
@@ -1194,7 +1210,7 @@
   // The saved layout, without apps that are gone and with new apps at the end.
   // Widgets in items sit between the apps; the rest stay in the left column.
   function homeItems() {
-    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), placedP = new Set(), placedS = new Set(), out = [];
+    const names = new Set(S.apps.map((a) => a.name)), placed = new Set(), placedW = new Set(), placedVm = new Set(), placedP = new Set(), placedS = new Set(), marks = new Set(), out = [];
     const hidden = new Set(((S.layout && S.layout.widgets) || {}).hidden || []);
     const vmNames = new Set((S.vms || []).map((v) => v.name));
     for (const it of (S.layout && S.layout.items) || []) {
@@ -1215,6 +1231,8 @@
         if (shortcutById(it.shortcut) && !placedS.has(it.shortcut)) { placedS.add(it.shortcut); out.push({ shortcut: it.shortcut }); }
         continue;
       }
+      if (it && it.heading) { if (!marks.has('h:' + it.heading)) { marks.add('h:' + it.heading); out.push({ heading: it.heading, name: it.name || '' }); } continue; }
+      if (it && it.spacer) { if (!marks.has('g:' + it.spacer)) { marks.add('g:' + it.spacer); out.push({ spacer: it.spacer }); } continue; }
       if (!it || !it.apps) continue;
       const apps = [];
       for (const n of it.apps) {
@@ -1229,8 +1247,23 @@
   // Folder names that are interface text ("System") are translated; a name you typed stays as it is.
   const folderLabel = (name) => t(name || 'Folder');
   // Folders with one app become a plain app again; empty folders disappear. Widgets and VMs stay.
-  const tidy = (items) => items.flatMap((it) => {
+  // Empty spots right before a heading or at the end leave nothing behind them (like trimSpacers in lib/layout.js).
+  function trimSpacers(items) {
+    const out = [];
+    let tail = true;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it && it.spacer) { if (!tail) out.push(it); continue; }
+      tail = !!(it && it.heading);
+      out.push(it);
+    }
+    return out.reverse();
+  }
+  const tidy = (items) => trimSpacers(tidyItems(items));
+  const tidyItems = (items) => items.flatMap((it) => {
     if (typeof it === 'string') return [it];
+    if (it && it.heading) return [{ heading: it.heading, name: it.name || '' }];
+    if (it && it.spacer) return [{ spacer: it.spacer }];
     if (it && it.widget) { const [w, h] = clampWidgetSize(it.widget, it.w, it.h); return [{ widget: it.widget, w, h }]; }
     if (it && it.vm) return [{ vm: it.vm }];
     if (it && it.page && PAGE_IDS.includes(it.page)) return [{ page: it.page }];
@@ -1377,6 +1410,9 @@
     });
   }
   const newFolderId = () => 'f' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  const newHeadingId = () => 'h' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  let spacerSeq = 0;
+  const newSpacerId = () => 'g' + Date.now().toString(36) + (spacerSeq++ % 1296).toString(36);
   const memberKey = (n) => (typeof n === 'string' ? n : n && n.page ? 'p:' + n.page : '');
   const memberFromKey = (key) => (String(key).startsWith('p:') ? { page: String(key).slice(2) } : key);
   const folderOf = (name) => ((S.layout && S.layout.items) || []).find((it) => it && it.apps && it.apps.includes(name)) || null;
@@ -1404,7 +1440,7 @@
     const flat = !!S.search.trim() || S.filter !== 'all' || S.view === 'list';
     S.placing = !!on && !flat;
     const grid = $('#appGrid');
-    const mixed = !flat && (S.placing || homeItems().some((it) => it && it.widget));
+    const mixed = !flat;
     grid.classList.toggle('home-mix', mixed);
     grid.classList.toggle('placing', S.placing && mixed);
     if (mixed) grid.style.setProperty('--home-cols', String(homeCols()));
@@ -1489,7 +1525,8 @@
     if (tile) {
       if ((tile.closest('#folderGrid') ? 'folder' : 'home') !== drag.ctx) return null;
       // Widgets, VM tiles and shortcuts stay on their own. Apps and built-in pages can start or join a folder.
-      const fixed = (k) => /^(w:|vm:|s:)/.test(k);
+      const fixed = (k) => /^(w:|vm:|s:|h:|g:)/.test(k);
+      if (tile.classList.contains('home-spacer')) return cellTarget(x, y);
       const canGroup = (k) => k && !fixed(k) && !k.startsWith('f:');
       const icon = tile.querySelector('.app-icon');
       const r = (icon || tile).getBoundingClientRect();
@@ -1498,12 +1535,82 @@
       return { tile, mode: 'move' };
     }
     if (drag.ctx !== 'home') return null;
-    const grid = $('#appGrid');
-    const gr = grid.getBoundingClientRect();
+    const gr = $('#appGrid').getBoundingClientRect();
     if (x < gr.left || x > gr.right || y < gr.top || y > gr.bottom) return null;
-    const firstPad = grid.querySelector(':scope > .home-pad');
-    if (firstPad) return { tile: firstPad, mode: 'move', key: 'pad' };
-    return { mode: 'hold' };
+    return cellTarget(x, y);
+  }
+  // An empty spot of the home grid (also the empty cells after the last apps while dragging): the cell under the pointer.
+  function cellAt(x, y) {
+    const { grid, cols, gapX, gapY, cellW, cellH } = gridMetrics();
+    const gr = grid.getBoundingClientRect(), ux = cellW + gapX, uy = cellH + gapY;
+    const pos = (el) => {
+      const r = el.getBoundingClientRect();
+      return { c: Math.round((r.left - gr.left) / ux), r: Math.round((r.top - gr.top) / uy), w: Math.max(1, Math.round((r.width + gapX) / ux)), h: Math.max(1, Math.round((r.height + gapY) / uy)) };
+    };
+    const tc = Math.max(0, Math.min(cols - 1, Math.floor((x - gr.left) / ux))), tr = Math.max(0, Math.floor((y - gr.top) / uy));
+    // Covers the cell, or lies before it in reading order (the grid fills row by row).
+    const covers = (p) => p.r <= tr && tr < p.r + p.h && p.c <= tc && tc < p.c + p.w;
+    const before = (p) => p.r + p.h - 1 < tr || (p.r <= tr && p.c + p.w - 1 < tc);
+    return { grid, tc, tr, pos, covers, before };
+  }
+  function cellTarget(x, y) {
+    const { tc, tr } = cellAt(x, y);
+    return { mode: 'cell', key: `cell:${tc}:${tr}` };
+  }
+  // Put the dragged tile on the empty cell under the pointer: empty spots fill the cells before it. An app leaves an
+  // empty spot where it was, so the rest stays where it is. Everything is undone again (clearTemp) when the pointer
+  // goes elsewhere; only the drop keeps it.
+  function clearTemp() {
+    if (!drag) return;
+    (drag.temp || []).forEach((s) => s.remove()); drag.temp = [];
+    if (drag.swallow) { drag.swallow.mark.replaceWith(drag.swallow.el); drag.swallow = null; }
+    if (drag.mark) { drag.mark.before(drag.el); drag.mark.remove(); drag.mark = null; }
+  }
+  function tempSpacer() {
+    const s = htmlNode(spacerTile({ spacer: newSpacerId() }));
+    (drag.temp = drag.temp || []).push(s);
+    return s;
+  }
+  function placeAtCell(x, y) {
+    const grid = $('#appGrid');
+    flip(grid, () => {
+      clearTemp();
+      const { pos, covers, before } = cellAt(x, y);
+      const kids = [...grid.children].filter((el) => el.dataset.item && el !== drag.el);
+      if (drag.el.parentNode === grid && covers(pos(drag.el))) return; // already there
+      const hit = kids.find((k) => covers(pos(k)));
+      const heading = drag.item.startsWith('h:'), widget = drag.item.startsWith('w:');
+      if (hit && !hit.classList.contains('home-spacer')) return; // a tile, not an empty cell
+      // Where it was: an empty spot (only for a tile of one cell that has something after it).
+      if (drag.el.parentNode === grid) {
+        drag.mark = document.createComment('');
+        drag.el.before(drag.mark);
+        if (!heading && !widget && kids.some((k) => drag.mark.compareDocumentPosition(k) & Node.DOCUMENT_POSITION_FOLLOWING)) drag.mark.before(tempSpacer());
+      }
+      if (hit && !widget && !heading) {
+        // An empty spot under the pointer: the tile takes its place.
+        const mark = document.createComment('');
+        hit.replaceWith(mark); mark.before(drag.el);
+        drag.swallow = { el: hit, mark };
+        drag.moved = true;
+        return;
+      }
+      let anchor = null;
+      for (const k of kids) if (k.isConnected && before(pos(k))) anchor = k;
+      if (widget && drag.el.parentNode !== grid) widgetToGrid(); // from the column: its size on the grid
+      if (anchor) anchor.after(drag.el);
+      else grid.insertBefore(drag.el, [...grid.children].find((el) => el.dataset.item && el !== drag.el) || grid.firstChild);
+      drag.moved = true;
+      if (heading) return; // a heading always takes a row of its own
+      for (let i = 0; i < 400; i++) {
+        const p = pos(drag.el);
+        if (covers(p) || !before(p)) break;
+        const s = tempSpacer(); drag.el.before(s);
+        const q = pos(drag.el);
+        if (q.r === p.r && q.c === p.c) { s.remove(); drag.temp.pop(); break; } // no progress (it doesn't fit there)
+        if (!covers(q) && !before(q)) { s.remove(); drag.temp.pop(); break; } // went past it
+      }
+    });
   }
   function setMerge(tile) {
     if (drag.merge) drag.merge.classList.remove('merge');
@@ -1513,6 +1620,8 @@
   function dropRef(tile, x, y) {
     if (!tile || tile.classList.contains('home-pad')) return tile;
     const r = tile.getBoundingClientRect();
+    // A heading: above its middle = the end of the section before, below = the start of its own.
+    if (tile.classList.contains('home-heading')) return y > r.top + r.height / 2 ? tile.nextSibling : tile;
     const after = y > r.top + r.height * 0.55 || (y >= r.top && x > r.left + r.width * 0.55);
     return after ? tile.nextSibling : tile;
   }
@@ -1523,25 +1632,29 @@
     return true;
   }
   // The place of the app you are dragging (half transparent) moves to the app you hover over; the rest moves along.
+  // A widget from the column gets its size on the grid (and the ghost too).
+  function widgetToGrid() {
+    const id = drag.el.dataset.widget;
+    const [w, h] = WIDGET_DEFAULT[id] || [2, 2];
+    applyWidgetChrome(drag.el, w, h);
+    if (drag.ghost) {
+      const { cellW, cellH, gapX, gapY } = gridMetrics();
+      drag.ghost.style.width = Math.max(0, w * cellW + (w - 1) * gapX) + 'px';
+      drag.ghost.style.height = Math.max(0, h * cellH + (h - 1) * gapY) + 'px';
+      drag.ghost.dataset.w = String(w); drag.ghost.dataset.h = String(h);
+    }
+  }
   function movePlaceholder(tile, x, y) {
-    if (tile && tile.parentNode === widgetBox) {
+    clearTemp();
+    if (!tile || !tile.isConnected) return;
+    if (tile.parentNode === widgetBox) {
       if (drag.el.parentNode !== widgetBox) stripWidgetChrome(drag.el);
       putDragBefore(widgetBox, dropRef(tile, x, y));
       return;
     }
     const grid = $('#appGrid');
     if (!grid.contains(tile) && tile !== grid) return;
-    if (drag.el.parentNode !== grid) {
-      const id = drag.el.dataset.widget;
-      const [w, h] = WIDGET_DEFAULT[id] || [2, 2];
-      applyWidgetChrome(drag.el, w, h);
-      if (drag.ghost) {
-        const { cellW, cellH, gapX, gapY } = gridMetrics();
-        drag.ghost.style.width = Math.max(0, w * cellW + (w - 1) * gapX) + 'px';
-        drag.ghost.style.height = Math.max(0, h * cellH + (h - 1) * gapY) + 'px';
-        drag.ghost.dataset.w = String(w); drag.ghost.dataset.h = String(h);
-      }
-    }
+    if (drag.el.parentNode !== grid) widgetToGrid();
     putDragBefore(grid, dropRef(tile, x, y));
   }
   // Only react when you hold still: whoever just slides over it (on the way to the middle of an app) moves nothing.
@@ -1560,6 +1673,7 @@
       setMerge(null);
       drag.timer = setTimeout(() => {
         if (!drag || drag.el.parentNode !== $('#appGrid')) return;
+        clearTemp();
         stripWidgetChrome(drag.el);
         widgetBox.appendChild(drag.el);
         drag.moved = true;
@@ -1573,6 +1687,7 @@
     }
     if (tg.mode === 'merge') { if (drag.merge !== tg.tile) drag.timer = setTimeout(() => setMerge(tg.tile), 280); return; }
     setMerge(null);
+    if (tg.mode === 'cell') { drag.timer = setTimeout(() => { if (drag) placeAtCell(x, y); }, 160); return; }
     const grid = $('#appGrid');
     const first = drag.el.parentNode !== grid;
     if (first) movePlaceholder(tg.tile, x, y);
@@ -1581,7 +1696,7 @@
   function onDragStart(e) {
     if (e.button > 0 || drag || S.view === 'list') return;
     const tile = e.target.closest('#appGrid [data-item], #folderGrid [data-item], #widgets [data-item]');
-    if (!tile || e.target.closest('.app-more, .widget-frame, .widget-handle, [data-wact], input, textarea, select')) return;
+    if (!tile || tile.classList.contains('home-spacer') || e.target.closest('.app-more, .widget-frame, .widget-handle, [data-wact], input, textarea, select')) return;
     const inFolder = !!tile.closest('#folderGrid');
     if (!inFolder && (S.search.trim() || S.filter !== 'all')) return;
     // A click that does not move still opens the app. The drag starts after a small movement.
@@ -1609,7 +1724,7 @@
       drag.ghost.style.width = r.width + 'px'; drag.ghost.style.height = r.height + 'px';
       document.body.appendChild(drag.ghost);
       drag.el.classList.add('dragging');
-      if (drag.item.startsWith('w:')) setPlacing(true);
+      if (drag.ctx === 'home') setPlacing(true); // the empty cells after the last apps show
     }
     e.preventDefault();
     drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px) scale(1.1)`;
@@ -1624,6 +1739,8 @@
     clearTimeout(d.timer);
     if (!d.started) { drag = null; return; }
     d.ending = true;
+    if (d.mark) { d.mark.remove(); d.mark = null; }
+    if (d.swallow) { d.swallow.mark.remove(); d.swallow = null; }
     ignoreNextClick(); // the click after releasing must open nothing
     folderOverlay.classList.remove('drop-out');
     // The icon flies to its place (or shrinks into the folder); only then save the layout.
@@ -1667,6 +1784,7 @@
       if (d.ctx === 'folder') setLayout(homeItems().map((it) => (it.folder === S.folder ? { ...it, apps: order.map(memberFromKey) } : it)));
       else {
         const by = new Map(homeItems().map((it) => [itemKey(it), it]));
+        for (const k of order) if (k.startsWith('g:') && !by.has(k)) by.set(k, { spacer: k.slice(2) }); // new empty spots
         if (d.item.startsWith('w:') && !by.has(d.item)) {
           const id = d.item.slice(2);
           const [w, h] = clampWidgetSize(id, Number(d.el.dataset.w), Number(d.el.dataset.h));
@@ -1817,20 +1935,62 @@
     });
   }
   // Right-click on an empty spot of the dashboard: a menu of its own (new folder, shortcut, app, view, hidden widgets).
-  function openDeskMenu(x, y) {
+  let deskAt = null; // where the dashboard's menu was opened: {x, y, key} (key = the heading or empty spot under it)
+  const DESK_ICON = { heading: 'heading', 'heading-rename': 'rename', 'heading-remove': 'remove', 'spacer-remove': 'remove' };
+  function openDeskMenu(x, y, target, opener) {
     const hidden = (((S.layout && S.layout.widgets) || {}).hidden || []).filter((id) => WIDGET_IDS.includes(id) && (id !== 'ai' || !S.ai || S.ai.enabled !== false));
-    const items = [
-      ['newfolder', t('New folder…')], ['shortcut', t('New shortcut…')], ['store', t('Add app…')], '-',
+    const key = target ? target.dataset.item : '';
+    const head = key.startsWith('h:') ? homeItems().find((it) => it.heading === key.slice(2)) : null;
+    deskAt = { x, y, key };
+    const own = head ? [['heading-rename', t('Rename heading…')], ['heading-remove', t('Remove heading'), 'danger'], '-']
+      : key.startsWith('g:') ? [['spacer-remove', t('Remove empty spot')], '-'] : [];
+    const items = [...own,
+      ['newfolder', t('New folder…')], ['heading', t('New heading…')], ['shortcut', t('New shortcut…')], ['store', t('Add app…')], '-',
       S.view === 'list' ? ['grid', t('Show as grid')] : ['list', t('Show as list')],
       ...(hidden.length ? ['-', ...hidden.map((id) => ['widget:' + id, t('Show widget: {name}', { name: t(WIDGET_NAMES[id] || id) })])] : []),
     ];
-    menu.innerHTML = `<div class="menu-head"><b>${esc(t('Dashboard'))}</b></div>` +
-      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item" data-menu="${esc(it[0])}"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0].startsWith('widget:') ? 'widget' : it[0]] || ''}</svg>${esc(it[1])}</button>`)).join('');
+    menu.innerHTML = `<div class="menu-head"><b>${esc(head ? head.name || t('Section') : t('Dashboard'))}</b></div>` +
+      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${esc(it[0])}"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0].startsWith('widget:') ? 'widget' : DESK_ICON[it[0]] || it[0]] || ''}</svg>${esc(it[1])}</button>`)).join('');
     delete menu.dataset.forApp; delete menu.dataset.forVm;
     menu.dataset.forDesk = '1';
-    placeMenu(x, y, null);
+    placeMenu(x, y, opener || null);
+  }
+  // Where a new heading goes: after the last tile before the spot that was clicked (the end when it wasn't on the grid).
+  function insertIndexAt(items, x, y) {
+    const grid = $('#appGrid'), gr = grid.getBoundingClientRect();
+    if (S.view === 'list' || !grid.classList.contains('home-mix') || x < gr.left || x > gr.right || y < gr.top || y > gr.bottom) return items.length;
+    const { pos, before } = cellAt(x, y);
+    let anchor = null;
+    for (const k of grid.children) if (k.dataset.item && before(pos(k))) anchor = k.dataset.item;
+    if (!anchor) return 0;
+    const i = items.findIndex((it) => itemKey(it) === anchor);
+    return i < 0 ? items.length : i + 1;
+  }
+  async function newHeading(at) {
+    const r = await ask(t('New heading'), t('Add'), null, { value: '', placeholder: t('e.g. Media'), label: t('Name'), max: 60 });
+    const name = r && r.value.trim().slice(0, 60);
+    if (!name) return;
+    const items = homeItems();
+    items.splice(at ? insertIndexAt(items, at.x, at.y) : items.length, 0, { heading: newHeadingId(), name });
+    setLayout(items);
+  }
+  async function headingCommand(act, id) {
+    const h = homeItems().find((it) => it.heading === id); if (!h) return;
+    if (act === 'heading-rename') {
+      const r = await ask(t('Rename heading'), t('Save'), null, { value: h.name || '', label: t('Name'), max: 60 });
+      const name = r && r.value.trim().slice(0, 60);
+      if (!name) return;
+      setLayout(homeItems().map((it) => (it.heading === id ? { ...it, name } : it)));
+      return;
+    }
+    if (!(await ask(t('Remove the heading {name}? The apps under it stay.', { name: h.name || t('Section') }), t('Remove')))) return;
+    setLayout(homeItems().filter((it) => it.heading !== id));
   }
   function deskCommand(act) {
+    const at = deskAt; deskAt = null;
+    if (act === 'heading') return newHeading(at);
+    if ((act === 'heading-rename' || act === 'heading-remove') && at && at.key.startsWith('h:')) return headingCommand(act, at.key.slice(2));
+    if (act === 'spacer-remove' && at && at.key.startsWith('g:')) return setLayout(homeItems().filter((it) => itemKey(it) !== at.key));
     if (act === 'newfolder') return newFolderWindow();
     if (act === 'shortcut') return shortcutWindow();
     if (act === 'store') { location.hash = 'store'; return; }
@@ -1844,7 +2004,12 @@
     const sel = window.getSelection && String(window.getSelection());
     if (sel && sel.trim()) return;
     e.preventDefault();
-    openDeskMenu(e.clientX, e.clientY);
+    openDeskMenu(e.clientX, e.clientY, e.target.closest('#appGrid > .home-heading, #appGrid > .home-spacer'));
+  });
+  $('#appGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-heading-menu]'); if (!b) return;
+    const r = b.getBoundingClientRect();
+    openDeskMenu(r.left, r.bottom + 4, b.closest('.home-heading'), b);
   });
 
   // Under the title: how many updates there are, with View, Update all and Check now.
@@ -2133,6 +2298,7 @@
   }
 
   const MENU_ICONS = {
+    heading: '<path d="M5 5v14M15 5v14M5 12h10M19 9v10"/>',
     newfolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/>',
     shortcut: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     store: '<path d="M12 5v14M5 12h14"/>',

@@ -113,3 +113,13 @@ test('widget size on the home screen', () => {
   const odd = validateLayout({ items: [{ widget: 'sys', w: 3, h: 3 }, { widget: 'clock', w: 1, h: 2 }] });
   assert.deepEqual(odd.items, [{ widget: 'sys', w: 3, h: 3 }, { widget: 'clock', w: 1, h: 2 }]);
 });
+
+test('the layout keeps headings and empty spots, but not empty spots that end a section', () => {
+  const out = validateLayout({ items: [
+    { heading: 'h1', name: '  Media ' }, 'plex', { spacer: 'g1' }, 'sonarr', { spacer: 'g2' }, { spacer: 'g3' },
+    { heading: 'h2', name: 'Tools' }, { spacer: 'g4' }, 'pihole', { spacer: 'g5' }, { heading: 'h1', name: 'twice' },
+  ] });
+  assert.deepEqual(out.items, [{ heading: 'h1', name: 'Media' }, 'plex', { spacer: 'g1' }, 'sonarr', { heading: 'h2', name: 'Tools' }, { spacer: 'g4' }, 'pihole']);
+  assert.throws(() => validateLayout({ items: [{ heading: '../x', name: 'a' }] }), /heading in the layout is not valid/);
+  assert.throws(() => validateLayout({ items: [{ spacer: 'x y' }] }), /empty spot in the layout is not valid/);
+});

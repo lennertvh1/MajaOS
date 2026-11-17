@@ -286,8 +286,21 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
   --home-cols: 4; --home-row: 60px;
   position: relative;
   grid-template-columns: repeat(var(--home-cols), minmax(0, 1fr));
-  grid-auto-rows: var(--home-row); grid-auto-flow: dense; gap: 10px 10px; align-items: stretch;
+  grid-auto-rows: var(--home-row); grid-auto-flow: row; gap: 10px 10px; align-items: stretch;
 }
+/* A heading starts a section over the whole width; an empty spot is a cell with nothing in it. */
+.app-grid.home-mix > .home-heading {
+  grid-column: 1 / -1; grid-row: span 1; position: relative; min-width: 0;
+  display: flex; align-items: flex-end; gap: 8px; padding: 0 4px 6px; border-bottom: 1px solid var(--glass-line);
+}
+.home-heading-name { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.home-heading .app-more { position: static; flex: none; width: 26px; height: 26px; }
+.home-heading:hover .app-more, .home-heading:focus-within .app-more { opacity: 1; }
+.home-heading.dragging { opacity: .35; }
+.home-spacer { grid-column: span 1; grid-row: span 2; min-width: 0; min-height: 0; border-radius: 20px; }
+.app-grid.placing > .home-spacer { border: 1.5px dashed color-mix(in srgb, var(--glass-line) 80%, transparent); }
+.app-list .list-heading { margin: 14px 4px 2px; font-size: 1.05rem; font-weight: 650; }
+.app-list .list-heading:first-child { margin-top: 0; }
 .app-grid.home-mix > .app {
   grid-column: span 1; grid-row: span 2; min-width: 0; min-height: 0; z-index: 0;
 }
