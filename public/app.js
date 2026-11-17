@@ -968,7 +968,7 @@
     const grid = $('#appGrid');
     $$('#appGrid > .home-pad').forEach((el) => el.remove());
     if (!grid.classList.contains('home-mix') || !S.placing) return;
-    const n = homeCols() * 3;
+    const n = (Number(grid.style.getPropertyValue('--home-cols')) || homeCols()) * 2;
     for (let i = 0; i < n; i++) {
       const pad = document.createElement('div');
       pad.className = 'home-pad';
@@ -1443,7 +1443,9 @@
     const mixed = !flat;
     grid.classList.toggle('home-mix', mixed);
     grid.classList.toggle('placing', S.placing && mixed);
-    if (mixed) grid.style.setProperty('--home-cols', String(homeCols()));
+    // The number of columns stays as it is while dragging: the empty cells make the page longer, a scrollbar can
+    // appear and make the grid narrower, and new columns would move every tile (and the page) at once.
+    if (mixed && !grid.style.getPropertyValue('--home-cols')) grid.style.setProperty('--home-cols', String(homeCols()));
     fillHomePads();
   }
   $('#shortcutBtn').addEventListener('click', () => shortcutWindow());
@@ -1745,7 +1747,7 @@
     folderOverlay.classList.remove('drop-out');
     // The icon flies to its place (or shrinks into the folder); only then save the layout.
     const land = (rect, into, then) => {
-      const done = () => { d.ghost.remove(); d.el.classList.remove('dragging'); drag = null; then(); setPlacing(false); };
+      const done = () => { d.ghost.remove(); d.el.classList.remove('dragging'); drag = null; then(); setPlacing(false); fitHomeCols(); };
       if (calm() || !rect) { done(); return; }
       const to = `translate(${rect.left}px, ${rect.top}px) scale(${into ? 0.3 : 1})`;
       const a = d.ghost.animate([{ transform: d.ghost.style.transform, opacity: 1 }, { transform: to, opacity: into ? 0 : 1 }],
@@ -1800,8 +1802,9 @@
   widgetBox.addEventListener('dragstart', (e) => e.preventDefault());
   function gridMetrics() {
     const grid = $('#appGrid');
-    const cols = homeCols();
     const cs = getComputedStyle(grid);
+    // The columns the grid really has (not what the width would give now).
+    const cols = Number(grid.style.getPropertyValue('--home-cols')) || homeCols();
     const gapX = parseFloat(cs.columnGap) || 10;
     const gapY = parseFloat(cs.rowGap) || 12;
     const cellW = (grid.clientWidth - gapX * (cols - 1)) / cols;
@@ -2420,17 +2423,19 @@
     else if (e.key === 'Tab') closeMenu(false);
   });
   document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(false); }, true);
-  window.addEventListener('resize', () => {
-    closeMenu(false);
+  // The columns follow the grid's own width (the window, the widget column appearing, a scrollbar), but never while
+  // something is dragged: then every tile would move at once.
+  function fitHomeCols() {
     const grid = $('#appGrid');
-    if (grid && grid.classList.contains('home-mix')) {
-      const cols = String(homeCols());
-      if (grid.style.getPropertyValue('--home-cols') !== cols) {
-        grid.style.setProperty('--home-cols', cols);
-        $$('#appGrid > .widget-slot').forEach((el) => applyWidgetChrome(el, Number(el.dataset.w), Number(el.dataset.h)));
-      }
+    if (!grid || !grid.classList.contains('home-mix') || drag || wresize) return;
+    const cols = String(homeCols());
+    if (grid.style.getPropertyValue('--home-cols') !== cols) {
+      grid.style.setProperty('--home-cols', cols);
+      $$('#appGrid > .widget-slot').forEach((el) => applyWidgetChrome(el, Number(el.dataset.w), Number(el.dataset.h)));
     }
-  });
+  }
+  window.addEventListener('resize', () => { closeMenu(false); fitHomeCols(); });
+  if (window.ResizeObserver) new ResizeObserver(() => fitHomeCols()).observe($('#appGrid'));
   window.addEventListener('scroll', () => { closeMenu(false); hideVmTip(); }, true);
 
   async function appCommand(a, act) {

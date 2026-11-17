@@ -77,7 +77,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; overflow-x: clip; font-size: var(--ui); }
+html { -webkit-text-size-adjust: 100%; overflow-x: clip; font-size: var(--ui); scrollbar-gutter: stable; } /* no jump when a scrollbar appears */
 html, body { margin: 0; min-height: 100%; min-height: 100dvh; }
 body {
   font-family: "Onest", system-ui, sans-serif; font-size: 1rem; line-height: 1.45;
