@@ -114,12 +114,20 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 
 /* ---- layout */
 .shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+/* The header stays at the top while the page scrolls. The blur sits on ::before: a backdrop-filter on the bar itself
+   would become the containing block of its fixed children (the search panel, #barTip). */
 .topbar {
   container-type: inline-size;
   display: flex; align-items: center; gap: clamp(8px, 1vw, 16px);
   padding: 0.9rem clamp(16px, 3vw, 36px);
   padding-left: max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px));
   padding-right: max(clamp(16px, 3vw, 36px), env(safe-area-inset-right, 0px));
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--body-bg) 78%, transparent);
+}
+.topbar::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 .brand { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 0 1 auto; }
 .brand-mark { width: 1.6rem; height: 1.6rem; fill: var(--text); flex: none; }
@@ -1179,14 +1187,9 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 /* ---- phone: the bar moves to the bottom. Above this, labels ease shut on their own. */
 @media (max-width: 880px) {
   .topbar {
-    flex-wrap: wrap; position: sticky; top: 0; z-index: 40; overflow: visible;
+    flex-wrap: wrap; overflow: visible;
     padding-top: max(10px, env(safe-area-inset-top, 0px));
-    background: color-mix(in srgb, var(--body-bg) 78%, transparent);
     filter: none; transform: none; backdrop-filter: none; -webkit-backdrop-filter: none;
-  }
-  .topbar::before {
-    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-    backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
   }
   .spot { flex: 1 1 100%; max-width: none; order: 3; }
   .brand { flex: 1 1 auto; order: 1; }
