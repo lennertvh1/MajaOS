@@ -96,3 +96,11 @@ test('without a bridge the IPv6 setting of the card stays', () => {
   assert.match(out, /iface enp5s0 inet6 auto/);
   assert.doesNotMatch(out, /The primary network interface/); // a loose comment no longer hangs on a block
 });
+
+test('a bridge keeps the card\'s MAC address, and allow-hotplug cards are brought up too', () => {
+  const nw = require('../lib/network');
+  const cfg = { ...nw.validate({ interface: 'enp5s0', mode: 'dhcp', bridge: true }, ['enp5s0']), mac: '04:7C:16:AA:BB:CC' };
+  const out = nw.buildInterfaces(cfg, 'auto lo\niface lo inet loopback\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n');
+  assert.match(out, /iface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/);
+  assert.deepEqual(nw.upNames('auto lo\niface lo inet loopback\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n\nauto br1\n'), ['enp5s0', 'br1']);
+});

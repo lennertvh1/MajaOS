@@ -93,15 +93,17 @@ test('network settings per card: a fixed address without a gateway on a second c
     { interface: 'enp6s0', mode: 'static', address: '10.10.0.1/24', gateway: '', dns: '' },
     { interface: 'enp7s0', mode: 'off' },
   ], physical);
-  const text = installer.buildInstallInterfaces(list);
-  assert.match(text, /allow-hotplug enp5s0\niface enp5s0 inet dhcp/);
+  const text = installer.buildInstallInterfaces(list, { enp5s0: '04:7C:16:AA:BB:CC' });
+  // The card to the home network is in br0 for the VMs, with its own MAC address (same DHCP address).
+  assert.match(text, /iface enp5s0 inet manual\n\nauto br0\niface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/);
   assert.match(text, /auto enp6s0\niface enp6s0 inet static\n {4}address 10\.10\.0\.1\/24\n/);
   assert.doesNotMatch(text, /enp7s0/);
   assert.doesNotMatch(text, /gateway/);
   assert.equal(installer.installResolv(list), null); // DHCP: dhcpcd writes resolv.conf
   // MajaOS reads the same file back in Settings > Network.
   const network = require('../lib/network');
-  assert.equal(network.configFromInterfaces(network.parseInterfaces(text), physical).interface, 'enp5s0');
+  const cfg = network.configFromInterfaces(network.parseInterfaces(text), physical);
+  assert.deepEqual([cfg.interface, cfg.bridge, cfg.mode], ['enp5s0', true, 'dhcp']);
 });
 
 test('network settings per card: one gateway, internet somewhere, and the card the message is about', () => {
@@ -120,4 +122,14 @@ test('network settings per card: one gateway, internet somewhere, and the card t
   assert.deepEqual(fails([{ interface: 'enp6s0', mode: 'static', address: '10.0.0.2' }]), ['Fill in the IP address with the netmask length, e.g. 192.168.1.10/24.', 'enp6s0']);
   assert.deepEqual(fails([{ interface: 'enp5s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.2.1', dns: '1.1.1.1' }])[0], 'The gateway is not in the same network as the IP address.');
   assert.ok(fails([{ interface: 'wlan0', mode: 'dhcp' }]));
+});
+
+test('installing with a fixed address: that card is in br0 with its address; a second DHCP card stays on its own', () => {
+  const list = installer.validateCards([
+    { interface: 'enp5s0', mode: 'dhcp' },
+    { interface: 'enp6s0', mode: 'static', address: '192.168.1.10/24', gateway: '192.168.1.1', dns: '1.1.1.1' },
+  ], ['enp5s0', 'enp6s0']);
+  const text = installer.buildInstallInterfaces(list);
+  assert.match(text, /allow-hotplug enp5s0\niface enp5s0 inet dhcp/);
+  assert.match(text, /auto br0\niface br0 inet static\n {4}bridge_ports enp6s0\n {4}bridge_stp off\n {4}bridge_fd 0\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n/);
 });

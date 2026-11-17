@@ -212,7 +212,7 @@ const server = http.createServer(async (req, res) => {
       // The installed system gets the same network, in the file MajaOS manages (Settings > Network).
       const plan = chosen || await defaultNetwork();
       for (const f of ['interfaces', 'resolv.conf']) fs.rmSync(path.join(DIR, f), { force: true });
-      if (plan.length) fs.writeFileSync(path.join(DIR, 'interfaces'), installer.buildInstallInterfaces(plan));
+      if (plan.length) fs.writeFileSync(path.join(DIR, 'interfaces'), installer.buildInstallInterfaces(plan, Object.fromEntries(((await cards()) || []).map((c) => [c.name, c.mac]))));
       const resolv = installer.installResolv(plan);
       if (resolv) fs.writeFileSync(path.join(DIR, 'resolv.conf'), resolv);
       const out = fs.openSync(path.join(DIR, 'log.txt'), 'a');
