@@ -101,7 +101,7 @@ test('a bridge keeps the card\'s MAC address, and allow-hotplug cards are brough
   const nw = require('../lib/network');
   const cfg = { ...nw.validate({ interface: 'enp5s0', mode: 'dhcp', bridge: true }, ['enp5s0']), mac: '04:7C:16:AA:BB:CC' };
   const out = nw.buildInterfaces(cfg, 'auto lo\niface lo inet loopback\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n');
-  assert.match(out, /iface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/);
+  assert.match(out, /iface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n {4}hwaddress ether 04:7c:16:aa:bb:cc\n/);
   assert.deepEqual(nw.upNames('auto lo\niface lo inet loopback\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n\nauto br1\n'), ['enp5s0', 'br1']);
 });
 
@@ -127,4 +127,24 @@ iface enp7s0 inet dhcp
   const plan = nw.cardsToBringUp(text, nw.parseIfState('lo=lo\nenp6s0=enp6s0\n'), (d) => cables[d]);
   assert.deepEqual(plan, { up: ['br0'], wake: ['enp7s0'] }); // enp6s0 is already up
   assert.deepEqual(nw.cardsToBringUp(text, new Set(['br0', 'enp6s0']), (d) => (d === 'enp7s0' ? false : true)), { up: [], wake: [] });
+});
+
+test('a bridge from before: the card\'s MAC address is added once', () => {
+  const nw = require('../lib/network');
+  const old = `auto lo
+iface lo inet loopback
+
+iface enp5s0 inet manual
+
+auto br0
+iface br0 inet dhcp
+    bridge_ports enp5s0
+    bridge_stp off
+    bridge_fd 0
+`;
+  const r = nw.addBridgeMacs(old, (d) => ({ enp5s0: '04:7C:16:AA:BB:CC' })[d]);
+  assert.deepEqual(r.bridges, ['br0']);
+  assert.match(r.text, /bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n {4}hwaddress ether 04:7c:16:aa:bb:cc\n {4}bridge_stp off\n/);
+  assert.deepEqual(nw.addBridgeMacs(r.text, () => '04:7c:16:aa:bb:cc').bridges, []); // already done
+  assert.deepEqual(nw.addBridgeMacs(old.replace('bridge_ports enp5s0', 'bridge_ports enp5s0 enp6s0'), () => '04:7c:16:aa:bb:cc').bridges, []); // several cards: left alone
 });

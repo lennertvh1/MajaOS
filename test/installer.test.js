@@ -95,7 +95,7 @@ test('network settings per card: a fixed address without a gateway on a second c
   ], physical);
   const text = installer.buildInstallInterfaces(list, { enp5s0: '04:7C:16:AA:BB:CC' });
   // The card to the home network is in br0 for the VMs, with its own MAC address (same DHCP address).
-  assert.match(text, /iface enp5s0 inet manual\n\nauto br0\niface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/);
+  assert.match(text, /iface enp5s0 inet manual\n\nauto br0\niface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n {4}hwaddress ether 04:7c:16:aa:bb:cc\n/);
   assert.match(text, /auto enp6s0\niface enp6s0 inet static\n {4}address 10\.10\.0\.1\/24\n/);
   assert.doesNotMatch(text, /enp7s0/);
   assert.doesNotMatch(text, /gateway/);
