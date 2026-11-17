@@ -1816,6 +1816,10 @@
     }
     if (b.boot && b.boot !== h.boot) { h.boot = b.boot; changed = true; }
     if (b.clipboard !== undefined && !!b.clipboard !== !!h.clipboard) { h.clipboard = !!b.clipboard; changed = true; }
+    if (b.secureBoot !== undefined) {
+      const cur = h.secureBoot === undefined ? /windows/i.test(v.name) : h.secureBoot;
+      if (!!b.secureBoot !== cur) { if (isOn(v)) throw err('Shut the VM down first to turn Secure Boot on or off.', 409); h.secureBoot = !!b.secureBoot; changed = true; }
+    }
     if (Array.isArray(b.hostdevs) && b.hostdevs.join() !== h.hostdevs.join()) {
       for (const k of b.hostdevs) if (!h.hostdevs.includes(k) && !USB.concat(PCI).some((x) => x.key === k)) throw err('This USB device is not plugged in (anymore). Plug it in and open the window again.');
       h.hostdevs = [...b.hostdevs]; changed = true;
@@ -3082,7 +3086,8 @@
         disks: dks.map((k, n) => ({ target: k.target, bus: k.target.startsWith('vd') ? 'virtio' : 'sata', format: 'qcow2',
           source: k.file || '/tank/vms/' + s + '/' + s + (n ? '-' + (n + 1) : '') + '.qcow2', size: k.size, used: k.size * (n ? 0.02 : 0.31) })),
         cdroms: h.cdrom ? [h.cdrom] : [], cdromDrive: !!h.cdrom || v.name === 'Windows 11',
-        nics: copy(h.nics), boot: h.boot, hostdevs: [...h.hostdevs], cpuPins: [...h.cpuPins], clipboard: !!h.clipboard };
+        nics: copy(h.nics), boot: h.boot, hostdevs: [...h.hostdevs], cpuPins: [...h.cpuPins], clipboard: !!h.clipboard,
+        secureBoot: h.secureBoot === undefined ? /windows/i.test(v.name) : h.secureBoot };
     }
     if (path === '/api/store' || path === '/api/store?refresh=1') {
       if (path.endsWith('refresh=1')) await wait(900);

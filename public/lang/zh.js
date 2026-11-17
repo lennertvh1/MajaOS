@@ -3040,4 +3040,8 @@ window.TB_LANG.zh = {
   "About {n} min left": "大约还剩 {n} 分钟",
   "{test} on {disk}: {result}": "{disk} 的{test}：{result}",
   "Test {disk}": "测试 {disk}",
+  "Secure Boot": "安全启动",
+  "Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM's UEFI settings; the system on the disk stays.": "只有为此签名的系统才能在安全启动下启动，例如 Windows 和大多数主流 Linux 发行版。Home Assistant OS、OPNsense 和 FreeBSD 需要关闭它。更改会重置虚拟机的 UEFI 设置；磁盘上的系统保持不变。",
+  "Shut the VM down to change Secure Boot.": "关闭虚拟机后才能更改安全启动。",
+  "Shut the VM down first to turn Secure Boot on or off.": "请先关闭虚拟机，再开启或关闭安全启动。",
 };

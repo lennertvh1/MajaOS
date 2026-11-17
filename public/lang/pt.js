@@ -3040,4 +3040,8 @@ window.TB_LANG.pt = {
   "About {n} min left": "Faltam cerca de {n} min",
   "{test} on {disk}: {result}": "{test} em {disk}: {result}",
   "Test {disk}": "Teste {disk}",
+  "Secure Boot": "Secure Boot",
+  "Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM's UEFI settings; the system on the disk stays.": "Só sistemas assinados para isso arrancam com Secure Boot, como o Windows e a maioria das grandes distribuições Linux. O Home Assistant OS, o OPNsense e o FreeBSD precisam dele desligado. Alterá-lo repõe as definições UEFI da VM; o sistema no disco fica.",
+  "Shut the VM down to change Secure Boot.": "Desliga a VM para alterar o Secure Boot.",
+  "Shut the VM down first to turn Secure Boot on or off.": "Desliga primeiro a VM para ligar ou desligar o Secure Boot.",
 };

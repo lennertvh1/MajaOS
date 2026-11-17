@@ -245,3 +245,42 @@ test('IP addresses of a VM (virsh domifaddr)', () => {
   assert.deepEqual(vms.usableIps(list), ['192.168.1.40', 'fd00::5054:ff:fe6b:3c58']);
   assert.deepEqual(vms.usableIps(vms.parseDomifaddr(' Name       MAC address          Protocol     Address\n----\n')), []);
 });
+
+test('Secure Boot: read from the firmware choice or the loader, and switched off', () => {
+  const sbOn = `<domain type='kvm'>
+  <name>haos</name>
+  <os firmware='efi'>
+    <type arch='x86_64' machine='pc-q35-10.0'>hvm</type>
+    <firmware>
+      <feature enabled='yes' name='enrolled-keys'/>
+      <feature enabled='yes' name='secure-boot'/>
+    </firmware>
+    <loader readonly='yes' secure='yes' type='pflash' format='raw'>/usr/share/OVMF/OVMF_CODE_4M.ms.fd</loader>
+    <nvram template='/usr/share/OVMF/OVMF_VARS_4M.ms.fd' format='raw'>/var/lib/libvirt/qemu/nvram/haos_VARS.fd</nvram>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <smm state='on'/>
+  </features>
+  <devices>
+  </devices>
+</domain>`;
+  const cur = hw.parseHardware(sbOn);
+  assert.equal(cur.secureBoot, true);
+  assert.equal(cur.nvram, '/var/lib/libvirt/qemu/nvram/haos_VARS.fd');
+  const change = hw.validateHardware({ secureBoot: false }, {}, cur);
+  assert.deepEqual(change, { secureBoot: false });
+  const out = hw.applyHardware(sbOn, change);
+  assert.doesNotMatch(out, /<loader|<nvram/);
+  assert.match(out, /<feature enabled="no" name="secure-boot"\/>|<feature enabled='no' name='secure-boot'\/>/);
+  assert.equal(hw.parseHardware(out).secureBoot, false);
+  assert.match(out, /<boot dev='hd'\/>/); // the rest of <os> stays
+  // Unraid-style: its own loader without Secure Boot; BIOS VMs have no Secure Boot at all.
+  assert.equal(hw.parseHardware(`<domain><os><type>hvm</type><loader readonly='yes' type='pflash'>/usr/share/qemu/ovmf-x64/OVMF_CODE-pure-efi.fd</loader></os><devices/></domain>`).secureBoot, false);
+  assert.equal(hw.parseHardware(`<domain><os><type>hvm</type></os><devices/></domain>`).secureBoot, null);
+  assert.deepEqual(hw.validateHardware({ secureBoot: true }, {}, { ...cur, secureBoot: null }), {});
+  // Turning it on adds SMM when it is missing.
+  const on = hw.applyHardware(`<domain><os firmware='efi'><type>hvm</type></os><devices/></domain>`, { secureBoot: true });
+  assert.match(on, /<smm state="on"\/>|<smm state='on'\/>/);
+});

@@ -5052,7 +5052,10 @@
             <option value="disk"${d.boot !== 'cdrom' ? ' selected' : ''}>${t('Disk first')}</option>
             <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('CD-ROM first')}</option></select>
             </label>
-        </div>`;
+        </div>
+        ${d.secureBoot == null ? '' : `<label class="check"><input type="checkbox" name="secureBoot"${d.secureBoot ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('Secure Boot')}
+          ${hint(t('Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM\'s UEFI settings; the system on the disk stays.'))}</label>
+        ${off ? '' : `<p class="muted small">${t('Shut the VM down to change Secure Boot.')}</p>`}`}`;
     };
 
     /* Devices: USB and PCI */

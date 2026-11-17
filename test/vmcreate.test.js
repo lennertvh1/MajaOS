@@ -15,9 +15,12 @@ test('new VMs default to br0 when it exists, otherwise to libvirt NAT', () => {
 });
 
 test('each operating system gets hardware its installer understands', () => {
-  assert.deepEqual(vmHardware({ os: 'debian' }), { os: 'debian', media: 'iso', osinfo: 'debian13', fallback: 'linux2022', firmware: 'uefi', bus: 'virtio', nic: 'virtio', tpm: false });
+  assert.deepEqual(vmHardware({ os: 'debian' }), { os: 'debian', media: 'iso', osinfo: 'debian13', fallback: 'linux2022', firmware: 'uefi', bus: 'virtio', nic: 'virtio', tpm: false, secureBoot: false });
   const win = vmHardware({ os: 'windows11' });
   assert.equal(win.bus, 'sata'); assert.equal(win.nic, 'e1000e'); assert.equal(win.tpm, true);
+  assert.equal(win.secureBoot, true); // only Windows gets Secure Boot
+  assert.equal(vmHardware({ os: 'haos' }).secureBoot, false);
+  assert.equal(vmHardware({ os: 'windows11', firmware: 'bios' }).secureBoot, false);
   assert.equal(vmHardware({ os: 'haos' }).media, 'disk'); // Home Assistant OS is a disk image
   assert.equal(vmHardware({ os: 'other' }).osinfo, 'detect=on,require=off');
   assert.equal(vmHardware({ os: 'other' }).bus, 'sata');
