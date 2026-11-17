@@ -1097,6 +1097,7 @@ bind(CFG.port).then(() => {
     shadow.startSchedule(); // ZFS snapshots behind Windows Previous Versions
     replace.startSchedule(); // a new disk in place of a failed one starts the rebuild
     storage.watchDisks(); // a disk plugged in or taken out: a message on the dashboard
+    network.watchCards(); // a card with a cable that ifupdown left down (e.g. after a rollback) comes up again
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
     activity.startSchedule(); // the activity log: who changed what in the shared folders (Samba full_audit)
     shares.upgradeConf().catch((e) => console.error('Shared folders: ' + e.message));

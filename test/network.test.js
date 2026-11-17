@@ -104,3 +104,27 @@ test('a bridge keeps the card\'s MAC address, and allow-hotplug cards are brough
   assert.match(out, /iface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/);
   assert.deepEqual(nw.upNames('auto lo\niface lo inet loopback\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n\nauto br1\n'), ['enp5s0', 'br1']);
 });
+
+test('a card or bridge with a cable that ifupdown left down is brought up; a down link is switched on first', () => {
+  const nw = require('../lib/network');
+  const text = `auto lo
+iface lo inet loopback
+
+iface enp5s0 inet manual
+
+auto br0
+iface br0 inet dhcp
+    bridge_ports enp5s0
+
+allow-hotplug enp6s0
+iface enp6s0 inet dhcp
+
+allow-hotplug enp7s0
+iface enp7s0 inet dhcp
+`;
+  assert.deepEqual([...nw.parseIfState('lo=lo\nenp6s0=enp6s0\n')], ['lo', 'enp6s0']);
+  const cables = { enp5s0: true, enp6s0: true, enp7s0: null };
+  const plan = nw.cardsToBringUp(text, nw.parseIfState('lo=lo\nenp6s0=enp6s0\n'), (d) => cables[d]);
+  assert.deepEqual(plan, { up: ['br0'], wake: ['enp7s0'] }); // enp6s0 is already up
+  assert.deepEqual(nw.cardsToBringUp(text, new Set(['br0', 'enp6s0']), (d) => (d === 'enp7s0' ? false : true)), { up: [], wake: [] });
+});
