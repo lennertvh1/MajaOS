@@ -3045,4 +3045,9 @@ window.TB_LANG.zh = {
   "Shut the VM down to change Secure Boot.": "关闭虚拟机后才能更改安全启动。",
   "Shut the VM down first to turn Secure Boot on or off.": "请先关闭虚拟机，再开启或关闭安全启动。",
   "Start with console": "启动并打开控制台",
+  "Reset network settings": "重置网络设置",
+  "Can't reach the page at all? On the server's own screen: node /opt/majaos/lib/network.js --reset": "完全打不开页面？在服务器自己的屏幕上运行：node /opt/majaos/lib/network.js --reset",
+  "Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.": "恢复为新安装时的状态：连接家庭网络的网卡加入网桥 br0 并使用 DHCP，其他网卡也使用 DHCP。固定地址会被删除。",
+  "Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.": "重置网络设置？每张网卡都会从路由器获取地址（DHCP），固定地址会被删除。连接会短暂中断；之后请在 2 分钟内确认，否则会恢复旧设置。",
+  "Reset": "重置",
 };

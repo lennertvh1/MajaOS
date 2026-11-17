@@ -3045,4 +3045,9 @@ window.TB_LANG.it = {
   "Shut the VM down to change Secure Boot.": "Spegni la VM per cambiare Secure Boot.",
   "Shut the VM down first to turn Secure Boot on or off.": "Spegni prima la VM per attivare o disattivare Secure Boot.",
   "Start with console": "Avvia con console",
+  "Reset network settings": "Ripristina la rete",
+  "Can't reach the page at all? On the server's own screen: node /opt/majaos/lib/network.js --reset": "Non riesci ad aprire la pagina? Sullo schermo del server: node /opt/majaos/lib/network.js --reset",
+  "Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.": "Come dopo una nuova installazione: la scheda verso la rete di casa nel bridge br0 con DHCP, tutte le altre schede con DHCP. Gli indirizzi fissi spariscono.",
+  "Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.": "Ripristinare la rete? Ogni scheda riceve l'indirizzo dal router (DHCP) e gli indirizzi fissi spariscono. La connessione cade per un attimo; poi conferma entro 2 minuti, altrimenti tornano le impostazioni precedenti.",
+  "Reset": "Ripristina",
 };

@@ -148,3 +148,19 @@ iface br0 inet dhcp
   assert.deepEqual(nw.addBridgeMacs(r.text, () => '04:7c:16:aa:bb:cc').bridges, []); // already done
   assert.deepEqual(nw.addBridgeMacs(old.replace('bridge_ports enp5s0', 'bridge_ports enp5s0 enp6s0'), () => '04:7c:16:aa:bb:cc').bridges, []); // several cards: left alone
 });
+
+test('reset: the card behind the default route (also through a bridge) goes in br0, the others get DHCP', () => {
+  const nw = require('../lib/network');
+  const links = [
+    { name: 'enp5s0', mac: '04:7c:16:aa:bb:cc', up: true, kind: 'ethernet', master: 'br0', gateway: null },
+    { name: 'enp6s0', mac: '04:7c:16:aa:bb:dd', up: true, kind: 'ethernet', master: null, gateway: null },
+    { name: 'br0', mac: 'fe:12:34:56:78:9a', up: true, kind: 'bridge', master: null, gateway: '192.168.1.1' },
+  ];
+  const { home, text } = nw.resetPlan(['enp5s0', 'enp6s0'], links);
+  assert.equal(home, 'enp5s0');
+  assert.match(text, /^# Reset by MajaOS/);
+  assert.match(text, /auto br0\niface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 04:7c:16:aa:bb:cc\n/); // the card's MAC, not the bridge's
+  assert.match(text, /allow-hotplug enp6s0\niface enp6s0 inet dhcp/);
+  // No route anywhere: the first card that is up.
+  assert.equal(nw.resetPlan(['enp5s0', 'enp6s0'], [{ name: 'enp5s0', up: false }, { name: 'enp6s0', up: true }]).home, 'enp6s0');
+});

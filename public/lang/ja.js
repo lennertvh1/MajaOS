@@ -3045,4 +3045,9 @@ window.TB_LANG.ja = {
   "Shut the VM down to change Secure Boot.": "セキュアブートを変更するには VM をシャットダウンしてください。",
   "Shut the VM down first to turn Secure Boot on or off.": "セキュアブートのオン・オフを切り替えるには、まず VM をシャットダウンしてください。",
   "Start with console": "起動してコンソールを開く",
+  "Reset network settings": "ネットワーク設定をリセット",
+  "Can't reach the page at all? On the server's own screen: node /opt/majaos/lib/network.js --reset": "ページにまったくアクセスできない場合は、サーバー本体の画面で: node /opt/majaos/lib/network.js --reset",
+  "Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.": "新規インストール時の状態に戻します。ホームネットワーク側のカードをブリッジ br0 に入れて DHCP、他のカードも DHCP にします。固定アドレスは削除されます。",
+  "Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.": "ネットワーク設定をリセットしますか？すべてのカードがルーターからアドレスを取得 (DHCP) し、固定アドレスは削除されます。接続が一時的に切れます。その後 2 分以内に確認しないと、元の設定に戻ります。",
+  "Reset": "リセット",
 };

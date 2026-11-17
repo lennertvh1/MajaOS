@@ -650,6 +650,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/network' && method === 'POST') return sendJson(res, 200, await network.applyNetwork(await readBody(req)));
   if (p === '/api/network/confirm' && method === 'POST') return sendJson(res, 200, network.confirmNetwork());
   if (p === '/api/network/revert' && method === 'POST') return sendJson(res, 200, await network.revertNetwork());
+  if (p === '/api/network/reset' && method === 'POST') return sendJson(res, 200, await network.resetNetwork());
   if (p === '/api/network/hostname' && method === 'POST') {
     const r = await network.setHostname((await readBody(req)).hostname);
     // The new name in the certificate. The browser then has to reload (and may ask about the certificate once more).

@@ -394,6 +394,12 @@
       net.pending = null; return { ok: true };
     }
     if (net.pending) throw err('New network settings are already waiting for confirmation.', 409);
+    if (path === '/api/network/reset') {
+      const { pending, ...rest } = net; netBackup = JSON.stringify(rest);
+      net.config = { interface: 'enp5s0', mode: 'dhcp', address: '', gateway: '', dns: [], bridge: true, bridgeName: 'br0' };
+      net.pending = { until: Date.now() + 120000 };
+      return { pending: net.pending, address: null };
+    }
     const ip = /^(\d{1,3}\.){3}\d{1,3}$/;
     let address = null;
     if (body.mode === 'static') {

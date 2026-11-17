@@ -6789,7 +6789,10 @@
         <p class="lead">${t('After applying you have 2 minutes to confirm. If you do not confirm, e.g. because the server became unreachable, MajaOS restores the old settings by itself.')}</p>
         <p class="form-error" role="alert"></p>
         <div class="btn-row"><button class="btn primary" type="submit"${n.pending ? ' disabled' : ''}>${t('Apply')}</button></div>
-      </form>`}
+      </form>
+      <h2 class="pane-title">${t('Reset network settings')} ${hint(t('Can\'t reach the page at all? On the server\'s own screen: node /opt/majaos/lib/network.js --reset'))}</h2>
+      <p class="muted small">${t('Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.')}</p>
+      <div class="btn-row"><button class="btn danger" type="button" id="netReset"${n.pending ? ' disabled' : ''}>${t('Reset network settings')}</button></div>`}
       <div id="remoteBox"></div>`;
     remoteSection($('#remoteBox', el));
 
@@ -6824,6 +6827,13 @@
         } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
       });
     }
+    const resetBtn = $('#netReset', el);
+    if (resetBtn) resetBtn.addEventListener('click', async () => {
+      if (!(await ask(t('Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.'), t('Reset')))) return;
+      resetBtn.disabled = true;
+      try { const r = await api.post('/api/network/reset', {}); renderPending(el, r.pending, null, true); }
+      catch (ex) { toast(ex.message, true); resetBtn.disabled = false; }
+    });
     if (n.pending) renderPending(el, n.pending, null, false);
   }
 
@@ -6831,6 +6841,7 @@
   function renderPending(el, p, newUrl, dhcp) {
     const box = $('#netPending', el); if (!box) return;
     const btn = $('#netForm [type=submit]', el); if (btn) btn.disabled = true;
+    const rb = $('#netReset', el); if (rb) rb.disabled = true;
     box.innerHTML = `<div class="notice warn">
       <p><b>${t('New network settings are active.')}</b> ${t('Does everything work? Then confirm them. Otherwise they are restored in')} <b id="netLeft"></b>.</p>
       ${newUrl ? `<p>${t('The server\'s address changes. Open')} <a href="${esc(newUrl)}">${esc(newUrl)}</a> ${t('and confirm there (you may have to sign in again).')}</p>` : ''}

@@ -3390,4 +3390,9 @@ window.TB_LANG.nl = {
   "Shut the VM down to change Secure Boot.": "Sluit de VM af om Secure Boot te wijzigen.",
   "Shut the VM down first to turn Secure Boot on or off.": "Sluit de VM eerst af om Secure Boot aan of uit te zetten.",
   "Start with console": "Starten met console",
+  "Reset network settings": "Netwerkinstellingen terugzetten",
+  "Can't reach the page at all? On the server's own screen: node /opt/majaos/lib/network.js --reset": "Kan je de pagina helemaal niet bereiken? Op het scherm van de server zelf: node /opt/majaos/lib/network.js --reset",
+  "Back to how a new installation starts: the card to your home network in bridge br0 with DHCP, every other card with DHCP. Fixed addresses go.": "Terug naar hoe een nieuwe installatie begint: de kaart naar je thuisnetwerk in bridge br0 met DHCP, elke andere kaart met DHCP. Vaste adressen verdwijnen.",
+  "Reset the network settings? Every card gets its address from your router (DHCP) and fixed addresses go. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.": "Netwerkinstellingen terugzetten? Elke kaart krijgt zijn adres van je router (DHCP) en vaste adressen verdwijnen. De verbinding valt even weg; bevestig daarna binnen 2 minuten, anders komen de oude instellingen terug.",
+  "Reset": "Terugzetten",
 };
