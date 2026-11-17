@@ -77,6 +77,7 @@
 }
 
 * { box-sizing: border-box; }
+html.no-anchor { overflow-anchor: none; } /* while dragging on the home screen */
 html { -webkit-text-size-adjust: 100%; overflow-x: clip; font-size: var(--ui); scrollbar-gutter: stable; } /* no jump when a scrollbar appears */
 html, body { margin: 0; min-height: 100%; min-height: 100dvh; }
 body {

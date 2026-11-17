@@ -1439,6 +1439,8 @@
   function setPlacing(on) {
     const flat = !!S.search.trim() || S.filter !== 'all' || S.view === 'list';
     S.placing = !!on && !flat;
+    // The browser's scroll anchoring would scroll the page along when the empty rows are added under the apps.
+    document.documentElement.classList.toggle('no-anchor', S.placing);
     const grid = $('#appGrid');
     const mixed = !flat;
     grid.classList.toggle('home-mix', mixed);
