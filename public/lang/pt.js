@@ -3035,4 +3035,9 @@ window.TB_LANG.pt = {
   "Select all": "Selecionar tudo",
   "Copy location": "Copiar localização",
   "Duplicate": "Duplicar",
+  "Passed": "Aprovado",
+  "Finished": "Concluído",
+  "About {n} min left": "Faltam cerca de {n} min",
+  "{test} on {disk}: {result}": "{test} em {disk}: {result}",
+  "Test {disk}": "Teste {disk}",
 };

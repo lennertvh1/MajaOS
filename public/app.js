@@ -442,6 +442,38 @@
     }).join('');
   }
   $('#diskAlerts').addEventListener('click', () => storageWindow());
+  // SMART self-tests of disks (lib/disks.js activeTests): a line with a bar in the Storage widget while they run,
+  // the result for half an hour after.
+  const SMART_RESULT = { ok: ['Passed', 'ok'], failed: ['Failed', 'bad'], fatal: ['Failed', 'bad'], aborted: ['Stopped', 'warn'], interrupted: ['Stopped', 'warn'] };
+  const smartKind = (x) => t(x.type === 'short' ? 'Short test' : x.type === 'long' ? 'Long test' : 'Self-test');
+  const smartResult = (x) => { const [k, cls] = SMART_RESULT[x.result] || ['Finished', '']; return [t(k), cls]; };
+  function renderSmartTests() {
+    const box = $('#storeTests'); if (!box) return;
+    const list = (S.overview && S.overview.smartTests) || [];
+    box.hidden = !list.length;
+    box.innerHTML = list.map((x) => {
+      const disk = [x.name, x.model].filter(Boolean).join(' · ');
+      if (x.done) {
+        const [res, cls] = smartResult(x);
+        return `<li class="smart-test done"><span class="smart-k">${esc(smartKind(x))} <span class="muted">${esc(disk)}</span></span><b${cls ? ` class="temp-${cls}"` : ''}>${esc(res)}</b></li>`;
+      }
+      const left = x.minutes && x.percent < 100 ? Math.max(1, Math.round(x.minutes * (100 - x.percent) / 100)) : null;
+      return `<li class="smart-test"><span class="smart-k">${esc(smartKind(x))} <span class="muted">${esc(disk)}</span></span><b>${esc(nf0.format(x.percent) + '%')}</b>
+        <span class="bar"><span style="width:${Math.max(2, x.percent).toFixed(0)}%"></span></span>${left ? `<span class="muted smart-left">${esc(t('About {n} min left', { n: left }))}</span>` : ''}</li>`;
+    }).join('');
+  }
+  // A message when a test that ran while the page was open finishes.
+  const smartSeen = new Set();
+  function smartTestToasts(list) {
+    for (const x of list || []) {
+      const id = x.name + '|' + x.started;
+      if (!x.done) { smartSeen.add(id); continue; }
+      if (!smartSeen.has(id)) continue;
+      smartSeen.delete(id);
+      const [res, cls] = smartResult(x);
+      toast(t('{test} on {disk}: {result}', { test: smartKind(x), disk: x.name, result: res.toLowerCase() }), cls === 'bad', { action: { label: t('Open storage'), run: () => storageWindow() } });
+    }
+  }
   function repairLine(r) {
     if (!r) return '';
     if (r.state === 'rebuilding') return t('Rebuilding {pool}: {pct}%', { pool: r.pool, pct: nf0.format(r.progress || 0) });
@@ -1093,8 +1125,10 @@
     if (!hidden.has('storage')) {
       const s = o.storage;
       const pools = (s && s.list) || [];
+      // A disk self-test that runs takes the second line (the tile has room for two).
+      const testing = (o.smartTests || []).find((x) => !x.done);
       const body = s && s.pools
-        ? `<span class="m-big">${esc(bytes(s.free))}<small> ${esc(t('free'))}</small></span><ul class="m-lines">${pools.slice(0, 3).map((p) => meter(p.name, p.total ? (p.used / p.total) * 100 : null, pct(p.total ? (p.used / p.total) * 100 : null))).join('')}${more(pools.length - 3)}</ul>`
+        ? `<span class="m-big">${esc(bytes(s.free))}<small> ${esc(t('free'))}</small></span><ul class="m-lines">${(testing ? pools.slice(0, 1) : pools.slice(0, 3)).map((p) => meter(p.name, p.total ? (p.used / p.total) * 100 : null, pct(p.total ? (p.used / p.total) * 100 : null))).join('')}${testing ? meter(t('Test {disk}', { disk: testing.name }), testing.percent, pct(testing.percent), '') : more(pools.length - 3)}</ul>`
         : `<span class="m-big small">${esc(txt('#storeLine') || '–')}</span>`;
       tiles.push(tile({ open: 'data-open="storage"', color: PAGE_META.storage.color, icon: PAGE_META.storage.svg, label: t('Storage'),
         pill: s && s.pools ? [txt('#arrayState'), ($('#arrayState').className.split(' ')[1] || '')] : null, pillBelow: true, body }));
@@ -9901,7 +9935,7 @@ sudo ./install.sh</pre></div>`}` : '') +
   }
 
   /* ------------------------------------------------------------ loading */
-  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); }
+  async function loadOverview() { S.overview = await api.get('/api/overview'); renderOverview(); renderSmartTests(); renderMobileHome(); diskEventToasts(S.overview.diskEvents); smartTestToasts(S.overview.smartTests); }
   // The UPS's power in watts; "≈" when it is estimated from the VA (UPSes like the Eaton Ellipse ECO report no watts); '' when unknown.
   const upsWatts = (u) => (u.power != null ? (u.powerEstimated ? '≈ ' : '') + nf0.format(u.power) + ' W' : '');
   // Time left on the UPS battery: "31 min", "1 h 5 min".

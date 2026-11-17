@@ -1878,10 +1878,7 @@
     if (name === 'sdc' && !wake && !smartState.sdcAwake) return { name, transport: d.transport, rotational: d.rotational, sleeping: true };
     if (name === 'sdc') { smartState.sdcAwake = true; d.temp = 30; }
     const st = smartState[name] || (smartState[name] = { tests: [] });
-    if (st.running && Date.now() >= st.running.until) {
-      st.tests.unshift({ type: st.running.type === 'short' ? 'Short offline' : 'Extended offline', passed: true, result: 'ok', text: 'Completed without error', hours: 0 });
-      st.running = null;
-    }
+    finishDemoTest(st);
     const seed = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
     const hdd = d.rotational, nv = d.transport === 'nvme';
     const hours = { sda: 36812, sdb: 36790, sdc: 36801, sdd: 41220, sde: 112, sdf: 108, sdg: 23400, nvme0n1: 9120, nvme1n1: 9118 }[name] || 1000 + seed * 10;
@@ -1905,12 +1902,33 @@
       attributes: attrs.map(([id, n, value, thresh, raw]) => ({ id, name: n, value, worst: value, thresh, raw: String(raw), failing: false })),
     };
   }
+  function finishDemoTest(st) {
+    if (!st.running || Date.now() < st.running.until) return;
+    st.tests.unshift({ type: st.running.type === 'short' ? 'Short offline' : 'Extended offline', passed: true, result: 'ok', text: 'Completed without error', hours: 0 });
+    st.last = { ...st.running, at: Date.now() };
+    st.running = null;
+  }
+  // Like activeTests in lib/disks.js: running tests, and finished ones for 30 minutes.
+  function demoSmartTests() {
+    const out = [];
+    for (const [name, st] of Object.entries(smartState)) {
+      if (!st || !Array.isArray(st.tests)) continue;
+      finishDemoTest(st);
+      const d = disks.find((x) => x.name === name) || {};
+      const r = st.running || (st.last && Date.now() - st.last.at < 30 * 60000 ? st.last : null);
+      if (!r) continue;
+      const done = !st.running;
+      out.push({ name, model: d.model || null, type: r.type, minutes: r.minutes, started: r.started, done, at: done ? r.at : null,
+        percent: done ? 100 : Math.min(99, Math.floor(((Date.now() - r.started) / r.total) * 100)), result: done ? 'ok' : null });
+    }
+    return out;
+  }
   function demoDiskTest(name, type) {
     if (!['short', 'long'].includes(type)) throw err('Choose a short or a long test.');
     const st = smartState[name] || (smartState[name] = { tests: [] });
     if (st.running) throw err('The disk refused the test. Maybe one is already running.', 409);
     const total = type === 'short' ? 20000 : 45000; // much faster in the demo than for real
-    st.running = { type, until: Date.now() + total, total };
+    st.running = { type, started: Date.now(), until: Date.now() + total, total, minutes: type === 'short' ? 2 : 252 };
     return { started: true, minutes: type === 'short' ? 2 : 252 };
   }
   function poolOptions() {
@@ -2642,7 +2660,7 @@
       storage: storageSummary(), gpu: nvidia.loaded ? gpu() : null,
       gpus: [{ name: 'GeForce RTX 3060 Ti', vendor: 'nvidia', driver: nvidia.loaded ? 'nvidia' : null, ready: nvidia.loaded }],
       diskEvents: copy(diskEvents),
-      ups: upsBrief(),
+      ups: upsBrief(), smartTests: demoSmartTests(),
     };
   }
 

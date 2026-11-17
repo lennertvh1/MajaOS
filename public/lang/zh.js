@@ -3035,4 +3035,9 @@ window.TB_LANG.zh = {
   "Select all": "全选",
   "Copy location": "复制位置",
   "Duplicate": "创建副本",
+  "Passed": "通过",
+  "Finished": "已完成",
+  "About {n} min left": "大约还剩 {n} 分钟",
+  "{test} on {disk}: {result}": "{disk} 的{test}：{result}",
+  "Test {disk}": "测试 {disk}",
 };

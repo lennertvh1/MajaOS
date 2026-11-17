@@ -2297,3 +2297,12 @@ button.snap-node:hover { background: var(--glass-hover); }
   .log-via { grid-column: 1 / -1; }
   .log-row.sys { grid-template-columns: auto minmax(0, 1fr); }
 }
+
+/* SMART self-tests in the Storage widget (#storeTests) */
+.smart-tests { list-style: none; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--glass-line); display: grid; gap: 8px; }
+.smart-tests[hidden] { display: none; }
+.smart-test { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+.smart-test .smart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.smart-test b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.smart-test .bar { grid-column: 1 / -1; height: 5px; margin: 0; }
+.smart-test .smart-left { grid-column: 1 / -1; font-size: 12px; }

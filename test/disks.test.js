@@ -51,3 +51,20 @@ test('NVMe: wear, spare and data written', () => {
 test('a sleeping disk is not woken up', () => {
   assert.deepEqual(parseSmart({ smartctl: { exit_status: 2, messages: [{ string: 'Device is in STANDBY mode, exit(2)', severity: 'information' }] } }), { sleeping: true });
 });
+
+test('a tracked self-test follows the readings and ends with the newest log entry', () => {
+  const { applyTest } = require('../lib/disks');
+  const tr = { name: 'sda', started: 1000, percent: 0, done: false, result: null, at: null };
+  applyTest(tr, { sleeping: false, testRunning: { remaining: 70 }, tests: [] }, 2000);
+  assert.equal(tr.percent, 30);
+  assert.equal(tr.done, false);
+  applyTest(tr, { sleeping: true }, 3000);
+  assert.equal(tr.done, false);
+  applyTest(tr, { sleeping: false, testRunning: null, tests: [{ result: 'failed', text: 'Completed: read failure' }] }, 4000);
+  assert.deepEqual([tr.done, tr.percent, tr.result, tr.at], [true, 100, 'failed', 4000]);
+});
+
+test('an NVMe self-test reports how far it is', () => {
+  const d = parseSmart({ model_name: 'X', nvme_smart_health_information_log: {}, nvme_self_test_log: { current_self_test_operation: { value: 1 }, current_self_test_completion_percent: 40, table: [] } });
+  assert.deepEqual(d.testRunning, { remaining: 60 });
+});

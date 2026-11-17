@@ -3035,4 +3035,9 @@ window.TB_LANG.it = {
   "Select all": "Seleziona tutto",
   "Copy location": "Copia percorso",
   "Duplicate": "Duplica",
+  "Passed": "Superato",
+  "Finished": "Finito",
+  "About {n} min left": "Mancano circa {n} min",
+  "{test} on {disk}: {result}": "{test} su {disk}: {result}",
+  "Test {disk}": "Test {disk}",
 };

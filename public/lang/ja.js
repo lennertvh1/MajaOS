@@ -3035,4 +3035,9 @@ window.TB_LANG.ja = {
   "Select all": "すべて選択",
   "Copy location": "場所をコピー",
   "Duplicate": "複製",
+  "Passed": "合格",
+  "Finished": "完了",
+  "About {n} min left": "残り約 {n} 分",
+  "{test} on {disk}: {result}": "{disk} の{test}：{result}",
+  "Test {disk}": "テスト {disk}",
 };

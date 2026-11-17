@@ -3380,4 +3380,9 @@ window.TB_LANG.nl = {
   "Deleted an AI model": "AI-model verwijderd",
   "Loaded or unloaded an AI model": "AI-model geladen of ontladen",
   "Gave the AI the GPU": "De AI kreeg de GPU",
+  "Passed": "Geslaagd",
+  "Finished": "Klaar",
+  "About {n} min left": "Nog ongeveer {n} min",
+  "{test} on {disk}: {result}": "{test} op {disk}: {result}",
+  "Test {disk}": "Test {disk}",
 };
