@@ -60,8 +60,23 @@ test('a tracked self-test follows the readings and ends with the newest log entr
   assert.equal(tr.done, false);
   applyTest(tr, { sleeping: true }, 3000);
   assert.equal(tr.done, false);
-  applyTest(tr, { sleeping: false, testRunning: null, tests: [{ result: 'failed', text: 'Completed: read failure' }] }, 4000);
-  assert.deepEqual([tr.done, tr.percent, tr.result, tr.at], [true, 100, 'failed', 4000]);
+  // A reading without the status says nothing.
+  applyTest(tr, { sleeping: false, testKnown: false, testRunning: null, tests: [{ result: 'ok' }] }, 3500);
+  assert.equal(tr.done, false);
+  // Not running once is not enough; twice in a row ends it with the newest log entry.
+  const idle = { sleeping: false, testKnown: true, testRunning: null, tests: [{ result: 'failed', text: 'Completed: read failure' }] };
+  applyTest(tr, idle, 4000);
+  assert.equal(tr.done, false);
+  applyTest(tr, { sleeping: false, testKnown: true, testRunning: { remaining: 50 }, tests: [] }, 4500);
+  applyTest(tr, idle, 5000);
+  assert.equal(tr.done, false);
+  applyTest(tr, idle, 6000);
+  assert.deepEqual([tr.done, tr.percent, tr.result, tr.at], [true, 100, 'failed', 6000]);
+});
+
+test('a reading without SMART data says nothing about the test', () => {
+  assert.equal(parseSmart({ model_name: 'X', smartctl: { exit_status: 4 } }).testKnown, false);
+  assert.equal(parseSmart({ ata_smart_data: { self_test: { status: { value: 249, remaining_percent: 90 } } } }).testKnown, true);
 });
 
 test('an NVMe self-test reports how far it is', () => {
