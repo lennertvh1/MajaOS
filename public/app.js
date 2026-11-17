@@ -6778,6 +6778,7 @@
           ${row(t('IP address'), ip || '–')}
           ${row(t('Gets its address'), esc(how))}
           ${row(t('Gateway'), x.gateway ? esc(x.gateway) : '')}
+          ${c ? row(t('DNS servers'), c.dns.length ? esc(c.dns.join(', ')) : c.mode === 'dhcp' ? esc(t('From your router')) : '') : ''}
           ${c && c.bridge ? row(t('For VMs'), esc(t('Bridge {name}', { name: c.bridgeName }))) : ''}
         </div>
         ${n.editable ? `<div class="btn-row net-actions"><button class="btn" type="button" data-net-edit="${esc(card)}"${n.pending ? ' disabled' : ''}>${t('Change')}</button></div>` : ''}
@@ -6843,7 +6844,12 @@
           <label class="fld"><span>${t('Gateway')} ${hint(t('Usually the address of your router.'))}</span>
             <input class="field" name="gateway" value="${esc(c.gateway || x.gateway || '')}" placeholder="192.168.1.1" spellcheck="false"></label>
         </div>
-        <label class="fld" data-static><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span>
+        <label class="toggle" data-dhcp>
+          <input type="checkbox" role="switch" name="ownDns"${c.mode === 'dhcp' && c.dns.length ? ' checked' : ''}>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span><b>${t('Own DNS servers')}</b><span class="muted small">${t('The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.')}</span></span>
+        </label>
+        <label class="fld" data-dns><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span>
           <input class="field" name="dns" value="${esc((c.dns.length ? c.dns : n.dns).join(', '))}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false"></label>
         <label class="toggle">
           <input type="checkbox" role="switch" name="bridge"${c.bridge ? ' checked' : ''}>
@@ -6859,16 +6865,20 @@
       const sync = () => {
         $$('[data-mode]', form).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
         $$('[data-static]', form).forEach((x2) => { x2.hidden = mode !== 'static'; });
-        $('[data-dhcp]', form).hidden = mode === 'static';
+        $$('[data-dhcp]', form).forEach((x2) => { x2.hidden = mode === 'static'; });
+        $('[data-dns]', form).hidden = mode !== 'static' && !form.elements.ownDns.checked;
       };
       sync();
       $$('[data-mode]', form).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; sync(); }));
+      form.elements.ownDns.addEventListener('change', () => { sync(); if (form.elements.ownDns.checked) form.elements.dns.focus(); });
       $('[data-net-cancel]', form).addEventListener('click', () => closeEdit(art));
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+        const ownDns = mode === 'static' || form.elements.ownDns.checked;
+        if (mode === 'dhcp' && ownDns && !form.elements.dns.value.trim()) { err.textContent = t('Fill in at least one DNS server, e.g. your router or 1.1.1.1.'); form.elements.dns.focus(); return; }
         const body = { interface: card, mode, address: form.elements.address.value.trim(), gateway: form.elements.gateway.value.trim(),
-          dns: form.elements.dns.value, bridge: form.elements.bridge.checked };
+          dns: ownDns ? form.elements.dns.value : '', bridge: form.elements.bridge.checked };
         if (!(await ask(t('Apply the network settings? The connection drops for a moment. Then confirm within 2 minutes, or the old settings come back.'), t('Apply')))) return;
         btn.disabled = true;
         try {

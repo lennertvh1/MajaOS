@@ -3060,4 +3060,8 @@ window.TB_LANG.ja = {
   "Your router gives the address. Reserve one for this card's MAC address in your router to keep it the same.": "アドレスはルーターが割り当てます。同じアドレスを保つには、ルーターでこのカードの MAC アドレスに予約してください。",
   "VMs in your home network": "VM をホームネットワークに",
   "Puts this card in bridge br0. New VMs use it and get an address from your router.": "このカードをブリッジ br0 に入れます。新しい VM はこれを使い、ルーターからアドレスを取得します。",
+  "From your router": "ルーターから",
+  "Own DNS servers": "独自の DNS サーバー",
+  "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "アドレスは引き続きルーターから取得し、DNS サーバーには入力したもの（Pi-hole や 1.1.1.1 など）を使います。",
+  "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf は別のプログラムが管理しています（リンクです）。MajaOS は DNS サーバーを設定できません。",
 };

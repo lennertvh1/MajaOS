@@ -188,3 +188,18 @@ iface enp6s0 inet dhcp
   assert.deepEqual(c.enp6s0, { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' });
   assert.equal(c.enp7s0, null);
 });
+
+test('DHCP with own DNS servers: in the file, and dhcpcd leaves resolv.conf alone', () => {
+  const nw = require('../lib/network');
+  const cfg = nw.validate({ interface: 'enp5s0', mode: 'dhcp', dns: '1.1.1.1, 9.9.9.9', bridge: false }, ['enp5s0']);
+  const out = nw.buildInterfaces(cfg, 'auto lo\niface lo inet loopback\n');
+  assert.match(out, /iface enp5s0 inet dhcp\n {4}dns-nameservers 1\.1\.1\.1 9\.9\.9\.9\n/);
+  assert.deepEqual(nw.cardConfigs(nw.parseInterfaces(out), ['enp5s0']).enp5s0.dns, ['1.1.1.1', '9.9.9.9']);
+  const plain = nw.buildInterfaces(nw.validate({ interface: 'enp5s0', mode: 'dhcp', dns: '' }, ['enp5s0']), 'auto lo\n');
+  assert.doesNotMatch(plain, /dns-nameservers/);
+  const conf = 'hostname\nclientid\nnohook hostname\n';
+  const on = nw.dhcpcdConf(conf, true);
+  assert.match(on, /nohook hostname\n# MajaOS: own DNS servers \(Settings > Network\)\nnohook resolv\.conf\n$/);
+  assert.equal(nw.dhcpcdConf(on, true), on); // only once
+  assert.equal(nw.dhcpcdConf(on, false), conf); // back as it was
+});

@@ -3060,4 +3060,8 @@ window.TB_LANG.zh = {
   "Your router gives the address. Reserve one for this card's MAC address in your router to keep it the same.": "由路由器分配地址。在路由器中为这张网卡的 MAC 地址保留一个地址，使其保持不变。",
   "VMs in your home network": "虚拟机接入家庭网络",
   "Puts this card in bridge br0. New VMs use it and get an address from your router.": "将这张网卡加入网桥 br0。新虚拟机会使用它，并从路由器获取地址。",
+  "From your router": "来自路由器",
+  "Own DNS servers": "自定义 DNS 服务器",
+  "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "地址仍由路由器分配；DNS 服务器使用你填写的，例如 Pi-hole 或 1.1.1.1。",
+  "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf 由其他程序管理（它是一个链接）。MajaOS 无法设置 DNS 服务器。",
 };

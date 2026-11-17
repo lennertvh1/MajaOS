@@ -3060,4 +3060,8 @@ window.TB_LANG.it = {
   "Your router gives the address. Reserve one for this card's MAC address in your router to keep it the same.": "Il router assegna l'indirizzo. Riservane uno per l'indirizzo MAC di questa scheda nel router perché resti uguale.",
   "VMs in your home network": "VM nella rete di casa",
   "Puts this card in bridge br0. New VMs use it and get an address from your router.": "Mette questa scheda nel bridge br0. Le nuove VM lo usano e ricevono un indirizzo dal router.",
+  "From your router": "Dal router",
+  "Own DNS servers": "Server DNS propri",
+  "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "L'indirizzo arriva sempre dal router; i server DNS sono quelli che indichi, ad es. un Pi-hole o 1.1.1.1.",
+  "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf è gestito da un altro programma (è un collegamento). MajaOS non può impostare i server DNS.",
 };

@@ -3405,4 +3405,8 @@ window.TB_LANG.nl = {
   "Your router gives the address. Reserve one for this card's MAC address in your router to keep it the same.": "Je router geeft het adres. Reserveer er een voor het MAC-adres van deze kaart in je router om het hetzelfde te houden.",
   "VMs in your home network": "VM's in je thuisnetwerk",
   "Puts this card in bridge br0. New VMs use it and get an address from your router.": "Zet deze kaart in bridge br0. Nieuwe VM's gebruiken die en krijgen een adres van je router.",
+  "From your router": "Van je router",
+  "Own DNS servers": "Eigen DNS-servers",
+  "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "Het adres komt nog altijd van je router; de DNS-servers zijn die je invult, bv. een Pi-hole of 1.1.1.1.",
+  "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf wordt beheerd door een ander programma (het is een link). MajaOS kan de DNS-servers niet instellen.",
 };

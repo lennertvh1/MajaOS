@@ -424,7 +424,8 @@
     net.config = { ...net.config, interface: body.interface, mode: body.mode, address: body.address, gateway: body.gateway, dns: String(body.dns || '').split(/[\s,]+/).filter(Boolean), bridge: !!body.bridge };
     // A bridge is on one card: putting another card in br0 takes it off the first.
     if (body.bridge) for (const k of Object.keys(net.cards)) net.cards[k] = { ...net.cards[k], bridge: false };
-    net.cards[body.interface] = { mode: body.mode, address: body.mode === 'static' ? body.address : '', gateway: body.mode === 'static' ? body.gateway : '', dns: body.mode === 'static' ? net.config.dns : [], bridge: !!body.bridge, bridgeName: 'br0' };
+    net.cards[body.interface] = { mode: body.mode, address: body.mode === 'static' ? body.address : '', gateway: body.mode === 'static' ? body.gateway : '', dns: net.config.dns, bridge: !!body.bridge, bridgeName: 'br0' };
+    if (net.config.dns.length) net.dns = [...net.config.dns];
     net.pending = { until: Date.now() + 120000 };
     // In the demo the page stays at the same address, so you can confirm right away.
     return { pending: net.pending, address: null };
