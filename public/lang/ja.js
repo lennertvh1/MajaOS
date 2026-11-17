@@ -3044,4 +3044,5 @@ window.TB_LANG.ja = {
   "Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM's UEFI settings; the system on the disk stays.": "セキュアブートで起動できるのは、Windows や主要な Linux ディストリビューションなど、署名されたシステムだけです。Home Assistant OS、OPNsense、FreeBSD ではオフにする必要があります。変更すると VM の UEFI 設定がリセットされますが、ディスク上のシステムはそのままです。",
   "Shut the VM down to change Secure Boot.": "セキュアブートを変更するには VM をシャットダウンしてください。",
   "Shut the VM down first to turn Secure Boot on or off.": "セキュアブートのオン・オフを切り替えるには、まず VM をシャットダウンしてください。",
+  "Start with console": "起動してコンソールを開く",
 };

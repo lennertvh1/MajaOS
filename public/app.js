@@ -2142,7 +2142,7 @@
     snapshot: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
     snapshots: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2"/>',
     open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
-    start: '<path d="M7 5l12 7-12 7z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+    start: '<path d="M7 5l12 7-12 7z"/>', 'start-console': '<path d="M3 5h18v12H3zM8 21h8M12 17v4M10 8.5l4.5 2.5-4.5 2.5z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
     restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', update: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     logs: '<path d="M6 4h9l4 4v12H6zM9 12h7M9 16h7M9 8h3"/>', updlog: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', console: '<path d="M4 5h16v14H4zM7 10l3 2-3 2M12 15h5"/>',
     pause: '<path d="M9 5v14M15 5v14"/>', resume: '<path d="M8 5v14l10-7z"/>',
@@ -2206,6 +2206,7 @@
     const kind = vmKind(v.state), busy = S.vmBusy[v.id];
     const items = [
       kind !== 'on' && kind !== 'paused' && kind !== 'stopping' && ['start', t('Start')],
+      kind !== 'on' && kind !== 'paused' && kind !== 'stopping' && ['start-console', t('Start with console')],
       kind === 'paused' && ['resume', t('Resume')],
       kind === 'on' && ['pause', t('Pause')],
       (kind === 'on' || kind === 'paused') && ['console', t('Console')],
@@ -4668,6 +4669,8 @@
   /* --- VMs (own page at #vms) */
   const VM_ACTS = {
     start: { label: 'Start', noun: 'Start', done: 'Started' },
+    // Start and open the console right away, e.g. to see the boot or reach the firmware's menu.
+    'start-console': { label: 'Start with console', noun: 'Start', done: 'Started' },
     stop: { label: 'Shut down', noun: 'Shut down', done: 'Shutdown started', yes: 'Shut down',
       ask: (n) => t('Shut down {name}? The VM gets the signal to shut down cleanly.', { name: n }) },
     reboot: { label: 'Restart', noun: 'Restart', done: 'Restarted', yes: 'Restart',
@@ -4769,7 +4772,7 @@
     const main = (kind === 'on' ? btn('pause') + btn('reboot') + btn('stop', 'danger')
       : kind === 'paused' ? btn('resume', 'primary')
       : kind === 'stopping' ? ''
-      : btn('start', 'primary')) +
+      : btn('start', 'primary') + btn('start-console')) +
       (kind === 'on' || kind === 'paused' ? consoleLink(v.id, 'btn') : '') +
       `<button class="btn" type="button" data-vm-snaps="${esc(v.id)}"${busy ? ' disabled' : ''}>${t('Snapshots')}</button>` +
       `<button class="btn" type="button" data-vm-edit="${esc(v.id)}"${busy ? ' disabled' : ''}>${t('Edit')}</button>`;
@@ -4831,9 +4834,10 @@
     list.innerHTML = shown.map(vmCardHtml).join('');
   }
 
-  async function vmRun(v, act, request) {
+  // after: runs when the request worked, before the list is read again.
+  async function vmRun(v, act, request, after) {
     S.vmBusy[v.id] = act; renderVmPage(); renderVmWidget();
-    try { const r = await request(); toast(t(VM_ACTS[act].done) + ': ' + v.name + (r && r.kept && r.kept.length ? '. ' + t('These files were kept: {list}', { list: r.kept.join(', ') }) : '')); }
+    try { const r = await request(); toast(t(VM_ACTS[act].done) + ': ' + v.name + (r && r.kept && r.kept.length ? '. ' + t('These files were kept: {list}', { list: r.kept.join(', ') }) : '')); if (after) after(); }
     catch (err) { toast(t('{action} {name} failed: {error}', { action: t(VM_ACTS[act].noun), name: v.name, error: err.message }), true); }
     delete S.vmBusy[v.id];
     await loadVms().catch(() => { renderVmPage(); renderVmWidget(); });
@@ -4841,6 +4845,7 @@
   async function vmCommand(v, act) {
     if (!v || S.vmBusy[v.id]) return;
     if (act === 'console') return openConsole(v.id);
+    if (act === 'start-console') return vmRun(v, 'start-console', () => api.post('/api/vms/' + encodeURIComponent(v.id) + '/start'), () => openConsole(v.id));
     if (act === 'edit') return vmEditWindow(v.id);
     if (act === 'snapshot') return vmEditWindow(v.id, 'snapshots', { snapNew: true });
     if (act === 'snapshots') return vmEditWindow(v.id, 'snapshots');
@@ -4984,7 +4989,7 @@
         <section class="form" role="tabpanel" id="vp-devices" aria-labelledby="vt-devices" data-vpane="devices"></section>
         <section class="form" role="tabpanel" id="vp-snapshots" aria-labelledby="vt-snapshots" data-vpane="snapshots"></section>
         <section role="tabpanel" id="vp-screen" aria-labelledby="vt-screen" data-vpane="screen">
-          <div class="btn-row" style="margin-bottom:14px">${vmKind(d.state) === 'off' ? `<span class="muted">${t('Start the VM to see its screen.')}</span>` : consoleLink(d.id, 'btn primary')}</div>
+          <div class="btn-row" style="margin-bottom:14px">${vmKind(d.state) === 'off' ? `<button class="btn primary" type="button" data-start-console="${esc(d.id)}">${t('Start with console')}</button>` : consoleLink(d.id, 'btn primary')}</div>
           <p class="muted small" style="margin-bottom:10px">${t('The console shows the VM\'s screen, with keyboard and mouse. Pop out puts it in its own browser window. Pasting (Cmd/Ctrl+V) types your clipboard text into the VM.')}</p>
           <label class="check" style="margin-bottom:4px"><input type="checkbox" name="clipboard"${d.clipboard ? ' checked' : ''}> ${t('Share the clipboard with this VM')}</label>
           <p class="muted small" style="margin-bottom:14px">${t('Needed to get text you copy in the VM onto your PC. Install spice-vdagent (Linux) or the SPICE guest tools (Windows) in the VM and restart the VM afterwards.')}</p>
@@ -10996,6 +11001,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     }
     const con = e.target.closest('[data-console]');
     if (con) { openConsole(con.dataset.console); return; }
+    const sc = e.target.closest('[data-start-console]');
+    if (sc) { const v = (S.vms || []).find((x) => x.id === sc.dataset.startConsole); if (v) vmCommand(v, 'start-console'); return; }
     const ext = e.target.closest('a[target="_blank"]');
     if (ext && api !== realApi) {
       e.preventDefault();

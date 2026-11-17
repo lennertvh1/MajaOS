@@ -3044,4 +3044,5 @@ window.TB_LANG.de = {
   "Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM's UEFI settings; the system on the disk stays.": "Nur dafür signierte Systeme starten mit Secure Boot, etwa Windows und die meisten großen Linux-Distributionen. Home Assistant OS, OPNsense und FreeBSD brauchen es aus. Eine Änderung setzt die UEFI-Einstellungen der VM zurück; das System auf der Festplatte bleibt.",
   "Shut the VM down to change Secure Boot.": "Fahre die VM herunter, um Secure Boot zu ändern.",
   "Shut the VM down first to turn Secure Boot on or off.": "Fahre die VM zuerst herunter, um Secure Boot ein- oder auszuschalten.",
+  "Start with console": "Mit Konsole starten",
 };

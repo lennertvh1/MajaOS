@@ -3389,4 +3389,5 @@ window.TB_LANG.nl = {
   "Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM's UEFI settings; the system on the disk stays.": "Alleen systemen die ervoor ondertekend zijn starten met Secure Boot, zoals Windows en de meeste grote Linux-distributies. Home Assistant OS, OPNsense en FreeBSD hebben het uit nodig. Wijzigen zet de UEFI-instellingen van de VM terug; het systeem op de schijf blijft.",
   "Shut the VM down to change Secure Boot.": "Sluit de VM af om Secure Boot te wijzigen.",
   "Shut the VM down first to turn Secure Boot on or off.": "Sluit de VM eerst af om Secure Boot aan of uit te zetten.",
+  "Start with console": "Starten met console",
 };
