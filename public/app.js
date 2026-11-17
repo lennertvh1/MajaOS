@@ -3878,9 +3878,10 @@
       return `<li><label class="check ur-item"><input type="checkbox" data-ur-vm="${i}"${v.disks.some((d) => d.at) ? ' checked' : ' disabled'}>
         <span><b>${esc(v.name)}</b><br><span class="muted small">${esc(notes.join(' · '))}</span></span></label></li>`;
     };
-    // The head of a list: its title, how many are ticked and one button that ticks all of them (or none).
-    const head = (title, help) => `<div class="ur-head"><div class="sub-head">${title} ${help ? hint(help) : ''}</div>
-      <span class="muted small" data-ur-count></span><button class="btn sm" type="button" data-ur-all>${t('Select all')}</button></div>`;
+    // The title of a list.
+    const head = (title, help) => `<div class="sub-head">${title} ${help ? hint(help) : ''}</div>`;
+    // The first row of each list, like the head of a table: one box above the others that ticks all of them, and the count.
+    const th = `<li class="ur-th"><label class="check ur-all"><input type="checkbox" data-ur-all><span>${t('Select all')}</span></label><span class="muted small" data-ur-count></span></li>`;
     const liveApps = r.apps.map((a, i) => [a, i]).filter(([a]) => a.installed);
     const oldApps = r.apps.map((a, i) => [a, i]).filter(([a]) => !a.installed);
     body.innerHTML = `<div data-ur-form>
@@ -3903,24 +3904,23 @@
       ${r.shares.length ? `<section class="pool-card plain ur-sec" data-ur-shares data-ur-group>${head(t('Shared folders'), net ? t('Their files are copied over the network to the pool you choose. That can take hours for a large folder.') : t('They come along with the data disks. Files that were still on the cache are copied onto the pool.'))}
         ${net ? ((r.pools || []).length ? `<label class="fld"><span>${t('Copy to')}</span><select class="field" data-ur-target>${r.pools.map((p) => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(t('{size} free', { size: bytes(p.free) }))}</option>`).join('')}</select></label>`
           : `<p class="small temp-warn">${t('Create a pool first to copy shared folders to.')}</p>`) : ''}
-        <ul class="rows">${r.shares.map((sh, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-share="${i}"${!net && sh.exported && (sh.onData.length || sh.onCache.length) ? ' checked' : ''}${net && !(r.pools || []).length ? ' disabled' : ''}>
+        <ul class="rows">${th}${r.shares.map((sh, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-share="${i}"${!net && sh.exported && (sh.onData.length || sh.onCache.length) ? ' checked' : ''}${net && !(r.pools || []).length ? ' disabled' : ''}>
           <span><b>${esc(sh.name)}</b>${sh.comment ? ` <span class="muted">${esc(sh.comment)}</span>` : ''}<br><span class="muted small">${esc([
             sh.exported ? (sh.guest ? t('everyone can read') : t('users: {list}', { list: Object.keys(sh.users).join(', ') || '–' })) : t('not shared on the network'),
             sh.onCache.length ? t('partly on the cache') : null].filter(Boolean).join(' · '))}</span></span></label></li>`).join('')}</ul></section>` : ''}
       ${r.users.length ? `<section class="pool-card plain ur-sec" data-ur-group>${head(t('Users'), t('Unraid doesn\'t give out its passwords: choose a new one for each user you take over (at least 8 characters).'))}
-        <ul class="rows">${r.users.map((n, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-user="${i}" checked><span><b>${esc(n)}</b></span></label>
+        <ul class="rows">${th}${r.users.map((n, i) => `<li><label class="check ur-item"><input type="checkbox" data-ur-user="${i}" checked><span><b>${esc(n)}</b></span></label>
           <div class="row-side"><input class="field sm" type="password" data-ur-pw="${i}" placeholder="${esc(t('New password'))}" autocomplete="new-password"></div></li>`).join('')}</ul></section>` : ''}
       ${r.apps.length ? `<section class="pool-card plain ur-sec">
         <div data-ur-group>${head(net ? t('Apps on Unraid') : t('Apps'), t('With app data, the app\'s folder (settings, database) is copied, so it continues where it was. Without, it starts empty with the same settings.'))}
           ${r.apps.length > 8 ? `<input class="field" type="search" data-ur-filter placeholder="${esc(t('Search apps'))}" aria-label="${esc(t('Search apps'))}" autocomplete="off" spellcheck="false">` : ''}
-          ${liveApps.length ? `<ul class="rows">${liveApps.map(([a, i]) => appRow(a, i)).join('')}</ul>` : `<p class="muted small">${t('No containers found on Unraid.')}</p>`}</div>
+          ${liveApps.length ? `<ul class="rows">${th}${liveApps.map(([a, i]) => appRow(a, i)).join('')}</ul>` : `<p class="muted small">${t('No containers found on Unraid.')}</p>`}</div>
         ${oldApps.length ? `<details class="ur-old"><summary>${esc(t('Old templates ({n})', { n: oldApps.length }))} <span class="muted small">${t('no container on Unraid anymore')}</span>
             ${hint(t('Unraid keeps the template of every app you ever installed, also after you removed it. These have no container on Unraid anymore, so you probably don\'t need them.'))}</summary>
-          <div data-ur-group>${head('', '')}
-          <ul class="rows">${oldApps.map(([a, i]) => appRow(a, i)).join('')}</ul></div></details>` : ''}
+          <div data-ur-group><ul class="rows">${th}${oldApps.map(([a, i]) => appRow(a, i)).join('')}</ul></div></details>` : ''}
         <div data-ur-folders></div></section>` : ''}
       ${r.vms.length ? `<section class="pool-card plain ur-sec" data-ur-group>${head(t('VMs'), t('The VM\'s disk is copied into the VM folder, with the same vCPUs, memory and firmware.'))}
-        <ul class="rows">${r.vms.map(vmRow).join('')}</ul></section>` : ''}
+        <ul class="rows">${th}${r.vms.map(vmRow).join('')}</ul></section>` : ''}
       <p class="form-error" role="alert"></p>
       <div class="btn-row"><button class="btn primary" type="button" data-ur-go>${t('Next')}</button>${back}<button class="btn" type="button" data-ur-again>${t('Look again')}</button></div></div>
       <div data-ur-review hidden></div>`;
@@ -3945,15 +3945,15 @@
     const drawCounts = () => $$('[data-ur-group]', body).forEach((g) => {
       const all = $$('.ur-item input[type=checkbox]', g), on = all.filter((c) => c.checked).length, can = boxesOf(g);
       $('[data-ur-count]', g).textContent = t('{n} of {total} chosen', { n: on, total: all.length });
-      const btn = $('[data-ur-all]', g);
-      btn.disabled = !can.length;
-      btn.textContent = can.length && can.every((c) => c.checked) ? t('Select none') : t('Select all');
+      const box = $('[data-ur-all]', g), ticked = can.filter((c) => c.checked).length;
+      box.disabled = !can.length;
+      box.checked = !!can.length && ticked === can.length;
+      box.indeterminate = ticked > 0 && ticked < can.length;
     });
-    body.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-ur-all]'); if (!btn) return;
-      const can = boxesOf(btn.closest('[data-ur-group]')), on = !can.every((c) => c.checked);
-      can.forEach((c) => { c.checked = on; });
-      drawFolders(); drawCounts();
+    // Before the listener below, which then redraws the counts and the folders.
+    body.addEventListener('change', (e) => {
+      const box = e.target.closest('[data-ur-all]'); if (!box) return;
+      boxesOf(box.closest('[data-ur-group]')).forEach((c) => { c.checked = box.checked; });
     });
     const filter = $('[data-ur-filter]', body);
     if (filter) filter.addEventListener('input', () => {

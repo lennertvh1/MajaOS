@@ -3064,7 +3064,6 @@ window.TB_LANG.ja = {
   "Own DNS servers": "独自の DNS サーバー",
   "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "アドレスは引き続きルーターから取得し、DNS サーバーには入力したもの（Pi-hole や 1.1.1.1 など）を使います。",
   "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf は別のプログラムが管理しています（リンクです）。MajaOS は DNS サーバーを設定できません。",
-  "Select none": "すべて解除",
   "{n} of {total} chosen": "{total} 件中 {n} 件を選択",
   "Search apps": "アプリを検索",
   "Apps on Unraid": "Unraid 上のアプリ",

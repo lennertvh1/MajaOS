@@ -3064,7 +3064,6 @@ window.TB_LANG.de = {
   "Own DNS servers": "Eigene DNS-Server",
   "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "Die Adresse kommt weiter vom Router; die DNS-Server sind die, die du einträgst, z. B. ein Pi-hole oder 1.1.1.1.",
   "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf wird von einem anderen Programm verwaltet (es ist ein Link). MajaOS kann die DNS-Server nicht setzen.",
-  "Select none": "Nichts auswählen",
   "{n} of {total} chosen": "{n} von {total} gewählt",
   "Search apps": "Apps suchen",
   "Apps on Unraid": "Apps auf Unraid",

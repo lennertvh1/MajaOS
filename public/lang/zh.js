@@ -3064,7 +3064,6 @@ window.TB_LANG.zh = {
   "Own DNS servers": "自定义 DNS 服务器",
   "The address still comes from your router; the DNS servers are the ones you fill in, e.g. a Pi-hole or 1.1.1.1.": "地址仍由路由器分配；DNS 服务器使用你填写的，例如 Pi-hole 或 1.1.1.1。",
   "/etc/resolv.conf is managed by another program (it is a link). MajaOS can't set the DNS servers.": "/etc/resolv.conf 由其他程序管理（它是一个链接）。MajaOS 无法设置 DNS 服务器。",
-  "Select none": "全不选",
   "{n} of {total} chosen": "已选 {n}/{total}",
   "Search apps": "搜索应用",
   "Apps on Unraid": "Unraid 上的应用",
