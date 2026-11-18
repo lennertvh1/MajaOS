@@ -3138,4 +3138,13 @@ window.TB_LANG.pt = {
   "Uploaded a file for VMs": "Ficheiro enviado para as VMs",
   "Downloaded a file for VMs": "Ficheiro transferido para as VMs",
   "Stopped a download for VMs": "Transferência para as VMs parada",
+  "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "Como a VM arranca. Um sistema instalado com UEFI normalmente não arranca com BIOS, e vice-versa: mude antes de instalar ou se o sistema suportar ambos. Mudar repõe as definições UEFI da VM; o disco fica como está.",
+  "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO é o mais rápido, mas o Windows só arranca de um disco VirtIO com os controladores VirtIO instalados. Se não arrancar, escolha SATA.",
+  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Desligue a VM para mudar o firmware, o Secure Boot, o TPM ou a interface de um disco.",
+  "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "Mudar {name} para BIOS? Um sistema instalado com UEFI normalmente deixa de arrancar. As definições UEFI da VM são removidas.",
+  "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "Mudar {name} para UEFI? Um sistema instalado com BIOS normalmente deixa de arrancar.",
+  "Switch": "Mudar",
+  "Shut the VM down first to switch between UEFI and BIOS.": "Desligue primeiro a VM para mudar entre UEFI e BIOS.",
+  "Shut the VM down first to add or remove the TPM.": "Desligue primeiro a VM para adicionar ou remover o TPM.",
+  "Shut the VM down first to change the interface of a disk.": "Desligue primeiro a VM para mudar a interface de um disco.",
 };

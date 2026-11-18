@@ -3138,4 +3138,13 @@ window.TB_LANG.zh = {
   "Uploaded a file for VMs": "上传了虚拟机文件",
   "Downloaded a file for VMs": "下载了虚拟机文件",
   "Stopped a download for VMs": "停止了虚拟机文件下载",
+  "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "虚拟机的启动方式。用 UEFI 安装的系统通常无法用 BIOS 启动，反之亦然：请在安装前切换，或在系统同时支持两者时切换。切换会重置虚拟机的 UEFI 设置；磁盘保持不变。",
+  "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO 最快，但 Windows 只有在安装了 VirtIO 驱动后才能从 VirtIO 磁盘启动。如果无法启动，请选择 SATA。",
+  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "请关闭虚拟机后再更改固件、Secure Boot、TPM 或磁盘接口。",
+  "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "将 {name} 切换为 BIOS？用 UEFI 安装的系统通常将无法启动。虚拟机的 UEFI 设置会被删除。",
+  "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "将 {name} 切换为 UEFI？用 BIOS 安装的系统通常将无法启动。",
+  "Switch": "切换",
+  "Shut the VM down first to switch between UEFI and BIOS.": "请先关闭虚拟机，再在 UEFI 和 BIOS 之间切换。",
+  "Shut the VM down first to add or remove the TPM.": "请先关闭虚拟机，再添加或移除 TPM。",
+  "Shut the VM down first to change the interface of a disk.": "请先关闭虚拟机，再更改磁盘接口。",
 };

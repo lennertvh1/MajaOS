@@ -284,3 +284,46 @@ test('Secure Boot: read from the firmware choice or the loader, and switched off
   const on = hw.applyHardware(`<domain><os firmware='efi'><type>hvm</type></os><devices/></domain>`, { secureBoot: true });
   assert.match(on, /<smm state="on"\/>|<smm state='on'\/>/);
 });
+
+test('firmware: UEFI to BIOS and back, with Secure Boot off unless asked', () => {
+  const cur = hw.parseHardware(DOMAIN);
+  assert.equal(cur.firmware, 'uefi');
+  assert.deepEqual(hw.validateHardware({ firmware: 'uefi' }, {}, cur), {});
+  assert.throws(() => hw.validateHardware({ firmware: 'coreboot' }, {}, cur), /UEFI or BIOS/);
+  const toBios = hw.validateHardware({ firmware: 'bios', secureBoot: true }, {}, cur);
+  assert.deepEqual(toBios, { firmware: 'bios' });
+  const bios = hw.applyHardware(DOMAIN, toBios);
+  assert.match(bios, /<os>\n/);
+  assert.match(bios, /<boot dev='hd'\/>/);
+  const b = hw.parseHardware(bios);
+  assert.equal(b.firmware, 'bios');
+  assert.equal(b.secureBoot, null);
+  // Back to UEFI: libvirt chooses the firmware; Secure Boot follows the checkbox.
+  const back = hw.validateHardware({ firmware: 'uefi' }, {}, b);
+  assert.deepEqual(back, { firmware: 'uefi', secureBoot: false });
+  const u = hw.parseHardware(hw.applyHardware(bios, back));
+  assert.equal(u.firmware, 'uefi');
+  assert.equal(u.secureBoot, false);
+  const sb = hw.parseHardware(hw.applyHardware(bios, hw.validateHardware({ firmware: 'uefi', secureBoot: true }, {}, b)));
+  assert.equal(sb.secureBoot, true);
+});
+
+test('TPM on and off, and another bus for an existing disk', () => {
+  const cur = hw.parseHardware(DOMAIN);
+  assert.equal(cur.tpm, false);
+  const withTpm = hw.applyHardware(DOMAIN, hw.validateHardware({ tpm: true }, {}, cur));
+  assert.match(withTpm, /<tpm model="tpm-crb">\s*<backend type="emulator" version="2.0"\/>\s*<\/tpm>|<tpm model='tpm-crb'>/);
+  assert.equal(hw.parseHardware(withTpm).tpm, true);
+  assert.deepEqual(hw.validateHardware({ tpm: true }, {}, hw.parseHardware(withTpm)), {});
+  assert.equal(hw.parseHardware(hw.applyHardware(withTpm, { tpm: false })).tpm, false);
+
+  assert.deepEqual(hw.validateHardware({ diskBus: [{ target: 'vda', bus: 'virtio' }] }, {}, cur), {});
+  assert.throws(() => hw.validateHardware({ diskBus: [{ target: 'vdz', bus: 'sata' }] }, {}, cur), /no longer belongs/);
+  assert.throws(() => hw.validateHardware({ diskBus: [{ target: 'vda', bus: 'ide' }] }, {}, cur), /VirtIO or SATA/);
+  const change = hw.validateHardware({ diskBus: [{ target: 'vda', bus: 'sata' }] }, {}, cur);
+  const out = hw.applyHardware(DOMAIN, change);
+  const disk = hw.parseHardware(out).disks[0];
+  assert.deepEqual([disk.target, disk.bus, disk.source], ['sda', 'sata', '/tank/vms/home-assistant-os/home-assistant-os.qcow2']);
+  // The disk's PCI address belonged to virtio; the network card keeps its own.
+  assert.equal((out.match(/<address /g) || []).length, 1);
+});

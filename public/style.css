@@ -751,7 +751,9 @@ details.adv[open] summary { margin-bottom: 4px; }
 .disk-row.is-new { border-style: dashed; }
 .disk-size { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .disk-size .field { width: 90px; }
-.disk-new-side { display: flex; align-items: center; gap: 6px; }
+.disk-new-side { display: flex; align-items: center; gap: 10px; }
+.disk-new-side select.field { width: auto; flex: none; }
+.disk-new-side .check { white-space: nowrap; }
 .pin-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .pin-core { display: grid; gap: 4px; justify-items: center; padding: 6px 8px; border-radius: 11px; background: var(--glass); border: 1px solid var(--glass-line); }
 .pin-core > div { display: flex; gap: 4px; }

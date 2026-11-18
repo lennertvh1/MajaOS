@@ -3483,4 +3483,13 @@ window.TB_LANG.nl = {
   "Uploaded a file for VMs": "Bestand voor VM's geüpload",
   "Downloaded a file for VMs": "Bestand voor VM's gedownload",
   "Stopped a download for VMs": "Download voor VM's gestopt",
+  "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "Hoe de VM opstart. Een systeem dat met UEFI geïnstalleerd is, start meestal niet met BIOS, en omgekeerd: wissel vóór je installeert, of als het systeem allebei kan. Wisselen zet de UEFI-instellingen van de VM terug; de schijf blijft zoals ze is.",
+  "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO is het snelst, maar Windows start alleen van een VirtIO-schijf als de VirtIO-drivers geïnstalleerd zijn. Start het niet, kies dan SATA.",
+  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Zet de VM uit om de firmware, Secure Boot, de TPM of de aansluiting van een schijf te wijzigen.",
+  "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "{name} naar BIOS overzetten? Een systeem dat met UEFI geïnstalleerd is, start dan meestal niet meer. De UEFI-instellingen van de VM worden verwijderd.",
+  "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "{name} naar UEFI overzetten? Een systeem dat met BIOS geïnstalleerd is, start dan meestal niet meer.",
+  "Switch": "Overzetten",
+  "Shut the VM down first to switch between UEFI and BIOS.": "Zet de VM eerst uit om te wisselen tussen UEFI en BIOS.",
+  "Shut the VM down first to add or remove the TPM.": "Zet de VM eerst uit om de TPM toe te voegen of te verwijderen.",
+  "Shut the VM down first to change the interface of a disk.": "Zet de VM eerst uit om de aansluiting van een schijf te wijzigen.",
 };

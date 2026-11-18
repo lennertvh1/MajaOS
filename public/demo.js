@@ -1905,9 +1905,37 @@
     }
     if (b.boot && b.boot !== h.boot) { h.boot = b.boot; changed = true; }
     if (b.clipboard !== undefined && !!b.clipboard !== !!h.clipboard) { h.clipboard = !!b.clipboard; changed = true; }
-    if (b.secureBoot !== undefined) {
+    // Firmware, Secure Boot and the TPM, like validateHardware() in lib/vmhw.js (only while the VM is off).
+    const fw = h.firmware || 'uefi';
+    if (b.firmware !== undefined) {
+      if (!['uefi', 'bios'].includes(b.firmware)) throw err('Choose UEFI or BIOS.');
+      if (b.firmware !== fw) {
+        if (isOn(v)) throw err('Shut the VM down first to switch between UEFI and BIOS.', 409);
+        h.firmware = b.firmware; h.secureBoot = b.firmware === 'uefi' ? !!b.secureBoot : null; changed = true;
+      }
+    }
+    if (b.secureBoot !== undefined && (h.firmware || 'uefi') === fw && fw === 'uefi') { // not when the firmware just changed
       const cur = h.secureBoot === undefined ? /windows/i.test(v.name) : h.secureBoot;
       if (!!b.secureBoot !== cur) { if (isOn(v)) throw err('Shut the VM down first to turn Secure Boot on or off.', 409); h.secureBoot = !!b.secureBoot; changed = true; }
+    }
+    if (b.tpm !== undefined) {
+      const cur = h.tpm === undefined ? /windows/i.test(v.name) : h.tpm;
+      if (!!b.tpm !== cur) { if (isOn(v)) throw err('Shut the VM down first to add or remove the TPM.', 409); h.tpm = !!b.tpm; changed = true; }
+    }
+    if (Array.isArray(b.diskBus) && b.diskBus.length) {
+      if (isOn(v)) throw err('Shut the VM down first to change the interface of a disk.', 409);
+      const list = v.disks || (v.disks = [{ target: 'vda', size: v.diskGb * GB }]);
+      for (const x of b.diskBus) {
+        const dk = list.find((k) => k.target === x.target);
+        if (!dk) throw err('This disk no longer belongs to the VM.');
+        if (!['virtio', 'sata'].includes(x.bus)) throw err('Choose VirtIO or SATA for the disk.');
+        const pre = x.bus === 'sata' ? 'sd' : 'vd';
+        if (dk.target.startsWith(pre)) continue;
+        if (!dk.file) dk.file = '/tank/vms/' + slug(v.name) + '/' + slug(v.name) + (list.indexOf(dk) ? '-' + (list.indexOf(dk) + 1) : '') + '.qcow2';
+        const used = list.map((k) => k.target);
+        for (let i = 0; i < 26; i++) { const tg = pre + String.fromCharCode(97 + i); if (!used.includes(tg)) { dk.target = tg; break; } }
+        changed = true;
+      }
     }
     if (Array.isArray(b.hostdevs) && b.hostdevs.join() !== h.hostdevs.join()) {
       for (const k of b.hostdevs) if (!h.hostdevs.includes(k) && !USB.concat(PCI).some((x) => x.key === k)) throw err('This USB device is not plugged in (anymore). Plug it in and open the window again.');
@@ -3181,12 +3209,12 @@
       const i = vms.indexOf(v), s = slug(v.name);
       const h = hwOf(v);
       const dks = v.disks || [{ target: 'vda', size: v.diskGb * GB }];
-      return { ...vmOut(v), firmware: 'uefi', vnc: { port: isOn(v) ? 5900 + i : null, password: VNC_PW[v.name] || 'Demo1234' },
+      return { ...vmOut(v), firmware: h.firmware || 'uefi', tpm: h.tpm === undefined ? /windows/i.test(v.name) : !!h.tpm, vnc: { port: isOn(v) ? 5900 + i : null, password: VNC_PW[v.name] || 'Demo1234' },
         disks: dks.map((k, n) => ({ target: k.target, bus: k.target.startsWith('vd') ? 'virtio' : 'sata', format: 'qcow2',
           source: k.file || '/tank/vms/' + s + '/' + s + (n ? '-' + (n + 1) : '') + '.qcow2', size: k.size, used: k.size * (n ? 0.02 : 0.31) })),
         cdroms: h.cdrom ? [h.cdrom] : [], cdromDrive: !!h.cdrom || v.name === 'Windows 11',
         nics: copy(h.nics), boot: h.boot, hostdevs: [...h.hostdevs], cpuPins: [...h.cpuPins], clipboard: !!h.clipboard,
-        secureBoot: h.secureBoot === undefined ? /windows/i.test(v.name) : h.secureBoot };
+        secureBoot: (h.firmware || 'uefi') === 'bios' ? null : h.secureBoot === undefined ? /windows/i.test(v.name) : h.secureBoot };
     }
     if (path === '/api/store' || path === '/api/store?refresh=1') {
       if (path.endsWith('refresh=1')) await wait(900);

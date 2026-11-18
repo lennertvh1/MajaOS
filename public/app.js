@@ -5179,7 +5179,7 @@
     // What changes in the form but isn't a normal input field.
     const st = {
       nics: d.nics.map((n) => ({ id: n.mac, locked: n.locked, type: n.type, source: n.source, model: n.model || 'virtio', mac: n.mac || '' })),
-      disks: d.disks.map((k) => ({ target: k.target, source: k.source, size: k.size, sizeGb: k.size ? Math.ceil(k.size / GIB) : '', remove: false })),
+      disks: d.disks.map((k) => ({ target: k.target, source: k.source, size: k.size, sizeGb: k.size ? Math.ceil(k.size / GIB) : '', remove: false, bus: k.bus, bus0: k.bus })),
       add: [], hostdevs: new Set(d.hostdevs), pins: new Set(d.cpuPins),
     };
     const body = $('#winBody');
@@ -5246,7 +5246,10 @@
         <div class="cf-list">${st.disks.map((k, i) => `<div class="cf-row disk-row${k.remove ? ' is-removed' : ''}">
             <div><div class="row-title">${esc(k.target || t('disk'))}</div><div class="row-sub">${esc(k.source || '')}</div></div>
             <label class="disk-size"><input class="field" type="number" min="${k.size ? Math.ceil(k.size / GIB) : 1}" max="16384" step="1" data-disk="${i}:sizeGb" value="${esc(k.sizeGb)}"${k.remove ? ' disabled' : ''} aria-label="${t('Size in GB')}"> GB</label>
-            <label class="check small"><input type="checkbox" data-disk="${i}:remove"${k.remove ? ' checked' : ''}> ${t('Detach')}</label></div>`).join('')}
+            <div class="disk-new-side">${k.bus === 'virtio' || k.bus === 'sata' ? `<select class="field cf-small" data-disk="${i}:bus" aria-label="${t('Interface')}"${off && !k.remove ? '' : ' disabled'}>
+                <option value="virtio"${k.bus === 'virtio' ? ' selected' : ''}>virtio</option><option value="sata"${k.bus === 'sata' ? ' selected' : ''}>SATA</option></select>`
+              : k.bus ? `<span class="muted small">${esc(k.bus)}</span>` : ''}
+            <label class="check small"><input type="checkbox" data-disk="${i}:remove"${k.remove ? ' checked' : ''}> ${t('Detach')}</label></div></div>`).join('')}
           ${st.add.map((k, i) => `<div class="cf-row disk-row is-new">
             <div><div class="row-title">${t('New disk')}</div><div class="row-sub">${t('Goes in {dir}', { dir: esc(opts.vmDir) })}${opts.vmDirMissing ? '' : dirLink(opts.vmDir)}</div></div>
             <label class="disk-size"><input class="field" type="number" min="1" max="16384" step="1" data-add="${i}:sizeGb" value="${esc(k.sizeGb)}" aria-label="${t('Size in GB')}"> GB</label>
@@ -5264,9 +5267,15 @@
             <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('CD-ROM first')}</option></select>
             </label>
         </div>
-        ${d.secureBoot == null ? '' : `<label class="check"><input type="checkbox" name="secureBoot"${d.secureBoot ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('Secure Boot')}
+        <div class="fld-row">
+          <label class="fld"><span>${t('Firmware')} ${hint(t('How the VM starts. A system installed with UEFI usually doesn\'t start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM\'s UEFI settings; the disk stays as it is.'))}</span>
+            <select class="field" name="firmware"${off ? '' : ' disabled'}><option value="uefi"${d.firmware !== 'bios' ? ' selected' : ''}>UEFI</option><option value="bios"${d.firmware === 'bios' ? ' selected' : ''}>${t('BIOS (older systems)')}</option></select></label>
+        </div>
+        <label class="check" data-sb${d.firmware === 'bios' ? ' hidden' : ''}><input type="checkbox" name="secureBoot"${d.secureBoot ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('Secure Boot')}
           ${hint(t('Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM\'s UEFI settings; the system on the disk stays.'))}</label>
-        ${off ? '' : `<p class="muted small">${t('Shut the VM down to change Secure Boot.')}</p>`}`}`;
+        <label class="check"><input type="checkbox" name="tpm"${d.tpm ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('TPM 2.0 (needed for Windows 11)')}</label>
+        <p class="muted small">${off ? t('VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn\'t start, choose SATA.')
+          : t('Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.')}</p>`;
     };
 
     /* Devices: USB and PCI */
@@ -5428,6 +5437,7 @@
       if (tg.dataset.pin != null) { if (tg.checked) st.pins.add(Number(tg.dataset.pin)); else st.pins.delete(Number(tg.dataset.pin)); drawCpu(); return; }
       if (tg.dataset.dev) { if (tg.checked) st.hostdevs.add(tg.dataset.dev); else st.hostdevs.delete(tg.dataset.dev); return; }
       if (tg.dataset.disk) { const [i, k] = tg.dataset.disk.split(':'); st.disks[i][k] = k === 'remove' ? tg.checked : tg.value; if (k === 'remove') drawStorage(); return; }
+      if (tg.name === 'firmware') { const sb = $('[data-sb]', form); if (sb) sb.hidden = tg.value === 'bios'; return; }
     });
     body.addEventListener('input', (e) => {
       const tg = e.target;
@@ -5454,6 +5464,11 @@
         resizeDisks: st.disks.filter((k) => !k.remove && k.sizeGb && (!k.size || Number(k.sizeGb) * GIB > k.size)).map((k) => ({ target: k.target, sizeGb: Number(k.sizeGb) })),
         addDisks: st.add.map((k) => ({ sizeGb: Number(k.sizeGb), bus: k.bus })),
       });
+      // Only while the VM is off (the fields are disabled otherwise and readForm leaves them out).
+      if (off) out.diskBus = st.disks.filter((k) => !k.remove && k.bus !== k.bus0).map((k) => ({ target: k.target, bus: k.bus }));
+      if (out.firmware && out.firmware !== d.firmware && !(await ask(t(out.firmware === 'bios'
+        ? 'Switch {name} to BIOS? A system installed with UEFI usually doesn\'t start anymore. The VM\'s UEFI settings are removed.'
+        : 'Switch {name} to UEFI? A system installed with BIOS usually doesn\'t start anymore.', { name: d.name }), t('Switch')))) return;
       if (out.removeDisks.length && !(await ask(t('Detach {n} disk(s) from {name}? The files stay, but the VM no longer sees them.', { n: out.removeDisks.length, name: d.name }), t('Detach')))) return;
       btn.disabled = true;
       try {
