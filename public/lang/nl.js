@@ -3493,4 +3493,7 @@ window.TB_LANG.nl = {
   "Shut the VM down first to change the interface of a disk.": "Zet de VM eerst uit om de aansluiting van een schijf te wijzigen.",
   "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Zet de VM uit om de firmware, Secure Boot of de TPM te wijzigen.",
   "Shut the VM down to change the interface of a disk.": "Zet de VM uit om de aansluiting van een schijf te wijzigen.",
+  "Automatic (from the disk)": "Automatisch (volgens de schijf)",
+  "Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.": "Automatisch kijkt naar de schijf: UEFI als ze een EFI-partitie heeft, anders BIOS.",
+  "The disk has no EFI partition, so the VM starts with BIOS.": "De schijf heeft geen EFI-partitie, dus de VM start met BIOS.",
 };

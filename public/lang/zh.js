@@ -3148,4 +3148,7 @@ window.TB_LANG.zh = {
   "Shut the VM down first to change the interface of a disk.": "请先关闭虚拟机，再更改磁盘接口。",
   "Shut the VM down to change the firmware, Secure Boot or the TPM.": "请关闭虚拟机后再更改固件、Secure Boot 或 TPM。",
   "Shut the VM down to change the interface of a disk.": "请关闭虚拟机后再更改磁盘接口。",
+  "Automatic (from the disk)": "自动（根据磁盘）",
+  "Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.": "“自动”会检查磁盘：有 EFI 分区则用 UEFI，否则用 BIOS。",
+  "The disk has no EFI partition, so the VM starts with BIOS.": "磁盘没有 EFI 分区，因此虚拟机将以 BIOS 启动。",
 };

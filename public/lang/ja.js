@@ -3148,4 +3148,7 @@ window.TB_LANG.ja = {
   "Shut the VM down first to change the interface of a disk.": "ディスクのインターフェースを変更するには、先に VM を停止してください。",
   "Shut the VM down to change the firmware, Secure Boot or the TPM.": "ファームウェア、Secure Boot、TPM を変更するには、VM を停止してください。",
   "Shut the VM down to change the interface of a disk.": "ディスクのインターフェースを変更するには、VM を停止してください。",
+  "Automatic (from the disk)": "自動（ディスクから判断）",
+  "Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.": "「自動」はディスクを調べ、EFI パーティションがあれば UEFI、なければ BIOS を使います。",
+  "The disk has no EFI partition, so the VM starts with BIOS.": "ディスクに EFI パーティションがないため、VM は BIOS で起動します。",
 };

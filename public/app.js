@@ -5567,7 +5567,8 @@
             <small>${t(VM_NET_HELP)}</small></label>` + vmDescAutoFields(v); })()}
           <details class="adv"><summary>${t('Advanced')}</summary><div class="form" style="margin-top:10px">
             <div class="fld-row">
-              <label class="fld"><span>${t('Firmware')}</span>${sel('firmware', [['uefi', 'UEFI'], ['bios', t('BIOS (older systems)')]], 'uefi')}</label>
+              <label class="fld"><span>${t('Firmware')}${media === 'disk' ? ' ' + hint(t('Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.')) : ''}</span>${sel('firmware',
+                [...(media === 'disk' ? [['auto', t('Automatic (from the disk)')]] : []), ['uefi', 'UEFI'], ['bios', t('BIOS (older systems)')]], media === 'disk' ? 'auto' : 'uefi')}</label>
               <label class="fld"><span>${t('Disk bus')}</span>${sel('bus', [['virtio', t('VirtIO (fastest)')], ['sata', t('SATA (works everywhere)')]], fam.bus)}</label>
               <label class="fld"><span>${t('Network card')}</span>${sel('nic', [['virtio', t('VirtIO (fastest)')], ['e1000e', t('Intel e1000e (works everywhere)')], ['rtl8139', t('Realtek RTL8139 (very old systems)')]], fam.nic)}</label>
             </div>
@@ -5701,7 +5702,7 @@
       try {
         const r = await api.post('/api/vms', readForm(form));
         srcJob = null;
-        toast(t('Created and started: {name}', { name: r.name }));
+        toast(t('Created and started: {name}', { name: r.name }) + (r.firmwareDetected === 'bios' ? '. ' + t('The disk has no EFI partition, so the VM starts with BIOS.') : ''));
         await loadVms().catch(() => {});
         vmEditWindow(r.name, 'screen'); // straight to the console to do the installation
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = t('Create'); }

@@ -3148,4 +3148,7 @@ window.TB_LANG.es = {
   "Shut the VM down first to change the interface of a disk.": "Apaga primero la VM para cambiar la interfaz de un disco.",
   "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Apaga la VM para cambiar el firmware, Secure Boot o el TPM.",
   "Shut the VM down to change the interface of a disk.": "Apaga la VM para cambiar la interfaz de un disco.",
+  "Automatic (from the disk)": "Automático (según el disco)",
+  "Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.": "Automático mira el disco: UEFI si tiene una partición EFI; si no, BIOS.",
+  "The disk has no EFI partition, so the VM starts with BIOS.": "El disco no tiene partición EFI, así que la VM arranca con BIOS.",
 };

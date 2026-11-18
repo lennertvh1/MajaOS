@@ -3617,7 +3617,10 @@
       if (!OS_FAMILY[osId]) throw err('Choose an operating system.');
       const media = old ? old[1] : body.media || (osId === 'haos' ? 'disk' : 'iso');
       if (media !== 'iso' && media !== 'disk') throw err('Choose an installation ISO or an existing disk.');
-      if (body.firmware && !['uefi', 'bios'].includes(body.firmware)) throw err('Choose UEFI or BIOS.');
+      if (body.firmware && !['uefi', 'bios', 'auto'].includes(body.firmware)) throw err('Choose UEFI or BIOS.');
+      // Automatic (existing disk): like diskFirmware() in lib/vms.js; in the demo images with kali, opnsense or old in their name are BIOS-only.
+      const detected = media === 'disk' && (body.firmware || 'auto') === 'auto' ? (/kali|opnsense|old/i.test(String(body.source)) ? 'bios' : 'uefi') : null;
+      const firmware = detected || (body.firmware === 'bios' ? 'bios' : 'uefi');
       if (body.bus && !['virtio', 'sata'].includes(body.bus)) throw err('Choose VirtIO or SATA for the disk.');
       if (body.nic && !['virtio', 'e1000e', 'rtl8139'].includes(body.nic)) throw err('Choose a network card: VirtIO, e1000e or RTL8139.');
       const nicModel = body.nic || (['windows', 'other'].includes(OS_FAMILY[osId]) ? 'e1000e' : 'virtio');
@@ -3637,9 +3640,10 @@
         autostart: !!body.autostart, delay: body.autostart ? body.delay || 0 : 0, description: String(body.description || '').trim(),
         base: [20, 60], ram: [0.2, 0.35] });
       vmHw[name] = { nics: [nic(ntype, nsrc, nicModel, '52:54:00:' + [0, 0, 0].map(() => Math.floor(rnd(16, 255)).toString(16)).join(':'))],
-        extra: [], cdrom: media === 'disk' ? null : '/tank/isos/' + body.source, boot: media === 'disk' ? 'disk' : 'cdrom', hostdevs: [], cpuPins: [] };
+        extra: [], cdrom: media === 'disk' ? null : '/tank/isos/' + body.source, boot: media === 'disk' ? 'disk' : 'cdrom', hostdevs: [], cpuPins: [],
+        firmware, secureBoot: firmware === 'bios' ? null : body.secureBoot == null ? OS_FAMILY[osId] === 'windows' : !!body.secureBoot, tpm: body.tpm == null ? OS_FAMILY[osId] === 'windows' : !!body.tpm };
       if (inPlace) { const img = vmImages.find((f) => f.name === srcPath); if (img) img.usedBy = name; }
-      return { name, disk: inPlace ? (srcPath.startsWith('/') ? srcPath : sp.isos + '/' + srcPath) : '/tank/vms/' + slug(name) + '/' + slug(name) + '.qcow2', inPlace };
+      return { name, disk: inPlace ? (srcPath.startsWith('/') ? srcPath : sp.isos + '/' + srcPath) : '/tank/vms/' + slug(name) + '/' + slug(name) + '.qcow2', inPlace, firmware, firmwareDetected: detected };
     }
     m = path.match(/^\/api\/vms\/([^/]+)\/settings$/);
     if (m) {

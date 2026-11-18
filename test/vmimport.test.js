@@ -35,6 +35,21 @@ if (args[0] === 'info') {
   const one = { filename: file, format: fmt };
   console.log(JSON.stringify(args.includes('--backing-chain') ? [one] : one));
 } else if (args[0] === 'convert') fs.copyFileSync(args[args.length - 2], args[args.length - 1]);
+else if (args[0] === 'dd') {
+  // The first MiB as raw bytes: an MBR without an EFI partition for files with "bios" in their name, a GPT with
+  // an EFI system partition for "efi", nothing (zeros) otherwise.
+  const src = args.find((a) => a.startsWith('if=')).slice(3), out = args.find((a) => a.startsWith('of=')).slice(3);
+  const buf = Buffer.alloc(1048576);
+  if (/bios|efi/.test(src)) { buf[510] = 0x55; buf[511] = 0xaa; }
+  if (/bios/.test(src)) buf[446 + 4] = 0x83;
+  if (/efi/.test(src)) {
+    buf[446 + 4] = 0xee;
+    buf.write('EFI PART', 512, 'latin1'); buf.writeBigUInt64LE(2n, 512 + 72); buf.writeUInt32LE(128, 512 + 80); buf.writeUInt32LE(128, 512 + 84);
+    Buffer.from('af3dc60f838472478e793d69d8477de4', 'hex').copy(buf, 1024); // Linux data first
+    Buffer.from('28732ac11ff8d211ba4b00a0c93ec93b', 'hex').copy(buf, 1024 + 128); // then the EFI system partition
+  }
+  fs.writeFileSync(out, buf);
+}
 `);
 tool('virt-install', '');
 process.env.PATH = bin + path.delimiter + process.env.PATH;
@@ -119,4 +134,39 @@ test('vmOptions marks the files a VM uses', async () => {
     const o = await vms.vmOptions();
     assert.deepEqual(o.images.map((f) => [f.name, f.usedBy]), [['haos.qcow2', null], ['spare.qcow2', 'Other']]);
   } finally { fs.writeFileSync(OTHER_FILE, OTHER_DISK); }
+});
+
+test('Automatic firmware: BIOS for a disk without an EFI partition, UEFI with one or when unknown', async () => {
+  const fw = () => { const a = install().args; const i = a.indexOf('--boot'); return i < 0 ? 'bios' : a[i + 1].split(',')[0]; };
+  fs.writeFileSync(path.join(pool, 'isos', 'kali-bios.qcow2'), 'x');
+  fs.writeFileSync(path.join(pool, 'isos', 'debian-efi.qcow2'), 'x');
+  reset();
+  let r = await vms.createVm({ ...base, os: 'linux', name: 'Kali', source: 'kali-bios.qcow2' });
+  assert.deepEqual([r.firmware, r.firmwareDetected, fw()], ['bios', 'bios', 'bios']);
+  reset();
+  r = await vms.createVm({ ...base, os: 'linux', name: 'Deb', source: 'debian-efi.qcow2' });
+  assert.deepEqual([r.firmware, r.firmwareDetected, fw()], ['uefi', 'uefi', 'uefi']);
+  reset();
+  r = await vms.createVm({ ...base, os: 'linux', name: 'Unknown', source: 'haos.qcow2', firmware: 'auto' });
+  assert.deepEqual([r.firmware, r.firmwareDetected], ['uefi', null]);
+  // A choice of the user wins: no detection.
+  reset();
+  r = await vms.createVm({ ...base, os: 'linux', name: 'Forced', source: 'kali-bios.qcow2', firmware: 'uefi' });
+  assert.deepEqual([r.firmware, r.firmwareDetected, fw()], ['uefi', null, 'uefi']);
+  assert.ok(!calls().some((c) => c.tool === 'qemu-img' && c.args[0] === 'dd'));
+});
+
+test('parseBootSectors reads MBR and GPT', () => {
+  const mbr = (type) => { const b = Buffer.alloc(4096); b[510] = 0x55; b[511] = 0xaa; b[446 + 4] = type; return b; };
+  assert.equal(vms.parseBootSectors(Buffer.alloc(4096)), null);
+  assert.equal(vms.parseBootSectors(mbr(0x83)), 'bios');
+  assert.equal(vms.parseBootSectors(mbr(0xef)), 'uefi');
+  assert.equal(vms.parseBootSectors(mbr(0)), null);
+  // GPT on 4096-byte sectors, with only a Linux partition.
+  const g = Buffer.alloc(65536); g[510] = 0x55; g[511] = 0xaa; g[446 + 4] = 0xee;
+  g.write('EFI PART', 4096, 'latin1'); g.writeBigUInt64LE(2n, 4096 + 72); g.writeUInt32LE(4, 4096 + 80); g.writeUInt32LE(128, 4096 + 84);
+  Buffer.from('af3dc60f838472478e793d69d8477de4', 'hex').copy(g, 8192);
+  assert.equal(vms.parseBootSectors(g), 'bios');
+  Buffer.from('28732ac11ff8d211ba4b00a0c93ec93b', 'hex').copy(g, 8192 + 128);
+  assert.equal(vms.parseBootSectors(g), 'uefi');
 });

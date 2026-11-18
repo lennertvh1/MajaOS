@@ -3148,4 +3148,7 @@ window.TB_LANG.de = {
   "Shut the VM down first to change the interface of a disk.": "Schalte die VM zuerst aus, um die Schnittstelle einer Festplatte zu ändern.",
   "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Schalte die VM aus, um Firmware, Secure Boot oder TPM zu ändern.",
   "Shut the VM down to change the interface of a disk.": "Schalte die VM aus, um die Schnittstelle einer Festplatte zu ändern.",
+  "Automatic (from the disk)": "Automatisch (nach der Festplatte)",
+  "Automatic looks at the disk: UEFI when it has an EFI partition, otherwise BIOS.": "Automatisch prüft die Festplatte: UEFI, wenn sie eine EFI-Partition hat, sonst BIOS.",
+  "The disk has no EFI partition, so the VM starts with BIOS.": "Die Festplatte hat keine EFI-Partition, daher startet die VM mit BIOS.",
 };
