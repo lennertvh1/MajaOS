@@ -127,7 +127,8 @@
     }
     const lines = ['Hit:1 http://deb.debian.org/debian trixie InRelease', 'Get:2 http://security.debian.org/debian-security trixie-security InRelease [43.4 kB]', 'Reading package lists...'];
     if (j.action === 'upgrade' && el > 2000) lines.push(...deb.lastUpdates.map(([n, , v]) => `Setting up ${n} (${v}) ...`));
-    return { action: j.action, state: msg === null ? 'done' : 'running', running: msg !== null, message: msg || 'Done.', started: new Date(j.start).toISOString(), lines };
+    const percent = msg === null ? 100 : j.action !== 'upgrade' ? null : el < 2000 ? 5 : el < 7000 ? Math.round(10 + 85 * (el - 2000) / 5000) : 97;
+    return { action: j.action, state: msg === null ? 'done' : 'running', running: msg !== null, message: msg || 'Done.', percent, started: new Date(j.start).toISOString(), lines };
   }
   function debStatus() {
     debProgress();

@@ -9654,7 +9654,7 @@ sudo ./install.sh</pre></div>`}` : '') +
         ${nv.secureBoot && !nv.loaded ? `<div class="small temp-warn">${t('Secure Boot is on: the driver won\'t load. Turn Secure Boot off in the BIOS.')}</div>` : ''}</div>
       ${btn ? `<div class="btn-row"><button class="btn primary" type="button" data-deb="nvidia"${busy ? ' disabled' : ''}>${esc(btn)}</button></div>` : ''}</div>`;
   }
-  async function debianSection(box) {
+  async function debianSection(box, { lastJob = false } = {}) {
     let d;
     try { d = await api.get('/api/system-updates'); }
     catch (e) { box.innerHTML = `<h2 class="pane-title">${t('Debian (the system)')}</h2><p class="muted small">${esc(e.message)}</p>`; return; }
@@ -9680,14 +9680,15 @@ sudo ./install.sh</pre></div>`}` : '') +
         <div class="muted small">${d.listsAt ? t('Package lists: {when}', { when: when(d.listsAt) }) : ''}</div></div>
         <div class="btn-row"><button class="btn" type="button" data-deb="check"${busy ? ' disabled' : ''}>${t('Check now')}</button>
           ${n ? `<button class="btn primary" type="button" data-deb="upgrade"${busy ? ' disabled' : ''}>${t('Update Debian now')}</button>` : ''}</div></div>
+      <div data-deb-job></div>
       ${reboot}
       ${nvidiaCard(d.nvidia, busy)}
       <label class="check"><input type="checkbox" data-deb-auto${d.auto.enabled ? ' checked' : ''}${busy ? ' disabled' : ''}> ${t('Install security updates automatically (every day, without restarting by itself)')}</label>
       <p class="muted small">${lastText}</p>
       ${n ? `<details class="upd-older"><summary>${t('Waiting updates ({n})', { n })}</summary><ul class="deb-list">${d.updates.map((x) =>
-        `<li><b>${esc(x.name)}</b> <span class="muted small">${esc(x.from)} → ${esc(x.version)}</span>${x.security ? ` <span class="pill warn">${t('Security')}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
-      <div data-deb-job></div>`;
+        `<li><b>${esc(x.name)}</b> <span class="muted small">${esc(x.from)} → ${esc(x.version)}</span>${x.security ? ` <span class="pill warn">${t('Security')}</span>` : ''}</li>`).join('')}</ul></details>` : ''}`;
     const jobBox = $('[data-deb-job]', box);
+    const jobShell = `<div class="deb-job" role="status"><p class="small"></p><div class="bar"><span></span></div><details><summary>${t('Details')}</summary><pre class="logs"></pre></details></div>`;
     const follow = async () => {
       let p;
       try { p = await api.get('/api/system-updates/progress'); } catch (e) { if (box.isConnected) setTimeout(follow, 2000); return; } // MajaOS restarting (needrestart)
@@ -9697,19 +9698,31 @@ sudo ./install.sh</pre></div>`}` : '') +
       // place unless it was at the bottom.
       if (p.state === 'idle') { jobBox.innerHTML = ''; }
       else {
-        if (!$('.deb-job', jobBox)) jobBox.innerHTML = `<div class="deb-job"><p class="small"></p><details><summary>${t('Details')}</summary><pre class="logs"></pre></details></div>`;
-        $('.deb-job p', jobBox).innerHTML = `<b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}`;
+        if (!$('.deb-job', jobBox)) jobBox.innerHTML = jobShell;
+        $('.deb-job p', jobBox).innerHTML = `<b>${esc(label)}</b> · ${p.running ? esc(tr(p.message || '…')) : p.state === 'done' ? t('Done.') : `<span class="temp-bad">${esc(tr(p.message || t('Failed.')))}</span>`}${p.running && p.percent != null ? ` <span class="muted">${p.percent}%</span>` : ''}`;
+        // A percent when apt's output tells it (Update Debian now), otherwise a bar that keeps moving while it runs.
+        const bar = $('.deb-job .bar', jobBox), fill = $('span', bar);
+        bar.classList.toggle('busy', !!p.running && p.percent == null);
+        fill.className = p.state === 'failed' ? 'bad' : '';
+        fill.style.width = !p.running ? '100%' : p.percent != null ? p.percent + '%' : '';
         if (p.state === 'failed') $('details', jobBox).open = true;
         const pre = $('pre', jobBox), atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
         const text = p.lines.join('\n');
         if (pre.textContent !== text) { pre.textContent = text; if (atEnd) pre.scrollTop = pre.scrollHeight; }
       }
       if (p.running) setTimeout(follow, 1500);
-      else if (busy || jobBox.dataset.waiting) { delete jobBox.dataset.waiting; debianSection(box); }
+      // Finished: draw the section again (new state), but keep the result of this run in view.
+      else if (busy || jobBox.dataset.waiting) { delete jobBox.dataset.waiting; debianSection(box, { lastJob: true }); }
     };
-    if (busy || (d.job && d.job.state !== 'done')) follow();
+    if (busy || lastJob || (d.job && d.job.state !== 'done')) follow();
     const startJob = async (action) => {
-      try { await api.post('/api/system-updates/' + action); jobBox.dataset.waiting = '1'; $$('[data-deb]', box).forEach((b) => { b.disabled = true; }); follow(); }
+      try {
+        await api.post('/api/system-updates/' + action); jobBox.dataset.waiting = '1';
+        $$('[data-deb], [data-deb-auto]', box).forEach((b) => { b.disabled = true; });
+        jobBox.innerHTML = jobShell; $('.deb-job p', jobBox).textContent = t('Starting…'); $('.deb-job .bar', jobBox).classList.add('busy');
+        jobBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        follow();
+      }
       catch (ex) { toast(ex.message, true); }
     };
     box.onclick = async (e) => {

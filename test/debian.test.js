@@ -61,3 +61,15 @@ test('NVIDIA: the graphics cards lspci shows, and the driver version', () => {
   assert.equal(parseDriverVersion('NVRM version: NVIDIA UNIX x86_64 Kernel Module  535.183.01  Sun May 12 19:39:15 UTC 2024\nGCC version:  gcc version 12.2.0'), '535.183.01');
   assert.equal(parseDriverVersion(''), null);
 });
+
+test('aptPercent follows the packages of an upgrade', () => {
+  assert.equal(deb.aptPercent('check', '== Fetching the package lists…\n'), null);
+  assert.equal(deb.aptPercent('upgrade', '== Fetching the package lists…\nHit:1 http://deb.debian.org/debian trixie InRelease\n'), 5);
+  const head = '== Installing the updates…\nReading package lists...\n';
+  assert.equal(deb.aptPercent('upgrade', head), 10);
+  const plan = head + '2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n';
+  assert.equal(deb.aptPercent('upgrade', plan), 10);
+  assert.equal(deb.aptPercent('upgrade', plan + 'Unpacking libc6:amd64 (2.41-12) over (2.41-11) ...\nUnpacking libc-bin (2.41-12) over (2.41-11) ...\n'), 53);
+  assert.equal(deb.aptPercent('upgrade', plan + 'Unpacking a\nUnpacking b\nSetting up a\nSetting up b\nSetting up c\n'), 95);
+  assert.equal(deb.aptPercent('upgrade', plan + '== Cleaning up…\n'), 97);
+});

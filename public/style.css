@@ -1740,7 +1740,12 @@ details.upd-older summary { cursor: pointer; font-weight: 600; margin: 14px 0 4p
 .deb-reboot { display: grid; gap: 6px; }
 .deb-reboot .btn-row { margin-top: 2px; }
 .deb-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
-.deb-job { margin-top: 10px; }
+.deb-job { margin: 10px 0 14px; }
+.deb-job p { margin: 0 0 6px; }
+.deb-job .bar { margin-bottom: 4px; }
+.bar.busy span { width: 30%; animation: bar-busy 1.4s ease-in-out infinite; }
+@keyframes bar-busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .bar.busy span { animation: none; width: 100%; opacity: .5; } }
 .deb-job .logs { margin-top: 6px; white-space: pre; }
 
 /* An app being updated: the icon dims and a bar at the bottom fills up (instead of the pulse of other actions) */
