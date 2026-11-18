@@ -133,3 +133,52 @@ test('installing with a fixed address: that card is in br0 with its address; a s
   assert.match(text, /allow-hotplug enp5s0\niface enp5s0 inet dhcp/);
   assert.match(text, /auto br0\niface br0 inet static\n {4}bridge_ports enp6s0\n {4}bridge_stp off\n {4}bridge_fd 0\n {4}address 192\.168\.1\.10\/24\n {4}gateway 192\.168\.1\.1\n/);
 });
+
+test('the account from the installer: a free user name, a strong password, both typed the same', () => {
+  const taken = installer.passwdNames('root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1::/usr/sbin:/usr/sbin/nologin\nlennert:x:1000:1000::/home/lennert:/bin/bash\n');
+  assert.deepEqual(taken, ['root', 'daemon', 'lennert']);
+  const ok = installer.validateAccount({ user: ' Lisa ', password: 'blue-horse-42', repeat: 'blue-horse-42' }, taken);
+  assert.deepEqual(ok, { user: 'lisa', password: 'blue-horse-42' });
+  assert.throws(() => installer.validateAccount({ user: 'daemon', password: 'blue-horse-42', repeat: 'blue-horse-42' }, taken), /already uses this user name/);
+  assert.throws(() => installer.validateAccount({ user: 'root', password: 'blue-horse-42', repeat: 'blue-horse-42' }, []), /already uses this user name/);
+  assert.throws(() => installer.validateAccount({ user: '-x', password: 'blue-horse-42', repeat: 'blue-horse-42' }, []), /user name of 2 to 32/);
+  assert.throws(() => installer.validateAccount({ user: 'lisa', password: 'short', repeat: 'short' }, []), /at least 10/);
+  assert.throws(() => installer.validateAccount({ user: 'lisa', password: 'blue-horse-42', repeat: 'blue-horse-43' }, []), /do not match/);
+  // openssl passwd and chpasswd read one line: a line break would cut the password short.
+  assert.throws(() => installer.validateAccount({ user: 'lisa', password: 'blue-horse\n42', repeat: 'blue-horse\n42' }, []), /line break/);
+});
+
+test('the account files hold only hashes, never the password', () => {
+  const files = installer.accountFiles({ user: 'lisa', password: 'blue-horse-42' }, '$6$salt$hash\n', 1700000000000);
+  assert.equal(files.user, 'lisa');
+  assert.equal(files.crypt, '$6$salt$hash');
+  assert.equal(files.auth.user, 'lisa');
+  assert.equal(files.auth.sessionsAfter, 1700000000000);
+  assert.match(files.auth.password.hash, /^[0-9a-f]{128}$/);
+  assert.ok(!JSON.stringify(files).includes('blue-horse-42'));
+  assert.throws(() => installer.accountFiles({ user: 'lisa', password: 'blue-horse-42' }, 'openssl: error'), /could not be prepared/);
+  // MajaOS accepts that hash as the owner's password.
+  const auth = require('../lib/auth');
+  const crypto = require('node:crypto');
+  const want = Buffer.from(files.auth.password.hash, 'hex');
+  const got = crypto.scryptSync('blue-horse-42', Buffer.from(files.auth.password.salt, 'hex'), want.length, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  assert.ok(crypto.timingSafeEqual(got, want));
+  assert.equal(typeof auth.hashPassword, 'function');
+});
+
+test('only an ordinary login user gets the new password on the server\'s screen', async () => {
+  const auth = require('../lib/auth');
+  const passwd = 'root:x:0:0:root:/root:/bin/bash\nsmbuser:x:1001:1001::/nonexistent:/usr/sbin/nologin\nlisa:x:1000:1000:MajaOS:/home/lisa:/bin/bash\nnobody:x:65534:65534::/nonexistent:/usr/sbin/nologin\n';
+  assert.equal(auth.consoleUser(passwd, 'lisa'), true);
+  assert.equal(auth.consoleUser(passwd, 'root'), false);
+  assert.equal(auth.consoleUser(passwd, 'smbuser'), false);
+  assert.equal(auth.consoleUser(passwd, 'nobody'), false);
+  assert.equal(auth.consoleUser(passwd, 'nobody-else'), false);
+  assert.equal(auth.consoleUser(passwd, ''), false);
+  // Not a login user: nothing runs (no chpasswd).
+  const file = path.join(require('node:os').tmpdir(), 'majaos-passwd-' + process.pid);
+  fs.writeFileSync(file, passwd);
+  try { assert.equal(await auth.setConsolePassword('smbuser', 'blue-horse-42', { passwd: file }), false); }
+  finally { fs.rmSync(file, { force: true }); }
+});
+

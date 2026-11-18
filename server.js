@@ -620,6 +620,8 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { ok: true, changed: auth.account(own).password.changed });
     }
     auth.setPassword(body.password);
+    // The owner made on the installer's screen is also the login of the server's own screen: the same new password.
+    await auth.setConsolePassword(auth.userName(), body.password).catch((e) => console.error(`Password of ${auth.userName()} on the server's screen: ${e.message}`));
     removePasswordIssue();
     setSession(res, true);
     return sendJson(res, 200, { ok: true, changed: auth.passwordChanged() });

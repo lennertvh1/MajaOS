@@ -132,3 +132,19 @@ test('the image: MajaOS is installed in the live system and copied to the disk, 
   assert.match(iso, /REMOVE=\(-rm_r \/pool \/dists \/install\.amd \/firmware --\)/);
   assert.match(iso, /build-live\.sh" "\$WORK\/live" "\$WORK\/hb\/majaos\.tar\.gz"/);
 });
+
+test('the account from the installer screen goes to the disk as hashes only, and the file is removed', () => {
+  const run = read('run-install.sh'), serve = read('serve.js');
+  // The screen sends the password only to serve.js; run-install.sh gets a 0600 file with the hashes.
+  assert.match(serve, /openssl', \['passwd', '-6', '-stdin'\]/);
+  assert.match(serve, /mode: 0o600/);
+  assert.match(serve, /Create your account first\./);
+  // A Linux user with sudo, its hash through stdin, and DATA_DIR/auth.json for MajaOS.
+  assert.match(run, /useradd --create-home --shell \/bin\/bash --comment MajaOS --groups sudo "\$A_USER"/);
+  assert.match(run, /chroot "\$TARGET" chpasswd -e/);
+  assert.match(run, /var\/lib\/majaos\/auth\.json/);
+  assert.doesNotMatch(run, /useradd[^\n]*(-p|--password)/);
+  // Removed after use and on every failure (cleanup).
+  assert.match(run, /cleanup\(\) \{\n  rm -f "\$ACCOUNT"/);
+});
+

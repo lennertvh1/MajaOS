@@ -2852,6 +2852,7 @@
     [100, 'MajaOS is installed. After the restart the address appears on the screen.'],
   ];
   let instJob = null;
+  let instAccount = null; // the user name from the account step
   // The keyboards of lib/keyboard.js (LAYOUTS), for Settings > General and the installer's first screen.
   const KBD_LAYOUTS = [['us', 'English (US, QWERTY)'], ['us:intl', 'US international (QWERTY)'], ['gb', 'English (UK, QWERTY)'], ['be', 'Belgian (AZERTY)'],
     ['fr', 'French (AZERTY)'], ['de', 'German (QWERTZ)'], ['ch', 'Swiss (QWERTZ)'], ['nl', 'Dutch (QWERTY)'], ['es', 'Spanish (QWERTY)'],
@@ -3237,8 +3238,21 @@
       if (!disk) throw err('Choose a disk.');
       if (disk.install) throw err('This disk is the installer. Choose another disk.');
       if (body.confirm !== disk.name) throw err('Type the disk name to confirm.');
+      if (!instAccount) throw err('Create your account first.');
       instJob = { start: Date.now(), log: disk.model + ' (' + disk.name + ')' + (body.nvidia ? '\nNVIDIA driver' : '') + '\n' + (body.language || 'en') };
       return { started: true };
+    }
+    if (path === '/api/install/account') {
+      await wait(300);
+      const user = String(body.user || '').trim().toLowerCase();
+      if (!/^[a-z][a-z0-9._-]{1,31}$/.test(user)) throw err('Choose a user name of 2 to 32 characters: lowercase letters, digits, dot, - or _, starting with a letter.');
+      if (['root', 'maja', 'majaos', 'nobody', 'guest', 'sudo', 'daemon', 'bin', 'sys', 'www-data'].includes(user)) throw err('The system already uses this user name. Choose another one.');
+      const pw = String(body.password || '');
+      if (/[\x00-\x1f\x7f]/.test(pw)) throw err('A password can\'t contain a line break or a tab.');
+      if (pw.length < 10) throw err('Choose a password of at least 10 characters.');
+      if (pw !== String(body.repeat || '')) throw err('The two passwords do not match.');
+      instAccount = user;
+      return { ok: true, user };
     }
     if (path === '/api/install/reboot') return { ok: true };
     if (path === '/api/keyboard') { await wait(300); return kbdSet(body.layout); }

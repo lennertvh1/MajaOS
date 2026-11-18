@@ -14,6 +14,8 @@ ROOT="${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 DIR="${INSTALL_DIR:-/run/majaos-install}"
 STATUS="${STATUS:-$DIR/status.json}"
 LOG="$DIR/log.txt"
+# The account from the installer's screen (iso/serve.js): {user, crypt, auth}. Only hashes, never the password.
+ACCOUNT="$DIR/account.json"
 TARGET=/mnt/maja-install
 mkdir -p "$DIR"
 : > "$LOG"
@@ -29,6 +31,7 @@ JS
 }
 
 cleanup() {
+  rm -f "$ACCOUNT"
   umount "$TARGET/run" 2>/dev/null || true
   umount "$TARGET/boot/efi" 2>/dev/null || true
   umount "$TARGET/dev/pts" 2>/dev/null || true
@@ -259,9 +262,27 @@ LOCALE="$(locale_of "$LANG_CODE")"
 grep -q "^$LOCALE UTF-8" "$TARGET/etc/locale.gen" || printf '%s UTF-8\n' "$LOCALE" >> "$TARGET/etc/locale.gen"
 chroot "$TARGET" locale-gen >>"$LOG" 2>&1 || true
 printf 'LANG=%s\n' "$LOCALE" > "$TARGET/etc/default/locale"
-chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS maja >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 76
-chroot "$TARGET" passwd -l maja >>"$LOG" 2>&1 || true
-chroot "$TARGET" usermod -aG sudo maja >>"$LOG" 2>&1 || true
+# The account: a login on the server's own screen (with sudo) and the owner in MajaOS, with the same password.
+account_field() { node -e 'const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(String(a[process.argv[2]] || ""))' "$ACCOUNT" "$1"; }
+if [ -f "$ACCOUNT" ]; then
+  A_USER="$(account_field user)"
+  printf '%s' "$A_USER" | grep -qxE '[a-z][a-z0-9._-]{1,31}' || fail "$NOT_PREPARED" 76
+  chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS --groups sudo "$A_USER" >>"$LOG" 2>&1 \
+    || fail "Your account could not be created. Open Details to see why." 76
+  # The hash through stdin (chpasswd -e), never on a command line.
+  printf '%s:%s\n' "$A_USER" "$(account_field crypt)" | chroot "$TARGET" chpasswd -e >>"$LOG" 2>&1 \
+    || fail "Your account could not be created. Open Details to see why." 76
+  mkdir -p "$TARGET/var/lib/majaos"
+  ( umask 077; node -e 'const fs = require("fs"); const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); fs.writeFileSync(process.argv[2], JSON.stringify(a.auth, null, 2) + "\n", { mode: 0o600 })' "$ACCOUNT" "$TARGET/var/lib/majaos/auth.json" ) \
+    || fail "Your account could not be created. Open Details to see why." 76
+  chmod 600 "$TARGET/var/lib/majaos/auth.json"
+  rm -f "$ACCOUNT"
+else
+  # Without an account from the screen (an older screen): a locked user, and the account is made in the browser.
+  chroot "$TARGET" useradd --create-home --shell /bin/bash --comment MajaOS maja >>"$LOG" 2>&1 || fail "$NOT_PREPARED" 76
+  chroot "$TARGET" passwd -l maja >>"$LOG" 2>&1 || true
+  chroot "$TARGET" usermod -aG sudo maja >>"$LOG" 2>&1 || true
+fi
 
 uuid() { blkid -s UUID -o value "$1"; }
 {

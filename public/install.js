@@ -37,7 +37,8 @@
   const NET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10h-4v3H8v-3H4z"/><path d="M8.5 8v3M11 8v3M13 8v3M15.5 8v3"/></svg>';
   const state = { step: 'lang', disks: [], disk: null, nvidia: false, error: '', job: null, timer: null, unavailable: false,
     kbd: null, kbdList: [], kbdDefaults: {}, kbdPicked: false, kbdBusy: false,
-    net: null, netForms: {}, netSeen: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null };
+    net: null, netForms: {}, netSeen: {}, netSel: null, netBusy: false, netPicked: false, netTimer: null,
+    acct: { user: 'admin', password: '', repeat: '' }, acctShow: false, acctBusy: false, acctUser: '' };
   let api = null;
 
   function bytes(n) {
@@ -79,7 +80,7 @@
     }
     if (state.step === 'welcome') {
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Welcome to MajaOS'))}</h1>
-        <p class="lead">${esc(t('This installs MajaOS on this computer. You create your account in the browser afterwards.'))}</p>
+        <p class="lead">${esc(t('This installs MajaOS on this computer.'))}</p>
         ${actions(btn(t('Back'), 'data-go="lang"') + btn(t('Continue'), 'data-go="network"', true))}</section>`;
       return;
     }
@@ -117,7 +118,25 @@
         <div class="seg inst-seg" role="radiogroup" aria-label="${esc(t('Address'))}">${mode('dhcp', t('Automatic (DHCP)'))}${mode('static', t('Fixed address'))}${mode('off', t('Not used'))}</div>
         ${fixed}<p class="inst-net ${n.online && !state.netBusy ? 'ok' : ''}" role="status">${esc(status)}</p>` : '') + `
         <p class="inst-error" role="alert">${esc(state.error)}</p>
-        ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="disk"' + (state.netBusy || !n.cards.length ? ' disabled' : ''), true))}</section>`;
+        ${actions(btn(t('Back'), 'data-go="welcome"') + btn(t('Continue'), 'data-go="account"' + (state.netBusy || !n.cards.length ? ' disabled' : ''), true))}</section>`;
+      return;
+    }
+    if (state.step === 'account') {
+      const a = state.acct, type = state.acctShow ? 'text' : 'password';
+      const field = (name, label, attrs) => `<label class="inst-field"><span>${esc(label)}</span>
+        <input class="field" name="${name}" value="${esc(a[name])}" ${attrs} spellcheck="false" autocapitalize="none"></label>`;
+      root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Your account'))}</h1>
+        <p class="lead">${esc(t('You sign in with it to MajaOS in the browser, and on the screen of this server.'))}</p>
+        <div class="inst-fields" data-account>
+          ${field('user', t('User name'), 'maxlength="32" autocomplete="off"')}
+          <p class="inst-hint">${esc(t('Lowercase letters, digits, dot, - or _.'))}</p>
+          ${field('password', t('Password'), `type="${type}" autocomplete="off" minlength="10"`)}
+          ${field('repeat', t('Repeat the password'), `type="${type}" autocomplete="off"`)}
+        </div>
+        <label class="inst-check"><input type="checkbox" data-show-pw ${state.acctShow ? 'checked' : ''}><span>${esc(t('Show the password'))}</span></label>
+        <p class="inst-hint">${esc(t('At least 10 characters. Check with Show the password that the keyboard types what you mean.'))}</p>
+        <p class="inst-error" role="alert">${esc(state.error)}</p>
+        ${actions(btn(t('Back'), 'data-go="network"') + btn(state.acctBusy ? t('Checking…') : t('Continue'), 'data-go="disk"' + (state.acctBusy ? ' disabled' : ''), true))}</section>`;
       return;
     }
     if (state.step === 'disk') {
@@ -130,7 +149,7 @@
       root.innerHTML = `<section class="inst-card">${brand()}<h1>${esc(t('Choose the disk'))}</h1>
         <p class="lead">${esc(t('MajaOS will be installed on this disk. Everything on it will be erased.'))}</p>
         ${cards}<p class="inst-error" role="alert">${esc(state.error)}</p>
-        ${actions(btn(t('Back'), 'data-go="network"') + btn(t('Continue'), 'data-go="confirm"' + (state.disk ? '' : ' disabled'), true))}</section>`;
+        ${actions(btn(t('Back'), 'data-go="account"') + btn(t('Continue'), 'data-go="confirm"' + (state.disk ? '' : ' disabled'), true))}</section>`;
       return;
     }
     if (state.step === 'confirm') {
@@ -149,7 +168,8 @@
       root.innerHTML = `<section class="inst-card" ${state.step === 'progress' && !failed ? 'data-step="progress"' : ''}>${brand()}<h1>${esc(title)}</h1>
         <p class="lead" data-msg>${esc(t(job.message || ''))}</p>
         <div class="bar" role="progressbar" aria-valuenow="${job.percent || 0}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.percent || 0}%"></span></div>
-        ${state.step === 'done' ? `<p class="lead">${esc(t('Remove the USB stick when the computer restarts.'))}</p>` : ''}
+        ${state.step === 'done' ? `<p class="lead">${esc(t('Remove the USB stick when the computer restarts.'))}</p>
+          ${state.acctUser ? `<p class="lead">${esc(t('Then sign in as {user}, in the browser or on this screen.', { user: state.acctUser }))}</p>` : ''}` : ''}
         ${job.log ? `<details><summary>${esc(t('Details'))}</summary><pre>${esc(job.log)}</pre></details>` : ''}
         <p class="inst-error" role="alert">${esc(failed ? '' : state.error)}</p>
         ${failed ? actions(btn(t('Try again'), 'data-go="disk"', true)) : (state.step === 'done' ? actions(btn(t('Restart'), 'data-go="reboot"', true)) : '')}</section>`;
@@ -319,7 +339,7 @@
       state.netSeen[wrong.name] = { all: true };
       state.netSel = wrong.name; state.error = t('Check the settings of {name}.', { name: wrong.name }); draw(); return;
     }
-    if (list.every((c) => c.mode === 'dhcp') && state.net.online && !state.net.chosen) { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
+    if (list.every((c) => c.mode === 'dhcp') && state.net.online && !state.net.chosen) { toAccount(); return; }
     state.netBusy = true; state.error = ''; draw();
     try {
       const r = await api.post('/api/install/network', { cards: list });
@@ -332,7 +352,7 @@
         state.error = t('There is no internet connection with these settings. MajaOS installs without it: choose Continue again, or check the cable and the settings.');
         draw(); return;
       }
-      state.step = 'disk'; draw(); await loadDisks(); draw();
+      toAccount();
     } catch (e) {
       state.netBusy = false; state.error = t(e.message);
       if (e.card && state.netForms[e.card]) state.netSel = e.card; // show the card the message is about
@@ -352,10 +372,30 @@
     } catch (e) { state.kbdBusy = false; state.error = t(e.message); draw(); }
   }
 
+  function toAccount() {
+    state.step = 'account'; state.error = ''; draw();
+    const first = $('#inst input[name="' + (state.acct.password ? 'password' : 'user') + '"]');
+    if (first) { first.focus(); if (first.name === 'user') first.select(); }
+  }
+  // Continue on the account step: the installer checks it (name free, password strong enough) before any disk is chosen.
+  async function applyAccount() {
+    const a = state.acct;
+    if (a.password.length < 10) { state.error = t('Choose a password of at least 10 characters.'); draw(); return; }
+    if (a.password !== a.repeat) { state.error = t('The two passwords do not match.'); draw(); return; }
+    state.acctBusy = true; state.error = ''; draw();
+    try {
+      const r = await api.post('/api/install/account', { user: a.user, password: a.password, repeat: a.repeat });
+      state.acctBusy = false; state.acctUser = r.user || a.user.trim().toLowerCase();
+      state.step = 'disk'; draw(); await loadDisks(); draw();
+    } catch (e) { state.acctBusy = false; state.error = t(e.message); draw(); }
+  }
+
   async function go(step) {
     if (step === 'welcome' && state.step === 'lang') return applyKeyboard();
     if (step === 'network') { state.step = 'network'; state.error = ''; draw(); await loadNetwork(); draw(); watchNetwork(); return; }
-    if (step === 'disk' && state.step === 'network') return applyNetwork();
+    if (step === 'account' && state.step === 'network') return applyNetwork();
+    if (step === 'account') return toAccount();
+    if (step === 'disk' && state.step === 'account') return applyAccount();
     if (step === 'disk') { state.step = 'disk'; draw(); await loadDisks(); draw(); return; }
     if (step === 'confirm') {
       if (!state.disk) { state.error = t('Choose a disk.'); draw(); return; }
@@ -412,6 +452,14 @@
   });
 
   $('#inst').addEventListener('input', (e) => {
+    if (state.step === 'account') {
+      if (e.target.matches('[data-show-pw]')) {
+        state.acctShow = e.target.checked;
+        document.querySelectorAll('#inst [data-account] input[name="password"], #inst [data-account] input[name="repeat"]').forEach((i) => { i.type = state.acctShow ? 'text' : 'password'; });
+      } else if (e.target.name in state.acct) state.acct[e.target.name] = e.target.value;
+      if (state.error) { state.error = ''; const box = $('#inst .inst-error'); if (box) box.textContent = ''; } // being fixed
+      return;
+    }
     const f = state.step === 'network' && form();
     if (!f || !(e.target.name in f)) return;
     f[e.target.name] = e.target.value;

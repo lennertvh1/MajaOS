@@ -25,6 +25,11 @@ const KBD_FILE = path.join(DIR, 'keyboard');
 let first = { language: null, keyboard: null, resume: null };
 const activeKeyboard = () => { try { return fs.readFileSync(KBD_FILE, 'utf8').trim() || 'us'; } catch { return 'us'; } };
 let chosen = null; // the network settings per card from the network step: they go along to the installed system
+// The account from the account step {user, password}: only in memory until the installation starts; then
+// run-install.sh gets it as a file in /run (tmpfs, 0600) with the password only as hashes, and removes it.
+let account = null;
+const ACCOUNT_FILE = path.join(DIR, 'account.json');
+function takenNames() { try { return installer.passwdNames(fs.readFileSync('/etc/passwd', 'utf8')); } catch { return []; } }
 
 function send(res, status, body, type) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
@@ -201,11 +206,22 @@ const server = http.createServer(async (req, res) => {
       const ok = await waitOnline(10);
       return send(res, 200, { online: ok, cards: await cards(), dns: nameservers(), chosen });
     }
+    if (url.pathname === '/api/install/account' && req.method === 'POST') {
+      if (child) return send(res, 409, { error: 'The installation is already running.' });
+      account = installer.validateAccount(await readBody(req), takenNames());
+      return send(res, 200, { ok: true, user: account.user });
+    }
     if (url.pathname === '/api/install' && req.method === 'POST') {
       if (child) return send(res, 409, { error: 'The installation is already running.' });
       const body = await readBody(req);
+      if (!account) return send(res, 400, { error: 'Create your account first.' });
       const list = await disks();
       const picked = installer.choose(list, body);
+      // The Linux password as a crypt hash (SHA-512), MajaOS's as scrypt: the password itself never goes on disk.
+      const crypt = await run('openssl', ['passwd', '-6', '-stdin'], { input: account.password + '\n', timeout: 10000 });
+      fs.mkdirSync(DIR, { recursive: true });
+      fs.rmSync(ACCOUNT_FILE, { force: true });
+      fs.writeFileSync(ACCOUNT_FILE, JSON.stringify(installer.accountFiles(account, crypt)), { mode: 0o600 });
       installLang = picked.language;
       fs.mkdirSync(DIR, { recursive: true });
       fs.writeFileSync(STATUS, JSON.stringify({ state: 'running', percent: 5, message: 'Preparing the installation', log: '' }));
