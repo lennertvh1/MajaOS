@@ -5496,11 +5496,17 @@
     let opts;
     try { opts = await vmOptions(); } catch (e) { $('#winBody').innerHTML = `<p class="lead">${esc(e.message)}</p>`; return; }
     let osId = 'debian', media = 'iso';
+    // The file can also come from an upload, a link (a job on the server) or anywhere on a pool (pick = {path, name, size, kind}).
+    let pick = null, srcJob = null, inPlace = false;
     const draw = (keep) => {
       const k = vmOs(osId), fam = VM_FAMILY[k.family];
       const files = media === 'disk' ? opts.images : opts.isos;
       const fileLabel = t(media === 'disk' ? 'Disk file' : 'Installation ISO');
-      const blocked = opts.vmDirMissing || !files.length;
+      if (pick && pick.kind !== media) pick = null;
+      const blocked = opts.vmDirMissing || (!files.length && !pick);
+      const want = pick ? pick.path : keep && keep.source;
+      const usable = files.filter((f) => !f.usedBy);
+      const selected = files.some((f) => f.name === want && !f.usedBy) ? want : usable[0] && usable[0].name;
       const sel = (name, list, cur) => `<select class="field" name="${name}">${list.map(([v, label]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
       $('#winBody').innerHTML = `
         ${opts.vmDirMissing ? `<p class="lead temp-bad">${t('The folder for VM disks ({dir}) does not exist. Create a pool in Storage first, or choose a folder in Settings → Storage.', { dir: esc(opts.vmDir) })}</p>` : ''}
@@ -5513,12 +5519,30 @@
           <div class="fld"><span>${t('Install from')}</span>
             <div class="seg kind-seg" role="radiogroup" aria-label="${t('Install from')}">${[['iso', t('Installation ISO')], ['disk', t('Existing disk')]].map(([v, label]) =>
               `<button type="button" role="radio" aria-checked="${v === media}" data-media="${v}">${esc(label)}</button>`).join('')}</div></div>
-          <label class="fld"><span>${fileLabel}</span>
-            ${files.length ? `<select class="field" name="source" required>${files.map((f) =>
-              `<option value="${esc(f.name)}"${keep && keep.source === f.name ? ' selected' : ''}>${esc(f.name)} (${bytes(f.size)})</option>`).join('')}</select>`
+          <div class="fld vm-src"><span>${fileLabel}</span>
+            ${pick ? `<div class="vm-pick"><span class="vm-pick-path" title="${esc(pick.path)}">${esc(pick.path)}</span> <span class="muted small">${bytes(pick.size)}</span>
+                <button class="btn sm" type="button" data-src-clear>${t('Choose another')}</button><input type="hidden" name="source" value="${esc(pick.path)}"></div>`
+            : files.length ? `<select class="field" name="source" required aria-label="${esc(fileLabel)}">${files.map((f) =>
+              `<option value="${esc(f.name)}"${f.name === selected ? ' selected' : ''}${f.usedBy ? ' disabled' : ''}>${esc(f.name)} (${bytes(f.size)})${f.usedBy ? ' · ' + esc(t('disk of {vm}', { vm: f.usedBy })) : ''}</option>`).join('')}</select>`
             : `<p class="muted small">${t(media === 'disk' ? 'There are no disk files (.qcow2, .img, .raw) in {dir} yet.' : 'There are no ISO files in {dir} yet.', { dir: esc(opts.isoDir) })}
-                ${t('Put one there, for example via the shared folder or with scp, and open this window again.')}${opts.isoDirMissing ? '' : dirLink(opts.isoDir)}</p>`}
-            <small>${t('From {dir}', { dir: esc(opts.isoDir) })}${opts.isoDirMissing ? '' : dirLink(opts.isoDir)}</small></label>
+                ${t('Upload one, download it from a link, or choose a file on the server.')}</p>`}
+            <div class="btn-row vm-src-btns">
+              <button class="btn sm" type="button" data-src-upload${opts.isoDirMissing || srcJob ? ' disabled' : ''}>${t('Upload…')}</button>
+              <button class="btn sm" type="button" data-src-link${opts.isoDirMissing || srcJob ? ' disabled' : ''}>${t('From a link…')}</button>
+              <button class="btn sm" type="button" data-src-browse${srcJob ? ' disabled' : ''}>${t('Choose on the server…')}</button>
+              <input type="file" data-src-file hidden accept="${media === 'disk' ? '.qcow2,.img,.raw,.vmdk,.vhdx,.vdi,.xz,.gz,.zip' : '.iso,.xz,.gz,.zip'}">
+            </div>
+            <div class="vm-src-link" data-src-linkform hidden>
+              <input class="field" type="url" data-src-url placeholder="https://…" aria-label="${t('Link to the file')}" spellcheck="false" autocomplete="off">
+              <button class="btn sm primary" type="button" data-src-get>${t('Download')}</button>
+              <button class="btn sm" type="button" data-src-linkcancel>${t('Cancel')}</button>
+            </div>
+            <div data-src-job></div>
+            <div class="vm-browse" data-src-browser hidden></div>
+            <small>${pick ? t('On the server') + dirLink(pick.path.slice(0, pick.path.lastIndexOf('/'))) : t('From {dir}', { dir: esc(opts.isoDir) }) + (opts.isoDirMissing ? '' : dirLink(opts.isoDir))}
+              ${hint(t('Upload and From a link put the file in {dir}. Packed files (.xz, .gz, .zip) are unpacked there.', { dir: opts.isoDir }))}</small></div>
+          ${media === 'disk' ? `<label class="check"><input type="checkbox" name="inPlace"${inPlace ? ' checked' : ''}> ${t('Use the file as it is (no copy)')}
+            ${hint(t('The file itself becomes the VM\'s disk: no copy and no extra space, but the VM changes it. Removing the VM keeps the file. Only qcow2 and raw files. Without this, MajaOS makes a qcow2 copy and leaves the file untouched.'))}</label>` : ''}
           ${(() => { const v = { name: keep ? keep.name : '', vcpus: k.vcpus, memory: k.memoryGb * 1073741824, diskGb: media === 'disk' ? undefined : (k.diskGb || 32),
             autostart: false, delay: 0, description: keep ? keep.description : '' }; return vmNameField(v) + vmSizeFields(v, opts) + `
           <label class="fld"><span>${t('Network')}</span><select class="field" name="network">${vmNetOptions(opts, keep && keep.network || opts.network)}</select>
@@ -5534,20 +5558,120 @@
           </div></details>
           <p class="muted small">${t('The VM starts right after it is created. Change network cards, disks and devices afterwards in Edit.')}</p>
           <p class="form-error" role="alert"></p>
-          <div class="btn-row"><button class="btn primary" type="submit"${blocked ? ' disabled' : ''}>${t('Create')}</button><button class="btn" type="button" data-close>${t('Cancel')}</button></div>
+          <div class="btn-row"><button class="btn primary" type="submit"${blocked || srcJob ? ' disabled' : ''}>${t('Create')}</button><button class="btn" type="button" data-close>${t('Cancel')}</button></div>
         </form>`;
       wireAutostart($('#vmForm'));
+      paintJob();
+    };
+    // The upload or download that is running: a bar under the buttons, with Stop. Drawn again after every draw().
+    const paintJob = () => {
+      const box = $('[data-src-job]'); if (!box) return;
+      if (!srcJob) { box.innerHTML = ''; return; }
+      const j = srcJob;
+      box.innerHTML = `<div class="deb-job" role="status"><p class="small"><b>${esc(j.label)}</b>${j.percent != null ? ` <span class="muted">${j.percent}%</span>` : ''}
+          ${j.detail ? ` · <span class="muted">${esc(j.detail)}</span>` : ''}</p>
+        <div class="bar${j.percent == null ? ' busy' : ''}"><span style="width:${j.percent == null ? '' : j.percent + '%'}"></span></div>
+        <button class="btn sm" type="button" data-src-stop>${t('Stop')}</button></div>`;
     };
     draw();
     const body = $('#winBody');
     const keepOf = (f) => ({ name: f.elements.name.value, description: f.elements.description.value, source: f.elements.source && f.elements.source.value, network: f.elements.network.value });
+    const redraw = (source) => { const f = $('#vmForm'); if (!f) return; const keep = keepOf(f); if (source !== undefined) keep.source = source; inPlace = !!(f.elements.inPlace && f.elements.inPlace.checked); draw(keep); };
+    const sizeText = (done, total) => total ? t('{done} of {total}', { done: bytes(done), total: bytes(total) }) : bytes(done);
+    // After an upload or download: read the folder again and choose the new file.
+    const arrived = async (name) => {
+      srcJob = null; pick = null;
+      try { opts = await vmOptions(); } catch (e) { toast(e.message, true); }
+      if (!$('#vmForm')) return;
+      if (/\.iso$/i.test(name) !== (media === 'iso')) media = /\.iso$/i.test(name) ? 'iso' : 'disk';
+      redraw(name);
+      toast(t('Ready: {name}', { name }));
+    };
+    // Follow a job on the server (downloading and/or unpacking) until it is done.
+    const followJob = async (id) => {
+      let j;
+      try { j = await api.get('/api/vm-media/jobs/' + id); }
+      catch (e) { srcJob = null; if ($('#vmForm')) { redraw(); toast(e.message, true); } return; }
+      if (!$('#vmForm')) return;
+      if (j.running) {
+        srcJob = { id, label: j.phase === 'unpack' ? t('Unpacking {name}…', { name: j.name }) : t('Downloading {name}…', { name: j.name || t('the file') }),
+          percent: j.percent, detail: sizeText(j.bytes, j.total) };
+        paintJob(); setTimeout(() => followJob(id), 1000); return;
+      }
+      if (j.state === 'done') return arrived(j.name);
+      srcJob = null; redraw();
+      if (j.state === 'failed') toast(tr(j.error) || t('Failed.'), true);
+    };
+    const startUpload = async (file) => {
+      const ctl = new AbortController();
+      srcJob = { label: t('Uploading {name}…', { name: file.name }), percent: 0, detail: sizeText(0, file.size), abort: ctl }; redraw();
+      try {
+        const r = await api.upload('/api/vm-media/upload?name=' + encodeURIComponent(file.name), file, { signal: ctl.signal, onProgress: (sent, total) => {
+          if (!srcJob || srcJob.abort !== ctl) return;
+          srcJob.percent = total ? Math.min(99, Math.floor(sent / total * 100)) : null; srcJob.detail = sizeText(sent, total); paintJob();
+        } });
+        if (r.job) { srcJob = { id: r.job.id, label: t('Unpacking {name}…', { name: r.job.name }), percent: null }; paintJob(); followJob(r.job.id); }
+        else arrived(r.name);
+      } catch (ex) { srcJob = null; redraw(); if (ex.status !== 499) toast(ex.message, true); }
+    };
+    // Browse the pools for a disk file or ISO (only the kind the form needs).
+    const browseTo = async (dir) => {
+      const box = $('[data-src-browser]'); if (!box) return;
+      box.hidden = false; box.innerHTML = `<p class="muted small">${t('Loading…')}</p>`;
+      let d;
+      try { d = await api.get('/api/vm-media/browse' + (dir ? '?path=' + encodeURIComponent(dir) : '')); }
+      catch (e) { box.innerHTML = `<p class="small temp-bad">${esc(e.message)}</p><button class="btn sm" type="button" data-browse-close>${t('Close')}</button>`; return; }
+      const files = d.files.filter((f) => f.kind === media);
+      const row = (attr, icon, label, extra = '') => `<li><button type="button" ${attr}><span class="vm-browse-icon" aria-hidden="true">${icon}</span><span>${esc(label)}</span>${extra}</button></li>`;
+      box.innerHTML = `<div class="vm-browse-head"><b>${esc(d.path || t('Pools'))}</b><button class="btn sm" type="button" data-browse-close>${t('Close')}</button></div>
+        <ul>${d.path ? row(`data-browse-dir="${esc(d.parent || '')}"`, '↑', d.parent ? t('Up one folder') : t('Pools')) : ''}
+          ${(d.path ? d.dirs.map((n) => row(`data-browse-dir="${esc(d.path + '/' + n)}"`, fileGlyph('dir'), n)) : d.roots.map((r) => row(`data-browse-dir="${esc(r.path)}"`, fileGlyph('dir'), r.name, ` <span class="muted small">${esc(r.path)}</span>`))).join('')}
+          ${files.map((f) => row(`data-browse-file="${esc(f.path)}" data-size="${f.size}"`, fileGlyph('file', f.name), f.name, ` <span class="muted small">${bytes(f.size)}</span>`)).join('')}</ul>
+        ${d.path && !files.length && !d.dirs.length ? `<p class="muted small">${t(media === 'iso' ? 'No ISO files in this folder.' : 'No disk files in this folder.')}</p>` : ''}
+        ${!d.path && !d.roots.length ? `<p class="muted small">${t('There are no pools yet.')}</p>` : ''}`;
+    };
     body.addEventListener('change', (e) => {
+      if (e.target.matches('[data-src-file]')) { const f = e.target.files[0]; e.target.value = ''; if (f) startUpload(f); return; }
+      if (e.target.name === 'inPlace') { inPlace = e.target.checked; return; }
       if (e.target.name !== 'os') return;
       const keep = keepOf($('#vmForm'));
       osId = e.target.value; media = vmOs(osId).media || 'iso'; draw(keep);
       $('#vmForm').elements.os.focus();
     });
-    body.addEventListener('click', (e) => {
+    body.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('[data-src-url]')) { e.preventDefault(); $('[data-src-get]').click(); }
+    });
+    body.addEventListener('click', async (e) => {
+      const linkForm = $('[data-src-linkform]');
+      if (e.target.closest('[data-src-upload]')) return $('[data-src-file]').click();
+      if (e.target.closest('[data-src-link]')) { linkForm.hidden = false; $('[data-src-url]').focus(); return; }
+      if (e.target.closest('[data-src-linkcancel]')) { linkForm.hidden = true; return; }
+      if (e.target.closest('[data-src-get]')) {
+        const url = $('[data-src-url]').value.trim();
+        if (!url) { $('[data-src-url]').focus(); return; }
+        try {
+          const j = await api.post('/api/vm-media/download', { url });
+          srcJob = { id: j.id, label: t('Downloading {name}…', { name: j.name || t('the file') }), percent: null }; redraw(); followJob(j.id);
+        } catch (ex) { toast(ex.message, true); }
+        return;
+      }
+      if (e.target.closest('[data-src-stop]')) {
+        if (!srcJob) return;
+        if (srcJob.abort) srcJob.abort.abort();
+        else if (srcJob.id) await api.del('/api/vm-media/jobs/' + srcJob.id).catch(() => {});
+        srcJob = null; redraw(); return;
+      }
+      if (e.target.closest('[data-src-browse]')) return browseTo('');
+      if (e.target.closest('[data-browse-close]')) { $('[data-src-browser]').hidden = true; return; }
+      const dir = e.target.closest('[data-browse-dir]');
+      if (dir) return browseTo(dir.dataset.browseDir);
+      const file = e.target.closest('[data-browse-file]');
+      if (file) {
+        const p = file.dataset.browseFile;
+        pick = { path: p, name: p.split('/').pop(), size: Number(file.dataset.size) || 0, kind: media };
+        return redraw();
+      }
+      if (e.target.closest('[data-src-clear]')) { pick = null; return redraw(); }
       const b = e.target.closest('[data-media]'); if (!b || b.dataset.media === media) return;
       const keep = keepOf($('#vmForm'));
       media = b.dataset.media; draw(keep);
@@ -5558,6 +5682,7 @@
       err.textContent = ''; btn.disabled = true; btn.textContent = t('Creating…');
       try {
         const r = await api.post('/api/vms', readForm(form));
+        srcJob = null;
         toast(t('Created and started: {name}', { name: r.name }));
         await loadVms().catch(() => {});
         vmEditWindow(r.name, 'screen'); // straight to the console to do the installation

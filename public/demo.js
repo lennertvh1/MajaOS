@@ -1810,10 +1810,71 @@
     };
   }
   const findVm = (id) => { const v = vms.find((x) => x.name === decodeURIComponent(id)); if (!v) throw err('This VM does not exist (anymore).', 404); return v; };
+  // Files for VMs, like lib/vmmedia.js: the ISO folder (uploads and downloads land there), and a few more on the pools.
+  const vmIsos = [{ name: 'debian-13.1.0-amd64-netinst.iso', size: 754 * 1e6 }, { name: 'ubuntu-24.04.3-live-server-amd64.iso', size: 3.1 * 1e9 },
+    { name: 'Win11_25H2_Dutch_x64.iso', size: 7.3 * 1e9 }];
+  const vmImages = [{ name: 'haos_ova-16.2.qcow2', size: 1.1 * 1e9 }, { name: 'haos_ova-15.2.qcow2', size: 1.0 * 1e9, usedBy: 'Home Assistant OS' }];
+  const vmTree = {
+    '/tank': { dirs: ['backups', 'downloads', 'isos', 'media', 'vms'] }, '/fast': { dirs: ['appdata', 'vms'] },
+    '/tank/downloads': { dirs: ['old-server'], files: [['opnsense-25.7-nano-amd64.img', 3.2e9], ['pfSense-CE-2.7.2.iso', 0.85e9]] },
+    '/tank/downloads/old-server': { files: [['nextcloud-vm.vmdk', 18e9], ['ubuntu-22.04.vhdx', 12e9]] },
+    '/tank/vms': { dirs: ['windows-11'] }, '/tank/vms/windows-11': { files: [['windows-11.qcow2', 64e9]] },
+    '/fast/vms': { dirs: ['old-debian'] }, '/fast/vms/old-debian': { files: [['old-debian.qcow2', 9.4e9]] },
+    '/tank/media': { dirs: ['Movies', 'Music'] }, '/tank/backups': { dirs: [] }, '/fast/appdata': { dirs: [] },
+  };
+  const VM_IMAGE = /\.(qcow2|img|raw|vmdk|vhdx|vdi)$/i, VM_ISO = /\.iso$/i;
+  const vmTreeFiles = (dir) => dir === sp.isos ? [...vmIsos, ...vmImages].map((f) => [f.name, f.size]) : (vmTree[dir] && vmTree[dir].files) || [];
+  function vmBrowse(p) {
+    const roots = [{ name: 'tank', path: '/tank' }, { name: 'fast', path: '/fast' }];
+    if (!p) return { path: null, parent: null, roots, dirs: [], files: [] };
+    const dir = p.replace(/\/+$/, '');
+    if (!vmTree[dir] && dir !== sp.isos) throw err('This folder doesn\'t exist (anymore).', 404);
+    const root = roots.find((r) => dir === r.path || dir.startsWith(r.path + '/'));
+    if (!root) throw err('Choose a folder on one of your pools.');
+    return { path: dir, parent: dir === root.path ? null : dir.slice(0, dir.lastIndexOf('/')), root: root.path, roots,
+      dirs: ((vmTree[dir] && vmTree[dir].dirs) || []).slice(), files: vmTreeFiles(dir).filter(([n]) => VM_IMAGE.test(n) || VM_ISO.test(n))
+        .map(([name, size]) => ({ name, size, path: dir + '/' + name, kind: VM_ISO.test(name) ? 'iso' : 'disk' })) };
+  }
+  // A file someone chose with Browse: it must exist in the tree above.
+  function vmTreeFile(p, kind) {
+    const dir = p.slice(0, p.lastIndexOf('/')), name = p.slice(p.lastIndexOf('/') + 1);
+    const hit = vmTreeFiles(dir).find(([n]) => n === name);
+    if (!hit) throw err('The file ' + p + ' doesn\'t exist (anymore).', 404);
+    if (!(kind === 'iso' ? VM_ISO : VM_IMAGE).test(name)) throw err(kind === 'iso' ? 'Choose an ISO file (.iso).' : 'Choose a disk file (.qcow2, .img, .raw, .vmdk, .vhdx or .vdi).');
+    return { name, size: hit[1] };
+  }
+  // Uploads and downloads (simulated): a download takes ~6 s, unpacking ~3 s, then the file is in the ISO folder.
+  const vmJobs = {};
+  const vmMediaName = (n) => String(n || '').split(/[\\/]/).pop().replace(/[^\w.+ ()-]+/g, '-').replace(/^[.\s-]+/, '').trim().slice(0, 200);
+  const vmAcceptable = (n) => /\.zip$/i.test(n) || VM_IMAGE.test(n.replace(/\.(xz|gz)$/i, '')) || VM_ISO.test(n.replace(/\.(xz|gz)$/i, ''));
+  const vmUnpacked = (n) => /\.zip$/i.test(n) ? n.replace(/\.zip$/i, '') : n.replace(/\.(xz|gz)$/i, '');
+  const vmExists = (n) => vmIsos.concat(vmImages).some((f) => f.name === n);
+  function vmAdd(name, size) { (VM_ISO.test(name) ? vmIsos : vmImages).push({ name, size }); }
+  function vmJob(fields) {
+    const id = Math.random().toString(16).slice(2, 14).padEnd(12, '0');
+    vmJobs[id] = { id, state: 'running', bytes: 0, total: null, error: null, started: Date.now(), ...fields };
+    return id;
+  }
+  function vmJobOut(id) {
+    const j = vmJobs[id]; if (!j) throw err('This download or unpacking is no longer known. Open the form again.', 404);
+    if (j.state === 'running') {
+      const ms = Date.now() - j.started, dl = j.kind === 'download' ? 6000 : 0, packed = /\.(xz|gz|zip)$/i.test(j.file);
+      if (ms < dl) { j.phase = 'download'; j.name = j.file; j.total = j.size; j.bytes = Math.round(j.size * ms / dl); }
+      else if (packed && ms < dl + 3000) { j.phase = 'unpack'; j.name = vmUnpacked(j.file); j.total = j.size * 3; j.bytes = Math.round(j.total * (ms - dl) / 3000); }
+      else if (j.fail) { j.state = 'failed'; j.error = j.fail; }
+      else { j.state = 'done'; j.name = packed ? vmUnpacked(j.file) : j.file; j.bytes = j.total = packed ? j.size * 3 : j.size; vmAdd(j.name, j.bytes); }
+    }
+    const { fail, file, size, ...rest } = j;
+    return { ...rest, running: j.state === 'running', percent: j.state === 'done' ? 100 : j.total ? Math.min(99, Math.floor(j.bytes / j.total * 100)) : null };
+  }
+  function vmCheckNew(name) {
+    if (!name || !vmAcceptable(name)) throw err('Choose a disk file or ISO: .iso, .qcow2, .img, .raw, .vmdk, .vhdx or .vdi, also packed as .xz, .gz or .zip.');
+    if (vmExists(name)) throw err('There is already a file called ' + name + ' in ' + sp.isos + '. Remove or rename it first.', 409);
+    if (/\.(xz|gz|zip)$/i.test(name) && vmExists(vmUnpacked(name))) throw err('There is already a file called ' + vmUnpacked(name) + ' in ' + sp.isos + '. Remove or rename it first.', 409);
+  }
   const vmOptions = () => ({
-    isos: [{ name: 'debian-13.1.0-amd64-netinst.iso', size: 754 * 1e6 }, { name: 'ubuntu-24.04.3-live-server-amd64.iso', size: 3.1 * 1e9 },
-      { name: 'Win11_25H2_Dutch_x64.iso', size: 7.3 * 1e9 }],
-    images: [{ name: 'haos_ova-16.2.qcow2', size: 1.1 * 1e9 }],
+    isos: copy(vmIsos),
+    images: vmImages.map((f) => ({ name: f.name, size: f.size, usedBy: f.usedBy || null })),
     isoDir: sp.isos, isoDirMissing: false, vmDir: sp.vms, vmDirMissing: false,
     network: 'bridge:br0', maxVcpus: 16, maxMemory: 32 * GB,
     networks: vmNets.map((n) => ({ name: n.name, mode: n.mode, subnet: n.subnet, active: n.active })), bridges: [{ name: 'br0', address: '192.168.1.10/24' }],
@@ -3110,6 +3171,9 @@
     if (m) { const a = apps.find((x) => x.id === decodeURIComponent(m[1])); return a ? logLines(a.name) : []; }
     if (path === '/api/vms') return vms.map(vmOut).sort((a, b) => a.name.localeCompare(b.name));
     if (path === '/api/vm-options') return vmOptions();
+    if (path === '/api/vm-media/jobs') return { jobs: Object.keys(vmJobs).map(vmJobOut) };
+    if (/^\/api\/vm-media\/jobs\/[0-9a-f]{12}$/.test(path)) return vmJobOut(path.split('/').pop());
+    if (path.startsWith('/api/vm-media/browse')) { await wait(rnd(80, 200)); return vmBrowse(new URLSearchParams(path.split('?')[1] || '').get('path') || ''); }
     if (path === '/api/vm-networks') return vmNetList();
     m = path.match(/^\/api\/vms\/([^/]+)$/);
     if (m) {
@@ -3500,6 +3564,19 @@
     }
     m = path.match(/^\/api\/store\/apps\/([0-9a-f]{12})\/install$/);
     if (m) { const a = store.find((x) => x.id === m[1]); if (!a) throw err('This app is not (or no longer) in the catalogue.', 404); return storeInstall(a, body); }
+    if (path === '/api/vm-media/download') {
+      let url;
+      try { url = new URL(String(body.url || '').trim()); } catch (e) { url = null; }
+      if (!url || !/^https?:$/.test(url.protocol)) throw err('Paste a link that starts with https:// or http://.');
+      let file = '';
+      try { file = vmMediaName(decodeURIComponent(url.pathname.split('/').pop())); } catch (e) { file = ''; }
+      if (file && vmAcceptable(file)) vmCheckNew(file);
+      // A link without a file name (a web page) fails after a moment, like on the server.
+      const ok = file && vmAcceptable(file);
+      const id = vmJob({ kind: 'download', url: url.href, file: ok ? file : 'download', name: ok ? file : '', size: /\.iso$/i.test(file) ? 2.4e9 : 0.45e9,
+        fail: ok ? null : 'This link doesn\'t point to a disk file or ISO (.iso, .qcow2, .img, .raw, .vmdk, .vhdx or .vdi, also packed as .xz, .gz or .zip).' });
+      return vmJobOut(id);
+    }
     if (path === '/api/vms') {
       const name = String(body.name || '').trim();
       checkFields({ ...body, name });
@@ -3516,7 +3593,15 @@
       if (body.bus && !['virtio', 'sata'].includes(body.bus)) throw err('Choose VirtIO or SATA for the disk.');
       if (body.nic && !['virtio', 'e1000e', 'rtl8139'].includes(body.nic)) throw err('Choose a network card: VirtIO, e1000e or RTL8139.');
       const nicModel = body.nic || (['windows', 'other'].includes(OS_FAMILY[osId]) ? 'e1000e' : 'virtio');
-      if (!(media === 'disk' ? opts.images : opts.isos).some((f) => f.name === body.source)) throw err('Choose a file from /tank/isos.');
+      const srcPath = String(body.source || '');
+      if (srcPath.startsWith('/')) vmTreeFile(srcPath, media);
+      else {
+        const f = (media === 'disk' ? opts.images : opts.isos).find((x) => x.name === srcPath);
+        if (!f) throw err('Choose a file from /tank/isos.');
+        if (f.usedBy && body.inPlace === true) throw err('This file is already the disk of the VM ' + f.usedBy + '. Choose another file, or turn off Use the file as it is to make a copy.', 409);
+      }
+      const inPlace = media === 'disk' && body.inPlace === true;
+      if (inPlace && !/\.(qcow2|img|raw)$/i.test(srcPath)) throw err('Only a qcow2 or raw file can be used as it is (this one is ' + srcPath.split('.').pop() + '). Turn off Use the file as it is: MajaOS then makes a qcow2 copy.');
       const [ntype, nsrc] = String(body.network || opts.network).split(':');
       if (!(ntype === 'network' ? opts.networks : ntype === 'bridge' ? opts.bridges : []).some((x) => x.name === nsrc)) throw err('Choose a network for the VM.');
       await wait(1200);
@@ -3525,7 +3610,8 @@
         base: [20, 60], ram: [0.2, 0.35] });
       vmHw[name] = { nics: [nic(ntype, nsrc, nicModel, '52:54:00:' + [0, 0, 0].map(() => Math.floor(rnd(16, 255)).toString(16)).join(':'))],
         extra: [], cdrom: media === 'disk' ? null : '/tank/isos/' + body.source, boot: media === 'disk' ? 'disk' : 'cdrom', hostdevs: [], cpuPins: [] };
-      return { name, disk: '/tank/vms/' + slug(name) + '/' + slug(name) + '.qcow2' };
+      if (inPlace) { const img = vmImages.find((f) => f.name === srcPath); if (img) img.usedBy = name; }
+      return { name, disk: inPlace ? (srcPath.startsWith('/') ? srcPath : sp.isos + '/' + srcPath) : '/tank/vms/' + slug(name) + '/' + slug(name) + '.qcow2', inPlace };
     }
     m = path.match(/^\/api\/vms\/([^/]+)\/settings$/);
     if (m) {
@@ -3564,6 +3650,11 @@
 
   async function del(path) {
     userGate('DELETE', path);
+    if (/^\/api\/vm-media\/jobs\/[0-9a-f]{12}$/.test(path)) {
+      const j = vmJobs[path.split('/').pop()]; if (!j) throw err('This download or unpacking is no longer known. Open the form again.', 404);
+      if (j.state === 'running') { j.state = 'stopped'; j.finished = Date.now(); }
+      return vmJobOut(j.id);
+    }
     await wait(400);
     { const cm = path.match(/^\/api\/ai\/chats\/([^/]+)$/); if (cm) {
       const c = demoChat(cm[1]); demoChats.splice(demoChats.indexOf(c), 1); saveChats();
@@ -3689,6 +3780,14 @@
   async function put(path, body) {
     userGate('PUT', path);
     await wait(rnd(80, 220));
+    if (path.startsWith('/api/vm-media/upload?')) {
+      const name = vmMediaName(new URLSearchParams(path.split('?')[1]).get('name'));
+      vmCheckNew(name);
+      const size = (body && body.size) || 0;
+      if (!/\.(xz|gz|zip)$/i.test(name)) { vmAdd(name, size); return { name, size }; }
+      const id = vmJob({ kind: 'unpack', file: name, size, phase: 'unpack', name });
+      return { name, size, job: vmJobOut(id) };
+    }
     const q = parseFilesApi(path);
     if (!q) throw err('Unknown endpoint', 404);
     return filesPut(q, body);
@@ -3696,6 +3795,9 @@
   // An upload with progress: about 60 MB/s, at most 6 seconds per file.
   function upload(path, file, { onProgress = () => {}, signal } = {}) {
     try { userGate('PUT', path); } catch (e) { return Promise.reject(e); }
+    if (path.startsWith('/api/vm-media/upload?')) {
+      try { vmCheckNew(vmMediaName(new URLSearchParams(path.split('?')[1]).get('name'))); } catch (e) { return Promise.reject(e); }
+    }
     return new Promise((resolve, reject) => {
       const size = file.size || 0, secs = Math.min(6, Math.max(0.6, size / 60e6)), start = Date.now();
       const timer = setInterval(() => {

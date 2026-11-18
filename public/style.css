@@ -452,6 +452,22 @@ code { font-size: .92em; padding: 1px 5px; border-radius: 6px; background: var(-
 .page-title { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .btn.back { width: 2.5rem; height: 2.5rem; padding: 0; border-radius: 0.8rem; flex: none; }
 .back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* New VM: where the ISO or disk file comes from */
+.vm-src-btns { margin-top: 6px; }
+.vm-src-link { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.vm-src-link .field { flex: 1 1 260px; min-width: 0; }
+.vm-src .deb-job { margin: 8px 0 0; }
+.vm-src .deb-job .btn { margin-top: 4px; }
+.vm-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--glass-line); border-radius: 10px; }
+.vm-pick-path { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; overflow-wrap: anywhere; flex: 1 1 200px; min-width: 0; }
+.vm-browse { margin-top: 8px; border: 1px solid var(--glass-line); border-radius: 10px; padding: 8px; max-height: 280px; overflow: auto; }
+.vm-browse-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.vm-browse ul { list-style: none; margin: 0; padding: 0; }
+.vm-browse li button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.vm-browse li button:hover, .vm-browse li button:focus-visible { background: var(--track); }
+.vm-browse li button > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.vm-browse-icon { width: 20px; text-align: center; flex: none; }
+.vm-browse-icon svg { width: 20px; height: 20px; display: block; }
 .vm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
 .vm-card { display: flex; flex-direction: column; gap: 14px; }
 .vm-head { display: flex; align-items: center; gap: 12px; }

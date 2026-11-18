@@ -44,6 +44,7 @@ const sys = require('./lib/system');
 const hardware = require('./lib/hardware');
 const docker = require('./lib/docker');
 const vms = require('./lib/vms');
+const vmmedia = require('./lib/vmmedia');
 const storage = require('./lib/storage');
 const appstore = require('./lib/appstore');
 const settings = require('./lib/settings');
@@ -475,6 +476,23 @@ async function handleApi(req, res, url) {
   if (p === '/api/vms' && method === 'GET') return sendJson(res, 200, await vms.listVms());
   if (p === '/api/vms' && method === 'POST') return sendJson(res, 200, await vms.createVm(await readBody(req)));
   if (p === '/api/vm-options' && method === 'GET') return sendJson(res, 200, await vms.vmOptions());
+  // Files for VMs: upload (the file is the body), download from a link, follow or stop that job, browse the pools.
+  if (p === '/api/vm-media/upload' && method === 'PUT') {
+    const name = url.searchParams.get('name') || '';
+    req.audit = { target: name };
+    return sendJson(res, 200, await vmmedia.upload(req, name));
+  }
+  if (p === '/api/vm-media/download' && method === 'POST') {
+    const body = await readBody(req);
+    req.audit = { target: String(body.url || '').slice(0, 300) };
+    return sendJson(res, 200, await vmmedia.download(body));
+  }
+  if (p === '/api/vm-media/jobs' && method === 'GET') return sendJson(res, 200, vmmedia.listJobs());
+  if ((m = p.match(/^\/api\/vm-media\/jobs\/([0-9a-f]{12})$/))) {
+    if (method === 'GET') return sendJson(res, 200, vmmedia.getJob(m[1]));
+    if (method === 'DELETE') return sendJson(res, 200, vmmedia.stopJob(m[1]));
+  }
+  if (p === '/api/vm-media/browse' && method === 'GET') return sendJson(res, 200, await vmmedia.browse(url.searchParams.get('path') || ''));
   if (p === '/api/vm-networks' && method === 'GET') return sendJson(res, 200, await vmnet.listVmNetworks());
   if (p === '/api/vm-networks' && method === 'POST') return sendJson(res, 200, await vmnet.createVmNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/vm-networks\/([^/]+)\/start$/)) && method === 'POST') return sendJson(res, 200, await vmnet.startVmNetwork(decodeURIComponent(m[1])));
@@ -959,6 +977,9 @@ function toHttps(req, res, url) {
 function tune(srv) {
   srv.keepAliveTimeout = 75000;
   srv.headersTimeout = 80000;
+  // Node stops a request after 5 minutes by default: too short to upload a large ISO or disk file (Files, VMs).
+  // headersTimeout still protects against clients that never finish their headers.
+  srv.requestTimeout = 0;
   return srv;
 }
 async function startHttps() {

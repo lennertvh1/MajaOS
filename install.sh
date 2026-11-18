@@ -45,7 +45,7 @@ fi
 apt-get update
 
 step "Base packages"
-apt-get install -y ca-certificates openssl curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone
+apt-get install -y ca-certificates openssl curl gnupg nodejs smartmontools pciutils usbutils eject bridge-utils rsync rclone xz-utils unzip
 # <name>.local in the browser (macOS, Linux, and Windows 10+ also ask mDNS); also on the server's screen.
 apt-get install -y avahi-daemon || true
 # Keep the clock right: the codes of two-step verification depend on the time.
