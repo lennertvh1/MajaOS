@@ -3140,11 +3140,12 @@ window.TB_LANG.es = {
   "Stopped a download for VMs": "Descarga para las VM detenida",
   "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "Cómo arranca la VM. Un sistema instalado con UEFI normalmente no arranca con BIOS, y al revés: cambia antes de instalar, o si el sistema admite ambos. Cambiar restablece los ajustes UEFI de la VM; el disco se queda como está.",
   "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO es lo más rápido, pero Windows solo arranca desde un disco VirtIO con los controladores VirtIO instalados. Si no arranca, elige SATA.",
-  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Apaga la VM para cambiar el firmware, Secure Boot, el TPM o la interfaz de un disco.",
   "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "¿Cambiar {name} a BIOS? Un sistema instalado con UEFI normalmente ya no arranca. Se eliminan los ajustes UEFI de la VM.",
   "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "¿Cambiar {name} a UEFI? Un sistema instalado con BIOS normalmente ya no arranca.",
   "Switch": "Cambiar",
   "Shut the VM down first to switch between UEFI and BIOS.": "Apaga primero la VM para cambiar entre UEFI y BIOS.",
   "Shut the VM down first to add or remove the TPM.": "Apaga primero la VM para añadir o quitar el TPM.",
   "Shut the VM down first to change the interface of a disk.": "Apaga primero la VM para cambiar la interfaz de un disco.",
+  "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Apaga la VM para cambiar el firmware, Secure Boot o el TPM.",
+  "Shut the VM down to change the interface of a disk.": "Apaga la VM para cambiar la interfaz de un disco.",
 };

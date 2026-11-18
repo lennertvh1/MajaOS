@@ -3140,11 +3140,12 @@ window.TB_LANG.de = {
   "Stopped a download for VMs": "Download für VMs gestoppt",
   "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "Wie die VM startet. Ein mit UEFI installiertes System startet meist nicht mit BIOS und umgekehrt: Wechsle vor der Installation oder wenn das System beides kann. Ein Wechsel setzt die UEFI-Einstellungen der VM zurück; die Festplatte bleibt, wie sie ist.",
   "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO ist am schnellsten, aber Windows startet nur mit installierten VirtIO-Treibern von einer VirtIO-Festplatte. Startet es nicht, wähle SATA.",
-  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Schalte die VM aus, um Firmware, Secure Boot, TPM oder die Schnittstelle einer Festplatte zu ändern.",
   "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "{name} auf BIOS umstellen? Ein mit UEFI installiertes System startet dann meist nicht mehr. Die UEFI-Einstellungen der VM werden entfernt.",
   "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "{name} auf UEFI umstellen? Ein mit BIOS installiertes System startet dann meist nicht mehr.",
   "Switch": "Umstellen",
   "Shut the VM down first to switch between UEFI and BIOS.": "Schalte die VM zuerst aus, um zwischen UEFI und BIOS zu wechseln.",
   "Shut the VM down first to add or remove the TPM.": "Schalte die VM zuerst aus, um das TPM hinzuzufügen oder zu entfernen.",
   "Shut the VM down first to change the interface of a disk.": "Schalte die VM zuerst aus, um die Schnittstelle einer Festplatte zu ändern.",
+  "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Schalte die VM aus, um Firmware, Secure Boot oder TPM zu ändern.",
+  "Shut the VM down to change the interface of a disk.": "Schalte die VM aus, um die Schnittstelle einer Festplatte zu ändern.",
 };

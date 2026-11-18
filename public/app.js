@@ -5189,7 +5189,17 @@
         `<button type="button" role="tab" id="vt-${k}" aria-controls="vp-${k}" aria-selected="${k === tab}" data-vtab="${k}">${t(label)}</button>`).join('')}</div>
       <form class="form" id="vmForm" novalidate>
         <section class="form" role="tabpanel" id="vp-general" aria-labelledby="vt-general" data-vpane="general">${vmNameField(d, off)}${vmDescAutoFields(d)}</section>
-        <section class="form" role="tabpanel" id="vp-cpu" aria-labelledby="vt-cpu" data-vpane="cpu"></section>
+        <section class="form" role="tabpanel" id="vp-cpu" aria-labelledby="vt-cpu" data-vpane="cpu"><div class="form" data-cpu-main></div>
+          <div class="form" data-firmware>
+            <div class="fld-row">
+              <label class="fld"><span>${t('Firmware')} ${hint(t('How the VM starts. A system installed with UEFI usually doesn\'t start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM\'s UEFI settings; the disk stays as it is.'))}</span>
+                <select class="field" name="firmware"${off ? '' : ' disabled'}><option value="uefi"${d.firmware !== 'bios' ? ' selected' : ''}>UEFI</option><option value="bios"${d.firmware === 'bios' ? ' selected' : ''}>${t('BIOS (older systems)')}</option></select></label>
+            </div>
+            <label class="check" data-sb${d.firmware === 'bios' ? ' hidden' : ''}><input type="checkbox" name="secureBoot"${d.secureBoot ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('Secure Boot')}
+              ${hint(t('Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM\'s UEFI settings; the system on the disk stays.'))}</label>
+            <label class="check"><input type="checkbox" name="tpm"${d.tpm ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('TPM 2.0 (needed for Windows 11)')}</label>
+            ${off ? '' : `<p class="muted small">${t('Shut the VM down to change the firmware, Secure Boot or the TPM.')}</p>`}
+          </div></section>
         <section class="form" role="tabpanel" id="vp-net" aria-labelledby="vt-net" data-vpane="net"></section>
         <section class="form" role="tabpanel" id="vp-storage" aria-labelledby="vt-storage" data-vpane="storage"></section>
         <section class="form" role="tabpanel" id="vp-devices" aria-labelledby="vt-devices" data-vpane="devices"></section>
@@ -5213,7 +5223,7 @@
     const drawCpu = () => {
       const memory = form.elements.memoryGb ? Number(form.elements.memoryGb.value) * GIB : d.memory;
       const vcpus = st.pins.size || (form.elements.vcpus ? Number(form.elements.vcpus.value) : d.vcpus);
-      pane('cpu').innerHTML = vmSizeFields({ ...d, vcpus, memory }, opts, st.pins.size > 0) + `
+      $('[data-cpu-main]', pane('cpu')).innerHTML = vmSizeFields({ ...d, vcpus, memory }, opts, st.pins.size > 0) + `
         <fieldset class="fld"><span>${t('Pinned cores (optional)')}</span>
           <div class="pin-grid">${cores.map((c, i) => `<div class="pin-core"><span class="muted small">${t('Core {n}', { n: i })}</span><div>${c.ids.map((cpu) =>
             `<label class="pin"><input type="checkbox" data-pin="${cpu}"${st.pins.has(cpu) ? ' checked' : ''}><span>${cpu}</span></label>`).join('')}</div></div>`).join('')}</div>
@@ -5267,15 +5277,8 @@
             <option value="cdrom"${d.boot === 'cdrom' ? ' selected' : ''}>${t('CD-ROM first')}</option></select>
             </label>
         </div>
-        <div class="fld-row">
-          <label class="fld"><span>${t('Firmware')} ${hint(t('How the VM starts. A system installed with UEFI usually doesn\'t start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM\'s UEFI settings; the disk stays as it is.'))}</span>
-            <select class="field" name="firmware"${off ? '' : ' disabled'}><option value="uefi"${d.firmware !== 'bios' ? ' selected' : ''}>UEFI</option><option value="bios"${d.firmware === 'bios' ? ' selected' : ''}>${t('BIOS (older systems)')}</option></select></label>
-        </div>
-        <label class="check" data-sb${d.firmware === 'bios' ? ' hidden' : ''}><input type="checkbox" name="secureBoot"${d.secureBoot ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('Secure Boot')}
-          ${hint(t('Only systems signed for it start with Secure Boot, such as Windows and most big Linux distributions. Home Assistant OS, OPNsense and FreeBSD need it off. Changing it resets the VM\'s UEFI settings; the system on the disk stays.'))}</label>
-        <label class="check"><input type="checkbox" name="tpm"${d.tpm ? ' checked' : ''}${off ? '' : ' disabled'}> ${t('TPM 2.0 (needed for Windows 11)')}</label>
         <p class="muted small">${off ? t('VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn\'t start, choose SATA.')
-          : t('Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.')}</p>`;
+          : t('Shut the VM down to change the interface of a disk.')}</p>`;
     };
 
     /* Devices: USB and PCI */

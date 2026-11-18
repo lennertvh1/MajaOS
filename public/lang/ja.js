@@ -3140,11 +3140,12 @@ window.TB_LANG.ja = {
   "Stopped a download for VMs": "VM 用のダウンロードを停止",
   "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "VM の起動方式です。UEFI でインストールしたシステムは通常 BIOS では起動せず、その逆も同じです。インストール前か、システムが両方に対応している場合に切り替えてください。切り替えると VM の UEFI 設定はリセットされますが、ディスクはそのままです。",
   "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO が最も高速ですが、Windows は VirtIO ドライバーがインストールされている場合にのみ VirtIO ディスクから起動します。起動しない場合は SATA を選んでください。",
-  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "ファームウェア、Secure Boot、TPM、ディスクのインターフェースを変更するには、VM を停止してください。",
   "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "{name} を BIOS に切り替えますか？UEFI でインストールしたシステムは通常起動しなくなります。VM の UEFI 設定は削除されます。",
   "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "{name} を UEFI に切り替えますか？BIOS でインストールしたシステムは通常起動しなくなります。",
   "Switch": "切り替える",
   "Shut the VM down first to switch between UEFI and BIOS.": "UEFI と BIOS を切り替えるには、先に VM を停止してください。",
   "Shut the VM down first to add or remove the TPM.": "TPM を追加・削除するには、先に VM を停止してください。",
   "Shut the VM down first to change the interface of a disk.": "ディスクのインターフェースを変更するには、先に VM を停止してください。",
+  "Shut the VM down to change the firmware, Secure Boot or the TPM.": "ファームウェア、Secure Boot、TPM を変更するには、VM を停止してください。",
+  "Shut the VM down to change the interface of a disk.": "ディスクのインターフェースを変更するには、VM を停止してください。",
 };

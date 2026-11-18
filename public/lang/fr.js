@@ -3140,11 +3140,12 @@ window.TB_LANG.fr = {
   "Stopped a download for VMs": "Téléchargement pour les VM arrêté",
   "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "La façon dont la VM démarre. Un système installé en UEFI ne démarre généralement pas en BIOS, et inversement : changez avant d'installer, ou si le système prend en charge les deux. Changer réinitialise les réglages UEFI de la VM ; le disque reste tel quel.",
   "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO est le plus rapide, mais Windows ne démarre depuis un disque VirtIO que si les pilotes VirtIO sont installés. S'il ne démarre pas, choisissez SATA.",
-  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Éteignez la VM pour changer le micrologiciel, Secure Boot, le TPM ou l'interface d'un disque.",
   "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "Passer {name} en BIOS ? Un système installé en UEFI ne démarre généralement plus. Les réglages UEFI de la VM sont supprimés.",
   "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "Passer {name} en UEFI ? Un système installé en BIOS ne démarre généralement plus.",
   "Switch": "Changer",
   "Shut the VM down first to switch between UEFI and BIOS.": "Éteignez d'abord la VM pour passer de UEFI à BIOS ou inversement.",
   "Shut the VM down first to add or remove the TPM.": "Éteignez d'abord la VM pour ajouter ou retirer le TPM.",
   "Shut the VM down first to change the interface of a disk.": "Éteignez d'abord la VM pour changer l'interface d'un disque.",
+  "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Éteignez la VM pour changer le micrologiciel, Secure Boot ou le TPM.",
+  "Shut the VM down to change the interface of a disk.": "Éteignez la VM pour changer l'interface d'un disque.",
 };

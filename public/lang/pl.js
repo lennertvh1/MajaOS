@@ -3140,11 +3140,12 @@ window.TB_LANG.pl = {
   "Stopped a download for VMs": "Zatrzymano pobieranie dla maszyn wirtualnych",
   "How the VM starts. A system installed with UEFI usually doesn't start with BIOS, and the other way round: switch before you install, or when the system supports both. Switching resets the VM's UEFI settings; the disk stays as it is.": "Sposób uruchamiania maszyny. System zainstalowany z UEFI zwykle nie uruchomi się z BIOS i odwrotnie: zmień przed instalacją albo gdy system obsługuje oba tryby. Zmiana resetuje ustawienia UEFI maszyny; dysk zostaje bez zmian.",
   "VirtIO is the fastest, but Windows only starts from a VirtIO disk with the VirtIO drivers installed. If it doesn't start, choose SATA.": "VirtIO jest najszybsze, ale Windows uruchomi się z dysku VirtIO tylko z zainstalowanymi sterownikami VirtIO. Jeśli się nie uruchamia, wybierz SATA.",
-  "Shut the VM down to change the firmware, Secure Boot, the TPM or the interface of a disk.": "Wyłącz maszynę, żeby zmienić oprogramowanie układowe, Secure Boot, TPM lub interfejs dysku.",
   "Switch {name} to BIOS? A system installed with UEFI usually doesn't start anymore. The VM's UEFI settings are removed.": "Przełączyć {name} na BIOS? System zainstalowany z UEFI zwykle przestanie się uruchamiać. Ustawienia UEFI maszyny zostaną usunięte.",
   "Switch {name} to UEFI? A system installed with BIOS usually doesn't start anymore.": "Przełączyć {name} na UEFI? System zainstalowany z BIOS zwykle przestanie się uruchamiać.",
   "Switch": "Przełącz",
   "Shut the VM down first to switch between UEFI and BIOS.": "Najpierw wyłącz maszynę, żeby przełączyć między UEFI a BIOS.",
   "Shut the VM down first to add or remove the TPM.": "Najpierw wyłącz maszynę, żeby dodać lub usunąć TPM.",
   "Shut the VM down first to change the interface of a disk.": "Najpierw wyłącz maszynę, żeby zmienić interfejs dysku.",
+  "Shut the VM down to change the firmware, Secure Boot or the TPM.": "Wyłącz maszynę, żeby zmienić oprogramowanie układowe, Secure Boot lub TPM.",
+  "Shut the VM down to change the interface of a disk.": "Wyłącz maszynę, żeby zmienić interfejs dysku.",
 };
