@@ -262,3 +262,39 @@ test('a file opened in the browser runs in a sandbox without scripts (a PDF with
   assert.match(pdf, /default-src 'none'/);
   assert.doesNotMatch(pdf, /sandbox/);
 });
+
+test('an upload never writes through a symlink someone put in the folder', async () => {
+  const root = tmpShare();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hb-out-'));
+  try {
+    // An app or SMB user plants the old temporary name as a link to a file outside the folder.
+    fs.symlinkSync(path.join(outside, 'victim'), path.join(root, 'note.txt.majaos-upload'));
+    fs.writeFileSync(path.join(outside, 'kept'), 'safe');
+    fs.symlinkSync(path.join(outside, 'kept'), path.join(root, 'link.txt'));
+    await files.upload(Readable.from([Buffer.from('payload')]), 'media', 'note.txt');
+    assert.equal(fs.existsSync(path.join(outside, 'victim')), false);
+    assert.equal(fs.readFileSync(path.join(root, 'note.txt'), 'utf8'), 'payload');
+    assert.ok(!fs.readdirSync(root).some((n) => n.startsWith('.upload-')), 'no temporary file left');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('copying a folder hands a symlink itself to the app user, never its target', () => {
+  const root = tmpShare();
+  const fsMod = require('node:fs');
+  const seen = [];
+  const orig = { chown: fsMod.chownSync, lchown: fsMod.lchownSync };
+  try {
+    fs.symlinkSync('/etc/passwd', path.join(root, 'Movies', 'link'));
+    fsMod.chownSync = (p) => seen.push(['chown', p]);
+    fsMod.lchownSync = (p) => seen.push(['lchown', p]);
+    files.act('media', { action: 'copy', path: 'Movies' });
+  } finally {
+    fsMod.chownSync = orig.chown; fsMod.lchownSync = orig.lchown;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  assert.ok(seen.some(([k, p]) => k === 'lchown' && p.endsWith(path.join('Movies copy', 'link'))));
+  assert.ok(!seen.some(([k]) => k === 'chown'), 'no chown that follows a link');
+});

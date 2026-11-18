@@ -105,6 +105,9 @@ test('the connector address signs in with PKCE and then answers MCP', async () =
 
   const refused = await call('POST', '/mcp', {}, '{}');
   assert.equal(refused.status, 401);
+  // The browser's cookie is no sign-in here: a page of another app on the same server could otherwise run tools (CSRF).
+  const viaCookie = await call('POST', '/mcp', { cookie: 'tb_session=session-token', origin: 'http://nas.example:8989' }, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+  assert.equal(viaCookie.status, 401);
   assert.match(refused.headers['WWW-Authenticate'], /oauth-protected-resource/);
 
   const form = new URLSearchParams({
