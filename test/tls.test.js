@@ -46,6 +46,9 @@ test('a real CA and server certificate: made once, renewed when an address chang
   assert.equal(second.reason, 'names');
   assert.ok(tls.info().names.includes('192.168.1.20'));
   assert.equal(tls.info().caFingerprint, fp); // devices that trust the CA keep trusting it
+  // A new temporary IPv6 address (they change every few hours or days) is no reason for a new certificate.
+  const v6 = { eno1: [...moved.eno1, { family: 'IPv6', address: '2a02:1810:4d3e:9b00:5d1c:7e2a:1b3f:9c41', internal: false }] };
+  assert.equal((await tls.ensure({ host: 'freddy', ifaces: v6 })).renewed, false);
   assert.equal(tls.renewReason({ certPem: '', caPem: tls.caPem(), names: tls.wantedNames('freddy', moved) }), 'missing');
   assert.equal(tls.renewReason({ certPem: tls.caPem(), caPem: tls.caPem(), names: tls.wantedNames('freddy', moved) }) !== null, true);
 });
