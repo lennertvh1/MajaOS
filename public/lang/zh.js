@@ -3193,4 +3193,13 @@ window.TB_LANG.zh = {
   "Leave this out": "不包含此项",
   "Left out:": "已省略：",
   "Put it back": "恢复",
+  "Fixed IP address": "固定 IP 地址",
+  "e.g. {ip} (subnet {subnet})": "例如 {ip}（子网 {subnet}）",
+  "An address in {subnet} (through {card}) that no other device uses. Reserve it in your router, so it doesn't give it to another device.": "{subnet} 中没有其他设备使用的地址（通过 {card}）。请在路由器中保留它，以免分配给其他设备。",
+  "With an address the app joins the MajaOS network maja ({subnet}), where apps also find each other by name.": "设置地址后，应用会加入 MajaOS 网络 maja（{subnet}），应用之间也可以通过名称互相找到。",
+  "An address in {subnet}.": "{subnet} 中的地址。",
+  "Docker gives the app a free address from {range} in your home network ({subnet}). Not from your router: Docker can't use its DHCP. The address can change when the app is made again.": "Docker 会从家庭网络（{subnet}）的 {range} 中为应用分配一个空闲地址。不是由路由器分配：Docker 无法使用其 DHCP。重新创建应用时地址可能会变。",
+  "Docker picks a free address.": "Docker 会选择一个空闲地址。",
+  "Fill in an IP address, or choose Automatic.": "请填写 IP 地址，或选择“自动”。",
+  "The app uses the server's own address and listens on its own ports, so it has no address of its own. For that, choose Own address in my home network. If you change a port below, MajaOS sets the app's own port setting (when the template has one) and the WebUI follows.": "应用使用服务器本身的地址，并监听自己的端口，因此没有自己的地址。如需独立地址，请选择“家庭网络中的独立地址”。如果在下面更改端口，MajaOS 会设置应用自己的端口设置（如果模板有），WebUI 也会随之更新。",
 };

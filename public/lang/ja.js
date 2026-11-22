@@ -3193,4 +3193,13 @@ window.TB_LANG.ja = {
   "Leave this out": "含めない",
   "Left out:": "除外:",
   "Put it back": "元に戻す",
+  "Fixed IP address": "固定 IP アドレス",
+  "e.g. {ip} (subnet {subnet})": "例: {ip}（サブネット {subnet}）",
+  "An address in {subnet} (through {card}) that no other device uses. Reserve it in your router, so it doesn't give it to another device.": "{subnet} 内で他の機器が使っていないアドレス（{card} 経由）。ルーターで予約して、他の機器に割り当てられないようにしてください。",
+  "With an address the app joins the MajaOS network maja ({subnet}), where apps also find each other by name.": "アドレスを指定すると、アプリは MajaOS ネットワーク maja（{subnet}）に参加し、アプリ同士を名前でも見つけられます。",
+  "An address in {subnet}.": "{subnet} 内のアドレス。",
+  "Docker gives the app a free address from {range} in your home network ({subnet}). Not from your router: Docker can't use its DHCP. The address can change when the app is made again.": "Docker がホームネットワーク（{subnet}）の {range} から空きアドレスをアプリに割り当てます。ルーターからではありません（Docker はその DHCP を使えません）。アプリを作り直すとアドレスが変わることがあります。",
+  "Docker picks a free address.": "Docker が空きアドレスを選びます。",
+  "Fill in an IP address, or choose Automatic.": "IP アドレスを入力するか、「自動」を選んでください。",
+  "The app uses the server's own address and listens on its own ports, so it has no address of its own. For that, choose Own address in my home network. If you change a port below, MajaOS sets the app's own port setting (when the template has one) and the WebUI follows.": "アプリはサーバー自身のアドレスを使い、自分のポートで待ち受けるため、独自のアドレスはありません。独自のアドレスが必要なら「ホームネットワーク内の独自アドレス」を選んでください。下でポートを変えると、MajaOS がアプリ自身のポート設定（テンプレートにあれば）を設定し、WebUI も追従します。",
 };

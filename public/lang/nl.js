@@ -3538,4 +3538,13 @@ window.TB_LANG.nl = {
   "Leave this out": "Weglaten",
   "Left out:": "Weggelaten:",
   "Put it back": "Terugzetten",
+  "Fixed IP address": "Vast IP-adres",
+  "e.g. {ip} (subnet {subnet})": "bv. {ip} (subnet {subnet})",
+  "An address in {subnet} (through {card}) that no other device uses. Reserve it in your router, so it doesn't give it to another device.": "Een adres in {subnet} (via {card}) dat geen ander toestel gebruikt. Reserveer het in je router, zodat die het niet aan een ander toestel geeft.",
+  "With an address the app joins the MajaOS network maja ({subnet}), where apps also find each other by name.": "Met een adres komt de app in het MajaOS-netwerk maja ({subnet}), waar apps elkaar ook op naam vinden.",
+  "An address in {subnet}.": "Een adres in {subnet}.",
+  "Docker gives the app a free address from {range} in your home network ({subnet}). Not from your router: Docker can't use its DHCP. The address can change when the app is made again.": "Docker geeft de app een vrij adres uit {range} in je thuisnetwerk ({subnet}). Niet van je router: Docker kan zijn DHCP niet gebruiken. Het adres kan veranderen als de app opnieuw gemaakt wordt.",
+  "Docker picks a free address.": "Docker kiest een vrij adres.",
+  "Fill in an IP address, or choose Automatic.": "Vul een IP-adres in, of kies Automatisch.",
+  "The app uses the server's own address and listens on its own ports, so it has no address of its own. For that, choose Own address in my home network. If you change a port below, MajaOS sets the app's own port setting (when the template has one) and the WebUI follows.": "De app gebruikt het adres van de server zelf en luistert op haar eigen poorten, dus ze heeft geen eigen adres. Kies daarvoor Eigen adres in mijn thuisnetwerk. Pas je hieronder een poort aan, dan zet MajaOS de eigen poortinstelling van de app (als het sjabloon er een heeft) en volgt de WebUI.",
 };

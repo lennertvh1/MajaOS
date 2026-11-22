@@ -2735,14 +2735,7 @@
           </div>
           ${f.networkOther ? '' : `<p class="muted small" style="margin-top:-6px">${t('Create new networks in Settings → Docker networks.')}</p>`}
           ${f.network === 'host' ? `<p class="lead small">${t('With the host network the app listens directly on its own ports and Docker ignores the ports below. Another port only works through the app\'s own port setting, e.g. a variable like WEBUI_PORT; then set the same port below, so the WebUI follows.')}</p>` : ''}
-          ${['host', 'none', '*'].includes(f.network) || f.networkOther ? '' : (() => {
-            const n = dockerNets.find((x) => x.name === f.network), ownIp = f.network === LAN_CHOICE || ownNet(n);
-            return `<label class="fld"><span>${t('Fixed IP address (optional)')}</span><input class="field" data-cf-top="ip" value="${esc(f.ip || '')}" spellcheck="false" autocomplete="off"
-              placeholder="${esc(n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : f.network === '' ? '172.30.0.10' : '')}">
-              <small>${ownIp ? t('The app\'s address in your home network. Empty = Docker picks one from the network\'s IP range.')
-                : f.network === '' ? t('Empty = Docker picks an address. With an address the app joins the MajaOS network maja (172.30.0.0/16), where apps also find each other by name.')
-                : t('Empty = Docker picks an address. A fixed address only works in a network with its own subnet.')}</small></label>`;
-          })()}
+          ${['host', 'none', '*'].includes(f.network) || f.networkOther ? '' : ipFieldHtml('data-cf-top="ip"', f.ip)}
           <label class="check"><input type="checkbox" data-cf-top="privileged"${f.privileged ? ' checked' : ''}> ${t('Privileged (almost full access to the server, only if the app really needs it)')}</label>
           ${f.gpu !== undefined ? `<label class="check"><input type="checkbox" data-cf-top="gpu"${f.gpu ? ' checked' : ''}> ${t('Use the NVIDIA graphics card (GPU)')} ${hint(t('For AI models and video transcoding. Needs the NVIDIA driver (Settings → Hardware).'))}</label>` : ''}
           ${f.otherServices.length ? `<p class="muted small">${t('This file also contains: {list}. Those stay unchanged.', { list: esc(f.otherServices.join(', ')) })}</p>` : ''}
@@ -2751,16 +2744,30 @@
         <div class="cf-add"><span class="muted small">${t('Add:')}</span>
           ${CF_KINDS.map(([kind, , one]) => `<button class="btn sm" type="button" data-cf-add="${kind}">+ ${t(one)}</button>`).join('')}</div>`;
       if (focus) { const x = $(`[data-cf^="${focus}:"]`, el); if (x) x.focus(); }
-      // Own address in the home network: suggest a free one.
-      const ipIn = $('[data-cf-top="ip"]', el);
-      if (ipIn && (f.network === LAN_CHOICE || ownNet(dockerNets.find((x) => x.name === f.network)))) suggestLanIp(ipIn, ipIn.parentElement.querySelector('small'));
+      // Automatic or a fixed address, with an example in the right subnet.
+      const ipBox = $('[data-ipbox]', el);
+      if (ipBox) {
+        const n = dockerNets.find((x) => x.name === f.network), lan = f.network === LAN_CHOICE || ownNet(n);
+        paintIpField(ipBox, ipMode, lan ? 'lan' : f.network === '' ? 'maja' : 'net', lan ? null : n && n.subnet ? n.subnet : f.network === '' ? majaSubnet(dockerNets) : null);
+      }
     };
+    // Fixed when the file already has an address. Kept on f (not sent: not enumerable) for composeFormCheck.
+    let ipMode = String(f.ip || '').trim() ? 'fixed' : 'auto';
+    const setIpMode = (m) => { ipMode = m; Object.defineProperty(f, 'ipFixed', { value: m === 'fixed', writable: true, configurable: true, enumerable: false }); };
+    setIpMode(ipMode);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ipmode]'); if (!b) return;
+      setIpMode(b.dataset.ipmode);
+      if (ipMode === 'auto') f.ip = '';
+      draw();
+      if (ipMode === 'fixed') { const x = $('[data-cf-top="ip"]', el); if (x) x.focus(); }
+    });
     draw();
     el.addEventListener('input', (e) => {
       const tg = e.target;
       if (tg.dataset.cfTop) {
         f[tg.dataset.cfTop] = tg.type === 'checkbox' ? tg.checked : tg.value;
-        if (tg.dataset.cfTop === 'network') { if (['host', 'none'].includes(f.network)) f.ip = ''; draw(); }
+        if (tg.dataset.cfTop === 'network') { if (['host', 'none'].includes(f.network)) { f.ip = ''; setIpMode('auto'); } draw(); }
         return;
       }
       if (!tg.dataset.cf) return;
@@ -2784,6 +2791,7 @@
   function composeFormCheck(f) {
     if (!f.image.trim() && !f.build) return t('Fill in the image.');
     if (f.ip && !/^\d{1,3}(\.\d{1,3}){3}$/.test(String(f.ip).trim())) return t('The fixed IP address is not a valid address, e.g. 192.168.1.200.');
+    if (f.ipFixed && !String(f.ip || '').trim() && !['host', 'none', '*'].includes(f.network)) return t('Fill in an IP address, or choose Automatic.');
     for (const p of f.ports) if (!p.locked && !/^\d{1,5}(-\d{1,5})?$/.test(String(p.container).trim())) return t('Fill in the port in the app for every port (a number).');
     for (const v of f.volumes) if (!v.locked && (!String(v.host).trim() || !String(v.container).trim().startsWith('/'))) return t('Fill in both sides for every folder; the folder in the app starts with /.');
     for (const d of f.devices) if (!/^\/dev\//.test(String(d.host).trim())) return t('A device starts with /dev/, e.g. /dev/dri.');
@@ -5899,17 +5907,47 @@
     const n = (d.networks || []).find((x) => x.name === value);
     return !['host', 'none', LAN_CHOICE].includes(value) && !ownNet(n);
   }
-  // Fill in a free address in the home network (once per form) when "own address" is chosen and the field is still empty.
-  async function suggestLanIp(input, small) {
-    if (input.value.trim() || input.dataset.suggested) return;
-    input.dataset.suggested = '1';
-    small.textContent = t('Looking for a free address…');
-    try {
-      const r = await api.get('/api/docker-networks/lan');
-      if (!input.value.trim() && r.suggestion) { input.value = r.suggestion; input.dispatchEvent(new Event('input', { bubbles: true })); }
-      small.textContent = r.home ? t('Free in {subnet} (through {card}). Reserve this address in your router, so it doesn\'t give it to another device.', { subnet: r.home.subnet, card: r.home.name })
-        : t('MajaOS can\'t find your home network. Create a macvlan network in Settings → Docker networks.');
-    } catch (e) { small.textContent = e.message; }
+  // The address of an app in a network that has addresses: Automatic (Docker picks a free one) or Fixed (typed in).
+  // Docker can't ask the router for an address (there is no DHCP for containers), so Automatic means: a free one from
+  // the network's range. The placeholder shows an example in the right subnet.
+  let lanInfoP = null;
+  const lanInfo = () => (lanInfoP ||= api.get('/api/docker-networks/lan').catch((e) => { lanInfoP = null; throw e; }));
+  const exampleIp = (subnet) => {
+    const [ip, pre] = String(subnet).split('/'), o = ip.split('.');
+    return Number(pre) >= 24 ? `${o[0]}.${o[1]}.${o[2]}.200` : `${o[0]}.${o[1]}.0.10`;
+  };
+  const majaSubnet = (nets) => ((nets || []).find((n) => (n.name === 'maja' || n.name === 'homebase') && n.subnet) || {}).subnet || '172.30.0.0/16';
+  function ipFieldHtml(attr, value) {
+    return `<div class="fld ip-box" data-ipbox><span>${t('IP address')}</span>
+      <div class="seg" role="radiogroup" aria-label="${t('IP address')}">
+        <button type="button" role="radio" aria-checked="true" data-ipmode="auto">${t('Automatic')}</button>
+        <button type="button" role="radio" aria-checked="false" data-ipmode="fixed">${t('Fixed address')}</button></div>
+      <input class="field" ${attr} value="${esc(value || '')}" spellcheck="false" autocomplete="off" inputmode="decimal" aria-label="${t('Fixed IP address')}">
+      <small></small></div>`;
+  }
+  // kind: 'lan' (own address in the home network), 'maja' (the default network: an address puts the app in the maja
+  // network) or 'net' (a network of its own; subnet null when MajaOS doesn't know it, e.g. a network of the compose file).
+  async function paintIpField(box, mode, kind, subnet) {
+    const input = $('input', box), small = $('small', box), run = String(Number(box.dataset.paint || 0) + 1);
+    box.dataset.paint = run;
+    $$('[data-ipmode]', box).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.ipmode === mode)));
+    input.hidden = mode !== 'fixed';
+    let info = null;
+    if (kind === 'lan') {
+      small.textContent = t('Looking for a free address…');
+      try { info = await lanInfo(); } catch (e) { if (box.dataset.paint === run) small.textContent = tr(e.message); return; }
+      if (box.dataset.paint !== run) return;
+      if (!info.home) { small.textContent = t('MajaOS can\'t find your home network. Create a macvlan network in Settings → Docker networks.'); return; }
+      subnet = info.home.subnet;
+    }
+    if (kind === 'maja') subnet = subnet || '172.30.0.0/16';
+    input.placeholder = subnet ? t('e.g. {ip} (subnet {subnet})', { ip: info && info.suggestion ? info.suggestion : exampleIp(subnet), subnet }) : '';
+    small.textContent = mode === 'fixed'
+      ? kind === 'lan' ? t('An address in {subnet} (through {card}) that no other device uses. Reserve it in your router, so it doesn\'t give it to another device.', { subnet, card: info.home.name })
+        : kind === 'maja' ? t('With an address the app joins the MajaOS network maja ({subnet}), where apps also find each other by name.', { subnet })
+        : subnet ? t('An address in {subnet}.', { subnet }) : t('A fixed address only works in a network with its own subnet.')
+      : kind === 'lan' ? t('Docker gives the app a free address from {range} in your home network ({subnet}). Not from your router: Docker can\'t use its DHCP. The address can change when the app is made again.', { range: info.ipRange || subnet, subnet })
+        : t('Docker picks a free address.');
   }
   // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (MajaOS creates it on install).
   const LAN_CHOICE = '@lan';
@@ -5926,8 +5964,7 @@
       <label class="fld"><span>${t('Network')}</span><select class="field" name="__network">${opts.map(([v, label]) =>
         `<option value="${esc(v)}"${v === d.networkDefault ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
         <small id="storeNetHelp"></small></label>
-      <label class="fld" data-store-ip><span>${t('Fixed IP address (optional)')} ${hint(t('Empty = Docker picks an address.'))}</span><input class="field" name="__ip" spellcheck="false" autocomplete="off">
-        <small></small></label></div>`;
+      <div data-store-ip>${ipFieldHtml('name="__ip"', '')}</div></div>`;
   }
   function storeSections(fields, d) {
     return FIELD_GROUPS.map(([type, title]) => {
@@ -6136,19 +6173,23 @@
       const lan = v === LAN_CHOICE || ownNet(n);
       const ipOk = v === 'bridge' || lan || !!(n && n.subnet);
       $('[data-store-ip]', form).hidden = !ipOk;
-      if (!ipOk) form.elements.__ip.value = '';
-      form.elements.__ip.placeholder = n && n.subnet ? n.subnet.replace(/\.\d+\/\d+$/, '.200') : v === 'bridge' ? '172.30.0.10' : '';
-      $('[data-store-ip] small', form).textContent = v === 'bridge' ? t('Empty = Docker picks an address. With an address the app joins the MajaOS network maja (172.30.0.0/16), where apps also find each other by name.')
-        : t('Empty = Docker picks an address.');
-      if (lan) suggestLanIp(form.elements.__ip, $('[data-store-ip] small', form));
+      if (!ipOk) { form.elements.__ip.value = ''; ipMode = 'auto'; }
+      else paintIpField($('[data-ipbox]', form), ipMode, lan ? 'lan' : v === 'bridge' ? 'maja' : 'net', lan ? null : n && n.subnet ? n.subnet : majaSubnet(d.networks));
       $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You added an extra port, so the app now uses the default network (bridge): only there Docker can publish extra ports.')
-        : v === 'host' ? t('The app uses the server\'s network and listens on its own ports. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
+        : v === 'host' ? t('The app uses the server\'s own address and listens on its own ports, so it has no address of its own. For that, choose Own address in my home network. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
         : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. MajaOS sets up the network the first time. The server itself can\'t reach the app at that address (a Linux limitation); your other devices can.')
         : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one).')
         : n ? t('Apps in the same network find each other by name.') : t('Create new networks in Settings → Docker networks.');
     };
-    let switched = false;
+    let switched = false, ipMode = 'auto';
     form.elements.__network.addEventListener('change', () => { switched = false; syncNet(); });
+    form.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ipmode]'); if (!b) return;
+      ipMode = b.dataset.ipmode;
+      if (ipMode === 'auto') { form.elements.__ip.value = ''; form.dispatchEvent(new Event('input', { bubbles: true })); }
+      syncNet();
+      if (ipMode === 'fixed') form.elements.__ip.focus();
+    });
     // Extra ports can only be published by Docker on a network with ports: then switch to the default network.
     // Changing a template port doesn't switch: with host or an own address it becomes the app's own port (see buildCompose).
     const needPorts = () => {
@@ -6287,6 +6328,9 @@
         return;
       }
       if (missingField('Fill in {field}.')) return;
+      if (ipMode === 'fixed' && !$('[data-store-ip]', form).hidden && !form.elements.__ip.value.trim()) {
+        err.textContent = t('Fill in an IP address, or choose Automatic.'); form.elements.__ip.focus(); return;
+      }
       const badX = extra.find((p) => (String(p.host).trim() || String(p.container).trim()) && !(/^\d{1,5}$/.test(String(p.host).trim()) && /^\d{1,5}$/.test(String(p.container).trim())));
       if (badX) { err.textContent = t('Enter two ports between 1 and 65535 for each extra port.'); return; }
       const values = {};
