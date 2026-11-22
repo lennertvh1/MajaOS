@@ -6943,6 +6943,43 @@
 
   /* --- Storage: where app data, VM disks, ISOs and shared folders are, and moving app data to another pool */
   const MIGRATE_STEPS = { prepare: 'Preparing', stop: 'Stopping apps', copy: 'Copy', compose: 'Updating compose files', start: 'Starting apps', done: 'Ready' };
+  // Disk sleep (lib/spindown.js): hard disks without reads or writes for a while go to standby.
+  async function sleepSection(box) {
+    let d;
+    try { d = await api.get('/api/spindown'); } catch (e) { box.innerHTML = `<p class="notice bad"><span>${esc(tr(e.message))}</span></p>`; return; }
+    if (!box.isConnected) return;
+    const label = (m) => (!m ? t('Never') : m % 60 ? duration(m * 60) : m === 60 ? t('1 hour') : t('{n} hours', { n: m / 60 }));
+    const opts = (cur, withDefault) => (withDefault ? `<option value=""${cur == null ? ' selected' : ''}>${esc(t('Default ({time})', { time: label(d.minutes) }))}</option>` : '') +
+      d.choices.map((m) => `<option value="${m}"${cur === m ? ' selected' : ''}>${esc(label(m))}</option>`).join('');
+    const state = (x) => x.state === 'standby' ? `<span class="pill ok">${t('Asleep')}</span>`
+      : x.state === 'active' ? `<span class="pill">${t('Spinning')}</span>` : `<span class="pill">${t('Unknown')}</span>`;
+    const sub = (x) => [bytes(x.size), x.name, x.state === 'active' && x.idle != null ? t('Not used for {time}', { time: duration(x.idle) }) : '',
+      x.error ? t('Could not put it to sleep: {error}', { error: tr(x.error) }) : ''].filter(Boolean).map(esc).join(' · ');
+    box.innerHTML = `<h2 class="pane-title">${t('Disk sleep')} ${hint(t('A hard disk that isn\'t read or written for this long goes to sleep: quieter, cooler and less power. The first file you open after that takes about 10 seconds while it spins up. Apps or VMs on a pool keep its disks awake. SSDs are left alone.'))}</h2>
+      ${d.available === false ? `<p class="notice bad"><span>${t('hdparm is not installed on the server. Install it with: apt install hdparm')}</span></p>` : ''}
+      ${d.disks.length ? `<ul class="rows">
+        <li><div><div class="row-title">${t('Every hard disk')}</div><div class="row-sub">${t('Unless a disk has its own time below.')}</div></div>
+          <div class="row-side"><select class="field sm" data-sleep-default aria-label="${t('Sleep after')}">${opts(d.minutes, false)}</select></div></li>
+        ${d.disks.map((x) => `<li><div><div class="row-title">${esc(x.model || x.name)} ${state(x)}</div><div class="row-sub">${sub(x)}</div></div>
+          <div class="row-side btn-row"><select class="field sm" data-sleep-disk="${esc(x.key)}" aria-label="${esc(t('Sleep after') + ': ' + (x.model || x.name))}">${opts(x.minutes, true)}</select>
+            ${x.state !== 'standby' && d.available !== false ? `<button class="btn sm" type="button" data-sleep-now="${esc(x.name)}">${t('Sleep now')}</button>` : ''}</div></li>`).join('')}
+      </ul>` : `<p class="muted">${t('There are no hard disks in this server.')}</p>`}`;
+    box.onchange = async (e) => {
+      const def = e.target.closest('[data-sleep-default]'), one = e.target.closest('[data-sleep-disk]');
+      if (!def && !one) return;
+      try {
+        await api.post('/api/spindown', def ? { minutes: Number(def.value) } : { disks: { [one.dataset.sleepDisk]: one.value === '' ? null : Number(one.value) } });
+        toast(t('Saved.'));
+        sleepSection(box);
+      } catch (ex) { toast(tr(ex.message), true); }
+    };
+    box.onclick = async (e) => {
+      const b = e.target.closest('[data-sleep-now]'); if (!b) return;
+      b.disabled = true;
+      try { await api.post('/api/spindown/' + encodeURIComponent(b.dataset.sleepNow) + '/sleep', {}); toast(t('{name} is going to sleep.', { name: b.dataset.sleepNow })); sleepSection(box); }
+      catch (ex) { toast(tr(ex.message), true); b.disabled = false; }
+    };
+  }
   async function storagePane(el) {
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
     let d;
@@ -6975,7 +7012,9 @@
         ${row('isos', t('ISOs and disk images'), '', t('Save'), t('Put installation ISOs here, e.g. through a shared folder.'))}
         ${row('shares', t('Shared folders for apps'), '', t('Save'), t('/mnt/user/… from the app store becomes this folder.'))}
       </ul>
-      <div id="spMig"></div>`;
+      <div id="spMig"></div>
+      <div id="spSleep"></div>`;
+    sleepSection($('#spSleep', el));
     const mig = $('#spMig', el);
     const drawMig = (m) => {
       if (!m) { mig.innerHTML = ''; return; }

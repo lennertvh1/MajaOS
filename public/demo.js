@@ -2586,6 +2586,35 @@
     }
     return { from: spJob.from, to: spJob.to, state, step, percent, error: null, lines, manual: [], started: new Date(spJob.start).toISOString(), finished: state === 'done' ? new Date().toISOString() : null };
   }
+  // Disk sleep (lib/spindown.js): the four hard disks of tank; sdd sleeps already.
+  const SD_CHOICES = [0, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360];
+  const sdCfg = { minutes: 30, disks: {} };
+  const sdDisks = [['sda', 'WDC WD20EFZX-68AWUN0', 'WD-CA1A'], ['sdb', 'WDC WD20EFZX-68AWUN0', 'WD-CA1B'], ['sdc', 'ST2000VN004-2E4164', 'ZFL1C'], ['sdd', 'ST2000VN004-2E4164', 'ZFL1D']]
+    .map(([name, model, serial], i) => ({ key: 's:' + serial, name, model, serial, size: 2000398934016, transport: 'sata', idle0: [4, 95, 12, 0][i] * 60, asleep: i === 3 }));
+  const sdStart = Date.now();
+  function sdGet() {
+    const up = Math.round((Date.now() - sdStart) / 1000);
+    return { available: true, minutes: sdCfg.minutes, choices: SD_CHOICES, disks: sdDisks.map((d) => {
+      const own = sdCfg.disks[d.key], eff = own == null ? sdCfg.minutes : own, idle = d.idle0 + up;
+      const asleep = d.asleep || (eff > 0 && idle >= eff * 60);
+      return { key: d.key, name: d.name, model: d.model, serial: d.serial, size: d.size, transport: d.transport, minutes: own == null ? null : own, effective: eff,
+        state: asleep ? 'standby' : 'active', idle, sleptAt: asleep ? Date.now() - 600000 : null, error: null };
+    }) };
+  }
+  function sdSave(b) {
+    if (b.minutes != null) { if (!SD_CHOICES.includes(Number(b.minutes))) throw err('Choose one of the times in the list.'); sdCfg.minutes = Number(b.minutes); }
+    for (const [k, v] of Object.entries(b.disks || {})) {
+      if (v == null || v === '') delete sdCfg.disks[k];
+      else if (SD_CHOICES.includes(Number(v))) sdCfg.disks[k] = Number(v); else throw err('Choose one of the times in the list.');
+    }
+    return sdGet();
+  }
+  function sdSleep(name) {
+    const d = sdDisks.find((x) => x.name === name);
+    if (!d) throw err('This disk is not a hard disk MajaOS knows.', 404);
+    d.asleep = true;
+    return { name, state: 'standby' };
+  }
   function spGet() {
     spMigration();
     return { paths: { ...sp }, exists: { appdata: true, vms: true, isos: true, shares: true }, pools: spPools(), folders: FOLDER,
@@ -3142,6 +3171,7 @@
     if (path === '/api/install/progress') return instProgress();
     if (path === '/api/install/network') return { cards: instCardsNow(), online: true, dns: ['192.168.1.1'], chosen: copy(instChosen) };
     if (path === '/api/storage-paths') return spGet();
+    if (path === '/api/spindown') { await wait(rnd(150, 350)); return sdGet(); }
     if (path === '/api/backup' || path === '/api/backup?brief=1') return bkGet(path.endsWith('brief=1'));
     const bkb = path.match(/^\/api\/backup\/remotes\/([^/]+)\/browse\?path=(.*)$/);
     if (bkb) { await wait(rnd(300, 700)); return bkBrowse(decodeURIComponent(bkb[1]), decodeURIComponent(bkb[2])); }
@@ -3403,6 +3433,8 @@
     }
     if (path === '/api/setup') { await wait(rnd(300, 600)); return demoSetup(body); }
     if (path === '/api/storage-paths') { await wait(rnd(300, 600)); return spSet(body); }
+    if (path === '/api/spindown') { await wait(rnd(150, 350)); return sdSave(body); }
+    { const m = path.match(/^\/api\/spindown\/(sd[a-z]+)\/sleep$/); if (m) { await wait(rnd(300, 600)); return sdSleep(m[1]); } }
     if (path.startsWith('/api/backup/')) { await wait(rnd(200, 500)); return bkPost(path, body); }
     if (path === '/api/update/install') {
       const g = updGet();

@@ -88,6 +88,7 @@ const keyboard = require('./lib/keyboard');
 const mixed = require('./lib/mixed');
 const unraid = require('./lib/unraid');
 const fans = require('./lib/fans');
+const spindown = require('./lib/spindown');
 const ups = require('./lib/ups');
 
 const CFG = {
@@ -865,6 +866,9 @@ async function handleApi(req, res, url) {
   if (p === '/api/unraid/close' && method === 'POST') return sendJson(res, 200, await unraid.close());
   // Storage locations (Settings → Storage): move app data to another pool, or choose a pool for VMs, ISOs and shared folders.
   if (p === '/api/storage-paths' && method === 'GET') return sendJson(res, 200, await migrate.overview());
+  if (p === '/api/spindown' && method === 'GET') return sendJson(res, 200, await spindown.status());
+  if (p === '/api/spindown' && method === 'POST') return sendJson(res, 200, await spindown.save(await readBody(req)));
+  if ((m = p.match(/^\/api\/spindown\/(sd[a-z]+)\/sleep$/)) && method === 'POST') return sendJson(res, 200, await spindown.sleepNow(m[1]));
   if (p === '/api/storage-paths' && method === 'POST') {
     const body = await readBody(req);
     if (body.path) return sendJson(res, 200, await migrate.usePath(body.kind, body.path)); // point to an existing folder, nothing moves
@@ -1124,6 +1128,7 @@ bind(CFG.port).then(() => {
     disks.watchTests(); // SMART self-tests that already run (after a restart, or started with smartctl)
     network.watchCards(); // a card with a cable that ifupdown left down (e.g. after a rollback) comes up again
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
+    spindown.start(); // hard disks that aren't used go to sleep (Settings → Storage)
     activity.startSchedule(); // the activity log: who changed what in the shared folders (Samba full_audit)
     shares.upgradeConf().catch((e) => console.error('Shared folders: ' + e.message));
     ups.startSchedule(); // the UPS: log power events and shut down early (Settings → UPS)
