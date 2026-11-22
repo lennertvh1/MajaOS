@@ -3165,4 +3165,7 @@ window.TB_LANG.ja = {
   "Stopped: it took longer than {minutes} minutes.": "停止しました：{minutes} 分以上かかりました。",
   "services: was missing above {names}. MajaOS added it.": "{names} の上に services: がなかったため、MajaOS が追加しました。",
   "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "「{key}」が compose ファイルの最上位にあります。services: の下に置いてください（2 スペース字下げ）。",
+  "Remove the container {name}? The image and its folders stay.": "コンテナ {name} を削除しますか？イメージとフォルダーは残ります。",
+  "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "サーバー上の別の場所にある compose ファイルで作成されました。そこで docker compose up を実行すると再作成されます。",
+  "Stop {name} first. Then you can remove the container.": "先に {name} を停止してください。その後コンテナを削除できます。",
 };

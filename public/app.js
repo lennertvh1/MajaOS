@@ -612,6 +612,9 @@
 
   /* ------------------------------------------------------------ apps */
   function isRunning(a) { return /RUNNING/i.test(a.state); }
+  // Installed by MajaOS (app store or own app) with its compose folder: removing takes the folder and maybe the data along.
+  // Other containers can only be removed (the container alone) once they are stopped.
+  const managedApp = (a) => !!((a.storeId || a.custom) && a.compose);
   // An update that is running: its job (lib/appstore.js startUpdate), with percent and phase.
   const updating = (a) => (a && a.updateJob && !a.updateJob.done ? a.updateJob : null);
   const progHtml = (job) => `<span class="app-prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${job.percent || 0}"><span style="width:${job.percent || 0}%"></span></span>`;
@@ -2359,7 +2362,7 @@
       ['logs', t('Logs')], run && ['console', t('Console')], ['settings', t('Settings')], ['rename', t('Rename…')], '-',
       ['autostart', t('Start with the server'), 'switch'], '-',
       ['tofolder', t('Move to folder…')], folderOf(a.name) && ['outfolder', t('Remove from folder')],
-      (a.storeId || a.custom) && '-', (a.storeId || a.custom) && ['remove', t('Remove'), 'danger'],
+      (managedApp(a) || !run) && '-', (managedApp(a) || !run) && ['remove', t('Remove'), 'danger'],
     ].filter(Boolean).filter((it, i, arr) => it !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1));
     menu.innerHTML = `<div class="menu-head"><b>${esc(prettyName(a.name))}</b><span>${esc(busy ? t(APP_ACTS[busy].noun) + '…' : a.status || a.state)}</span>
         ${a.update && !busy ? `<span class="menu-upd">${t('A new version is available')}</span>` : ''}</div>` +
@@ -2489,12 +2492,15 @@
 
   async function removeApp(a) {
     const label = prettyName(a.name);
-    const r = await ask(t('Remove {name}? The app will be stopped and removed, together with its compose file.', { name: label }), t('Remove'),
-      a.dataDirs.length ? t('Also delete the app\'s data ({dirs})', { dirs: a.dataDirs.join(', ') }) : null);
+    const own = managedApp(a);
+    const r = own ? await ask(t('Remove {name}? The app will be stopped and removed, together with its compose file.', { name: label }), t('Remove'),
+      a.dataDirs.length ? t('Also delete the app\'s data ({dirs})', { dirs: a.dataDirs.join(', ') }) : null)
+      : await ask(t('Remove the container {name}? The image and its folders stay.', { name: label }) +
+        (a.compose ? ' ' + t('It was made with a compose file elsewhere on the server: docker compose up there makes it again.') : ''), t('Remove'));
     if (!r) return;
     S.appBusy[a.id] = 'stop'; renderApps();
     try {
-      const res = await api.del(appPath(a) + (r.checked ? '?data=1' : ''));
+      const res = await api.del(appPath(a) + (own && r.checked ? '?data=1' : ''));
       toast(t('Removed: {name}', { name: label }) + (res.kept && res.kept.length ? '. ' + t('These folders were kept: {list}', { list: res.kept.join(', ') }) : ''));
       if (S.store) { const s = S.store.apps.find((x) => x.id === a.storeId); if (s) s.installed = false; }
     } catch (e) { toast(t('Removing {name} failed: {error}', { name: label, error: e.message }), true); }

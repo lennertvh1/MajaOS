@@ -3711,7 +3711,11 @@
     if (m) {
       const i = apps.findIndex((x) => x.id === decodeURIComponent(m[1]));
       if (i < 0) throw err('This app does not exist (anymore).', 404);
-      if (!apps[i].storeId && !apps[i].custom) throw err('Only app store apps or your own MajaOS apps can be removed here. Remove other apps through their own compose file.', 400);
+      if (!apps[i].storeId && !apps[i].custom) {
+        if (/running|paused|restarting/i.test(apps[i].state)) throw err('Stop ' + apps[i].name + ' first. Then you can remove the container.', 409);
+        apps.splice(i, 1);
+        return { removed: [], kept: [], container: true };
+      }
       const [a] = apps.splice(i, 1);
       return { removed: m[2] ? a.dataDirs : [], kept: [] };
     }

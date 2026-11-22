@@ -157,7 +157,7 @@ A simple management system for a home server in the style of ZimaOS/HexOS. It ru
 | POST | `/api/apps/:id/compose` | {text}: first `docker compose config -q`, then `.bak` and `up -d` → {ok, backup} |
 | POST | `/api/apps/:id/compose-form` | {form}: change this app's service through the form (`applyServiceForm`), then the same as `/compose` |
 | POST | `/api/apps/:id/exec` | {cmd, cwd} → {output, cwd, exitCode}: one command with sh in the container (`EXEC_SCRIPT`, no TTY) |
-| DELETE | `/api/apps/:id?data=1` | remove an app from the app store or an own app (compose down + folder), optionally with its data → {removed, kept} |
+| DELETE | `/api/apps/:id?data=1` | remove an app from the app store or an own app (compose down + folder), optionally with its data → {removed, kept}; any other container (docker run, Portainer, a compose file elsewhere) only when it is stopped: `docker rm` of the container alone → {removed: [], kept: [], container: true} (409 while it runs) |
 | GET | `/api/store?refresh=1` | catalogue: updated, fetched, error, source, count, categories, apps (id, name, image, icon, summary, categories, maintainer, popularity, featured, official, beta, installed) |
 | GET | `/api/store/apps/:id` | details + folders, networks, networkDefault, templateNetwork, fields (key, type, name, target, value, mode, description, required, mask, advanced, options, auto), warnings, suggestedName, appdataDir, sharesDir, stacksDir, installed, appdataMissing |
 | POST | `/api/apps/draft` | draft {name + store/values/network/ip/extraPorts, or custom, or text, or text + form} → {text, form, formError, dockerNetworks} |

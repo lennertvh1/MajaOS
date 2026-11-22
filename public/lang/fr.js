@@ -3165,4 +3165,7 @@ window.TB_LANG.fr = {
   "Stopped: it took longer than {minutes} minutes.": "Arrêté : cela a pris plus de {minutes} minutes.",
   "services: was missing above {names}. MajaOS added it.": "services: manquait au-dessus de {names}. MajaOS l'a ajouté.",
   "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "« {key} » est au premier niveau du fichier compose. Placez-le sous services: (indenté de deux espaces).",
+  "Remove the container {name}? The image and its folders stay.": "Supprimer le conteneur {name} ? L'image et ses dossiers restent.",
+  "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "Il a été créé avec un fichier compose ailleurs sur le serveur : docker compose up à cet endroit le recrée.",
+  "Stop {name} first. Then you can remove the container.": "Arrêtez d'abord {name}. Vous pourrez ensuite supprimer le conteneur.",
 };

@@ -3510,4 +3510,7 @@ window.TB_LANG.nl = {
   "Stopped: it took longer than {minutes} minutes.": "Gestopt: het duurde langer dan {minutes} minuten.",
   "services: was missing above {names}. MajaOS added it.": "services: ontbrak boven {names}. MajaOS heeft het toegevoegd.",
   "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "\"{key}\" staat bovenaan in het compose-bestand. Zet het onder services: (twee spaties ingesprongen).",
+  "Remove the container {name}? The image and its folders stay.": "Container {name} verwijderen? Het image en de mappen blijven.",
+  "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "Hij is gemaakt met een compose-bestand elders op de server: docker compose up daar maakt hem opnieuw.",
+  "Stop {name} first. Then you can remove the container.": "Stop {name} eerst. Daarna kan je de container verwijderen.",
 };

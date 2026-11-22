@@ -3165,4 +3165,7 @@ window.TB_LANG.zh = {
   "Stopped: it took longer than {minutes} minutes.": "已停止：耗时超过 {minutes} 分钟。",
   "services: was missing above {names}. MajaOS added it.": "{names} 上方缺少 services:，MajaOS 已自动添加。",
   "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "“{key}”位于 compose 文件的顶层。请将其放在 services: 下（缩进两个空格）。",
+  "Remove the container {name}? The image and its folders stay.": "删除容器 {name}？镜像及其文件夹会保留。",
+  "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "它由服务器上其他位置的 compose 文件创建：在那里运行 docker compose up 会重新创建它。",
+  "Stop {name} first. Then you can remove the container.": "请先停止 {name}，然后才能删除容器。",
 };
