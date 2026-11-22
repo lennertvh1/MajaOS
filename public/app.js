@@ -6177,7 +6177,7 @@
       else paintIpField($('[data-ipbox]', form), ipMode, lan ? 'lan' : v === 'bridge' ? 'maja' : 'net', lan ? null : n && n.subnet ? n.subnet : majaSubnet(d.networks));
       $('#storeNetHelp', form).textContent = switched && v === 'bridge' ? t('You added an extra port, so the app now uses the default network (bridge): only there Docker can publish extra ports.')
         : v === 'host' ? t('The app uses the server\'s own address and listens on its own ports, so it has no address of its own. For that, choose Own address in my home network. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one) and the WebUI follows.')
-        : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. MajaOS sets up the network the first time. The server itself can\'t reach the app at that address (a Linux limitation); your other devices can.')
+        : v === LAN_CHOICE ? t('The app gets its own address in your home network, like a separate device, and is reachable there on its own ports. MajaOS sets up the network the first time, with a link so the server and its other apps can reach it too (Settings → Docker networks).')
         : !ports ? t('The app gets its own address in your home network and is reachable there on the app\'s own ports. If you change a port below, MajaOS sets the app\'s own port setting (when the template has one).')
         : n ? t('Apps in the same network find each other by name.') : t('Create new networks in Settings → Docker networks.');
     };
@@ -7507,7 +7507,11 @@
       return `<li>
         <div><div class="row-title">${esc(n.name)} <span class="pill">${esc(n.driver || '–')}</span></div>
           <div class="row-sub">${esc(sub)}</div>
-          <div class="row-sub">${n.containers.length ? t('Apps: {list}', { list: apps }) : t('No apps yet')}</div></div>
+          <div class="row-sub">${n.containers.length ? t('Apps: {list}', { list: apps }) : t('No apps yet')}</div>
+          ${n.shim ? `<label class="check net-shim"><input type="checkbox" data-net-shim="${esc(n.name)}"${n.shim.enabled ? ' checked' : ''}> ${t('The server and its other apps can reach these apps')}
+            ${hint(t('Linux never lets a card talk to its own macvlan or ipvlan apps. With this on, the server gets an address of its own in this network (a shim) and routes the apps\' addresses through it, so the server, apps on the host network and apps on other Docker networks can reach them.'))}</label>
+            ${n.shim.enabled ? `<div class="row-sub ${n.shim.up ? '' : 'temp-bad'}">${n.shim.up ? esc(t('Through {dev} with the address {ip}', { dev: n.shim.dev, ip: n.shim.address }))
+              : esc(t('Not working: {error}', { error: tr(n.shim.error || t('Waiting for the first check…')) }))}</div>` : ''}` : ''}</div>
         <div class="row-side">${n.builtin ? `<span class="muted">${t('built-in')}</span>`
           : `<button class="btn sm danger" type="button" data-net-del="${esc(n.name)}"${n.containers.length ? ` disabled title="${t('Move the apps out of this network first.')}"` : ''}>${t('Remove')}</button>`}</div></li>`;
     };
@@ -7543,6 +7547,24 @@
       <h2 class="pane-title">${t('Built-in')}</h2>
       <ul class="rows">${builtin.map(row).join('')}</ul>`;
 
+    el.onchange = async (e) => {
+      const box = e.target.closest('[data-net-shim]'); if (!box) return;
+      const name = box.dataset.netShim, n = d.networks.find((x) => x.name === name);
+      box.checked = !box.checked; // only changes after a yes
+      let address = null;
+      if (!n.shim.enabled) {
+        const r = await ask(t('Give the server an address of its own in {name}, so it can reach the apps there? Choose an address no other device uses.', { name }), t('Turn on'), null,
+          { value: n.shim.address || '', label: t('Address of the server in {name}', { name }), placeholder: n.subnet || '' });
+        if (!r) return;
+        address = String(r.value || '').trim();
+      } else if (!(await ask(t('Turn this off? The server and its other apps can no longer reach the apps in {name}.', { name }), t('Turn off')))) return;
+      box.disabled = true;
+      try {
+        await api.post('/api/docker-networks/' + encodeURIComponent(name) + '/shim', { enabled: !n.shim.enabled, address });
+        toast(n.shim.enabled ? t('Turned off for {name}.', { name }) : t('The server can now reach the apps in {name}.', { name }));
+        dockerNetPane(el);
+      } catch (ex) { toast(tr(ex.message), true); box.disabled = false; }
+    };
     const form = $('#dnForm', el), F = form.elements;
     const parentOf = () => d.parents.find((p) => p.name === F.parent.value) || null;
     let filled = null; // what we filled in ourselves, so we can remove it again with another choice

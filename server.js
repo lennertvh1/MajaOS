@@ -89,6 +89,7 @@ const mixed = require('./lib/mixed');
 const unraid = require('./lib/unraid');
 const fans = require('./lib/fans');
 const spindown = require('./lib/spindown');
+const macvlanShim = require('./lib/macvlanshim');
 const ups = require('./lib/ups');
 
 const CFG = {
@@ -685,6 +686,11 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks/lan' && method === 'GET') return sendJson(res, 200, await dockernet.lanInfo());
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
+  if ((m = p.match(/^\/api\/docker-networks\/([^/]+)\/shim$/)) && method === 'POST') {
+    const b = await readBody(req);
+    await macvlanShim.setEnabled(decodeURIComponent(m[1]), !!b.enabled, b.address);
+    return sendJson(res, 200, await dockernet.listNetworks());
+  }
 
   if (p === '/api/shares' && method === 'GET') {
     if (who.role === 'user') {
@@ -1129,6 +1135,7 @@ bind(CFG.port).then(() => {
     network.watchCards(); // a card with a cable that ifupdown left down (e.g. after a rollback) comes up again
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
     spindown.start(); // hard disks that aren't used go to sleep (Settings → Storage)
+    macvlanShim.start(); // the server can reach apps with their own address (Settings → Docker networks)
     activity.startSchedule(); // the activity log: who changed what in the shared folders (Samba full_audit)
     shares.upgradeConf().catch((e) => console.error('Shared folders: ' + e.message));
     ups.startSchedule(); // the UPS: log power events and shut down early (Settings → UPS)
