@@ -3161,4 +3161,6 @@ window.TB_LANG.zh = {
   "For variables like ${PASSWORD} in the compose file. Stored next to it, readable only by the server.": "用于 compose 文件中的 ${PASSWORD} 等变量。保存在其旁边，仅服务器可读取。",
   "Paste a compose file first.": "请先粘贴一个 compose 文件。",
   "The .env file is too large.": ".env 文件太大。",
+  "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "已停止：{minutes} 分钟内没有任何进展。请检查服务器的网络连接后重试。",
+  "Stopped: it took longer than {minutes} minutes.": "已停止：耗时超过 {minutes} 分钟。",
 };

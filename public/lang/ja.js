@@ -3161,4 +3161,6 @@ window.TB_LANG.ja = {
   "For variables like ${PASSWORD} in the compose file. Stored next to it, readable only by the server.": "compose ファイル内の ${PASSWORD} などの変数用です。その隣に保存され、サーバーだけが読み取れます。",
   "Paste a compose file first.": "先に compose ファイルを貼り付けてください。",
   "The .env file is too large.": ".env ファイルが大きすぎます。",
+  "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "停止しました：{minutes} 分間何も進みませんでした。サーバーのインターネット接続を確認して、もう一度お試しください。",
+  "Stopped: it took longer than {minutes} minutes.": "停止しました：{minutes} 分以上かかりました。",
 };

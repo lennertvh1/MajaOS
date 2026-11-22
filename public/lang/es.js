@@ -3161,4 +3161,6 @@ window.TB_LANG.es = {
   "For variables like ${PASSWORD} in the compose file. Stored next to it, readable only by the server.": "Para variables como ${PASSWORD} en el archivo compose. Se guarda junto a él, solo legible por el servidor.",
   "Paste a compose file first.": "Pega primero un archivo compose.",
   "The .env file is too large.": "El archivo .env es demasiado grande.",
+  "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "Detenido: no pasó nada durante {minutes} minutos. Comprueba la conexión a internet del servidor e inténtalo de nuevo.",
+  "Stopped: it took longer than {minutes} minutes.": "Detenido: tardó más de {minutes} minutos.",
 };

@@ -3506,4 +3506,6 @@ window.TB_LANG.nl = {
   "For variables like ${PASSWORD} in the compose file. Stored next to it, readable only by the server.": "Voor variabelen zoals ${PASSWORD} in het compose-bestand. Wordt ernaast bewaard, enkel leesbaar voor de server.",
   "Paste a compose file first.": "Plak eerst een compose-bestand.",
   "The .env file is too large.": "Het .env-bestand is te groot.",
+  "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "Gestopt: er gebeurde {minutes} minuten niets. Controleer de internetverbinding van de server en probeer opnieuw.",
+  "Stopped: it took longer than {minutes} minutes.": "Gestopt: het duurde langer dan {minutes} minuten.",
 };
