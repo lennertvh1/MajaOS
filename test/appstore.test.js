@@ -85,6 +85,18 @@ test('splitting extra Docker options and PostArgs', () => {
   assert.deepEqual(o.unknown, ['--mystery']);
 });
 
+test('extra Docker options that compose has a key for are taken over', () => {
+  const o = s.parseExtraParams('--cgroupns=host --stop-signal SIGRTMIN+3 --group-add 44 --dns 1.1.1.1 --read-only -w /app --ulimit nofile=1024:4096 --ulimit nproc=65535 --ulimit bad');
+  assert.deepEqual(o.unknown, []);
+  assert.equal(o.cgroup, 'host');
+  assert.equal(o.stopSignal, 'SIGRTMIN+3');
+  assert.deepEqual(o.groupAdd, ['44']);
+  assert.deepEqual(o.dns, ['1.1.1.1']);
+  assert.equal(o.readOnly, true);
+  assert.equal(o.workdir, '/app');
+  assert.deepEqual(s.parseUlimits(o.ulimits), { ok: { nofile: { soft: 1024, hard: 4096 }, nproc: 65535 }, bad: ['bad'] });
+});
+
 test('building the compose file', () => {
   const [jf, pxe] = s.normalizeFeed(FEED).apps;
   const r = s.buildCompose(jf, 'jellyfin', s.prepareFields(jf.config, 'jellyfin', 'Europe/Brussels'), { tz: 'Europe/Brussels' });
