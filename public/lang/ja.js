@@ -3189,4 +3189,8 @@ window.TB_LANG.ja = {
   "Put a disk to sleep": "ディスクをスリープにしました",
   "1 hour": "1 時間",
   "{n} hours": "{n} 時間",
+  "Remove {name}": "{name} を削除",
+  "Leave this out": "含めない",
+  "Left out:": "除外:",
+  "Put it back": "元に戻す",
 };

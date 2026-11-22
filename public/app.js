@@ -5889,7 +5889,9 @@
       ? `<select class="field" ${attrs}>${f.options.map((o) => `<option${o === f.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
       : `<input class="field" ${attrs} type="${f.type === 'Port' ? 'number' : f.mask ? 'password' : 'text'}" value="${esc(f.value)}" autocomplete="off"${f.type === 'Path' ? ' list="appFolders" spellcheck="false"' : ''}
           ${f.type === 'Port' ? 'min="1" max="65535"' : ''}${f.type === 'Path' && !f.value ? ` placeholder="${t('e.g. {path}', { path: esc(d.sharesDir) + '/media' })}"` : ''}>`;
-    return `<label class="fld"><span>${esc(tr(f.name))}${f.required ? ' <em class="req">*</em>' : ''}</span>${input}
+    // A field that isn't required can be left out of the compose file (× → data-field-del, undone under the section).
+    const del = f.required ? '' : `<button class="cf-del fld-del" type="button" data-field-del="${esc(f.key)}" aria-label="${esc(t('Remove {name}', { name: tr(f.name) }))}" title="${t('Leave this out')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
+    return `<label class="fld" data-field="${esc(f.key)}"><span class="fld-head"><span>${esc(tr(f.name))}${f.required ? ' <em class="req">*</em>' : ''}</span>${del}</span>${input}
       <small>${esc([tr(f.description), where].filter(Boolean).join(' · '))}</small></label>`;
   }
   // Does the app get ports on the server? Not with host, no network or its own address (macvlan/ipvlan).
@@ -5981,6 +5983,7 @@
         <div class="form" data-basic>
         ${storeNetHtml(d)}
         ${storeSections(rest, d)}
+        <p class="muted small" id="storeRemoved" hidden></p>
         <div class="cf-list" id="storeExtra"></div>
         <div class="btn-row"><button class="btn sm" type="button" data-xport-add>+ ${t('Port')}</button></div>
         ${adv.length ? `<details class="adv" data-more open><summary>${t('More settings ({n})', { n: adv.length })}</summary>${storeSections(adv, d)}</details>` : ''}
@@ -6153,6 +6156,31 @@
       form.elements.__network.value = 'bridge'; switched = true; syncNet();
     };
     syncNet();
+    // Template fields the user left out: hidden and disabled (so they aren't sent), listed with a way back.
+    const removed = new Set();
+    const drawRemoved = () => {
+      const box = $('#storeRemoved', form);
+      box.hidden = !removed.size;
+      box.innerHTML = removed.size ? t('Left out:') + ' ' + [...removed].map((k) => {
+        const f = d.fields.find((x) => x.key === k);
+        return `<button class="linkish" type="button" data-field-back="${esc(k)}" title="${t('Put it back')}">${esc(tr(f ? f.name : k))} ↺</button>`;
+      }).join(', ') : '';
+    };
+    const setRemoved = (key, gone) => {
+      $$(`[data-field="${CSS.escape(key)}"]`, form).forEach((fld) => {
+        fld.hidden = gone;
+        $$('input, select', fld).forEach((x) => { x.disabled = gone; });
+      });
+      if (gone) removed.add(key); else removed.delete(key);
+      drawRemoved();
+      form.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    form.addEventListener('click', (e) => {
+      const del = e.target.closest('[data-field-del]');
+      if (del) { e.preventDefault(); setRemoved(del.dataset.fieldDel, true); return; }
+      const back = e.target.closest('[data-field-back]');
+      if (back) { setRemoved(back.dataset.fieldBack, false); const x = $(`[data-field="${CSS.escape(back.dataset.fieldBack)}"] .field`, form); if (x) x.focus(); }
+    });
     // Extra ports that aren't in the template.
     const extra = [];
     const drawExtra = (focus) => {
@@ -6212,7 +6240,7 @@
       const values = {};
       for (const el of form.elements) if (el.name && !el.name.startsWith('__') && !el.disabled) values[el.name] = el.value;
       return { name: form.elements.__name.value.trim(), values, network: form.elements.__network.value, ip: form.elements.__ip.value.trim(),
-        extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()) };
+        extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()), removed: [...removed] };
     };
     // The first required field that is still empty: expand, focus and message.
     const missingField = (msg) => {
@@ -6268,7 +6296,7 @@
       try {
         r = await api.post('/api/store/apps/' + encodeURIComponent(d.id) + '/install',
           { name: form.elements.__name.value.trim(), values, network: form.elements.__network.value, ip: form.elements.__ip.value.trim(),
-            extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()) });
+            extraPorts: extra.filter((p) => String(p.host).trim() || String(p.container).trim()), removed: [...removed] });
       }
       catch (ex) { err.textContent = ex.message; btn.disabled = false; return; }
       form.hidden = true; $('#storeJob', body).hidden = false;

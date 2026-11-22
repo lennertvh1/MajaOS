@@ -1479,7 +1479,7 @@
     const name = String(body.name || '').trim();
     if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) throw err('Choose a name with lowercase letters, digits, - or _ (at most 63 characters).');
     if (apps.some((x) => x.name === name)) throw err('An app named ' + name + ' already exists. Choose another name.', 409);
-    const fields = a.fields().map((f) => (f.key in (body.values || {}) ? { ...f, value: String(body.values[f.key]) } : f));
+    const fields = a.fields().filter((f) => f.required || !(body.removed || []).includes(f.key)).map((f) => (f.key in (body.values || {}) ? { ...f, value: String(body.values[f.key]) } : f));
     const tpl = a.network || 'bridge';
     const network = body.network || 'host';
     if (!['bridge', 'host', 'none'].includes(network) && !dnets.some((n) => n.name === network)) throw err('The network ' + network + ' does not exist. Create it in Settings → Docker networks or choose another network.');
@@ -1661,7 +1661,7 @@
     let form, labels = [];
     if (b.store) {
       const a = store.find((x) => x.id === b.store); if (!a) throw err('This app is not (or no longer) in the catalogue.', 404);
-      const fields = a.fields().map((f) => (f.key in (b.values || {}) ? { ...f, value: String(b.values[f.key]) } : f));
+      const fields = a.fields().filter((f) => f.required || !(b.removed || []).includes(f.key)).map((f) => (f.key in (b.values || {}) ? { ...f, value: String(b.values[f.key]) } : f));
       const miss = fields.find((f) => f.required && !String(f.value).trim() && f.type !== 'Device'); if (miss) throw err('Fill in ' + miss.name + '.');
       const by = (t) => fields.filter((f) => f.type === t);
       form = { ...base, image: a.image, privileged: !!a.privileged, network: !b.network || b.network === 'bridge' ? '' : b.network, ip: String(b.ip || ''),

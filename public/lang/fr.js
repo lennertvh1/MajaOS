@@ -3189,4 +3189,8 @@ window.TB_LANG.fr = {
   "Put a disk to sleep": "Disque mis en veille",
   "1 hour": "1 heure",
   "{n} hours": "{n} heures",
+  "Remove {name}": "Supprimer {name}",
+  "Leave this out": "Ne pas inclure",
+  "Left out:": "Non inclus :",
+  "Put it back": "Remettre",
 };

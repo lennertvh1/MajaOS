@@ -3189,4 +3189,8 @@ window.TB_LANG.zh = {
   "Put a disk to sleep": "已让磁盘休眠",
   "1 hour": "1 小时",
   "{n} hours": "{n} 小时",
+  "Remove {name}": "移除 {name}",
+  "Leave this out": "不包含此项",
+  "Left out:": "已省略：",
+  "Put it back": "恢复",
 };

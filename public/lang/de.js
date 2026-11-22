@@ -3189,4 +3189,8 @@ window.TB_LANG.de = {
   "Put a disk to sleep": "Festplatte schlafen gelegt",
   "1 hour": "1 Stunde",
   "{n} hours": "{n} Stunden",
+  "Remove {name}": "{name} entfernen",
+  "Leave this out": "Weglassen",
+  "Left out:": "Weggelassen:",
+  "Put it back": "Wiederherstellen",
 };

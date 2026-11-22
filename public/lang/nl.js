@@ -3534,4 +3534,8 @@ window.TB_LANG.nl = {
   "Put a disk to sleep": "Schijf laten slapen",
   "1 hour": "1 uur",
   "{n} hours": "{n} uur",
+  "Remove {name}": "{name} verwijderen",
+  "Leave this out": "Weglaten",
+  "Left out:": "Weggelaten:",
+  "Put it back": "Terugzetten",
 };

@@ -3189,4 +3189,8 @@ window.TB_LANG.pl = {
   "Put a disk to sleep": "Uśpiono dysk",
   "1 hour": "1 godzina",
   "{n} hours": "{n} godz.",
+  "Remove {name}": "Usuń {name}",
+  "Leave this out": "Pomiń",
+  "Left out:": "Pominięte:",
+  "Put it back": "Przywróć",
 };

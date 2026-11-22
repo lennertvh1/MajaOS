@@ -3189,4 +3189,8 @@ window.TB_LANG.es = {
   "Put a disk to sleep": "Disco suspendido",
   "1 hour": "1 hora",
   "{n} hours": "{n} horas",
+  "Remove {name}": "Quitar {name}",
+  "Leave this out": "Omitir",
+  "Left out:": "Omitido:",
+  "Put it back": "Volver a poner",
 };
