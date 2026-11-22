@@ -3168,4 +3168,5 @@ window.TB_LANG.de = {
   "Remove the container {name}? The image and its folders stay.": "Container {name} entfernen? Das Image und seine Ordner bleiben.",
   "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "Er wurde mit einer Compose-Datei an anderer Stelle auf dem Server erstellt: docker compose up dort erstellt ihn neu.",
   "Stop {name} first. Then you can remove the container.": "Stoppe zuerst {name}. Danach kannst du den Container entfernen.",
+  "This also removes {names}, which belong to the same app.": "Dabei wird auch {names} entfernt, das zur selben App gehört.",
 };

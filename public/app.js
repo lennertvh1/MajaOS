@@ -2493,8 +2493,12 @@
   async function removeApp(a) {
     const label = prettyName(a.name);
     const own = managedApp(a);
-    const r = own ? await ask(t('Remove {name}? The app will be stopped and removed, together with its compose file.', { name: label }), t('Remove'),
-      a.dataDirs.length ? t('Also delete the app\'s data ({dirs})', { dirs: a.dataDirs.join(', ') }) : null)
+    // A stack with several containers is removed as a whole.
+    const mates = own ? S.apps.filter((x) => x.compose === a.compose && x.id !== a.id) : [];
+    const dirs = [...new Set([a, ...mates].flatMap((x) => x.dataDirs))];
+    const r = own ? await ask(t('Remove {name}? The app will be stopped and removed, together with its compose file.', { name: label }) +
+        (mates.length ? ' ' + t('This also removes {names}, which belong to the same app.', { names: mates.map((x) => prettyName(x.name)).join(', ') }) : ''), t('Remove'),
+      dirs.length ? t('Also delete the app\'s data ({dirs})', { dirs: dirs.join(', ') }) : null)
       : await ask(t('Remove the container {name}? The image and its folders stay.', { name: label }) +
         (a.compose ? ' ' + t('It was made with a compose file elsewhere on the server: docker compose up there makes it again.') : ''), t('Remove'));
     if (!r) return;

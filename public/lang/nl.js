@@ -3513,4 +3513,5 @@ window.TB_LANG.nl = {
   "Remove the container {name}? The image and its folders stay.": "Container {name} verwijderen? Het image en de mappen blijven.",
   "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "Hij is gemaakt met een compose-bestand elders op de server: docker compose up daar maakt hem opnieuw.",
   "Stop {name} first. Then you can remove the container.": "Stop {name} eerst. Daarna kan je de container verwijderen.",
+  "This also removes {names}, which belong to the same app.": "Dit verwijdert ook {names}, die bij dezelfde app horen.",
 };

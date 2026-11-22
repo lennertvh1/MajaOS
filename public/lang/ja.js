@@ -3168,4 +3168,5 @@ window.TB_LANG.ja = {
   "Remove the container {name}? The image and its folders stay.": "コンテナ {name} を削除しますか？イメージとフォルダーは残ります。",
   "It was made with a compose file elsewhere on the server: docker compose up there makes it again.": "サーバー上の別の場所にある compose ファイルで作成されました。そこで docker compose up を実行すると再作成されます。",
   "Stop {name} first. Then you can remove the container.": "先に {name} を停止してください。その後コンテナを削除できます。",
+  "This also removes {names}, which belong to the same app.": "同じアプリに属する {names} も削除されます。",
 };
