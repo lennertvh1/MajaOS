@@ -6269,6 +6269,10 @@
   /* --- own app: an image or a link to Docker Hub, GitHub or Quay */
   function customAppWindow(prefill = '') {
     openWindow(t('Add your own app'), `
+      <div class="seg" role="radiogroup" aria-label="${t('Install from')}" style="margin-bottom:14px">
+        <button type="button" role="radio" aria-checked="true" data-csrc="image">${t('An image')}</button>
+        <button type="button" role="radio" aria-checked="false" data-csrc="compose">${t('A Docker Compose file')}</button></div>
+      <div data-csrc-pane="image">
       <p class="lead">${t('Paste the name of an image or a link to its page. MajaOS reads from the registry which ports and folders the app uses and fills in the form for you.')}</p>
       <form class="inline-form" id="customImgForm">
         <input class="field" name="image" value="${esc(prefill)}" placeholder="${t('e.g. louislam/uptime-kuma or https://hub.docker.com/r/linuxserver/jellyfin')}" spellcheck="false" autocomplete="off" aria-label="${t('Image or link')}" required>
@@ -6276,8 +6280,18 @@
       </form>
       <p class="muted small" style="margin-top:8px">${t('Works with Docker Hub, ghcr.io, lscr.io, quay.io and other registries. Private images are not supported yet.')}</p>
       <p class="form-error" role="alert" id="customImgErr"></p>
-      <div id="customForm"></div>`, (body) => {
+      <div id="customForm"></div></div>
+      <div data-csrc-pane="compose" hidden></div>`, (body) => {
       const imgForm = $('#customImgForm', body);
+      body.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-csrc]'); if (!b) return;
+        const src = b.dataset.csrc;
+        $$('[data-csrc]', body).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.csrc === src)));
+        $$('[data-csrc-pane]', body).forEach((x) => { x.hidden = x.dataset.csrcPane !== src; });
+        const pane = $('[data-csrc-pane="compose"]', body);
+        if (src === 'compose' && !pane.firstChild) composeAppForm(pane);
+        if (src === 'compose') pane.querySelector('textarea').focus(); else imgForm.elements.image.focus();
+      });
       imgForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = $('[type=submit]', imgForm), err = $('#customImgErr', body); err.textContent = '';
@@ -6392,6 +6406,67 @@
       form.hidden = true; $('#storeJob', body).hidden = false;
       $('#customImgForm', body).hidden = true;
       followJob(r.job, prettyName(name), body, null);
+    });
+  }
+  // Own app from a compose file: pasted or opened, with an optional .env. Exactly that file is installed (/api/apps/compose).
+  function composeAppForm(pane) {
+    pane.innerHTML = `
+      <p class="lead">${t('Paste a compose file (compose.yaml or docker-compose.yml). MajaOS installs exactly that file, so apps with several containers work too.')}</p>
+      <form class="form" id="storeForm" novalidate>
+        <label class="fld"><span>${t('Name')} <em class="req">*</em></span><input class="field" name="__name" required maxlength="63" autocomplete="off" spellcheck="false">
+          <small>${t('Lowercase letters, digits, - and _. Becomes the name of the app and of its folder.')}</small></label>
+        <div class="fld"><span class="compose-head">${t('Compose file')} <button class="btn" type="button" data-compose-open>${t('Open a file…')}</button></span>
+          <textarea class="field code" name="text" rows="18" spellcheck="false" aria-label="${t('Compose file')}" placeholder="services:
+  app:
+    image: louislam/uptime-kuma:1
+    ports:
+      - &quot;3001:3001&quot;
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped"></textarea>
+          <small class="muted">${t('Exactly this file is installed. Docker Compose checks it first.')} ${t('A relative folder like ./data ends up in the app\'s own folder.')}</small></div>
+        <details class="adv"><summary>${t('Environment file (.env)')} <span class="muted small">${t('(optional)')}</span></summary>
+          <div class="form"><textarea class="field code" name="env" rows="6" spellcheck="false" aria-label="${t('Environment file (.env)')}" placeholder="PASSWORD=…"></textarea>
+          <small class="muted">${t('For variables like ${PASSWORD} in the compose file. Stored next to it, readable only by the server.')}</small></div></details>
+        <input type="file" accept=".yml,.yaml,.env,text/yaml,text/plain" data-compose-file hidden>
+        <p class="form-error" role="alert"></p>
+        <div class="btn-row"><button class="btn primary" type="submit">${t('Install')}</button>
+          <button class="btn" type="button" data-close>${t('Cancel')}</button></div>
+      </form>
+      ${jobHtml()}`;
+    const form = $('#storeForm', pane), area = form.elements.text, nameInp = form.elements.__name;
+    // A name from the file (container_name, else the first service) until you type one yourself.
+    let ownName = false;
+    const suggest = () => {
+      if (ownName) return;
+      const txt = area.value;
+      const m = txt.match(/^\s*container_name:\s*["']?([A-Za-z0-9_.-]+)/m) || txt.match(/^services:[ \t]*\n(?:[ \t]*(?:#.*)?\n)*[ \t]+["']?([A-Za-z0-9_.-]+)["']?:/m);
+      nameInp.value = m ? m[1].toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 63) : '';
+    };
+    area.addEventListener('input', suggest);
+    nameInp.addEventListener('input', () => { ownName = nameInp.value.trim() !== ''; });
+    const picker = $('[data-compose-file]', form);
+    $('[data-compose-open]', form).addEventListener('click', () => picker.click());
+    picker.addEventListener('change', async () => {
+      const file = picker.files[0]; picker.value = ''; if (!file) return;
+      const err = $('.form-error', form); err.textContent = '';
+      if (file.size > 200000) { err.textContent = t('The compose file is too large.'); return; }
+      const txt = await file.text();
+      if (/\.env$/i.test(file.name) && !/^services:/m.test(txt)) { form.elements.env.value = txt; $('details', form).open = true; return; }
+      area.value = txt; suggest();
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = $('[type=submit]', form); err.textContent = '';
+      const name = nameInp.value.trim();
+      if (!area.value.trim()) { err.textContent = t('Paste a compose file first.'); area.focus(); return; }
+      if (!name) { err.textContent = t('Fill in {field}.', { field: t('Name') }); nameInp.focus(); return; }
+      btn.disabled = true;
+      let r;
+      try { r = await api.post('/api/apps/compose', { name, text: area.value, env: form.elements.env.value }); }
+      catch (ex) { err.textContent = tr(ex.message); btn.disabled = false; return; }
+      form.hidden = true; $('#storeJob', pane).hidden = false;
+      followJob(r.job, prettyName(name), pane, null);
     });
   }
   $('#customAppBtn').addEventListener('click', () => customAppWindow());

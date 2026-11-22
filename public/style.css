@@ -2379,3 +2379,5 @@ button.snap-node:hover { background: var(--glass-hover); }
 .net-reset { grid-template-columns: 1fr auto; align-items: center; margin-top: 26px; }
 .net-reset h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
 @media (max-width: 640px) { .net-reset { grid-template-columns: 1fr; } .net-cards { grid-template-columns: 1fr; } }
+.compose-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.compose-head .btn { padding: 0.25em 0.7em; font-size: 0.88rem; }
