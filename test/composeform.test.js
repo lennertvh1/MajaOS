@@ -132,3 +132,52 @@ test('the GPU switch adds and removes the NVIDIA device request, and keeps the r
   // gpus: all (newer compose) counts as on too.
   assert.equal(cf.serviceForm({ services: { x: { image: 'a', gpus: 'all' } } }, 'x').gpu, true);
 });
+
+test('wrapServices: a pasted service block gets services: above it', () => {
+  const pasted = [
+    '# from the guide',
+    'unifi-db:',
+    '  image: docker.io/mongo:7.0',
+    '  container_name: unifi-db',
+    '  volumes:',
+    '    - /path/to/data:/data/db',
+    '',
+    'unifi-network-application:',
+    '  image: lscr.io/linuxserver/unifi-network-application:latest',
+    '  depends_on:',
+    '    - unifi-db',
+    'networks:',
+    '  default:',
+    '    name: unifi',
+  ].join('\n');
+  const r = cf.wrapServices(pasted);
+  assert.deepEqual(r.services, ['unifi-db', 'unifi-network-application']);
+  assert.equal(r.text, [
+    '# from the guide',
+    'networks:',
+    '  default:',
+    '    name: unifi',
+    'services:',
+    '  unifi-db:',
+    '    image: docker.io/mongo:7.0',
+    '    container_name: unifi-db',
+    '    volumes:',
+    '      - /path/to/data:/data/db',
+    '',
+    '  unifi-network-application:',
+    '    image: lscr.io/linuxserver/unifi-network-application:latest',
+    '    depends_on:',
+    '      - unifi-db',
+  ].join('\n'));
+  // Already right, or nothing that looks like a service: unchanged.
+  assert.equal(cf.wrapServices('services:\n  app:\n    image: nginx\n'), null);
+  assert.equal(cf.wrapServices('version: "3"\nnetworks:\n  x: {}\n'), null);
+  assert.equal(cf.wrapServices('foo:\n  bar: 1\n'), null);
+});
+
+test('composeError: a service at the top says where it belongs', () => {
+  assert.equal(cf.composeError("validating /opt/stacks/unifi-db/compose.yaml: additional properties 'unifi-db' not allowed"),
+    '"unifi-db" is at the top of the compose file. Put it under services: (indented by two spaces).');
+  assert.match(cf.composeError("validating x: services.app additional properties 'foo' not allowed"), /^The compose file is not valid: /);
+  assert.match(cf.composeError('yaml: line 3: mapping values are not allowed'), /^The compose file is not valid: /);
+});

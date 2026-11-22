@@ -3163,4 +3163,6 @@ window.TB_LANG.ja = {
   "The .env file is too large.": ".env ファイルが大きすぎます。",
   "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "停止しました：{minutes} 分間何も進みませんでした。サーバーのインターネット接続を確認して、もう一度お試しください。",
   "Stopped: it took longer than {minutes} minutes.": "停止しました：{minutes} 分以上かかりました。",
+  "services: was missing above {names}. MajaOS added it.": "{names} の上に services: がなかったため、MajaOS が追加しました。",
+  "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "「{key}」が compose ファイルの最上位にあります。services: の下に置いてください（2 スペース字下げ）。",
 };

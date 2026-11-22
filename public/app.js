@@ -6465,6 +6465,7 @@
       let r;
       try { r = await api.post('/api/apps/compose', { name, text: area.value, env: form.elements.env.value }); }
       catch (ex) { err.textContent = tr(ex.message); btn.disabled = false; return; }
+      if (r.wrapped) toast(t('services: was missing above {names}. MajaOS added it.', { names: r.wrapped.join(', ') }));
       form.hidden = true; $('#storeJob', pane).hidden = false;
       followJob(r.job, prettyName(name), pane, null);
     });

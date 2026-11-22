@@ -1699,7 +1699,13 @@
     const name = String(b.name || '').trim();
     if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) throw err('Choose a name with lowercase letters, digits, - or _ (at most 63 characters).');
     if (apps.some((x) => x.name === name)) throw err('An app named ' + name + ' already exists. Choose another name.', 409);
-    const text = String(b.text || '');
+    let text = String(b.text || '');
+    // Like composeForm.wrapServices: only a service block pasted → services: above it.
+    let wrapped = null;
+    if (!/^services:/m.test(text) && /^[A-Za-z0-9_.-]+:\s*$/m.test(text) && /^\s+image:/m.test(text)) {
+      wrapped = [...text.matchAll(/^([A-Za-z0-9_.-]+):\s*$/gm)].map((m) => m[1]).filter((k) => !['version', 'name', 'networks', 'volumes', 'configs', 'secrets'].includes(k));
+      text = 'services:\n' + text.split('\n').map((l) => (l.trim() ? '  ' + l : l)).join('\n');
+    }
     if (!/^services:/m.test(text)) throw err('The compose file has no service (services).');
     const img = text.match(/^\s*image:\s*"?([^"\n]+)"?/m);
     const sid = (text.match(/majaos\.store:\s*"?([\w-]+)/) || [])[1], a = store.find((x) => x.id === sid);
@@ -1710,7 +1716,7 @@
     const id = Math.random().toString(16).slice(2, 14).padEnd(12, '0');
     storeJobs[id] = { started: Date.now(), name, a: { id: a ? a.id : null, image: img ? img[1].trim() : 'app', webui: a ? a.webui : null, icon: a ? a.icon : ICON(name) }, custom: !a,
       fields, webPort: web ? web.value : null, network: 'bridge', own: null, extraPorts: [] };
-    return { job: id, name, file: '/opt/stacks/' + name + '/compose.yaml' };
+    return { job: id, name, file: '/opt/stacks/' + name + '/compose.yaml', wrapped };
   }
   function demoInstallCustom(b) {
     const name = String(b.name || '').trim();

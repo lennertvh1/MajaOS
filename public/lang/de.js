@@ -3163,4 +3163,6 @@ window.TB_LANG.de = {
   "The .env file is too large.": "Die .env-Datei ist zu groß.",
   "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "Abgebrochen: {minutes} Minuten lang passierte nichts. Prüfe die Internetverbindung des Servers und versuche es erneut.",
   "Stopped: it took longer than {minutes} minutes.": "Abgebrochen: Es dauerte länger als {minutes} Minuten.",
+  "services: was missing above {names}. MajaOS added it.": "services: fehlte über {names}. MajaOS hat es ergänzt.",
+  "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "„{key}“ steht auf der obersten Ebene der Compose-Datei. Setze es unter services: (zwei Leerzeichen eingerückt).",
 };

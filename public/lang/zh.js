@@ -3163,4 +3163,6 @@ window.TB_LANG.zh = {
   "The .env file is too large.": ".env 文件太大。",
   "Stopped: nothing happened for {minutes} minutes. Check the server's internet connection and try again.": "已停止：{minutes} 分钟内没有任何进展。请检查服务器的网络连接后重试。",
   "Stopped: it took longer than {minutes} minutes.": "已停止：耗时超过 {minutes} 分钟。",
+  "services: was missing above {names}. MajaOS added it.": "{names} 上方缺少 services:，MajaOS 已自动添加。",
+  "\"{key}\" is at the top of the compose file. Put it under services: (indented by two spaces).": "“{key}”位于 compose 文件的顶层。请将其放在 services: 下（缩进两个空格）。",
 };
