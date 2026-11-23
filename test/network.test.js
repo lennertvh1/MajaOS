@@ -216,3 +216,37 @@ test('changing a second card keeps the bridge of the first, and gives the second
   assert.equal(cards.enp4s0.mode, 'dhcp'); assert.equal(cards.enp4s0.bridge, false);
   assert.equal(cards.enp5s0.bridge, true); assert.deepEqual(cards.enp5s0.dns, ['1.1.1.1']);
 });
+
+test('every card gets DHCP by default, unless something uses it', () => {
+  const text = `auto lo
+iface lo inet loopback
+
+iface enp5s0 inet manual
+
+auto br0
+iface br0 inet dhcp
+    bridge_ports enp5s0
+    bridge_stp off
+
+iface enp4s0 inet manual
+
+iface enp6s0 inet manual
+    bond-master bond0
+
+iface enp7s0 inet manual
+
+auto enp7s0.10
+iface enp7s0.10 inet dhcp
+`;
+  const r = nw.addDhcpCards(text, ['enp4s0', 'enp5s0', 'enp6s0', 'enp7s0', 'enp8s0']);
+  assert.deepEqual(r.added, ['enp4s0', 'enp8s0']); // not the bridge port, the bond slave or the VLAN parent
+  assert.match(r.text, /allow-hotplug enp4s0\niface enp4s0 inet dhcp\n/);
+  assert.match(r.text, /allow-hotplug enp8s0\niface enp8s0 inet dhcp\n$/);
+  assert.match(r.text, /iface enp5s0 inet manual\n/);
+  assert.doesNotMatch(r.text, /iface enp4s0 inet manual/);
+  const cards = nw.cardConfigs(nw.parseInterfaces(r.text), ['enp4s0', 'enp5s0', 'enp8s0']);
+  assert.equal(cards.enp4s0.mode, 'dhcp'); assert.equal(cards.enp8s0.mode, 'dhcp'); assert.equal(cards.enp5s0.bridge, true);
+  assert.deepEqual(nw.upNames(r.text).filter((n) => /enp[48]/.test(n)), ['enp4s0', 'enp8s0']);
+  // Nothing to do: the same text back.
+  assert.deepEqual(nw.addDhcpCards(r.text, ['enp4s0', 'enp8s0']), { text: r.text, added: [] });
+});
