@@ -688,7 +688,7 @@ async function handleApi(req, res, url) {
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)\/shim$/)) && method === 'POST') {
     const b = await readBody(req);
-    await macvlanShim.setEnabled(decodeURIComponent(m[1]), !!b.enabled, b.address);
+    await macvlanShim.setEnabled(decodeURIComponent(m[1]), !!b.enabled, b.address, { server: !!b.server });
     return sendJson(res, 200, await dockernet.listNetworks());
   }
 

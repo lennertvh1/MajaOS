@@ -40,6 +40,24 @@ test('routes: the IP range, plus a /32 for each app outside it', () => {
   assert.deepEqual(shim.wantedRoutes({ ...lan, containers: [] }, '192.168.1.223'), ['192.168.1.192/27']);
 });
 
+test('the server\'s own address: on the parent card first, else any card in the subnet', () => {
+  const parents = [{ name: 'eno2', address: '10.0.0.5' }, { name: 'eno1', address: '192.168.1.11' }, { name: 'br0', address: '192.168.1.10' }];
+  assert.equal(shim.serverAddress(lan, parents), '192.168.1.10');
+  assert.equal(shim.serverAddress({ ...lan, parent: 'eno3' }, parents), '192.168.1.11');
+  assert.equal(shim.serverAddress(lan, [{ name: 'br0', address: null }]), null);
+  assert.equal(shim.serverAddress({ ...lan, subnet: null }, parents), null);
+});
+
+test('info: a shim that shares the server\'s address shows that address', () => {
+  fs.writeFileSync(path.join(process.env.DATA_DIR, 'shims.json'), JSON.stringify({ networks: { lan: { server: true } } }));
+  const i = shim.info(lan, [{ name: 'br0', address: '192.168.1.10' }]);
+  assert.equal(i.enabled, true); assert.equal(i.server, true);
+  assert.equal(i.address, '192.168.1.10'); assert.equal(i.serverAddress, '192.168.1.10');
+  fs.writeFileSync(path.join(process.env.DATA_DIR, 'shims.json'), JSON.stringify({ networks: {} }));
+  const off = shim.info(lan, [{ name: 'br0', address: '192.168.1.10' }]);
+  assert.equal(off.enabled, false); assert.equal(off.address, '192.168.1.223');
+});
+
 test('the routes ip -j lists, as CIDR text', () => {
   const out = JSON.parse('[{"dst":"192.168.1.192/27","dev":"mshim1","scope":"link","flags":[]},{"dst":"192.168.1.53","dev":"mshim1","scope":"link","flags":[]}]');
   assert.deepEqual(shim.routeDsts(out), ['192.168.1.192/27', '192.168.1.53/32']);

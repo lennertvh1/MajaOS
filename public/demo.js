@@ -463,13 +463,14 @@
     return '';
   }
   // The server's own address in an own-address network (lib/macvlanshim.js): lan has one from the start.
-  const dshims = { lan: '192.168.1.223' };
+  const dshims = { lan: '192.168.1.223' }; // an address, or 'server' = the server's own address (192.168.1.10)
   const shimTop = (n) => { const r = cidr(n.ipRange || n.subnet); if (!r) return null; const p = r.text.split('/')[0].split('.').map(Number), size = 2 ** (32 - Number(r.text.split('/')[1]));
     const last = p[3] + size - 1; return p.slice(0, 3).join('.') + '.' + Math.min(last, 254); };
   function dnetList() {
     const networks = dnets.map((n) => ({ ...copy(n), containers: apps.filter((a) => (appNet[a.name] ? appNet[a.name].net : a.compose + '_default') === n.name)
       .map((a) => ({ name: a.name, ip: appNet[a.name] && appNet[a.name].ip ? appNet[a.name].ip : null })).sort((x, y) => x.name.localeCompare(y.name)),
-      ...(/^(macvlan|ipvlan)$/.test(n.driver) ? { shim: { enabled: !!dshims[n.name], address: dshims[n.name] || shimTop(n), dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
+      ...(/^(macvlan|ipvlan)$/.test(n.driver) ? { shim: { enabled: !!dshims[n.name], server: dshims[n.name] === 'server', address: dshims[n.name] === 'server' ? '192.168.1.10' : dshims[n.name] || shimTop(n),
+        serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
       .sort((a, b) => (a.builtin - b.builtin) || a.name.localeCompare(b.name));
     return { networks, parents: [{ name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }] };
   }
@@ -3492,7 +3493,7 @@
       await wait(rnd(300, 700));
       const n = dnets.find((x) => x.name === decodeURIComponent(m[1]));
       if (!n) throw err('The network ' + m[1] + ' doesn\'t exist.', 404);
-      if (body.enabled) dshims[n.name] = String(body.address || '').trim() || dshims[n.name] || shimTop(n); else delete dshims[n.name];
+      if (body.enabled) dshims[n.name] = body.server ? 'server' : String(body.address || '').trim() || dshims[n.name] || shimTop(n); else delete dshims[n.name];
       return dnetList();
     } }
     if (path === '/api/vm-networks') { await wait(rnd(400, 800)); return vmNetCreate(body); }

@@ -7510,7 +7510,8 @@
           <div class="row-sub">${n.containers.length ? t('Apps: {list}', { list: apps }) : t('No apps yet')}</div>
           ${n.shim ? `<label class="check net-shim"><input type="checkbox" data-net-shim="${esc(n.name)}"${n.shim.enabled ? ' checked' : ''}> ${t('The server and its other apps can reach these apps')}
             ${hint(t('Linux never lets a card talk to its own macvlan or ipvlan apps. With this on, the server gets an address of its own in this network (a shim) and routes the apps\' addresses through it, so the server, apps on the host network and apps on other Docker networks can reach them.'))}</label>
-            ${n.shim.enabled ? `<div class="row-sub ${n.shim.up ? '' : 'temp-bad'}">${n.shim.up ? esc(t('Through {dev} with the address {ip}', { dev: n.shim.dev, ip: n.shim.address }))
+            ${n.shim.enabled ? `<div class="row-sub ${n.shim.up ? '' : 'temp-bad'}">${n.shim.up ? esc(n.shim.server ? t('Through {dev} with the server\'s own address {ip}', { dev: n.shim.dev, ip: n.shim.address })
+              : t('Through {dev} with the address {ip}', { dev: n.shim.dev, ip: n.shim.address }))
               : esc(t('Not working: {error}', { error: tr(n.shim.error || t('Waiting for the first check…')) }))}</div>` : ''}` : ''}</div>
         <div class="row-side">${n.builtin ? `<span class="muted">${t('built-in')}</span>`
           : `<button class="btn sm danger" type="button" data-net-del="${esc(n.name)}"${n.containers.length ? ` disabled title="${t('Move the apps out of this network first.')}"` : ''}>${t('Remove')}</button>`}</div></li>`;
@@ -7551,16 +7552,17 @@
       const box = e.target.closest('[data-net-shim]'); if (!box) return;
       const name = box.dataset.netShim, n = d.networks.find((x) => x.name === name);
       box.checked = !box.checked; // only changes after a yes
-      let address = null;
+      let address = null, server = false;
       if (!n.shim.enabled) {
-        const r = await ask(t('Give the server an address of its own in {name}, so it can reach the apps there? Choose an address no other device uses.', { name }), t('Turn on'), null,
+        const r = await ask(t('Give the server an address of its own in {name}, so it can reach the apps there? Choose an address no other device uses.', { name }), t('Turn on'),
+          n.shim.serverAddress ? t('Use the server\'s own address ({ip}) instead (some routers then warn about a duplicate address)', { ip: n.shim.serverAddress }) : null,
           { value: n.shim.address || '', label: t('Address of the server in {name}', { name }), placeholder: n.subnet || '' });
         if (!r) return;
-        address = String(r.value || '').trim();
+        address = String(r.value || '').trim(); server = !!r.checked;
       } else if (!(await ask(t('Turn this off? The server and its other apps can no longer reach the apps in {name}.', { name }), t('Turn off')))) return;
       box.disabled = true;
       try {
-        await api.post('/api/docker-networks/' + encodeURIComponent(name) + '/shim', { enabled: !n.shim.enabled, address });
+        await api.post('/api/docker-networks/' + encodeURIComponent(name) + '/shim', { enabled: !n.shim.enabled, address, server });
         toast(n.shim.enabled ? t('Turned off for {name}.', { name }) : t('The server can now reach the apps in {name}.', { name }));
         dockerNetPane(el);
       } catch (ex) { toast(tr(ex.message), true); box.disabled = false; }
