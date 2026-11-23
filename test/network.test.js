@@ -203,3 +203,16 @@ test('DHCP with own DNS servers: in the file, and dhcpcd leaves resolv.conf alon
   assert.equal(nw.dhcpcdConf(on, true), on); // only once
   assert.equal(nw.dhcpcdConf(on, false), conf); // back as it was
 });
+
+test('changing a second card keeps the bridge of the first, and gives the second allow-hotplug', () => {
+  const start = 'auto lo\niface lo inet loopback\n\niface enp5s0 inet manual\n\nauto br0\niface br0 inet dhcp\n    bridge_ports enp5s0\n    bridge_hw 9c:6b:00:f4:8b:9b\n    hwaddress ether 9c:6b:00:f4:8b:9b\n    bridge_stp off\n    bridge_fd 0\n    dns-nameservers 1.1.1.1\n';
+  const out = nw.buildInterfaces(nw.validate({ interface: 'enp4s0', mode: 'dhcp', bridge: false }, ['enp4s0', 'enp5s0']), start);
+  assert.match(out, /allow-hotplug enp4s0\niface enp4s0 inet dhcp\n/);
+  assert.match(out, /auto br0\niface br0 inet dhcp\n {4}bridge_ports enp5s0\n {4}bridge_hw 9c:6b:00:f4:8b:9b/);
+  assert.match(out, /iface enp5s0 inet manual/);
+  assert.deepEqual(nw.bridgePorts(nw.parseInterfaces(out), 'br0'), ['enp5s0']);
+  // Both cards read back as before.
+  const cards = nw.cardConfigs(nw.parseInterfaces(out), ['enp4s0', 'enp5s0']);
+  assert.equal(cards.enp4s0.mode, 'dhcp'); assert.equal(cards.enp4s0.bridge, false);
+  assert.equal(cards.enp5s0.bridge, true); assert.deepEqual(cards.enp5s0.dns, ['1.1.1.1']);
+});
