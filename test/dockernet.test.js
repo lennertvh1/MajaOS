@@ -146,3 +146,32 @@ test('own address in the home network: the IP range Docker may hand out', () => 
   assert.equal(dn.lanRange('192.168.0.0/16'), '192.168.255.224/27');
   assert.equal(dn.lanRange('10.0.0.0/28'), null); // too small
 });
+
+test('addresses for apps in the home network: a range you choose, else the IP range', () => {
+  const lan = { name: 'lan', subnet: '10.10.10.0/24', gateway: '10.10.10.1', ipRange: '10.10.10.224/27', containers: [{ name: 'pihole', ip: '10.10.10.53' }] };
+  // Without a range of your own: the IP range, without the broadcast address.
+  assert.deepEqual(dn.appRange(lan, null), { from: '10.10.10.224', to: '10.10.10.254', custom: false });
+  assert.deepEqual(dn.defaultRange('10.10.10.0/24', null), { from: '10.10.10.224', to: '10.10.10.254' });
+  // Your own range, any part of the subnet; one that no longer fits the subnet is ignored.
+  assert.deepEqual(dn.appRange(lan, { from: '10.10.10.231', to: '10.10.10.250' }), { from: '10.10.10.231', to: '10.10.10.250', custom: true });
+  assert.equal(dn.appRange(lan, { from: '192.168.1.2', to: '192.168.1.9' }).custom, false);
+  // Checking the form.
+  assert.deepEqual(dn.validateRange({ from: ' 10.10.10.231 ', to: '10.10.10.250' }, '10.10.10.0/24'), { from: '10.10.10.231', to: '10.10.10.250' });
+  assert.equal(dn.validateRange({ from: '', to: '' }, '10.10.10.0/24'), null); // back to the default
+  assert.throws(() => dn.validateRange({ from: '10.10.10.250', to: '10.10.10.231' }, '10.10.10.0/24'), /must come before/);
+  assert.throws(() => dn.validateRange({ from: '10.10.11.2', to: '10.10.10.231' }, '10.10.10.0/24'), /not in your home network/);
+  assert.throws(() => dn.validateRange({ from: '10.10.10.200', to: '10.10.10.255' }, '10.10.10.0/24'), /can't be used/);
+  assert.throws(() => dn.validateRange({ from: 'x', to: '10.10.10.231' }, '10.10.10.0/24'), /not a valid IP address/);
+  assert.ok(dn.inRange('10.10.10.231', { from: '10.10.10.231', to: '10.10.10.250' }));
+  assert.ok(!dn.inRange('10.10.10.251', { from: '10.10.10.231', to: '10.10.10.250' }));
+});
+
+test('a fixed address in the home network: inside the range, never the server\'s own; an app keeps its address', () => {
+  const lan = { name: 'lan', subnet: '10.10.10.0/24', gateway: '10.10.10.1', ipRange: '10.10.10.224/27', containers: [{ name: 'pihole', ip: '10.10.10.53' }] };
+  const home = { name: 'br0', address: '10.10.10.152', subnet: '10.10.10.0/24', gateway: '10.10.10.1' };
+  assert.equal(dn.checkLanIp('10.10.10.230', lan, home), '10.10.10.230');
+  assert.throws(() => dn.checkLanIp('10.10.10.180', lan, home), /not one of the addresses for apps \(10\.10\.10\.224 to 10\.10\.10\.254\)/);
+  assert.throws(() => dn.checkLanIp('10.10.10.152', lan, home), /server's own address/);
+  assert.equal(dn.checkLanIp('10.10.10.53', lan, home, 'pihole'), '10.10.10.53'); // outside the range, but its own
+  assert.equal(dn.checkLanIp('10.10.10.180', lan, home, null, { anywhere: true }), '10.10.10.180'); // moving from Unraid
+});

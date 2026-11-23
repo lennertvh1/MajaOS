@@ -462,6 +462,19 @@
     for (let i = 2; i < r.size - 1; i++) { const ip = [16777216, 65536, 256, 1].map((d) => Math.floor((r.base + i) / d) % 256).join('.'); if (!used.has(ip)) return ip; }
     return '';
   }
+  // The addresses apps may get in the home network (lib/dockernet.js appRange): own, or the network's IP range.
+  let dRange = null; // {from, to}
+  const numToIp = (n) => [16777216, 65536, 256, 1].map((d) => Math.floor(n / d) % 256).join('.');
+  function dAppRange() {
+    if (dRange) return { ...dRange, custom: true };
+    const r = cidr('192.168.1.192/27', 8, 32);
+    return { from: numToIp(r.base), to: numToIp(Math.min(r.base + r.size - 1, ipN('192.168.1.254'))), custom: false };
+  }
+  function dFreeLanIp() {
+    const r = dAppRange(), used = new Set([...Object.values(appNet).map((x) => x.ip), '192.168.1.1', '192.168.1.10', ...Object.values(dshims).map((x) => (x === 'server' ? '' : x))]);
+    for (let i = ipN(r.from); i <= ipN(r.to); i++) if (!used.has(numToIp(i))) return numToIp(i);
+    return null;
+  }
   // The server's own address in an own-address network (lib/macvlanshim.js): lan has one from the start.
   const dshims = { lan: '192.168.1.223' }; // an address, or 'server' = the server's own address (192.168.1.10)
   const shimTop = (n) => { const r = cidr(n.ipRange || n.subnet); if (!r) return null; const p = r.text.split('/')[0].split('.').map(Number), size = 2 ** (32 - Number(r.text.split('/')[1]));
@@ -472,7 +485,22 @@
       ...(/^(macvlan|ipvlan)$/.test(n.driver) ? { shim: { enabled: !!dshims[n.name], server: dshims[n.name] === 'server', address: dshims[n.name] === 'server' ? '192.168.1.10' : dshims[n.name] || shimTop(n),
         serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
       .sort((a, b) => (a.builtin - b.builtin) || a.name.localeCompare(b.name));
-    return { networks, parents: [{ name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }] };
+    const lanNet = networks.find((n) => /^(macvlan|ipvlan)$/.test(n.driver));
+    if (lanNet) lanNet.appRange = dAppRange();
+    return { networks, parents: [{ name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }],
+      lanRange: { ...dAppRange(), subnet: '192.168.1.0/24', network: lanNet ? lanNet.name : null } };
+  }
+  function dSetRange(b) {
+    const from = String(b.from || '').trim(), to = String(b.to || '').trim();
+    if (!from && !to) { dRange = null; return dnetList(); }
+    for (const v of [from, to]) if (!ip4.test(v)) throw err('"' + (v || '–') + '" is not a valid IP address.');
+    for (const v of [from, to]) {
+      if (!inCidr(cidr('192.168.1.0/24', 0, 32), v)) throw err('The address ' + v + ' is not in your home network (192.168.1.0/24).');
+      if (/\.(0|255)$/.test(v)) throw err(v + ' can\'t be used as an address in 192.168.1.0/24. Choose another address.');
+    }
+    if (ipN(from) > ipN(to)) throw err('The first address must come before the last one.');
+    dRange = { from, to };
+    return dnetList();
   }
   function dnetCreate(f) {
     const name = String(f.name || '').trim();
@@ -522,6 +550,16 @@
     if (ip && (network === 'host' || network === 'none')) throw err('A fixed IP address doesn\'t work with the host network or without a network.');
     if (ip && (!network || network === 'bridge')) network = majaNet().name;
     if (network === '@lan') network = (dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)) || {}).name || 'lan';
+    // Own address in the home network: from the addresses for apps (an app keeps its own), like checkLanIp().
+    if (ownIpNet(network) && ip && !(appNet[a.name] && appNet[a.name].ip === ip)) {
+      const r = dAppRange();
+      if (ip === '192.168.1.10') throw err(ip + ' is the server\'s own address. Choose another address.', 409);
+      if (ip4.test(ip) && (ipN(ip) < ipN(r.from) || ipN(ip) > ipN(r.to))) throw err(ip + ' is not one of the addresses for apps (' + r.from + ' to ' + r.to + '). Choose one of those, or change them in Settings → Docker networks.');
+    }
+    if (ownIpNet(network) && !ip && !(appNet[a.name] && appNet[a.name].net === network)) {
+      ip = dFreeLanIp();
+      if (!ip) { const r = dAppRange(); throw err('There is no free address left from ' + r.from + ' to ' + r.to + '. Make the range larger in Settings → Docker networks.', 409); }
+    }
     if (ip && Object.entries(appNet).some(([app, x]) => x.ip === ip && app !== a.name)) {
       throw err(ip + ' is already used by ' + Object.entries(appNet).find(([app, x]) => x.ip === ip && app !== a.name)[0] + '. Choose another address.', 409);
     }
@@ -3213,10 +3251,9 @@
     if (path === '/api/docker-networks') return dnetList();
     if (path === '/api/docker-networks/lan') { // like lanInfo() in lib/dockernet.js
       await wait(rnd(300, 700));
-      const lan = dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)), used = new Set(Object.values(appNet).map((x) => x.ip));
-      let suggestion = null;
-      for (let i = 194; i < 223 && !suggestion; i++) if (!used.has('192.168.1.' + i)) suggestion = '192.168.1.' + i;
-      return { choice: '@lan', network: lan ? lan.name : null, home: { name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' }, ipRange: lan ? lan.ipRange : '192.168.1.224/27', suggestion };
+      const lan = dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver));
+      return { choice: '@lan', network: lan ? lan.name : null, home: { name: 'br0', kind: 'bridge', address: '192.168.1.10', subnet: '192.168.1.0/24', gateway: '192.168.1.1' },
+        ipRange: lan ? lan.ipRange : '192.168.1.224/27', range: dAppRange(), suggestion: dFreeLanIp() };
     }
     if (path === '/api/layout') return copy(layout);
     if (path === '/api/shortcuts') return shortcuts.map(cutPublic);
@@ -3494,6 +3531,7 @@
     }
     if (path.startsWith('/api/network')) { await wait(rnd(300, 700)); return demoNetPost(path, body); }
     if (path === '/api/docker-networks') { await wait(rnd(300, 700)); return dnetCreate(body); }
+    if (path === '/api/docker-networks/lan-range') { await wait(rnd(200, 500)); return dSetRange(body || {}); }
     { const m = path.match(/^\/api\/docker-networks\/([^/]+)\/shim$/); if (m) {
       await wait(rnd(300, 700));
       const n = dnets.find((x) => x.name === decodeURIComponent(m[1]));

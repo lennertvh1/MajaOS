@@ -685,6 +685,8 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks' && method === 'GET') return sendJson(res, 200, await dockernet.listNetworks());
   // "Own address in my home network": the home network, the macvlan network if there is one, and a free address.
   if (p === '/api/docker-networks/lan' && method === 'GET') return sendJson(res, 200, await dockernet.lanInfo());
+  // The addresses apps may get in the home network {from, to} (both empty = the default) → the same as GET /api/docker-networks.
+  if (p === '/api/docker-networks/lan-range' && method === 'POST') return sendJson(res, 200, await dockernet.setAppRange(await readBody(req)));
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)\/shim$/)) && method === 'POST') {
