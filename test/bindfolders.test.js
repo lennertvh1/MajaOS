@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'majaos-binds-'));
-const { bindFolderPlan } = require('../lib/appstore');
+const { bindFolderPlan, folderSuggestions } = require('../lib/appstore');
 
 test('missing folders on a pool are made, also outside the app data', () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'majaos-pool-')));
@@ -35,4 +35,10 @@ test('never outside the pools, never an existing folder, never through a symlink
     pool,                                 // the pool itself
   ], [pool]);
   assert.deepEqual(plan, []);
+});
+
+test('folder suggestions never list folders outside the pools', async () => {
+  const r = await folderSuggestions('/etc');
+  assert.deepEqual(r, { path: '/etc', dirs: [] });
+  assert.equal((await folderSuggestions('relative/path')).path, null);
 });

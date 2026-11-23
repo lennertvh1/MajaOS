@@ -3243,6 +3243,11 @@
     if (path === '/api/vm-options') return vmOptions();
     if (path === '/api/vm-media/jobs') return { jobs: Object.keys(vmJobs).map(vmJobOut) };
     if (/^\/api\/vm-media\/jobs\/[0-9a-f]{12}$/.test(path)) return vmJobOut(path.split('/').pop());
+    if (path.startsWith('/api/folders')) {
+      const d = (new URLSearchParams(path.split('?')[1] || '').get('path') || '').replace(/\/+$/, '');
+      if (!d) return { path: null, dirs: bkFolders() };
+      return { path: d, dirs: ((vmTree[d] && vmTree[d].dirs) || []).map((n) => d + '/' + n) };
+    }
     if (path.startsWith('/api/vm-media/browse')) { await wait(rnd(80, 200)); return vmBrowse(new URLSearchParams(path.split('?')[1] || '').get('path') || ''); }
     if (path === '/api/vm-networks') return vmNetList();
     m = path.match(/^\/api\/vms\/([^/]+)$/);

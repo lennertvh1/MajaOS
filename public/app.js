@@ -2286,6 +2286,33 @@
     });
   }
 
+  /* Folder fields (app store, own app, compose form, shared folders, backups): while typing, the datalist also gets
+     the folders inside the folder typed so far, so folders another app made deeper down show up too (/api/folders). */
+  const DIR_LISTS = new Set(['appFolders', 'shareRoots', 'bkFolders', 'sysFolders', 'dirSuggest']);
+  let dirSeq = 0;
+  async function suggestDirs(input) {
+    let list = input.list;
+    if (!list && input.getAttribute('list') === 'dirSuggest') {
+      list = document.createElement('datalist'); list.id = 'dirSuggest'; document.body.append(list);
+    }
+    if (!list) return;
+    const v = input.value;
+    const dir = v.endsWith('/') ? v.replace(/\/+$/, '') : v.lastIndexOf('/') > 0 ? v.slice(0, v.lastIndexOf('/')) : '';
+    if (list.dataset.dirAt === dir && list.dataset.dirFor === (input.name || input.dataset.cf || '')) return;
+    list.dataset.dirAt = dir; list.dataset.dirFor = input.name || input.dataset.cf || '';
+    if (!('base' in list.dataset)) list.dataset.base = JSON.stringify([...list.options].map((o) => o.value));
+    const seq = ++dirSeq;
+    let dirs = [];
+    try { dirs = (await api.get('/api/folders' + (dir ? '?path=' + encodeURIComponent(dir) : ''))).dirs || []; } catch { /* keep the base */ }
+    if (seq !== dirSeq) return;
+    const all = [...new Set([...dirs, ...JSON.parse(list.dataset.base)])];
+    list.innerHTML = all.map((f) => `<option value="${esc(f)}">`).join('');
+  }
+  for (const type of ['input', 'focusin']) document.addEventListener(type, (e) => {
+    const x = e.target;
+    if (x instanceof HTMLInputElement && DIR_LISTS.has(x.getAttribute('list') || '')) suggestDirs(x);
+  });
+
   async function withBusy(btn, fn) {
     btn.disabled = true;
     try { await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
@@ -2698,7 +2725,7 @@
     if (kind === 'ports') return `<div class="cf-row cf-pair">${inp('host', t('on the server'), ` inputmode="numeric" aria-label="${t('Port on the server')}"`)}<span class="cf-sep">→</span>
       ${inp('container', t('in the app'), ` inputmode="numeric" aria-label="${t('Port in the app')}"`)}
       <select class="field cf-small" data-cf="${kind}:${i}:protocol" aria-label="Protocol"><option${r.protocol !== 'udp' ? ' selected' : ''}>tcp</option><option${r.protocol === 'udp' ? ' selected' : ''}>udp</option></select>${del}</div>`;
-    if (kind === 'volumes') return `<div class="cf-row cf-pair">${inp('host', t('folder on the server, e.g. /tank/media'), ` aria-label="${t('Folder on the server')}"`)}<span class="cf-sep">→</span>
+    if (kind === 'volumes') return `<div class="cf-row cf-pair">${inp('host', t('folder on the server, e.g. /tank/media'), ` aria-label="${t('Folder on the server')}" list="dirSuggest"`)}<span class="cf-sep">→</span>
       ${inp('container', t('folder in the app, e.g. /media'), ` aria-label="${t('Folder in the app')}"`)}
       <select class="field cf-small" data-cf="${kind}:${i}:mode" aria-label="${t('Access')}"><option value="rw"${r.mode !== 'ro' ? ' selected' : ''}>${t('read and write')}</option><option value="ro"${r.mode === 'ro' ? ' selected' : ''}>${t('read only')}</option></select>${del}</div>`;
     if (kind === 'devices') return `<div class="cf-row cf-pair">${inp('host', t('on the server, e.g. /dev/dri'), ` aria-label="${t('Device on the server')}"`)}<span class="cf-sep">→</span>

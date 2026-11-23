@@ -494,6 +494,7 @@ async function handleApi(req, res, url) {
     if (method === 'GET') return sendJson(res, 200, vmmedia.getJob(m[1]));
     if (method === 'DELETE') return sendJson(res, 200, vmmedia.stopJob(m[1]));
   }
+  if (p === '/api/folders' && method === 'GET') return sendJson(res, 200, await appstore.folderSuggestions(url.searchParams.get('path') || ''));
   if (p === '/api/vm-media/browse' && method === 'GET') return sendJson(res, 200, await vmmedia.browse(url.searchParams.get('path') || ''));
   if (p === '/api/vm-networks' && method === 'GET') return sendJson(res, 200, await vmnet.listVmNetworks());
   if (p === '/api/vm-networks' && method === 'POST') return sendJson(res, 200, await vmnet.createVmNetwork(await readBody(req)));
