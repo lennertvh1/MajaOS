@@ -7593,7 +7593,12 @@
     try { d = await api.get('/api/docker-networks'); }
     catch (e) { el.innerHTML = `<p class="lead">${t('The Docker networks could not be loaded: {error}', { error: esc(e.message) })}</p>`; return; }
     if (settingsTab() !== 'docker') return;
-    const own = d.networks.filter((n) => !n.builtin), builtin = d.networks.filter((n) => n.builtin);
+    // Three kinds: own addresses in the home network (macvlan/ipvlan), networks you (or MajaOS) made, and networks Docker
+    // Compose made for an app's own containers.
+    const builtin = d.networks.filter((n) => n.builtin), custom = d.networks.filter((n) => !n.builtin);
+    const ownAddr = custom.filter((n) => /^(macvlan|ipvlan)$/.test(n.driver));
+    const appNets = custom.filter((n) => !ownAddr.includes(n) && n.compose);
+    const mine = custom.filter((n) => !ownAddr.includes(n) && !n.compose);
     const lan = d.parents.find((p) => p.gateway) || d.parents[0] || null;
     const row = (n) => {
       const sub = [n.subnet, n.gateway && t('gateway {ip}', { ip: n.gateway }), n.ipRange && t('addresses from {range}', { range: n.ipRange }),
@@ -7615,7 +7620,9 @@
     };
     el.innerHTML = `
       ${paneHint(t('Choose a network in an app\'s settings (compose form) or when installing from the app store.'))}
-      ${d.lanRange ? `<h2 class="pane-title">${t('Addresses for apps in your home network')} ${hint(t('Apps with their own address in your home network get a fixed address from this range. MajaOS suggests a free one when you install an app, and you can change it. Choose addresses your router doesn\'t hand out via DHCP, so no other device gets them.'))}</h2>
+      <h2 class="pane-title">${t('Own address in your home network')} ${hint(t('Apps in these networks get an address of their own in your home network, like a separate device (macvlan or ipvlan).'))}</h2>
+      <ul class="rows">${ownAddr.map(row).join('') || `<li><span class="muted">${t('None yet. MajaOS creates one when you install an app with Own address in my home network, or create one below.')}</span></li>`}</ul>
+      ${d.lanRange ? `<h3 class="pane-sub">${t('Addresses for apps in your home network')} ${hint(t('Apps with their own address in your home network get a fixed address from this range. MajaOS suggests a free one when you install an app, and you can change it. Choose addresses your router doesn\'t hand out via DHCP, so no other device gets them.'))}</h3>
       <form class="form" id="lanRangeForm" novalidate>
         <div class="fld-row">
           <label class="fld"><span>${t('From')}</span><input class="field" name="from" value="${esc(d.lanRange.from)}" spellcheck="false" autocomplete="off" inputmode="decimal"></label>
@@ -7626,8 +7633,10 @@
         <div class="btn-row"><button class="btn primary" type="submit">${t('Save')}</button>
           ${d.lanRange.custom ? `<button class="btn" type="button" data-range-reset>${t('Use the default')}</button>` : ''}</div>
       </form>` : ''}
-      <h2 class="pane-title">${t('Custom networks')}</h2>
-      <ul class="rows">${own.map(row).join('') || `<li><span class="muted">${t('No custom networks yet. Create one below.')}</span></li>`}</ul>
+      <h2 class="pane-title">${t('Your networks')} ${hint(t('Networks you made here (or MajaOS made, like maja for apps with a fixed address). Apps in the same network find each other by name.'))}</h2>
+      <ul class="rows">${mine.map(row).join('') || `<li><span class="muted">${t('No networks of your own yet. Create one below.')}</span></li>`}</ul>
+      ${appNets.length ? `<h2 class="pane-title">${t('Networks of apps')} ${hint(t('Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app\'s compose file.'))}</h2>
+      <ul class="rows">${appNets.map(row).join('')}</ul>` : ''}
       <h2 class="pane-title">${t('Create network')}</h2>
       <form class="form" id="dnForm" novalidate>
         <div class="fld-row">

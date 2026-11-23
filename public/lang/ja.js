@@ -3257,4 +3257,12 @@ window.TB_LANG.ja = {
   "Changed which network ports are used together": "まとめて使うネットワークポートを変更しました",
   "Reset the network settings": "ネットワーク設定をリセットしました",
   "Changed the addresses for apps in the home network": "ホームネットワークのアプリ用アドレスを変更しました",
+  "Own address in your home network": "ホームネットワーク内の独自アドレス",
+  "Apps in these networks get an address of their own in your home network, like a separate device (macvlan or ipvlan).": "これらのネットワークのアプリは、別の機器のようにホームネットワーク内で独自のアドレスを持ちます（macvlan または ipvlan）。",
+  "None yet. MajaOS creates one when you install an app with Own address in my home network, or create one below.": "まだありません。「ホームネットワーク内の独自アドレス」でアプリをインストールすると MajaOS が作成します。下で作成することもできます。",
+  "Your networks": "あなたのネットワーク",
+  "Networks you made here (or MajaOS made, like maja for apps with a fixed address). Apps in the same network find each other by name.": "ここで作成したネットワーク（または MajaOS が作成したもの。例：固定アドレスのアプリ用の maja）。同じネットワーク内のアプリは名前で互いを見つけられます。",
+  "No networks of your own yet. Create one below.": "自分のネットワークはまだありません。下で作成してください。",
+  "Networks of apps": "アプリのネットワーク",
+  "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "Docker Compose が 1 つのアプリのコンテナー用に作成します。アプリとともに作られ、削除されます。変更はアプリの compose ファイルで行ってください。",
 };

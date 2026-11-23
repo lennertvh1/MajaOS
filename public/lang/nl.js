@@ -3602,4 +3602,12 @@ window.TB_LANG.nl = {
   "Changed which network ports are used together": "Gewijzigd welke netwerkpoorten samen gebruikt worden",
   "Reset the network settings": "De netwerkinstellingen teruggezet",
   "Changed the addresses for apps in the home network": "De adressen voor apps in het thuisnetwerk gewijzigd",
+  "Own address in your home network": "Eigen adres in je thuisnetwerk",
+  "Apps in these networks get an address of their own in your home network, like a separate device (macvlan or ipvlan).": "Apps in deze netwerken krijgen een eigen adres in je thuisnetwerk, zoals een apart toestel (macvlan of ipvlan).",
+  "None yet. MajaOS creates one when you install an app with Own address in my home network, or create one below.": "Nog geen. MajaOS maakt er een als je een app installeert met Eigen adres in mijn thuisnetwerk, of maak er hieronder een.",
+  "Your networks": "Jouw netwerken",
+  "Networks you made here (or MajaOS made, like maja for apps with a fixed address). Apps in the same network find each other by name.": "Netwerken die je hier maakte (of die MajaOS maakte, zoals maja voor apps met een vast adres). Apps in hetzelfde netwerk vinden elkaar op naam.",
+  "No networks of your own yet. Create one below.": "Nog geen eigen netwerken. Maak er hieronder een.",
+  "Networks of apps": "Netwerken van apps",
+  "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "Docker Compose maakt deze voor de containers van één app. Ze komen en gaan met de app; pas ze aan in het compose-bestand van de app.",
 };

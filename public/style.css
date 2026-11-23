@@ -2391,3 +2391,5 @@ button.snap-node:hover { background: var(--glass-hover); }
 .net-bond h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
 @media (max-width: 640px) { .net-bond { grid-template-columns: 1fr; } }
 .bond-picks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; }
+
+.pane-sub { margin: 18px 0 8px; font-size: 15px; font-weight: 650; }

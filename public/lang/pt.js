@@ -3257,4 +3257,12 @@ window.TB_LANG.pt = {
   "Changed which network ports are used together": "Alterou as portas de rede usadas em conjunto",
   "Reset the network settings": "Repôs as definições de rede",
   "Changed the addresses for apps in the home network": "Alterou os endereços para apps na rede doméstica",
+  "Own address in your home network": "Endereço próprio na sua rede doméstica",
+  "Apps in these networks get an address of their own in your home network, like a separate device (macvlan or ipvlan).": "As apps nestas redes recebem um endereço próprio na sua rede doméstica, como um dispositivo separado (macvlan ou ipvlan).",
+  "None yet. MajaOS creates one when you install an app with Own address in my home network, or create one below.": "Ainda nenhuma. O MajaOS cria uma quando instala uma app com Endereço próprio na minha rede doméstica, ou crie uma abaixo.",
+  "Your networks": "As suas redes",
+  "Networks you made here (or MajaOS made, like maja for apps with a fixed address). Apps in the same network find each other by name.": "Redes que criou aqui (ou que o MajaOS criou, como maja para apps com endereço fixo). As apps na mesma rede encontram-se pelo nome.",
+  "No networks of your own yet. Create one below.": "Ainda não tem redes próprias. Crie uma abaixo.",
+  "Networks of apps": "Redes de apps",
+  "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "O Docker Compose cria-as para os contentores de uma app. Vêm e vão com a app; altere-as no ficheiro compose da app.",
 };
