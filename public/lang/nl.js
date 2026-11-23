@@ -3581,6 +3581,8 @@ window.TB_LANG.nl = {
   "The first address must come before the last one.": "Het eerste adres moet voor het laatste komen.",
   "MajaOS can't find your home network (there is no default route).": "MajaOS vindt je thuisnetwerk niet (er is geen standaardroute).",
   "{ip} is the server's own address. Choose another address.": "{ip} is het eigen adres van de server. Kies een ander adres.",
-  "{ip} is not one of the addresses for apps ({from} to {to}). Choose one of those, or change them in Settings → Docker networks.": "{ip} hoort niet bij de adressen voor apps ({from} tot {to}). Kies er een daaruit, of pas ze aan in Instellingen → Docker-netwerken.",
   "There is no free address left from {from} to {to}. Make the range larger in Settings → Docker networks.": "Er is geen vrij adres meer van {from} tot {to}. Maak het bereik groter in Instellingen → Docker-netwerken.",
+  "To give this address a reservation in your router (static DHCP), so it never hands it to another device.": "Om dit adres in je router te reserveren (statische DHCP), zodat hij het nooit aan een ander toestel geeft.",
+  "Its MAC address is {mac}: reserve the address for it in your router.": "Het MAC-adres is {mac}: reserveer het adres daarvoor in je router.",
+  "{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn't hand it to another device.": "{ip} ligt buiten de adressen voor apps ({from} tot {to}). Dat werkt, maar zorg dat je router het niet aan een ander toestel geeft.",
 };

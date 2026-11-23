@@ -166,12 +166,12 @@ test('addresses for apps in the home network: a range you choose, else the IP ra
   assert.ok(!dn.inRange('10.10.10.251', { from: '10.10.10.231', to: '10.10.10.250' }));
 });
 
-test('a fixed address in the home network: inside the range, never the server\'s own; an app keeps its address', () => {
+test('a fixed address in the home network: also outside the range, never the server\'s own', () => {
   const lan = { name: 'lan', subnet: '10.10.10.0/24', gateway: '10.10.10.1', ipRange: '10.10.10.224/27', containers: [{ name: 'pihole', ip: '10.10.10.53' }] };
   const home = { name: 'br0', address: '10.10.10.152', subnet: '10.10.10.0/24', gateway: '10.10.10.1' };
   assert.equal(dn.checkLanIp('10.10.10.230', lan, home), '10.10.10.230');
-  assert.throws(() => dn.checkLanIp('10.10.10.180', lan, home), /not one of the addresses for apps \(10\.10\.10\.224 to 10\.10\.10\.254\)/);
+  assert.equal(dn.checkLanIp('10.10.10.180', lan, home), '10.10.10.180'); // outside the range: allowed (the browser warns)
   assert.throws(() => dn.checkLanIp('10.10.10.152', lan, home), /server's own address/);
-  assert.equal(dn.checkLanIp('10.10.10.53', lan, home, 'pihole'), '10.10.10.53'); // outside the range, but its own
-  assert.equal(dn.checkLanIp('10.10.10.180', lan, home, null, { anywhere: true }), '10.10.10.180'); // moving from Unraid
+  assert.equal(dn.checkLanIp('10.10.10.53', lan, home, 'pihole'), '10.10.10.53'); // its own address when editing
+  assert.throws(() => dn.checkLanIp('10.10.10.53', lan, home), /already used by pihole/);
 });

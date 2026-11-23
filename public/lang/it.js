@@ -3236,6 +3236,8 @@ window.TB_LANG.it = {
   "The first address must come before the last one.": "Il primo indirizzo deve venire prima dell'ultimo.",
   "MajaOS can't find your home network (there is no default route).": "MajaOS non trova la rete di casa (non c'è una route predefinita).",
   "{ip} is the server's own address. Choose another address.": "{ip} è l'indirizzo del server. Scegli un altro indirizzo.",
-  "{ip} is not one of the addresses for apps ({from} to {to}). Choose one of those, or change them in Settings → Docker networks.": "{ip} non è tra gli indirizzi per le app ({from} a {to}). Scegline uno, oppure cambiali in Impostazioni → Reti Docker.",
   "There is no free address left from {from} to {to}. Make the range larger in Settings → Docker networks.": "Non ci sono più indirizzi liberi da {from} a {to}. Allarga l'intervallo in Impostazioni → Reti Docker.",
+  "To give this address a reservation in your router (static DHCP), so it never hands it to another device.": "Per riservare questo indirizzo nel router (DHCP statico), così non lo assegna mai a un altro dispositivo.",
+  "Its MAC address is {mac}: reserve the address for it in your router.": "Il suo indirizzo MAC è {mac}: riserva l'indirizzo per esso nel router.",
+  "{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn't hand it to another device.": "{ip} è fuori dagli indirizzi per le app ({from} a {to}). Funziona, ma assicurati che il router non lo assegni a un altro dispositivo.",
 };

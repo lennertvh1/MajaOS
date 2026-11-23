@@ -5986,7 +5986,12 @@
       input.value = info.suggestion;
       if (onFill) onFill(info.suggestion);
     }
-    small.textContent = mode === 'fixed'
+    // Outside the addresses for apps: allowed, with a warning while typing.
+    const outside = () => {
+      const v = input.value.trim();
+      return kind === 'lan' && mode === 'fixed' && range && /^\d{1,3}(\.\d{1,3}){3}$/.test(v) && (ipToNum(v) < ipToNum(range.from) || ipToNum(v) > ipToNum(range.to));
+    };
+    const normal = () => small.textContent = mode === 'fixed'
       ? kind === 'lan' ? range ? t('A free address from {from} to {to} (Settings → Docker networks). You can change it.', range)
         : t('An address in {subnet} (through {card}) that no other device uses. Reserve it in your router, so it doesn\'t give it to another device.', { subnet, card: info.home.name })
         : kind === 'maja' ? t('With an address the app joins the MajaOS network maja ({subnet}), where apps also find each other by name.', { subnet })
@@ -5994,7 +5999,16 @@
       : kind === 'lan' ? range ? t('MajaOS gives the app a free address from {from} to {to} when it is installed.', range)
         : t('Docker gives the app a free address from {range} in your home network ({subnet}). Not from your router: Docker can\'t use its DHCP. The address can change when the app is made again.', { range: info.ipRange || subnet, subnet })
         : t('Docker picks a free address.');
+    const show = () => {
+      const out = outside();
+      small.classList.toggle('temp-warn', out);
+      if (out) small.textContent = t('{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn\'t hand it to another device.', { ip: input.value.trim(), ...range });
+      else normal();
+    };
+    show();
+    input.oninput = show;
   }
+  const ipToNum = (ip) => ip.split('.').reduce((x, o) => x * 256 + Number(o), 0);
   // "Own address in my home network": an existing macvlan/ipvlan network, or LAN_CHOICE (MajaOS creates it on install).
   const LAN_CHOICE = '@lan';
   const ownNet = (n) => n && /^(macvlan|ipvlan)$/.test(n.driver);
@@ -7565,6 +7579,7 @@
             ${hint(t('Linux never lets a card talk to its own macvlan or ipvlan apps. With this on, the server gets an address of its own in this network (a shim) and routes the apps\' addresses through it, so the server, apps on the host network and apps on other Docker networks can reach them.'))}</label>
             ${n.shim.enabled ? `<div class="row-sub ${n.shim.up ? '' : 'temp-bad'}">${n.shim.up ? esc(n.shim.server ? t('Through {dev} with the server\'s own address {ip}', { dev: n.shim.dev, ip: n.shim.address })
               : t('Through {dev} with the address {ip}', { dev: n.shim.dev, ip: n.shim.address }))
+              + (n.shim.mac ? ` · ${t('MAC address')} <code>${esc(n.shim.mac)}</code> ${hint(t('To give this address a reservation in your router (static DHCP), so it never hands it to another device.'))}` : '')
               : esc(t('Not working: {error}', { error: tr(n.shim.error || t('Waiting for the first check…')) }))}</div>` : ''}` : ''}</div>
         <div class="row-side">${n.builtin ? `<span class="muted">${t('built-in')}</span>`
           : `<button class="btn sm danger" type="button" data-net-del="${esc(n.name)}"${n.containers.length ? ` disabled title="${t('Move the apps out of this network first.')}"` : ''}>${t('Remove')}</button>`}</div></li>`;
@@ -7618,7 +7633,8 @@
       box.checked = !box.checked; // only changes after a yes
       let address = null, server = false;
       if (!n.shim.enabled) {
-        const r = await ask(t('Give the server an address of its own in {name}, so it can reach the apps there? Choose an address no other device uses.', { name }), t('Turn on'),
+        const r = await ask(t('Give the server an address of its own in {name}, so it can reach the apps there? Choose an address no other device uses.', { name })
+          + (n.shim.mac ? ' ' + t('Its MAC address is {mac}: reserve the address for it in your router.', { mac: n.shim.mac }) : ''), t('Turn on'),
           n.shim.serverAddress ? t('Use the server\'s own address ({ip}) instead (some routers then warn about a duplicate address)', { ip: n.shim.serverAddress }) : null,
           { value: n.shim.address || '', label: t('Address of the server in {name}', { name }), placeholder: n.subnet || '' });
         if (!r) return;

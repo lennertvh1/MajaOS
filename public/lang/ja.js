@@ -3236,6 +3236,8 @@ window.TB_LANG.ja = {
   "The first address must come before the last one.": "最初のアドレスは最後のアドレスより前にしてください。",
   "MajaOS can't find your home network (there is no default route).": "MajaOS がホームネットワークを見つけられません（デフォルトルートがありません）。",
   "{ip} is the server's own address. Choose another address.": "{ip} はサーバー自身のアドレスです。別のアドレスを選んでください。",
-  "{ip} is not one of the addresses for apps ({from} to {to}). Choose one of those, or change them in Settings → Docker networks.": "{ip} はアプリ用アドレス（{from} から {to}）に含まれていません。その中から選ぶか、設定 → Docker ネットワーク で変更してください。",
   "There is no free address left from {from} to {to}. Make the range larger in Settings → Docker networks.": "{from} から {to} に空いているアドレスがありません。設定 → Docker ネットワーク で範囲を広げてください。",
+  "To give this address a reservation in your router (static DHCP), so it never hands it to another device.": "ルーターでこのアドレスを予約（静的 DHCP）し、ほかの機器に割り当てられないようにするためのものです。",
+  "Its MAC address is {mac}: reserve the address for it in your router.": "MAC アドレスは {mac} です。ルーターでこのアドレスを予約してください。",
+  "{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn't hand it to another device.": "{ip} はアプリ用アドレス（{from} から {to}）の範囲外です。使えますが、ルーターがほかの機器に割り当てないようにしてください。",
 };

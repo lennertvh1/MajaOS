@@ -3236,6 +3236,8 @@ window.TB_LANG.zh = {
   "The first address must come before the last one.": "第一个地址必须在最后一个之前。",
   "MajaOS can't find your home network (there is no default route).": "MajaOS 找不到你的家庭网络（没有默认路由）。",
   "{ip} is the server's own address. Choose another address.": "{ip} 是服务器自身的地址。请选择其他地址。",
-  "{ip} is not one of the addresses for apps ({from} to {to}). Choose one of those, or change them in Settings → Docker networks.": "{ip} 不属于应用地址（{from} 到 {to}）。请从中选择一个，或在 设置 → Docker 网络 中修改。",
   "There is no free address left from {from} to {to}. Make the range larger in Settings → Docker networks.": "从 {from} 到 {to} 已没有空闲地址。请在 设置 → Docker 网络 中扩大范围。",
+  "To give this address a reservation in your router (static DHCP), so it never hands it to another device.": "用于在路由器中保留此地址（静态 DHCP），使其不会分配给其他设备。",
+  "Its MAC address is {mac}: reserve the address for it in your router.": "它的 MAC 地址是 {mac}：请在路由器中为它保留该地址。",
+  "{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn't hand it to another device.": "{ip} 不在应用地址范围内（{from} 到 {to}）。这样可以使用，但请确保路由器不会把它分配给其他设备。",
 };

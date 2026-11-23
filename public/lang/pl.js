@@ -3236,6 +3236,8 @@ window.TB_LANG.pl = {
   "The first address must come before the last one.": "Pierwszy adres musi być przed ostatnim.",
   "MajaOS can't find your home network (there is no default route).": "MajaOS nie może znaleźć Twojej sieci domowej (brak trasy domyślnej).",
   "{ip} is the server's own address. Choose another address.": "{ip} to własny adres serwera. Wybierz inny adres.",
-  "{ip} is not one of the addresses for apps ({from} to {to}). Choose one of those, or change them in Settings → Docker networks.": "{ip} nie należy do adresów dla aplikacji ({from} do {to}). Wybierz jeden z nich lub zmień je w Ustawienia → Sieci Docker.",
   "There is no free address left from {from} to {to}. Make the range larger in Settings → Docker networks.": "Brak wolnych adresów od {from} do {to}. Powiększ zakres w Ustawienia → Sieci Docker.",
+  "To give this address a reservation in your router (static DHCP), so it never hands it to another device.": "Aby zarezerwować ten adres w routerze (statyczny DHCP), żeby nigdy nie przydzielił go innemu urządzeniu.",
+  "Its MAC address is {mac}: reserve the address for it in your router.": "Jego adres MAC to {mac}: zarezerwuj dla niego adres w routerze.",
+  "{ip} is outside the addresses for apps ({from} to {to}). That works, but make sure your router doesn't hand it to another device.": "{ip} jest poza adresami dla aplikacji ({from} do {to}). To działa, ale upewnij się, że router nie przydzieli go innemu urządzeniu.",
 };

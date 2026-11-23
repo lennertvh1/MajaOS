@@ -483,7 +483,7 @@
     const networks = dnets.map((n) => ({ ...copy(n), containers: apps.filter((a) => (appNet[a.name] ? appNet[a.name].net : a.compose + '_default') === n.name)
       .map((a) => ({ name: a.name, ip: appNet[a.name] && appNet[a.name].ip ? appNet[a.name].ip : null })).sort((x, y) => x.name.localeCompare(y.name)),
       ...(/^(macvlan|ipvlan)$/.test(n.driver) ? { shim: { enabled: !!dshims[n.name], server: dshims[n.name] === 'server', address: dshims[n.name] === 'server' ? '192.168.1.10' : dshims[n.name] || shimTop(n),
-        serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
+        serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, mac: n.driver === 'ipvlan' ? '04:7c:16:aa:bb:cc' : '02:5e:a1:' + n.id.slice(-6).match(/../g).join(':'), dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
       .sort((a, b) => (a.builtin - b.builtin) || a.name.localeCompare(b.name));
     const lanNet = networks.find((n) => /^(macvlan|ipvlan)$/.test(n.driver));
     if (lanNet) lanNet.appRange = dAppRange();
@@ -551,11 +551,7 @@
     if (ip && (!network || network === 'bridge')) network = majaNet().name;
     if (network === '@lan') network = (dnets.find((n) => /^(macvlan|ipvlan)$/.test(n.driver)) || {}).name || 'lan';
     // Own address in the home network: from the addresses for apps (an app keeps its own), like checkLanIp().
-    if (ownIpNet(network) && ip && !(appNet[a.name] && appNet[a.name].ip === ip)) {
-      const r = dAppRange();
-      if (ip === '192.168.1.10') throw err(ip + ' is the server\'s own address. Choose another address.', 409);
-      if (ip4.test(ip) && (ipN(ip) < ipN(r.from) || ipN(ip) > ipN(r.to))) throw err(ip + ' is not one of the addresses for apps (' + r.from + ' to ' + r.to + '). Choose one of those, or change them in Settings → Docker networks.');
-    }
+    if (ownIpNet(network) && ip === '192.168.1.10') throw err(ip + ' is the server\'s own address. Choose another address.', 409);
     if (ownIpNet(network) && !ip && !(appNet[a.name] && appNet[a.name].net === network)) {
       ip = dFreeLanIp();
       if (!ip) { const r = dAppRange(); throw err('There is no free address left from ' + r.from + ' to ' + r.to + '. Make the range larger in Settings → Docker networks.', 409); }
