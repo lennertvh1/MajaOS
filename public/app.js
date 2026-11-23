@@ -7370,15 +7370,19 @@
     // What a card has now: its own addresses, or those of the bridge it is in.
     const now = (card) => {
       const l = linkOf(card) || { name: card };
-      const br = l.master ? linkOf(l.master) : null;
+      // Up the chain: card → bond → bridge.
+      let br = null;
+      for (let m = l.master, i = 0; m && i < 3; i++) { const x = linkOf(m); if (!x) break; br = x; m = x.master; }
       const src = br || l;
       return { link: l, bridge: br, ipv4: src.ipv4 || [], gateway: src.gateway || null };
     };
+    const bond = n.bond;
     const gwCard = n.physical.find((p) => now(p).gateway);
     const row = (k, v) => (v ? `<div class="net-kv"><span>${esc(k)}</span><b>${v}</b></div>` : '');
     const cardHtml = (card) => {
       const c = n.cards ? n.cards[card] : null, x = now(card), l = x.link;
-      const connected = l.up || (x.bridge && x.bridge.up);
+      // A card in the bond: its own cable counts (the bond is up as long as one of its cards has one).
+      const connected = c && c.bond ? l.up : l.up || (x.bridge && x.bridge.up);
       const ip = x.ipv4.map((a) => esc(a.address)).join('<br>');
       const how = c ? (c.mode === 'static' ? t('Fixed address') : t('Automatic (DHCP)')) : t('Not used');
       return `<article class="net-card${connected ? ' on' : ''}" data-card="${esc(card)}">
@@ -7394,6 +7398,7 @@
           ${row(t('Gateway'), x.gateway ? esc(x.gateway) : '')}
           ${c ? row(t('DNS servers'), c.dns.length ? esc(c.dns.join(', ')) : c.mode === 'dhcp' ? esc(t('From your router')) : '') : ''}
           ${c && c.bridge ? row(t('For VMs'), esc(t('Bridge {name}', { name: c.bridgeName }))) : ''}
+          ${c && c.bond ? row(t('Ports together'), esc(bond && bond.active === card ? t('Carries the traffic now') : t('Standby: takes over when the other port loses its cable'))) : ''}
         </div>
         ${n.editable ? `<div class="btn-row net-actions"><button class="btn" type="button" data-net-edit="${esc(card)}"${n.pending ? ' disabled' : ''}>${t('Change')}</button></div>` : ''}
         <div class="net-edit" hidden></div>
@@ -7415,6 +7420,13 @@
       <div class="section-head"><h2>${t('Network cards')}</h2></div>
       ${!n.editable ? `<p class="notice">${t('This network is managed by {who}. MajaOS can only change it when Debian uses ifupdown (/etc/network/interfaces), the default for a server without a desktop.', { who: esc(n.manager || t('another program')) })}</p>` : ''}
       <div class="net-cards">${n.physical.map(cardHtml).join('') || `<p class="muted">${t('No network cards found.')}</p>`}</div>
+      ${n.editable && n.physical.length > 1 ? `<section class="net-card net-bond" id="netBond">
+        <div><h3>${t('Use the ports together')} ${hint(t('All chosen ports become one connection to your home network. Plug the cable into any of them, or into several: the server keeps the same MAC address and so the same address from your router, and VMs and apps with their own address keep their network. One port carries the traffic; when its cable goes, another takes over within a second. Two cables to the same switch never make a loop.'))}</h3>
+          ${bond ? `<p class="row-sub">${esc(t('{cards} are used together. {active} carries the traffic now.', { cards: bond.cards.join(', '), active: bond.active || t('none') }))}</p>`
+            : `<div class="bond-picks">${n.physical.map((p) => `<label class="check"><input type="checkbox" data-bond-card="${esc(p)}" checked> ${esc(p)}</label>`).join('')}</div>
+              ${n.canBond ? '' : `<p class="notice">${t('The package ifenslave is missing. Update MajaOS (Settings → Software update), or run on the server: apt install ifenslave')}</p>`}`}</div>
+        <button class="btn" type="button" id="bondBtn"${n.pending || (!bond && !n.canBond) ? ' disabled' : ''}>${bond ? t('Stop using them together') : t('Use together')}</button>
+      </section>` : ''}
       <div id="remoteBox"></div>
       ${n.editable ? `<section class="net-card net-reset">
         <div><h3>${t('Reset network settings')} ${hint(t('Can\'t reach the page at all? On the server\'s own screen: node /opt/majaos/lib/network.js --reset'))}</h3>
@@ -7465,7 +7477,7 @@
         </label>
         <label class="fld" data-dns><span>${t('DNS servers')} ${hint(t('Separated by commas.'))}</span>
           <input class="field" name="dns" value="${esc((c.dns.length ? c.dns : n.dns).join(', '))}" placeholder="192.168.1.1, 1.1.1.1" spellcheck="false"></label>
-        <label class="toggle">
+        <label class="toggle"${c.bond ? ' hidden' : ''}>
           <input type="checkbox" role="switch" name="bridge"${c.bridge ? ' checked' : ''}>
           <span class="toggle-ui" aria-hidden="true"></span>
           <span><b>${t('VMs in your home network')}</b><span class="muted small">${t('Puts this card in bridge br0. New VMs use it and get an address from your router.')}</span></span>
@@ -7505,6 +7517,23 @@
       const first = $('[aria-checked="true"]', form); if (first) first.focus();
     };
     $$('[data-net-edit]', el).forEach((b) => b.addEventListener('click', () => openEdit(b.closest('.net-card'))));
+
+    const bondBtn = $('#bondBtn', el);
+    if (bondBtn) bondBtn.addEventListener('click', async () => {
+      let body;
+      if (bond) {
+        if (!(await ask(t('Stop using the ports together? br0 goes back on the port that carries the traffic now; the other ports get their own address via DHCP. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.'), t('Stop')))) return;
+        body = { enabled: false };
+      } else {
+        const cards = $$('[data-bond-card]', el).filter((x) => x.checked).map((x) => x.dataset.bondCard);
+        if (cards.length < 2) { toast(t('Choose at least two network cards to use together.'), true); return; }
+        if (!(await ask(t('Use {cards} together? Their own settings go: they all carry br0, with the address the server has now. The connection drops for a moment; then confirm within 2 minutes, or the old settings come back.', { cards: cards.join(', ') }), t('Use together')))) return;
+        body = { enabled: true, cards };
+      }
+      bondBtn.disabled = true;
+      try { const r = await api.post('/api/network/bond', body); renderPending(el, r.pending, null, true); }
+      catch (ex) { toast(tr(ex.message), true); bondBtn.disabled = false; }
+    });
 
     const resetBtn = $('#netReset', el);
     if (resetBtn) resetBtn.addEventListener('click', async () => {

@@ -250,3 +250,79 @@ iface enp7s0.10 inet dhcp
   // Nothing to do: the same text back.
   assert.deepEqual(nw.addDhcpCards(r.text, ['enp4s0', 'enp8s0']), { text: r.text, added: [] });
 });
+
+const BR0 = `auto lo
+iface lo inet loopback
+
+iface enp5s0 inet manual
+
+auto br0
+iface br0 inet static
+    bridge_ports enp5s0
+    bridge_hw 9c:6b:00:f4:8b:9b
+    hwaddress ether 9c:6b:00:f4:8b:9b
+    bridge_stp off
+    bridge_fd 0
+    address 10.10.10.152/24
+    gateway 10.10.10.1
+    dns-nameservers 10.10.10.1
+
+allow-hotplug enp4s0
+iface enp4s0 inet dhcp
+
+allow-hotplug wlp3s0
+iface wlp3s0 inet dhcp
+    wpa-ssid Thuis
+`;
+
+test('ports used together: a bond under br0 with the same address and MAC, and back', () => {
+  const on = nw.buildBond(BR0, { enabled: true, cards: ['enp5s0', 'enp4s0'], mac: '9C:6B:00:F4:8B:9B' });
+  assert.match(on, /auto bond0\niface bond0 inet manual\n {4}bond-slaves enp5s0 enp4s0\n {4}bond-mode active-backup\n {4}bond-miimon 100\n/);
+  assert.match(on, /auto br0\niface br0 inet static\n {4}bridge_ports bond0\n {4}bridge_hw 9c:6b:00:f4:8b:9b\n {4}hwaddress ether 9c:6b:00:f4:8b:9b\n {4}bridge_stp off\n {4}bridge_fd 0\n {4}address 10\.10\.10\.152\/24\n {4}gateway 10\.10\.10\.1\n {4}dns-nameservers 10\.10\.10\.1\n/);
+  assert.ok(on.indexOf('iface bond0') < on.indexOf('iface br0')); // the bond exists before the bridge takes it
+  assert.doesNotMatch(on, /iface enp4s0|iface enp5s0/);
+  assert.match(on, /iface wlp3s0 inet dhcp\n {4}wpa-ssid Thuis/); // other settings stay
+  assert.deepEqual(nw.bondInFile(nw.parseInterfaces(on)), { name: 'bond0', cards: ['enp5s0', 'enp4s0'] });
+  // Each card shows br0's settings, and that it is in the bond; nothing gives them DHCP of their own.
+  const cards = nw.cardConfigs(nw.parseInterfaces(on), ['enp4s0', 'enp5s0']);
+  assert.equal(cards.enp4s0.bond, 'bond0'); assert.equal(cards.enp4s0.mode, 'static'); assert.equal(cards.enp5s0.bridge, true);
+  assert.deepEqual(nw.addDhcpCards(on, ['enp4s0', 'enp5s0']).added, []);
+  assert.deepEqual(nw.cardsBehind(nw.parseInterfaces(on), 'br0'), ['enp5s0', 'enp4s0']);
+  assert.deepEqual(nw.upNames(on).slice(0, 2), ['bond0', 'br0']);
+  // Changing the address through a card in the bond keeps the bond.
+  const dhcp = nw.buildInterfaces({ ...nw.validate({ interface: 'bond0', mode: 'dhcp', bridge: true }, ['bond0']), mac: '9c:6b:00:f4:8b:9b' }, on);
+  assert.match(dhcp, /iface bond0 inet manual\n {4}bond-slaves enp5s0 enp4s0/);
+  assert.match(dhcp, /iface br0 inet dhcp\n {4}bridge_ports bond0\n/);
+  assert.ok(dhcp.indexOf('iface bond0') < dhcp.indexOf('iface br0'));
+  assert.equal((dhcp.match(/iface bond0/g) || []).length, 1);
+  // Off: br0 on the card that carried the traffic, the other card DHCP again.
+  const off = nw.buildBond(on, { enabled: false, cards: [], mac: '00:e0:4c:01:40:dd', primary: 'enp4s0' });
+  assert.match(off, /iface enp4s0 inet manual\n\nauto br0\niface br0 inet static\n {4}bridge_ports enp4s0\n {4}bridge_hw 00:e0:4c:01:40:dd/);
+  assert.match(off, /allow-hotplug enp5s0\niface enp5s0 inet dhcp/);
+  assert.doesNotMatch(off, /bond/);
+  assert.match(off, /address 10\.10\.10\.152\/24/);
+});
+
+test('reading /proc/net/bonding', () => {
+  const st = nw.parseBonding(`Ethernet Channel Bonding Driver: v6.12.0
+
+Bonding Mode: fault-tolerance (active-backup)
+Primary Slave: None
+Currently Active Slave: enp4s0
+MII Status: up
+MII Polling Interval (ms): 100
+
+Slave Interface: enp5s0
+MII Status: down
+Speed: Unknown
+Permanent HW addr: 9c:6b:00:f4:8b:9b
+
+Slave Interface: enp4s0
+MII Status: up
+Speed: 1000 Mbps
+Permanent HW addr: 00:e0:4c:01:40:dd
+`);
+  assert.deepEqual(st, { mode: 'fault-tolerance (active-backup)', active: 'enp4s0',
+    slaves: [{ name: 'enp5s0', up: false, speed: null }, { name: 'enp4s0', up: true, speed: 1000 }] });
+  assert.deepEqual(nw.parseBonding(''), { mode: null, active: null, slaves: [] });
+});

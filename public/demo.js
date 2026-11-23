@@ -374,6 +374,7 @@
   }
   const net = {
     hostname: 'demo', manager: 'ifupdown', editable: true, physical: ['enp5s0', 'enp6s0'], dns: ['192.168.1.1', '1.1.1.1'], resolvManaged: false, pending: null,
+    bond: null, canBond: true, // like applyBond in lib/network.js: the ports used together
     links: [
       { name: 'enp5s0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'ethernet', master: 'br0', ipv4: [], ipv6: [], gateway: null, speed: 2500 },
       { name: 'br0', mac: 'a8:a1:59:3c:21:7e', up: true, state: 'UP', kind: 'bridge', master: null, ipv4: [{ address: '192.168.1.10/24', dynamic: false }], ipv6: [], gateway: '192.168.1.1', speed: null },
@@ -401,6 +402,31 @@
       net.pending = null; return { ok: true };
     }
     if (net.pending) throw err('New network settings are already waiting for confirmation.', 409);
+    if (path === '/api/network/bond') {
+      const { pending, ...rest } = net; netBackup = JSON.stringify(rest);
+      const brCfg = { ...net.config, bridge: true, bridgeName: 'br0' };
+      const link = (name) => net.links.find((l) => l.name === name);
+      net.links = net.links.filter((l) => l.name !== 'bond0');
+      if (body.enabled) {
+        const cards = (body.cards || []).filter((c) => net.physical.includes(c));
+        if (cards.length < 2) throw err('Choose at least two network cards to use together.');
+        const active = cards.find((c) => link(c) && link(c).up) || cards[0];
+        net.bond = { name: 'bond0', cards, active, mode: 'fault-tolerance (active-backup)', slaves: cards.map((c) => ({ name: c, up: !!(link(c) && link(c).up), speed: link(c) && link(c).speed })) };
+        for (const c of cards) { net.cards[c] = { ...brCfg, bond: 'bond0' }; link(c).master = 'bond0'; }
+        net.links.push({ name: 'bond0', mac: link(cards[0]).mac, up: true, state: 'UP', kind: 'bond', master: 'br0', ipv4: [], ipv6: [], gateway: null, speed: null });
+      } else {
+        if (!net.bond) throw err('The network cards are not used together.', 409);
+        const primary = net.bond.active || net.bond.cards[0];
+        for (const c of net.bond.cards) {
+          net.cards[c] = c === primary ? { ...brCfg } : { mode: 'dhcp', address: '', gateway: '', dns: [], bridge: false, bridgeName: 'br0' };
+          link(c).master = c === primary ? 'br0' : null;
+        }
+        net.config = { ...brCfg, interface: primary };
+        net.bond = null;
+      }
+      net.pending = { until: Date.now() + 120000 };
+      return { pending: net.pending };
+    }
     if (path === '/api/network/reset') {
       const { pending, ...rest } = net; netBackup = JSON.stringify(rest);
       net.config = { interface: 'enp5s0', mode: 'dhcp', address: '', gateway: '', dns: [], bridge: true, bridgeName: 'br0' };

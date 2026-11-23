@@ -2385,3 +2385,9 @@ button.snap-node:hover { background: var(--glass-hover); }
 .fld-head .fld-del { width: 26px; height: 26px; margin: -4px -4px -4px 0; }
 .ip-box .seg { width: max-content; max-width: 100%; align-self: flex-start; justify-self: start; margin-bottom: 2px; }
 .net-shim { margin-top: 6px; }
+
+/* Settings > Network: the ports used together */
+.net-bond { grid-template-columns: 1fr auto; align-items: center; margin-top: 16px; }
+.net-bond h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+@media (max-width: 640px) { .net-bond { grid-template-columns: 1fr; } }
+.bond-picks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; }
