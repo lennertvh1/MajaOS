@@ -691,6 +691,8 @@ async function handleApi(req, res, url) {
   if (p === '/api/docker-networks/lan-range' && method === 'POST') return sendJson(res, 200, await dockernet.setAppRange(await readBody(req)));
   if (p === '/api/docker-networks' && method === 'POST') return sendJson(res, 200, await dockernet.createNetwork(await readBody(req)));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)$/)) && method === 'DELETE') return sendJson(res, 200, await dockernet.deleteNetwork(decodeURIComponent(m[1])));
+  // Put an own-address network on another card (its apps keep their addresses) → {name, parent, moved}.
+  if ((m = p.match(/^\/api\/docker-networks\/([^/]+)\/parent$/)) && method === 'POST') return sendJson(res, 200, await dockernet.moveNetwork(decodeURIComponent(m[1]), (await readBody(req)).parent));
   if ((m = p.match(/^\/api\/docker-networks\/([^/]+)\/shim$/)) && method === 'POST') {
     const b = await readBody(req);
     await macvlanShim.setEnabled(decodeURIComponent(m[1]), !!b.enabled, b.address, { server: !!b.server });
@@ -1141,6 +1143,8 @@ bind(CFG.port).then(() => {
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
     spindown.start(); // hard disks that aren't used go to sleep (Settings → Storage)
     macvlanShim.start(); // the server can reach apps with their own address (Settings → Docker networks)
+    // An own-address network whose card is in br0 (or the bond) now follows it, so its apps stay reachable.
+    setTimeout(() => dockernet.followBridges().catch((e) => console.error('Docker networks: ' + e.message)), 15000).unref();
     activity.startSchedule(); // the activity log: who changed what in the shared folders (Samba full_audit)
     shares.upgradeConf().catch((e) => console.error('Shared folders: ' + e.message));
     ups.startSchedule(); // the UPS: log power events and shut down early (Settings → UPS)

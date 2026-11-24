@@ -7590,6 +7590,12 @@
     ipvlan: 'Like macvlan, but all apps share the server\'s MAC address. Choose this if your router or switch has trouble with many MAC addresses. Here too, the server itself cannot reach the apps.',
   };
   const BUILTIN_NET = { bridge: 'For apps without their own network', host: 'The server\'s own network', none: 'No network' };
+  // Why the card of an own-address network is wrong (parentIssue in lib/dockernet.js).
+  const PARENT_ISSUE = {
+    missing: (card) => t('The network card {card} doesn\'t exist anymore, so the apps in this network can\'t be reached.', { card }),
+    port: (card, to) => t('{card} is part of {bridge} now, so the apps in this network can\'t be reached.', { card, bridge: to || '?' }),
+    nocable: (card) => t('{card} has no cable, so the apps in this network can\'t be reached.', { card }),
+  };
   async function dockerNetPane(el) {
     el.onchange = null;
     el.innerHTML = `<p class="lead">${t('Loading…')}</p>`;
@@ -7613,6 +7619,8 @@
         <div><div class="row-title">${esc(n.name)} <span class="pill">${esc(n.driver || '–')}</span></div>
           <div class="row-sub">${esc(sub)}</div>
           <div class="row-sub">${n.containers.length ? t('Apps: {list}', { list: apps }) : t('No apps yet')}</div>
+          ${n.parentIssue ? `<div class="notice warn net-move"><span>${esc(PARENT_ISSUE[n.parentIssue.reason](n.parent, n.parentIssue.moveTo))}</span>
+            ${n.parentIssue.moveTo ? `<button class="btn sm primary" type="button" data-net-move="${esc(n.name)}" data-to="${esc(n.parentIssue.moveTo)}">${esc(t('Move to {card}', { card: n.parentIssue.moveTo }))}</button>` : ''}</div>` : ''}
           ${n.shim ? `<label class="check net-shim"><input type="checkbox" data-net-shim="${esc(n.name)}"${n.shim.enabled ? ' checked' : ''}> ${t('The server and its other apps can reach these apps')}
             ${hint(t('Linux never lets a card talk to its own macvlan or ipvlan apps. With this on, the server gets an address of its own in this network (a shim) and routes the apps\' addresses through it, so the server, apps on the host network and apps on other Docker networks can reach them.'))}</label>
             ${n.shim.enabled ? `<div class="row-sub ${n.shim.up ? '' : 'temp-bad'}">${n.shim.up ? esc(n.shim.server ? t('Through {dev} with the server\'s own address {ip}', { dev: n.shim.dev, ip: n.shim.address })
@@ -7737,6 +7745,15 @@
       catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
     el.onclick = async (e) => {
+      const mv = e.target.closest('[data-net-move]');
+      if (mv) {
+        const name = mv.dataset.netMove, card = mv.dataset.to;
+        if (!(await ask(t('Move {name} to {card}? Docker makes the network again on {card}; the apps in it keep their addresses and lose their connection for a few seconds.', { name, card }), t('Move')))) return;
+        mv.disabled = true;
+        try { await api.post('/api/docker-networks/' + encodeURIComponent(name) + '/parent', { parent: card }); toast(t('Network {name} is on {card} now.', { name, card })); dockerNetPane(el); }
+        catch (ex) { toast(ex.message, true); mv.disabled = false; dockerNetPane(el); }
+        return;
+      }
       const del = e.target.closest('[data-net-del]');
       if (!del) return;
       const name = del.dataset.netDel;

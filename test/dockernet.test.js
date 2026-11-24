@@ -175,3 +175,26 @@ test('a fixed address in the home network: also outside the range, never the ser
   assert.equal(dn.checkLanIp('10.10.10.53', lan, home, 'pihole'), '10.10.10.53'); // its own address when editing
   assert.throws(() => dn.checkLanIp('10.10.10.53', lan, home), /already used by pihole/);
 });
+
+test('the card of an own-address network: gone, in a bridge, or without a cable', () => {
+  const { parentIssue } = require('../lib/dockernet');
+  const home = { name: 'br0', subnet: '10.10.10.0/24', gateway: '10.10.10.1' };
+  const lan = (parent) => ({ name: 'lan', driver: 'macvlan', parent, subnet: '10.10.10.0/24', compose: null });
+  const links = [
+    { ifname: 'enp5s0', flags: ['BROADCAST', 'MULTICAST', 'UP', 'LOWER_UP'], master: 'br0', operstate: 'UP' },
+    { ifname: 'enp4s0', flags: ['NO-CARRIER', 'BROADCAST', 'MULTICAST', 'UP'], operstate: 'DOWN' },
+    { ifname: 'enp6s0', flags: ['BROADCAST', 'MULTICAST', 'UP', 'LOWER_UP'], master: 'bond0', operstate: 'UP' },
+    { ifname: 'bond0', flags: ['UP', 'LOWER_UP'], master: 'br0', operstate: 'UP' },
+    { ifname: 'br0', flags: ['UP', 'LOWER_UP'], operstate: 'UP' },
+  ];
+  assert.equal(parentIssue(lan('br0'), links, home), null);
+  assert.deepEqual(parentIssue(lan('enp5s0'), links, home), { reason: 'port', moveTo: 'br0' });
+  assert.deepEqual(parentIssue(lan('enp6s0'), links, home), { reason: 'port', moveTo: 'br0' }); // through the bond
+  assert.deepEqual(parentIssue(lan('enp4s0'), links, home), { reason: 'nocable', moveTo: 'br0' });
+  assert.deepEqual(parentIssue(lan('enp9s0'), links, home), { reason: 'missing', moveTo: 'br0' });
+  // Another subnet: no suggestion; a cable that is in: fine; compose and bridge networks are never touched.
+  assert.deepEqual(parentIssue({ ...lan('enp9s0'), subnet: '192.168.5.0/24' }, links, home), { reason: 'missing', moveTo: null });
+  assert.equal(parentIssue({ ...lan('enp4s0'), subnet: '192.168.5.0/24' }, links, home), null);
+  assert.equal(parentIssue({ ...lan('enp5s0'), compose: 'pihole' }, links, home), null);
+  assert.equal(parentIssue({ name: 'maja', driver: 'bridge', parent: null }, links, home), null);
+});

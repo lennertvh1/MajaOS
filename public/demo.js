@@ -462,7 +462,8 @@
   const dnets = [
     { name: 'bridge', driver: 'bridge', subnet: '172.17.0.0/16', gateway: '172.17.0.1' },
     { name: 'host', driver: 'host' }, { name: 'none', driver: 'null' },
-    { name: 'lan', driver: 'macvlan', subnet: '192.168.1.0/24', gateway: '192.168.1.1', ipRange: '192.168.1.192/27', parent: 'br0', ours: true },
+    // /?lanport=1: made before br0 existed, so still on enp5s0, which is in br0 now (parentIssue in lib/dockernet.js).
+    { name: 'lan', driver: 'macvlan', subnet: '192.168.1.0/24', gateway: '192.168.1.1', ipRange: '192.168.1.192/27', parent: /lanport=1/.test(location.search) ? 'enp5s0' : 'br0', ours: true },
     { name: 'proxy', driver: 'bridge', subnet: '172.20.0.0/24', gateway: '172.20.0.1', ours: true },
     { name: 'media_default', driver: 'bridge', subnet: '172.18.0.0/16', gateway: '172.18.0.1', compose: 'media' },
   ].map((n, i) => ({ id: (i + 1).toString(16).padStart(12, 'a'), builtin: ['bridge', 'host', 'none'].includes(n.name), internal: false,
@@ -509,7 +510,8 @@
     const networks = dnets.map((n) => ({ ...copy(n), containers: apps.filter((a) => (appNet[a.name] ? appNet[a.name].net : a.compose + '_default') === n.name)
       .map((a) => ({ name: a.name, ip: appNet[a.name] && appNet[a.name].ip ? appNet[a.name].ip : null })).sort((x, y) => x.name.localeCompare(y.name)),
       ...(/^(macvlan|ipvlan)$/.test(n.driver) ? { shim: { enabled: !!dshims[n.name], server: dshims[n.name] === 'server', address: dshims[n.name] === 'server' ? '192.168.1.10' : dshims[n.name] || shimTop(n),
-        serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, mac: n.driver === 'ipvlan' ? '04:7c:16:aa:bb:cc' : '02:5e:a1:' + n.id.slice(-6).match(/../g).join(':'), dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}) }))
+        serverAddress: n.subnet === '192.168.1.0/24' ? '192.168.1.10' : null, mac: n.driver === 'ipvlan' ? '04:7c:16:aa:bb:cc' : '02:5e:a1:' + n.id.slice(-6).match(/../g).join(':'), dev: 'mshim' + n.id.slice(-8), up: !!dshims[n.name], error: null } } : {}),
+      ...(/^(macvlan|ipvlan)$/.test(n.driver) && n.parent === 'enp5s0' ? { parentIssue: { reason: 'port', moveTo: 'br0' } } : {}) }))
       .sort((a, b) => (a.builtin - b.builtin) || a.name.localeCompare(b.name));
     const lanNet = networks.find((n) => /^(macvlan|ipvlan)$/.test(n.driver));
     if (lanNet) lanNet.appRange = dAppRange();
@@ -3554,6 +3556,15 @@
     if (path.startsWith('/api/network')) { await wait(rnd(300, 700)); return demoNetPost(path, body); }
     if (path === '/api/docker-networks') { await wait(rnd(300, 700)); return dnetCreate(body); }
     if (path === '/api/docker-networks/lan-range') { await wait(rnd(200, 500)); return dSetRange(body || {}); }
+    { const m = path.match(/^\/api\/docker-networks\/([^/]+)\/parent$/); if (m) { // like moveNetwork in lib/dockernet.js
+      const n = dnets.find((x) => x.name === decodeURIComponent(m[1]));
+      if (!n) throw err('Network not found', 404);
+      if (!/^(macvlan|ipvlan)$/.test(n.driver)) throw err('Only a macvlan or ipvlan network has a network card to change.');
+      if (body.parent !== 'br0') throw err('Choose the network card (or bridge) connected to your home network.');
+      await wait(rnd(1200, 2000));
+      n.parent = body.parent;
+      return { name: n.name, parent: n.parent, moved: dnetList().networks.find((x) => x.name === n.name).containers.map((c) => c.name) };
+    } }
     { const m = path.match(/^\/api\/docker-networks\/([^/]+)\/shim$/); if (m) {
       await wait(rnd(300, 700));
       const n = dnets.find((x) => x.name === decodeURIComponent(m[1]));
