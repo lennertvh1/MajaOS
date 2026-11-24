@@ -3624,4 +3624,13 @@ window.TB_LANG.nl = {
   "Docker could not make the network on {card}: {error}": "Docker kon het netwerk niet maken op {card}: {error}",
   "The network {name} is on {card} now, but these apps could not go back in: {list}. Restart them, or choose the network again in their settings.": "Het netwerk {name} zit nu op {card}, maar deze apps konden er niet terug in: {list}. Herstart ze, of kies het netwerk opnieuw in hun instellingen.",
   "Moved a Docker network to another network card": "Docker-netwerk naar een andere netwerkkaart verplaatst",
+  "Rename folder": "Map hernoemen",
+  "Open folder": "Map openen",
+  "Update {name}": "{name} bijwerken",
+  "Update all in this folder": "Alles in deze map bijwerken",
+  "{n} apps, {on} running": "{n} apps, {on} actief",
+  "{n} update available": "{n} update beschikbaar",
+  "{n} updates available": "{n} updates beschikbaar",
+  "{name}: update progress": "{name}: voortgang van de update",
+  "{name}: updating only works for compose apps": "{name}: bijwerken kan alleen bij compose-apps",
 };

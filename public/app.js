@@ -806,6 +806,9 @@
           <span class="app-icon folder-icon">${mini}${upd ? '<span class="upd-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg></span>' : ''}</span>
           <span class="app-name">${esc(folderLabel(f.name))}</span>
         </button>
+        <button class="app-more" type="button" data-folder-menu="${esc(f.folder)}" aria-haspopup="menu" aria-label="${esc(t('Menu for {name}', { name: folderLabel(f.name) }))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
       </div>`;
   }
   // A heading over the whole width: it starts a section. Its menu (⋯ or a right click) renames or removes it.
@@ -1959,7 +1962,7 @@
     ];
     menu.innerHTML = `<div class="menu-head"><b>${esc(head ? head.name || t('Section') : t('Dashboard'))}</b></div>` +
       items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${esc(it[0])}"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0].startsWith('widget:') ? 'widget' : DESK_ICON[it[0]] || it[0]] || ''}</svg>${esc(it[1])}</button>`)).join('');
-    delete menu.dataset.forApp; delete menu.dataset.forVm;
+    delete menu.dataset.forApp; delete menu.dataset.forVm; delete menu.dataset.forFolder;
     menu.dataset.forDesk = '1';
     placeMenu(x, y, opener || null);
   }
@@ -2015,6 +2018,8 @@
     openDeskMenu(e.clientX, e.clientY, e.target.closest('#appGrid > .home-heading, #appGrid > .home-spacer'));
   });
   $('#appGrid').addEventListener('click', (e) => {
+    const fm = e.target.closest('[data-folder-menu]');
+    if (fm) { const r = fm.getBoundingClientRect(); openFolderMenu(fm.dataset.folderMenu, r.right - 8, r.bottom + 4, fm); return; }
     const b = e.target.closest('[data-heading-menu]'); if (!b) return;
     const r = b.getBoundingClientRect();
     openDeskMenu(r.left, r.bottom + 4, b.closest('.home-heading'), b);
@@ -2398,7 +2403,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}<span class="menu-switch" aria-hidden="true"></span></button>`
         : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${(busy && APP_ACTS[it[0]]) || it[2] === 'off' ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[0]]}</svg>${it[1]}</button>`)).join('');
-    delete menu.dataset.forVm; delete menu.dataset.forDesk;
+    delete menu.dataset.forVm; delete menu.dataset.forDesk; delete menu.dataset.forFolder;
     menu.dataset.forApp = a.id; // not data-app: the tiles' click handling reacts to that
     placeMenu(x, y, opener);
   }
@@ -2426,13 +2431,63 @@
     menu.innerHTML = `<div class="menu-head"><b>${esc(v.name)}</b><span>${esc(busy ? t(VM_ACTS[busy].noun) + '…' : vmStateText(v.state))}</span></div>` +
       items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${it[0]}"
         ${busy && VM_ACTS[it[0]] ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[VM_MENU_ICON[it[0]] || it[0]] || ''}</svg>${it[1]}</button>`)).join('');
-    delete menu.dataset.forApp; delete menu.dataset.forDesk;
+    delete menu.dataset.forApp; delete menu.dataset.forDesk; delete menu.dataset.forFolder;
     menu.dataset.forVm = v.id;
     placeMenu(x, y, opener);
+  }
+  // A folder's menu (⋯ or a right click): which apps in it have an update, with a button for each, plus open, rename, ungroup.
+  function openFolderMenu(id, x, y, opener) {
+    const f = homeItems().find((it) => it.folder === id); if (!f) return;
+    const apps = f.apps.map((n) => (typeof n === 'string' ? appByName(n) : null)).filter(Boolean);
+    const upd = apps.filter((a) => a.update), can = upd.filter((a) => a.canUpdate && !updating(a) && !S.appBusy[a.id]);
+    const busy = apps.filter(updating), on = apps.filter(isRunning).length;
+    const items = [
+      ...upd.map((a) => (updating(a) ? ['updlog:' + a.id, t('{name}: update progress', { name: prettyName(a.name) }), '', 'updlog']
+        : a.canUpdate ? ['update:' + a.id, t('Update {name}', { name: prettyName(a.name) }), 'accent', 'update']
+          : ['update:' + a.id, t('{name}: updating only works for compose apps', { name: prettyName(a.name) }), 'off', 'update'])),
+      ...busy.filter((a) => !a.update).map((a) => ['updlog:' + a.id, t('{name}: update progress', { name: prettyName(a.name) }), '', 'updlog']),
+      can.length > 1 && ['update-all', t('Update all in this folder'), 'accent', 'update'],
+      (upd.length || busy.length) && '-',
+      ['open', t('Open folder'), '', 'newfolder'], ['rename', t('Rename…')], ['ungroup', t('Remove folder'), '', 'outfolder'],
+    ].filter(Boolean);
+    menu.innerHTML = `<div class="menu-head"><b>${esc(folderLabel(f.name))}</b><span>${esc(t('{n} apps, {on} running', { n: apps.length, on }))}</span>
+        ${upd.length ? `<span class="menu-upd">${esc(t(upd.length === 1 ? '{n} update available' : '{n} updates available', { n: upd.length }))}</span>` : ''}</div>` +
+      items.map((it) => (it === '-' ? '<hr>' : `<button type="button" role="menuitem" class="menu-item ${it[2] || ''}" data-menu="${esc(it[0])}"${it[2] === 'off' ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[it[3] || it[0]] || ''}</svg>${esc(it[1])}</button>`)).join('');
+    delete menu.dataset.forApp; delete menu.dataset.forVm; delete menu.dataset.forDesk;
+    menu.dataset.forFolder = id;
+    placeMenu(x, y, opener);
+  }
+  async function folderCommand(id, act) {
+    const f = homeItems().find((it) => it.folder === id); if (!f) return;
+    const byId = (x) => S.apps.find((a) => a.id === x);
+    if (act.startsWith('update:')) { const a = byId(act.slice(7)); if (a) startAppUpdate(a); return; }
+    if (act.startsWith('updlog:')) { const a = byId(act.slice(7)); if (a) updateLogWindow(a); return; }
+    if (act === 'update-all') {
+      const list = f.apps.map((n) => (typeof n === 'string' ? appByName(n) : null)).filter((a) => a && a.update && a.canUpdate && !updating(a) && !S.appBusy[a.id]);
+      if (!list.length) return;
+      if (!(await ask(t('Update {n} apps? {names}. Each will be unavailable for a moment while it restarts.', { n: list.length, names: list.map((a) => prettyName(a.name)).join(', ') }), t('Update all')))) return;
+      for (const a of list) await startAppUpdate(a, true);
+      return;
+    }
+    if (act === 'open') return openFolder(id);
+    if (act === 'rename') {
+      const r = await ask(t('Rename folder'), t('Save'), null, { value: folderLabel(f.name), label: t('Name'), max: 40 });
+      const name = r && r.value.trim().slice(0, 40);
+      if (name) setLayout(homeItems().map((it) => (it.folder === id ? { ...it, name } : it)));
+      return;
+    }
+    if (act === 'ungroup') {
+      const items = homeItems(), at = items.findIndex((it) => it.folder === id);
+      if (at < 0) return;
+      items.splice(at, 1, ...items[at].apps);
+      if (S.folder === id) closeFolder();
+      setLayout(items);
+    }
   }
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('[data-menu]'); if (!b) return;
     if (menu.dataset.forDesk) { const act = b.dataset.menu; closeMenu(false); deskCommand(act); return; }
+    if (menu.dataset.forFolder) { const id = menu.dataset.forFolder, act = b.dataset.menu; closeMenu(false); folderCommand(id, act); return; }
     if (menu.dataset.forVm) {
       const v = S.vms.find((x) => x.id === menu.dataset.forVm);
       const act = b.dataset.menu;
@@ -11871,6 +11926,8 @@ sudo ./install.sh</pre></div>`}` : '') +
   $('#appGrid').addEventListener('contextmenu', (e) => {
     const cut = e.target.closest('[data-shortcut]');
     if (cut) { e.preventDefault(); shortcutWindow(cut.dataset.shortcut); return; }
+    const fo = e.target.closest('[data-folder-open], [data-folder-menu]');
+    if (fo) { e.preventDefault(); openFolderMenu(fo.dataset.folderOpen || fo.dataset.folderMenu, e.clientX, e.clientY, fo); return; }
     const t = e.target.closest('[data-app]'); if (!t) return;
     const a = S.apps.find((x) => x.id === t.dataset.app); if (!a) return;
     e.preventDefault();

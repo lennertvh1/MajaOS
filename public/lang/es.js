@@ -3279,4 +3279,13 @@ window.TB_LANG.es = {
   "Docker could not make the network on {card}: {error}": "Docker no pudo crear la red en {card}: {error}",
   "The network {name} is on {card} now, but these apps could not go back in: {list}. Restart them, or choose the network again in their settings.": "La red {name} está ahora en {card}, pero estas apps no pudieron volver a entrar: {list}. Reinícialas o vuelve a elegir la red en sus ajustes.",
   "Moved a Docker network to another network card": "Red de Docker movida a otra tarjeta de red",
+  "Rename folder": "Renombrar carpeta",
+  "Open folder": "Abrir carpeta",
+  "Update {name}": "Actualizar {name}",
+  "Update all in this folder": "Actualizar todo en esta carpeta",
+  "{n} apps, {on} running": "{n} apps, {on} en marcha",
+  "{n} update available": "{n} actualización disponible",
+  "{n} updates available": "{n} actualizaciones disponibles",
+  "{name}: update progress": "{name}: progreso de la actualización",
+  "{name}: updating only works for compose apps": "{name}: solo se pueden actualizar las apps compose",
 };

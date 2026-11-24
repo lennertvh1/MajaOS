@@ -3279,4 +3279,13 @@ window.TB_LANG.zh = {
   "Docker could not make the network on {card}: {error}": "Docker 无法在 {card} 上创建网络：{error}",
   "The network {name} is on {card} now, but these apps could not go back in: {list}. Restart them, or choose the network again in their settings.": "网络 {name} 现在位于 {card}，但这些应用无法重新加入：{list}。请重启它们，或在其设置中重新选择网络。",
   "Moved a Docker network to another network card": "已将 Docker 网络移到另一块网卡",
+  "Rename folder": "重命名文件夹",
+  "Open folder": "打开文件夹",
+  "Update {name}": "更新 {name}",
+  "Update all in this folder": "更新此文件夹中的全部应用",
+  "{n} apps, {on} running": "{n} 个应用，{on} 个正在运行",
+  "{n} update available": "有 {n} 个更新",
+  "{n} updates available": "有 {n} 个更新",
+  "{name}: update progress": "{name}：更新进度",
+  "{name}: updating only works for compose apps": "{name}：只有 compose 应用可以更新",
 };

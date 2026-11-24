@@ -3279,4 +3279,13 @@ window.TB_LANG.ja = {
   "Docker could not make the network on {card}: {error}": "Docker は {card} 上にネットワークを作成できませんでした：{error}",
   "The network {name} is on {card} now, but these apps could not go back in: {list}. Restart them, or choose the network again in their settings.": "ネットワーク {name} は現在 {card} 上にありますが、次のアプリは戻れませんでした：{list}。再起動するか、設定でネットワークを選び直してください。",
   "Moved a Docker network to another network card": "Docker ネットワークを別のネットワークカードに移動しました",
+  "Rename folder": "フォルダー名を変更",
+  "Open folder": "フォルダーを開く",
+  "Update {name}": "{name} を更新",
+  "Update all in this folder": "このフォルダー内をすべて更新",
+  "{n} apps, {on} running": "{n} 個のアプリ、{on} 個が実行中",
+  "{n} update available": "{n} 件の更新があります",
+  "{n} updates available": "{n} 件の更新があります",
+  "{name}: update progress": "{name}：更新の進行状況",
+  "{name}: updating only works for compose apps": "{name}：更新できるのは compose アプリだけです",
 };
