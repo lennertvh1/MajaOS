@@ -357,3 +357,21 @@ test('switching files: ifdown sees the old file, ifup the new one, and a bridge 
   assert.deepEqual(nw.portsIn(next), ['enp4s0']);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+test('a bridge the settings no longer have, and a card still stuck in it', () => {
+  const file = 'auto lo\niface lo inet loopback\n\nauto enp4s0\niface enp4s0 inet dhcp\n\nallow-hotplug enp5s0\niface enp5s0 inet dhcp\n';
+  // br0 removed from the file while ifdown no longer knew it: br0 stays in the kernel with enp4s0 in it.
+  const kernel = [{ name: 'lo', master: null, kind: null }, { name: 'enp4s0', master: 'br0', kind: null }, { name: 'enp5s0', master: null, kind: null },
+    { name: 'br0', master: null, kind: 'bridge' }, { name: 'docker0', master: null, kind: 'bridge' }, { name: 'vethab12', master: 'docker0', kind: null },
+    { name: 'virbr0', master: null, kind: 'bridge' }, { name: 'vnet0', master: 'virbr0', kind: null }];
+  assert.deepEqual(nw.strayPlan(file, kernel), { detach: [], remove: ['br0'] }); // removing br0 frees enp4s0
+  // In another bridge that isn't ours (made by hand): only the card comes out.
+  const k2 = kernel.map((l) => (l.name === 'enp4s0' ? { ...l, master: 'brx' } : l)).concat([{ name: 'brx', master: null, kind: 'bridge' }]);
+  assert.deepEqual(nw.strayPlan(file, k2), { detach: ['enp4s0'], remove: ['br0'] });
+  // What the file wants stays: br0 with enp4s0, and a bond under it.
+  const br = 'auto lo\niface lo inet loopback\n\niface enp4s0 inet manual\n\nauto br0\niface br0 inet dhcp\n    bridge_ports enp4s0\n';
+  assert.deepEqual(nw.strayPlan(br, kernel), { detach: [], remove: [] });
+  const bond = nw.buildBond(br, { enabled: true, cards: ['enp4s0', 'enp5s0'], mac: '00:e0:4c:01:40:dd' });
+  const kb = [{ name: 'enp4s0', master: 'bond0', kind: null }, { name: 'enp5s0', master: 'bond0', kind: null }, { name: 'bond0', master: 'br0', kind: 'bond' }, { name: 'br0', master: null, kind: 'bridge' }];
+  assert.deepEqual(nw.strayPlan(bond, kb), { detach: [], remove: [] });
+});
