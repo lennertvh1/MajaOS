@@ -3265,4 +3265,6 @@ window.TB_LANG.pt = {
   "No networks of your own yet. Create one below.": "Ainda não tem redes próprias. Crie uma abaixo.",
   "Networks of apps": "Redes de apps",
   "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "O Docker Compose cria-as para os contentores de uma app. Vêm e vão com a app; altere-as no ficheiro compose da app.",
+  "The app stopped right after starting (exit code {code}). Look at its logs to see why.": "A app parou logo após iniciar (código de saída {code}). Veja os registos para saber porquê.",
+  "Last message: {line}": "Última mensagem: {line}",
 };

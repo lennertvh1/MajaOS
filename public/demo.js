@@ -3693,6 +3693,12 @@
     if (m) {
       const a = apps.find((x) => x.id === decodeURIComponent(m[1]));
       if (!a) throw err('Container not found', 404);
+      // Like checkStarted in lib/docker.js: pihole quits right away in the demo (port 53 is taken by the server's own DNS).
+      if (m[2] === 'start' && a.name === 'pihole') {
+        await wait(1500);
+        const e = err('The app stopped right after starting (exit code 1). Look at its logs to see why.', 502);
+        e.data = { stopped: true, exitCode: 1, last: 'Error starting userland proxy: listen tcp4 0.0.0.0:53: bind: address already in use' }; throw e;
+      }
       if (m[2] === 'stop') { a.state = 'EXITED'; a.status = 'Exited (0) Less than a second ago'; }
       else { a.state = 'RUNNING'; a.status = 'Up Less than a second'; }
       if (m[2] === 'update') {

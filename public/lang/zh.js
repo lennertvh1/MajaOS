@@ -3265,4 +3265,6 @@ window.TB_LANG.zh = {
   "No networks of your own yet. Create one below.": "还没有你自己的网络。请在下方创建。",
   "Networks of apps": "应用的网络",
   "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "Docker Compose 为单个应用的容器创建这些网络。它们随应用出现和消失；请在应用的 compose 文件中修改。",
+  "The app stopped right after starting (exit code {code}). Look at its logs to see why.": "应用启动后立即停止（退出代码 {code}）。查看其日志了解原因。",
+  "Last message: {line}": "最后一条消息：{line}",
 };

@@ -3265,4 +3265,6 @@ window.TB_LANG.ja = {
   "No networks of your own yet. Create one below.": "自分のネットワークはまだありません。下で作成してください。",
   "Networks of apps": "アプリのネットワーク",
   "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "Docker Compose が 1 つのアプリのコンテナー用に作成します。アプリとともに作られ、削除されます。変更はアプリの compose ファイルで行ってください。",
+  "The app stopped right after starting (exit code {code}). Look at its logs to see why.": "アプリは起動直後に停止しました（終了コード {code}）。ログで原因を確認してください。",
+  "Last message: {line}": "最後のメッセージ：{line}",
 };

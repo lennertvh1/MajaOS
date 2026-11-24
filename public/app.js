@@ -2486,7 +2486,11 @@
     if (act === 'stop' && !(await ask(t('Stop {name}? Whatever runs on it will no longer be reachable.', { name: label }), t('Stop')))) return;
     S.appBusy[a.id] = act; renderApps();
     try { await api.post(appPath(a, '/' + act)); toast(t(APP_ACTS[act].done) + ': ' + label); }
-    catch (e) { toast(t('{action} {name} failed: {error}', { action: t(APP_ACTS[act].noun), name: label, error: e.message }), true); }
+    catch (e) {
+      const why = e.data && e.data.last ? e.message + ' ' + t('Last message: {line}', { line: e.data.last }) : e.message;
+      toast(t('{action} {name} failed: {error}', { action: t(APP_ACTS[act].noun), name: label, error: why }), true,
+        e.data && e.data.stopped ? { action: { label: t('Logs'), run: () => logWindow(a) } } : {});
+    }
     delete S.appBusy[a.id];
     await loadApps().catch(() => renderApps());
   }

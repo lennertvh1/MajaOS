@@ -3610,4 +3610,6 @@ window.TB_LANG.nl = {
   "No networks of your own yet. Create one below.": "Nog geen eigen netwerken. Maak er hieronder een.",
   "Networks of apps": "Netwerken van apps",
   "Docker Compose makes these for the containers of one app. They come and go with the app; change them in the app's compose file.": "Docker Compose maakt deze voor de containers van één app. Ze komen en gaan met de app; pas ze aan in het compose-bestand van de app.",
+  "The app stopped right after starting (exit code {code}). Look at its logs to see why.": "De app stopte meteen na het starten (foutcode {code}). Kijk in de logs waarom.",
+  "Last message: {line}": "Laatste melding: {line}",
 };
