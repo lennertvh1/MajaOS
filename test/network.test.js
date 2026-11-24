@@ -2,6 +2,9 @@
 /* Tests for the network settings and the About page. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const nw = require('../lib/network');
 const ab = require('../lib/about');
 
@@ -325,4 +328,32 @@ Permanent HW addr: 00:e0:4c:01:40:dd
   assert.deepEqual(st, { mode: 'fault-tolerance (active-backup)', active: 'enp4s0',
     slaves: [{ name: 'enp5s0', up: false, speed: null }, { name: 'enp4s0', up: true, speed: 1000 }] });
   assert.deepEqual(nw.parseBonding(''), { mode: null, active: null, slaves: [] });
+});
+
+test('switching files: ifdown sees the old file, ifup the new one, and a bridge port keeps no address', () => {
+  const { execFileSync } = require('node:child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'majaos-net-'));
+  const bin = path.join(tmp, 'bin'), sys = path.join(tmp, 'sys'), file = path.join(tmp, 'interfaces'), log = path.join(tmp, 'log');
+  fs.mkdirSync(bin); fs.mkdirSync(path.join(sys, 'enp4s0'), { recursive: true });
+  fs.writeFileSync(path.join(sys, 'enp4s0', 'carrier'), '1\n');
+  // Each tool logs its arguments and what the file says about enp4s0 right then.
+  for (const tool of ['ifdown', 'ifup', 'dhclient', 'dhcpcd']) {
+    fs.writeFileSync(path.join(bin, tool), `#!/bin/sh\necho "${tool} $* [$(grep '^iface enp4s0' '${file}')]" >> '${log}'\n`, { mode: 0o755 });
+  }
+  // ip: enp4s0 still has an address of its own (a DHCP client that kept running) until it is flushed.
+  fs.writeFileSync(path.join(bin, 'ip'), `#!/bin/sh\necho "ip $*" >> '${log}'\ncase "$*" in *"-j -4 addr show dev enp4s0"*) echo '[{"ifname":"enp4s0","addr_info":[{"family":"inet","local":"10.10.10.158"}]}]';; *-j*) echo '[]';; esac\n`, { mode: 0o755 });
+  fs.writeFileSync(file, 'auto lo\niface lo inet loopback\n\nallow-hotplug enp4s0\niface enp4s0 inet dhcp\n');
+  const next = 'auto lo\niface lo inet loopback\n\niface enp4s0 inet manual\n\nauto br0\niface br0 inet dhcp\n    bridge_ports enp4s0\n';
+  const script = `require(${JSON.stringify(path.resolve(__dirname, '../lib/network.js'))}).reload(['enp4s0', 'br0'], ${JSON.stringify(next)}).then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });`;
+  execFileSync(process.execPath, ['-e', script], { env: { ...process.env, PATH: bin + ':' + process.env.PATH, NET_INTERFACES_FILE: file, SYS_NET_DIR: sys, DATA_DIR: tmp } });
+  const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
+  const at = (re) => lines.findIndex((l) => re.test(l));
+  assert.match(lines[at(/^ifdown --force enp4s0/)], /iface enp4s0 inet dhcp/); // the old file: DHCP is taken down
+  assert.match(lines[at(/^dhclient -x -pf \/run\/dhclient\.enp4s0\.pid enp4s0/)], /inet dhcp/);
+  assert.match(lines[at(/^ifup br0/)], /iface enp4s0 inet manual/); // the new file
+  assert.ok(at(/^ifdown --force enp4s0/) < at(/^ifup br0/));
+  assert.ok(at(/^ip -4 addr flush dev enp4s0/) > at(/^ifup br0/)); // the port's own address removed afterwards
+  assert.equal(fs.readFileSync(file, 'utf8'), next);
+  assert.deepEqual(nw.portsIn(next), ['enp4s0']);
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
