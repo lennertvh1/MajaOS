@@ -189,3 +189,30 @@ test('behind a tunnel the connector addresses use https from X-Forwarded-Proto',
   assert.equal(originOf(req({ 'x-forwarded-proto': 'http' })), 'http://maja.example.be');
   assert.equal(originOf(req({}, { encrypted: true })), 'https://maja.example.be');
 });
+
+test('app_change: only what is given changes, with the changes in plain words', () => {
+  const { mergeAppForm } = require('../lib/mcp');
+  const form = {
+    service: 'jellyfin', image: 'jellyfin/jellyfin:10.9', restart: 'unless-stopped', privileged: false, gpu: false, network: 'host', ip: '',
+    ports: [{ host: '8096', container: '8096', protocol: 'tcp', ip: '', mode: '' }, { host: '', container: '7359', protocol: 'udp', locked: true, raw: '7359/udp' }],
+    volumes: [{ host: '/tank/appdata/jellyfin', container: '/config', mode: 'rw', kind: 'bind' }],
+    env: [{ name: 'TZ', value: 'UTC' }, { name: 'PUID', value: '1000' }], devices: [], labels: [],
+  };
+  const { form: f, changes } = mergeAppForm(form, {
+    image: 'jellyfin/jellyfin:10.10', gpu: true, env: { TZ: 'Europe/Brussels', PUID: null, JELLYFIN_PublishedServerUrl: 'http://10.10.10.152:8096' },
+    volumes: [{ host: '/tank/appdata/jellyfin', container: '/config' }, { host: '/tank/media', container: '/media', mode: 'ro' }],
+  });
+  assert.equal(f.image, 'jellyfin/jellyfin:10.10');
+  assert.equal(f.gpu, true);
+  assert.equal(f.network, 'host'); assert.equal(f.restart, 'unless-stopped');
+  assert.deepEqual(f.ports, form.ports); // not given: unchanged
+  assert.deepEqual(f.env, [{ name: 'TZ', value: 'Europe/Brussels' }, { name: 'JELLYFIN_PublishedServerUrl', value: 'http://10.10.10.152:8096' }]);
+  assert.deepEqual(f.volumes.map((v) => [v.host, v.container, v.mode, v.kind]), [['/tank/appdata/jellyfin', '/config', 'rw', 'bind'], ['/tank/media', '/media', 'ro', 'bind']]);
+  assert.deepEqual(changes, ['image → jellyfin/jellyfin:10.10', 'GPU → on', 'folders → /tank/appdata/jellyfin → /config, /tank/media → /media (read only)',
+    'TZ = Europe/Brussels', 'remove variable PUID', 'JELLYFIN_PublishedServerUrl = http://10.10.10.152:8096']);
+  // A new port list keeps the entry the form can't edit; another network drops the old fixed address.
+  const p = mergeAppForm({ ...form, network: 'lan', ip: '10.10.10.200' }, { ports: [{ host: 8097, container: 8096 }], network: '' });
+  assert.deepEqual(p.form.ports.map((x) => [x.host, x.container, x.protocol, !!x.locked]), [['8097', '8096', 'tcp', false], ['', '7359', 'udp', true]]);
+  assert.equal(p.form.network, ''); assert.equal(p.form.ip, '');
+  assert.deepEqual(mergeAppForm(form, { image: form.image }).changes, []);
+});
