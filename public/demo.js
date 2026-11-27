@@ -101,7 +101,7 @@
       install: { ok: true, reason: null }, running: !!(upd.job && !upd.job.finished) };
   }
   // Debian itself, like lib/debian.js: four updates waiting (two security), automatic updates on, apt simulated (~8 s).
-  const deb = { auto: true, kernel: '6.12.48+deb13-amd64', newKernel: null, job: null,
+  const deb = { schedule: { every: 'off', time: '03:00', day: 0, date: null, reboot: false, next: null, last: null }, auto: true, kernel: '6.12.48+deb13-amd64', newKernel: null, job: null,
     updates: [['openssl', 'stable-security', '3.5.4-1~deb13u1', '3.5.1-1'], ['libssl3t64', 'stable-security', '3.5.4-1~deb13u1', '3.5.1-1'],
       ['tzdata', 'stable-updates', '2026b-0+deb13u1', '2026a-0+deb13u1'], ['linux-image-amd64', 'stable', '6.12.52-1', '6.12.48-1']] };
   const DEB_STEPS = { check: [[0, 'Fetching the package lists…'], [2500, null]],
@@ -138,7 +138,7 @@
       listsAt: new Date(Date.now() - 5 * 3600000).toISOString(),
       auto: { installed: true, enabled: deb.auto, last: { at: new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 19), packages: ['libc6', 'libc-bin'], ok: true, nothing: false } }, needrestart: true,
       reboot: { required: !!deb.newKernel || nvidia.reboot, packages: [...(deb.newKernel ? ['linux-image-6.12.52+deb13-amd64'] : []), ...(nvidia.reboot ? ['nvidia-driver'] : [])], zfsReady: true },
-      job: deb.job ? { ...debProgress() } : null, nvidia: (({ reboot, ...x }) => copy(x))(nvidia) };
+      job: deb.job ? { ...debProgress() } : null, nvidia: (({ reboot, ...x }) => copy(x))(nvidia), schedule: copy(deb.schedule) };
   }
   function debStart(action) {
     if (!DEB_STEPS[action]) throw err('Unknown action.');
@@ -3514,6 +3514,24 @@
       if (!g.newer.some((r) => r.version === body.version)) throw err('This version is not available (anymore). Check for updates again first.', 404);
       upd.job = { start: Date.now(), version: body.version, from: g.current };
       return { started: true, version: body.version };
+    }
+    if (path === '/api/system-updates/schedule') { // like saveSchedule in lib/debian.js
+      const every = ['off', 'once', 'daily', 'weekly'].includes(body.every) ? body.every : 'off';
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(body.time || '') ? body.time : '03:00', day = Number(body.day) || 0;
+      let next = null;
+      if (every === 'once') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) throw err('Choose the date of the update.');
+        const [y, mo, d] = body.date.split('-').map(Number), [h, m] = time.split(':').map(Number);
+        next = new Date(y, mo - 1, d, h, m).getTime();
+        if (!(next > Date.now())) throw err('Choose a time in the future.');
+      } else if (every !== 'off') {
+        const [h, m] = time.split(':').map(Number), x = new Date(); x.setHours(h, m, 0, 0);
+        if (every === 'weekly') x.setDate(x.getDate() + ((day - x.getDay() + 7) % 7));
+        if (x.getTime() <= Date.now()) x.setDate(x.getDate() + (every === 'weekly' ? 7 : 1));
+        next = x.getTime();
+      }
+      deb.schedule = { every, time, day, date: every === 'once' ? body.date : null, reboot: !!body.reboot, next, last: deb.schedule.last };
+      return copy(deb.schedule);
     }
     if (/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off|nvidia)$/.test(path)) { await wait(rnd(200, 400)); return debStart(path.split('/').pop()); }
     if (path === '/api/update/check') { await wait(rnd(600, 1200)); upd.checked = new Date().toISOString(); return updGet(); }

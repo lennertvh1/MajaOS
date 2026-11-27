@@ -73,3 +73,27 @@ test('aptPercent follows the packages of an upgrade', () => {
   assert.equal(deb.aptPercent('upgrade', plan + 'Unpacking a\nUnpacking b\nSetting up a\nSetting up b\nSetting up c\n'), 95);
   assert.equal(deb.aptPercent('upgrade', plan + '== Cleaning up…\n'), 97);
 });
+
+test('a scheduled update: checking and the next time', () => {
+  const now = new Date(2026, 10, 27, 12, 0).getTime();
+  assert.deepEqual(deb.validateSchedule({ every: 'daily', time: '04:30', reboot: 1 }, now), { every: 'daily', time: '04:30', day: 0, date: null, reboot: true });
+  assert.equal(deb.validateSchedule({ every: 'nonsense' }, now).every, 'off');
+  assert.throws(() => deb.validateSchedule({ every: 'once', date: '2026-11-27', time: '03:00' }, now), /future/);
+  assert.throws(() => deb.validateSchedule({ every: 'once', date: '27/11', time: '03:00' }, now), /date/);
+  const once = deb.validateSchedule({ every: 'once', date: '2026-11-28', time: '03:00' }, now);
+  assert.equal(deb.nextScheduled(once, now), new Date(2026, 10, 28, 3, 0).getTime());
+  assert.equal(deb.nextScheduled({ every: 'daily', time: '03:00' }, now), new Date(2026, 10, 28, 3, 0).getTime());
+  assert.equal(deb.nextScheduled({ every: 'weekly', time: '03:00', day: 0 }, now), new Date(2026, 10, 29, 3, 0).getTime()); // Sunday
+  assert.equal(deb.nextScheduled({ every: 'off' }, now), null);
+});
+
+test('a scheduled update missed by more than an hour is skipped, not run in the middle of the day', async () => {
+  const at = new Date(2026, 10, 27, 3, 0).getTime();
+  fs.mkdirSync(path.join(process.env.DATA_DIR, 'debian'), { recursive: true });
+  fs.writeFileSync(path.join(process.env.DATA_DIR, 'debian', 'schedule.json'), JSON.stringify({ every: 'once', date: '2026-11-27', time: '03:00', next: at }));
+  await deb.scheduleTick(at + 5 * 3600 * 1000);
+  const info = deb.scheduleInfo();
+  assert.equal(info.every, 'off');
+  assert.equal(info.next, null);
+  assert.match(info.last.note, /Skipped/);
+});

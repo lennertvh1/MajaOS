@@ -2399,3 +2399,10 @@ button.snap-node:hover { background: var(--glass-hover); }
 /* Settings > Docker networks: the network's card is wrong */
 .net-move { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .net-move > span { flex: 1 1 240px; }
+
+/* Software update > Debian: a planned update */
+.deb-sched { display: grid; gap: 12px; grid-template-columns: 1fr; }
+.deb-sched .fld-row { flex-wrap: wrap; }
+.deb-sched [hidden] { display: none !important; }
+.deb-sched { margin-top: 12px; }
+.deb-sched .form-error:empty { display: none; }

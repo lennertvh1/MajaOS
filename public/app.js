@@ -10232,6 +10232,32 @@ sudo ./install.sh</pre></div>`}` : '') +
         ${nv.secureBoot && !nv.loaded ? `<div class="small temp-warn">${t('Secure Boot is on: the driver won\'t load. Turn Secure Boot off in the BIOS.')}</div>` : ''}</div>
       ${btn ? `<div class="btn-row"><button class="btn primary" type="button" data-deb="nvidia"${busy ? ' disabled' : ''}>${esc(btn)}</button></div>` : ''}</div>`;
   }
+  // A planned Debian update: once (date and time) or every day/week, optionally with a restart afterwards (lib/debian.js).
+  const debWhen = (ms) => new Date(ms).toLocaleString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() });
+  function debScheduleHtml(sc) {
+    if (!sc) return '';
+    const opt = (v, cur, l) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(l)}</option>`;
+    const pad = (x) => String(x).padStart(2, '0');
+    const tomorrow = new Date(Date.now() + 86400000), dflt = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+    const lastAt = sc.last ? debWhen(Date.parse(sc.last.at)) : '';
+    const last = !sc.last ? '' : sc.last.ok
+      ? t('Last planned update: {when}, done', { when: lastAt }) + (sc.last.restarted ? ' · ' + t('restarted') : '') + (sc.last.note ? ' · ' + tr(sc.last.note) : '')
+      : t('Last planned update: {when}', { when: lastAt }) + ' · ' + tr(sc.last.note || 'Failed.');
+    return `<form class="upd-card deb-sched" id="debSched" novalidate>
+      <div class="upd-text"><b>${t('Plan an update')} ${hint(t('Install all waiting Debian updates at a time that suits you, e.g. at night. If the server is off at that time, the update is skipped.'))}</b>
+        <div class="muted small">${sc.next ? esc(t('Next update: {when}', { when: debWhen(sc.next) })) : t('No update planned.')}</div>
+        ${last ? `<div class="muted small">${esc(last)}</div>` : ''}</div>
+      <div class="fld-row">
+        <label class="fld"><span>${t('When')}</span><select class="field" name="every">${[['off', 'Not planned'], ['once', 'Once'], ['daily', 'Every day'], ['weekly', 'Every week']].map(([v, l]) => opt(v, sc.every, t(l))).join('')}</select></label>
+        <label class="fld" data-when="once"><span>${t('Date')}</span><input class="field" type="date" name="date" value="${esc(sc.date || dflt)}"></label>
+        <label class="fld" data-when="weekly"><span>${t('Day')}</span><select class="field" name="day">${[1, 2, 3, 4, 5, 6, 0].map((x) => opt(x, sc.day, weekday(x))).join('')}</select></label>
+        <label class="fld" data-when="once daily weekly"><span>${t('Time')}</span><input class="field" type="time" name="time" value="${esc(sc.time || '03:00')}"></label>
+      </div>
+      <label class="check" data-when="once daily weekly"><input type="checkbox" name="reboot"${sc.reboot ? ' checked' : ''}> ${t('Restart afterwards when an update needs it')} ${hint(t('Only when the update asks for it, e.g. a new kernel. Never when the ZFS module isn\'t ready for the new kernel. Apps and VMs stop during the restart.'))}</label>
+      <p class="form-error" role="alert"></p>
+      <div class="btn-row"><button class="btn" type="submit">${t('Save')}</button></div>
+    </form>`;
+  }
   async function debianSection(box, { lastJob = false } = {}) {
     let d;
     try { d = await api.get('/api/system-updates'); }
@@ -10263,6 +10289,7 @@ sudo ./install.sh</pre></div>`}` : '') +
       ${nvidiaCard(d.nvidia, busy)}
       <label class="check"><input type="checkbox" data-deb-auto${d.auto.enabled ? ' checked' : ''}${busy ? ' disabled' : ''}> ${t('Install security updates automatically (every day, without restarting by itself)')}</label>
       <p class="muted small">${lastText}</p>
+      ${debScheduleHtml(d.schedule)}
       ${n ? `<details class="upd-older"><summary>${t('Waiting updates ({n})', { n })}</summary><ul class="deb-list">${d.updates.map((x) =>
         `<li><b>${esc(x.name)}</b> <span class="muted small">${esc(x.from)} → ${esc(x.version)}</span>${x.security ? ` <span class="pill warn">${t('Security')}</span>` : ''}</li>`).join('')}</ul></details>` : ''}`;
     const jobBox = $('[data-deb-job]', box);
@@ -10310,6 +10337,22 @@ sudo ./install.sh</pre></div>`}` : '') +
       if (b.dataset.deb === 'nvidia' && !(await ask(t('Install the NVIDIA driver and GPU support for Docker? This takes a few minutes and downloads about 500 MB. At the end Docker restarts (your apps stop for a moment), and the server needs a restart to load the driver.'), t('Install driver')))) return;
       startJob(b.dataset.deb);
     };
+    const sf = $('#debSched', box);
+    if (sf) {
+      const F = sf.elements;
+      const sync = () => { $$('[data-when]', sf).forEach((x) => { x.hidden = !x.dataset.when.split(' ').includes(F.every.value); }); };
+      sf.addEventListener('change', sync); sync();
+      sf.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('button[type=submit]', sf), err = $('.form-error', sf);
+        err.textContent = ''; btn.disabled = true;
+        try {
+          const r = await api.post('/api/system-updates/schedule', { every: F.every.value, date: F.date.value, time: F.time.value, day: F.day.value, reboot: F.reboot.checked });
+          toast(r.every === 'off' ? t('No update planned.') : t('Update planned: {when}', { when: debWhen(r.next) }));
+          debianSection(box);
+        } catch (ex) { err.textContent = tr(ex.message); btn.disabled = false; }
+      });
+    }
     box.onchange = async (e) => {
       if (!e.target.matches('[data-deb-auto]')) return;
       if (!e.target.checked && !(await ask(t('Turn off automatic security updates? Then you have to install them yourself.'), t('Turn off')))) { e.target.checked = true; return; }

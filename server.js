@@ -627,6 +627,7 @@ async function handleApi(req, res, url) {
   // Debian itself: what is waiting, automatic security updates, reboot needed (lib/debian.js).
   if (p === '/api/system-updates' && method === 'GET') return sendJson(res, 200, await debian.status());
   if (p === '/api/system-updates/progress' && method === 'GET') return sendJson(res, 200, debian.progress());
+  if (p === '/api/system-updates/schedule' && method === 'POST') return sendJson(res, 200, debian.saveSchedule(await readBody(req)));
   if ((m = p.match(/^\/api\/system-updates\/(check|upgrade|auto-on|auto-off|nvidia)$/)) && method === 'POST') return sendJson(res, 200, await debian.start(m[1]));
   if (p === '/api/update/check' && method === 'POST') return sendJson(res, 200, await release.check());
   // Change password (welcome wizard and Security). Other sessions are signed out, this one stays signed in.
@@ -1141,6 +1142,7 @@ bind(CFG.port).then(() => {
     disks.watchTests(); // SMART self-tests that already run (after a restart, or started with smartctl)
     network.watchCards(); // a card with a cable that ifupdown left down (e.g. after a rollback) comes up again
     fans.startSchedule(); // fans on a fixed speed or a curve (Settings → Cooling)
+    debian.startSchedule(); // a planned Debian update (Settings → Software update)
     spindown.start(); // hard disks that aren't used go to sleep (Settings → Storage)
     macvlanShim.start(); // the server can reach apps with their own address (Settings → Docker networks)
     // An own-address network whose card is in br0 (or the bond) now follows it, so its apps stay reachable.
