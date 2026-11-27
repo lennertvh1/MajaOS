@@ -3307,4 +3307,11 @@ window.TB_LANG.ja = {
   "The update did not finish.": "更新が完了しませんでした。",
   "Skipped: the server was off at the planned time.": "スキップ：予定時刻にサーバーが停止していました。",
   "Skipped: apt was already running.": "スキップ：apt がすでに実行中でした。",
+  "Later…": "後で…",
+  "Planned: {when}": "予約済み：{when}",
+  "restarts afterwards when needed": "必要ならその後再起動",
+  "Update at a fixed time": "決まった時刻に更新",
+  "When should the {n} updates for Debian be installed? Apps and VMs keep running; some services restart briefly.": "Debian の {n} 件の更新をいつインストールしますか？アプリと VM は動作し続けます。一部のサービスが一時的に再起動します。",
+  "This replaces the update at a fixed time.": "これは決まった時刻の更新を置き換えます。",
+  "Plan": "予約",
 };

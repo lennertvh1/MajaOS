@@ -2272,12 +2272,14 @@
     $('#askCheckWrap').hidden = !checkLabel; $('#askCheck').checked = false; $('#askCheckText').textContent = checkLabel || '';
     field.hidden = !input;
     if (input) {
+      field.type = input.type || 'text';
+      if (input.min) field.min = input.min; else field.removeAttribute('min');
       field.value = input.value || ''; field.placeholder = input.placeholder || '';
       field.setAttribute('aria-label', input.label || text);
       if (input.max) field.maxLength = input.max; else field.removeAttribute('maxlength');
     }
     d.showModal();
-    if (input) { field.focus(); field.select(); } else $('#askNo').focus();
+    if (input) { field.focus(); if (field.type === 'text') field.select(); } else $('#askNo').focus();
     return new Promise((resolve) => {
       const done = (v) => { d.close(); $('#askYes').onclick = $('#askNo').onclick = field.onkeydown = null; d.onclose = null; resolve(v); };
       const yes = () => {
@@ -10243,7 +10245,8 @@ sudo ./install.sh</pre></div>`}` : '') +
     const last = !sc.last ? '' : sc.last.ok
       ? t('Last planned update: {when}, done', { when: lastAt }) + (sc.last.restarted ? ' · ' + t('restarted') : '') + (sc.last.note ? ' · ' + tr(sc.last.note) : '')
       : t('Last planned update: {when}', { when: lastAt }) + ' · ' + tr(sc.last.note || 'Failed.');
-    return `<form class="upd-card deb-sched" id="debSched" novalidate>
+    return `<details class="upd-older deb-sched-wrap"${sc.every === 'daily' || sc.every === 'weekly' ? ' open' : ''}><summary>${t('Update at a fixed time')}</summary>
+      <form class="upd-card deb-sched" id="debSched" novalidate>
       <div class="upd-text"><b>${t('Plan an update')} ${hint(t('Install all waiting Debian updates at a time that suits you, e.g. at night. If the server is off at that time, the update is skipped.'))}</b>
         <div class="muted small">${sc.next ? esc(t('Next update: {when}', { when: debWhen(sc.next) })) : t('No update planned.')}</div>
         ${last ? `<div class="muted small">${esc(last)}</div>` : ''}</div>
@@ -10256,7 +10259,25 @@ sudo ./install.sh</pre></div>`}` : '') +
       <label class="check" data-when="once daily weekly"><input type="checkbox" name="reboot"${sc.reboot ? ' checked' : ''}> ${t('Restart afterwards when an update needs it')} ${hint(t('Only when the update asks for it, e.g. a new kernel. Never when the ZFS module isn\'t ready for the new kernel. Apps and VMs stop during the restart.'))}</label>
       <p class="form-error" role="alert"></p>
       <div class="btn-row"><button class="btn" type="submit">${t('Save')}</button></div>
-    </form>`;
+    </form></details>`;
+  }
+  // Later…: pick a moment (tonight at 03:00 by default) for the waiting updates.
+  async function planDebianUpdate(d, box) {
+    const pad = (x) => String(x).padStart(2, '0');
+    const local = (x) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
+    const night = new Date(); night.setHours(3, 0, 0, 0);
+    if (night.getTime() <= Date.now() + 10 * 60000) night.setDate(night.getDate() + 1);
+    const recurring = d.schedule && (d.schedule.every === 'daily' || d.schedule.every === 'weekly');
+    const text = t('When should the {n} updates for Debian be installed? Apps and VMs keep running; some services restart briefly.', { n: d.updates.length })
+      + (recurring ? ' ' + t('This replaces the update at a fixed time.') : '');
+    const r = await ask(text, t('Plan'), t('Restart afterwards when an update needs it'), { type: 'datetime-local', value: local(night), min: local(new Date()), label: t('Date and time') });
+    if (!r || !r.value) return;
+    const [date, time] = r.value.split('T');
+    try {
+      const sc = await api.post('/api/system-updates/schedule', { every: 'once', date, time: time.slice(0, 5), reboot: r.checked });
+      toast(t('Update planned: {when}', { when: debWhen(sc.next) }));
+      debianSection(box);
+    } catch (ex) { toast(tr(ex.message), true); }
   }
   async function debianSection(box, { lastJob = false } = {}) {
     let d;
@@ -10265,7 +10286,7 @@ sudo ./install.sh</pre></div>`}` : '') +
     S.debian = d; renderNotes(); renderGpuBar();
     if (!box.isConnected) return;
     const busy = d.job && d.job.running;
-    const sec = d.security, n = d.updates.length;
+    const sec = d.security, n = d.updates.length, plan = d.schedule && d.schedule.every !== 'off' ? d.schedule : null;
     const title = n ? t(n === 1 ? '{n} update for Debian' : '{n} updates for Debian', { n }) + (sec ? ' · ' + t(sec === 1 ? '{n} security update' : '{n} security updates', { n: sec }) : '')
       : t('Debian is up to date');
     const when = (iso) => esc(new Date(iso).toLocaleString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', ...clockOpts() }));
@@ -10281,8 +10302,11 @@ sudo ./install.sh</pre></div>`}` : '') +
     box.innerHTML = `<h2 class="pane-title">${t('Debian (the system)')}</h2>
       <div class="upd-card${n ? ' new' : ''}"><div class="upd-text"><b>${title}</b>
         <div class="muted small">${esc([d.os, d.kernel && t('kernel {k}', { k: d.kernel })].filter(Boolean).join(' · '))}</div>
-        <div class="muted small">${d.listsAt ? t('Package lists: {when}', { when: when(d.listsAt) }) : ''}</div></div>
+        <div class="muted small">${d.listsAt ? t('Package lists: {when}', { when: when(d.listsAt) }) : ''}</div>
+        ${plan && plan.next ? `<div class="small deb-planned"><b>${esc(t('Planned: {when}', { when: debWhen(plan.next) }))}</b>${plan.reboot ? ' · ' + t('restarts afterwards when needed') : ''}
+          ${plan.every === 'once' ? `<button class="linkish" type="button" data-deb="unplan">${t('Cancel')}</button>` : ''}</div>` : ''}</div>
         <div class="btn-row"><button class="btn" type="button" data-deb="check"${busy ? ' disabled' : ''}>${t('Check now')}</button>
+          ${n && !(plan && plan.every === 'once') ? `<button class="btn" type="button" data-deb="later"${busy ? ' disabled' : ''}>${t('Later…')}</button>` : ''}
           ${n ? `<button class="btn primary" type="button" data-deb="upgrade"${busy ? ' disabled' : ''}>${t('Update Debian now')}</button>` : ''}</div></div>
       <div data-deb-job></div>
       ${reboot}
@@ -10333,6 +10357,12 @@ sudo ./install.sh</pre></div>`}` : '') +
     box.onclick = async (e) => {
       const b = e.target.closest('[data-deb]'); if (!b) return;
       if (b.dataset.deb === 'reboot') return powerAction('reboot');
+      if (b.dataset.deb === 'later') return planDebianUpdate(d, box);
+      if (b.dataset.deb === 'unplan') {
+        try { await api.post('/api/system-updates/schedule', { every: 'off' }); toast(t('No update planned.')); debianSection(box); }
+        catch (ex) { toast(tr(ex.message), true); }
+        return;
+      }
       if (b.dataset.deb === 'upgrade' && !(await ask(t('Install {n} updates for Debian now? Apps and VMs keep running; some services restart briefly.', { n }), t('Update Debian now')))) return;
       if (b.dataset.deb === 'nvidia' && !(await ask(t('Install the NVIDIA driver and GPU support for Docker? This takes a few minutes and downloads about 500 MB. At the end Docker restarts (your apps stop for a moment), and the server needs a restart to load the driver.'), t('Install driver')))) return;
       startJob(b.dataset.deb);

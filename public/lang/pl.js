@@ -3307,4 +3307,11 @@ window.TB_LANG.pl = {
   "The update did not finish.": "Aktualizacja się nie zakończyła.",
   "Skipped: the server was off at the planned time.": "Pominięto: serwer był wyłączony w zaplanowanym czasie.",
   "Skipped: apt was already running.": "Pominięto: apt już działał.",
+  "Later…": "Później…",
+  "Planned: {when}": "Zaplanowano: {when}",
+  "restarts afterwards when needed": "potem uruchomi się ponownie, jeśli trzeba",
+  "Update at a fixed time": "Aktualizuj o stałej porze",
+  "When should the {n} updates for Debian be installed? Apps and VMs keep running; some services restart briefly.": "Kiedy zainstalować {n} aktualizacji Debiana? Aplikacje i maszyny wirtualne działają dalej; niektóre usługi na chwilę się zrestartują.",
+  "This replaces the update at a fixed time.": "To zastępuje aktualizację o stałej porze.",
+  "Plan": "Zaplanuj",
 };

@@ -3307,4 +3307,11 @@ window.TB_LANG.zh = {
   "The update did not finish.": "更新未完成。",
   "Skipped: the server was off at the planned time.": "已跳过：计划时间服务器处于关机状态。",
   "Skipped: apt was already running.": "已跳过：apt 已在运行。",
+  "Later…": "稍后…",
+  "Planned: {when}": "已计划：{when}",
+  "restarts afterwards when needed": "需要时之后重启",
+  "Update at a fixed time": "在固定时间更新",
+  "When should the {n} updates for Debian be installed? Apps and VMs keep running; some services restart briefly.": "何时安装这 {n} 个 Debian 更新？应用和虚拟机会继续运行；部分服务会短暂重启。",
+  "This replaces the update at a fixed time.": "这将替换固定时间的更新。",
+  "Plan": "计划",
 };

@@ -2406,3 +2406,6 @@ button.snap-node:hover { background: var(--glass-hover); }
 .deb-sched [hidden] { display: none !important; }
 .deb-sched { margin-top: 12px; }
 .deb-sched .form-error:empty { display: none; }
+.deb-planned { margin-top: 6px; color: var(--accent); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.deb-sched-wrap .deb-sched { margin-top: 10px; }
+.upd-text .deb-planned b { font-size: inherit; display: inline; font-weight: 600; }
